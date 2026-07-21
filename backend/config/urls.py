@@ -11,4 +11,6 @@ urlpatterns = [
     path(ADMIN_PATH, admin.site.urls),
     path("api/v1/", include("core.urls")),
     path("api/v1/", include("accounts.urls")),
+    path("api/v1/", include("messaging.urls")),
+    path("api/v1/", include("attachments.urls")),
 ]
