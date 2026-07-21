@@ -98,11 +98,20 @@ EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
 
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": ["accounts.auth.DeviceJWTAuthentication"],
-    "DEFAULT_PERMISSION_CLASSES": ["rest_framework.permissions.IsAuthenticated"],
+    # Fail closed on scope as well as identity: DeviceJWTAuthentication authenticates
+    # register-scope tokens, so IsAuthenticated alone would admit them to any view
+    # that forgets the check. POST /me/devices is the one endpoint expected to opt
+    # down (§A8).
+    "DEFAULT_PERMISSION_CLASSES": [
+        "rest_framework.permissions.IsAuthenticated",
+        "accounts.permissions.IsFullScope",
+    ],
     "DEFAULT_THROTTLE_CLASSES": ["rest_framework.throttling.ScopedRateThrottle"],
     "DEFAULT_THROTTLE_RATES": {
         "register": env("THROTTLE_REGISTER", default="10/hour"),
         "login": env("THROTTLE_LOGIN", default="20/hour"),
+        "refresh": env("THROTTLE_REFRESH", default="120/hour"),
+        "accounts": env("THROTTLE_ACCOUNTS", default="120/min"),
         "claim": env("THROTTLE_CLAIM", default="120/min"),
         "envelopes": env("THROTTLE_ENVELOPES", default="600/min"),
         "attachments": env("THROTTLE_ATTACHMENTS", default="60/min"),

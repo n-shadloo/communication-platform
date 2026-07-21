@@ -1,5 +1,8 @@
 import pytest
 from django.urls import reverse
+from rest_framework.response import Response
+from rest_framework.test import APIRequestFactory
+from rest_framework.views import APIView
 
 from accounts.tokens import issue_full, issue_register_scope
 
@@ -85,3 +88,20 @@ def test_register_scope_token_cannot_reach_a_full_scope_endpoint(
 
 def test_anonymous_requests_are_rejected(api, protected_url):
     assert api.get(protected_url).status_code == 401
+
+
+def test_a_view_relying_on_project_defaults_is_closed_to_register_scope(active_user):
+    """Phases 3-8 add endpoints. One that inherits DEFAULT_PERMISSION_CLASSES and
+    forgets the scope check must still fail closed (§A8), rather than depending on
+    every future author remembering."""
+
+    class DefaultsOnlyView(APIView):
+        def get(self, request):
+            return Response({"reached": True})
+
+    request = APIRequestFactory().get(
+        "/", HTTP_AUTHORIZATION=f"Bearer {issue_register_scope(active_user)}")
+
+    response = DefaultsOnlyView.as_view()(request)
+
+    assert response.status_code == 403
