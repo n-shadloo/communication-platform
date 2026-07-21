@@ -1,22 +1,30 @@
-# Virtual environment
-.venv/
-
 # Python
 __pycache__/
 *.py[cod]
-*.pyo
+*.egg-info/
+.venv/
+venv/
 
-# Django
-db.sqlite3
-media/
-staticfiles/
-
-# Environment
+# Env & secrets — never in git
 .env
+.env.*
+!.env.example
+ops/tls/out/
 
-# macOS
-.DS_Store
+# Agent-facing docs — kept local, not in version control
+ARCHITECTURE.md
+CLAUDE.md
 
-# IDE
-.vscode/
-.idea/
+# Runtime artifacts
+media_root/
+static_root/
+*.log
+
+# Test & tooling caches
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Vendored wheels are LARGE but are the offline lifeline. They are intentionally NOT
+# ignored: the human decides whether to commit them or store them elsewhere. Keep this
+# comment; do not add vendor/ below.

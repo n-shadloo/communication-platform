@@ -1,0 +1,29 @@
+[Unit]
+Description=chatapp retention pruning (ARCHITECTURE §A13)
+Documentation=file:///srv/chatapp/backend/ARCHITECTURE.md
+After=postgresql.service
+Requires=postgresql.service
+
+[Service]
+Type=oneshot
+User=chatapp
+Group=chatapp
+WorkingDirectory=/srv/chatapp/backend
+EnvironmentFile=/etc/chatapp/chatapp.env
+Environment=DJANGO_SETTINGS_MODULE=config.settings.prod
+# Deletes expired queue rows, flushes expired refresh tokens, GCs unreferenced
+# attachments. Ciphertext and metadata only — never a remote-wipe guarantee (§A13).
+ExecStart=/srv/chatapp/backend/.venv/bin/python manage.py prune
+
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=true
+LockPersonality=true
+ReadWritePaths=/etc/chatapp/media_root
