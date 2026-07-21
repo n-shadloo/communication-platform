@@ -1,0 +1,87 @@
+import pytest
+from django.urls import reverse
+
+from accounts.tokens import issue_full, issue_register_scope
+
+pytestmark = pytest.mark.django_db
+
+
+@pytest.fixture
+def protected_url():
+    return reverse("user-directory")
+
+
+def bearer(access):
+    return {"HTTP_AUTHORIZATION": f"Bearer {access}"}
+
+
+def test_a_live_device_token_is_accepted(api, active_user, device, protected_url):
+    access, _ = issue_full(active_user, device)
+
+    assert api.get(protected_url, **bearer(access)).status_code == 200
+
+
+def test_revoking_a_device_rejects_its_outstanding_access_token(
+    api, active_user, device, protected_url
+):
+    access, _ = issue_full(active_user, device)
+    device.revoked_date = "2026-01-01"
+    device.save(update_fields=["revoked_date"])
+
+    response = api.get(protected_url, **bearer(access))
+
+    assert response.status_code == 401
+    assert response.json()["code"] == "token_revoked"
+
+
+def test_bumping_token_generation_rejects_outstanding_access_tokens(
+    api, active_user, device, protected_url
+):
+    access, _ = issue_full(active_user, device)
+    device.token_generation += 1
+    device.save(update_fields=["token_generation"])
+
+    response = api.get(protected_url, **bearer(access))
+
+    assert response.status_code == 401
+    assert response.json()["code"] == "token_revoked"
+
+
+def test_deleting_the_device_rejects_its_token(
+    api, active_user, device, protected_url
+):
+    access, _ = issue_full(active_user, device)
+    device.delete()
+
+    response = api.get(protected_url, **bearer(access))
+
+    assert response.status_code == 401
+    assert response.json()["code"] == "token_revoked"
+
+
+def test_deactivating_the_account_rejects_its_tokens(
+    api, active_user, device, protected_url
+):
+    access, _ = issue_full(active_user, device)
+    active_user.is_active = False
+    active_user.save(update_fields=["is_active"])
+
+    response = api.get(protected_url, **bearer(access))
+
+    assert response.status_code in {401, 403}
+
+
+def test_register_scope_token_cannot_reach_a_full_scope_endpoint(
+    api, active_user, protected_url
+):
+    # Its only power is POST /me/devices, which does not exist yet (§A8).
+    access = issue_register_scope(active_user)
+
+    response = api.get(protected_url, **bearer(access))
+
+    assert response.status_code == 403
+    assert response.json()["code"] == "scope_forbidden"
+
+
+def test_anonymous_requests_are_rejected(api, protected_url):
+    assert api.get(protected_url).status_code == 401
