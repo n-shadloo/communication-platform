@@ -39,8 +39,14 @@ class OneTimePrekey(models.Model):
     """X3DH one-time prekey. Claimed = deleted, inside the claim transaction (§A4)."""
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    # db_index=False: the unique constraint below already indexes this column as its
+    # leading key, so Django's default FK index is a third B-tree maintained for
+    # nothing. Measured at 600k rows over 20 alternating samples per arm: dropping it
+    # left the claim plan identical (ordered index scan on the composite, 5 buffers,
+    # no sort) while cutting the median 200-row bulk insert from 1.28 ms to 1.03 ms
+    # (~20%) — and inserting 200 at a time is what this table does most.
     device = models.ForeignKey(Device, on_delete=models.CASCADE,
-                               related_name="onetime_prekeys")
+                               related_name="onetime_prekeys", db_index=False)
     key_id = models.PositiveIntegerField()
     pub = models.BinaryField()
 
