@@ -63,6 +63,16 @@ class TestReadProfile:
         assert base64.b64decode(response.json()["blob"]) == raw
         assert response.json()["version"] == 3
 
+    def test_own_profile_is_readable(self, api, active_user, headers):
+        raw = b"\x03" * PROFILE_BUCKETS[0]
+        ProfileBlob.objects.create(user=active_user, blob=raw, version=2)
+
+        response = api.get(reverse("my-profile"), **headers)
+
+        assert response.status_code == 200
+        assert base64.b64decode(response.json()["blob"]) == raw
+        assert response.json()["version"] == 2
+
     def test_missing_profile_is_a_404(self, api, active_user, headers):
         response = api.get(
             reverse("user-profile", args=[active_user.id]), **headers
@@ -149,6 +159,20 @@ class TestWriteProfile:
         stored = ProfileBlob.objects.get(user=active_user)
         assert stored.version == 2
         assert len(bytes(stored.blob)) == PROFILE_BUCKETS[1]
+
+    def test_a_write_reads_the_row_once(self, api, active_user, headers,
+                                        django_assert_num_queries):
+        """The locked version check and the write must not each SELECT the row.
+        2 auth + savepoint + locked read + UPDATE + release."""
+        url = reverse("my-profile")
+        api.put(url, {"blob": blob_of(PROFILE_BUCKETS[0]), "version": 1},
+                format="json", **headers)
+
+        with django_assert_num_queries(6):
+            response = api.put(url, {"blob": blob_of(PROFILE_BUCKETS[0]),
+                                     "version": 2}, format="json", **headers)
+
+        assert response.status_code == 200
 
     def test_unknown_fields_are_rejected(self, api, active_user, headers):
         response = api.put(reverse("my-profile"),

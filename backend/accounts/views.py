@@ -1,33 +1,34 @@
-import base64
-import secrets
-from functools import lru_cache
+import uuid
 
 from django.contrib.auth.hashers import check_password, make_password
 from django.db import IntegrityError, transaction
-from rest_framework.permissions import BasePermission, IsAuthenticated
+from rest_framework import status
+from rest_framework.generics import ListAPIView
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
-from rest_framework_simplejwt.views import TokenRefreshView
 
-from core.buckets import PROFILE_BUCKETS
-from core.fields import decode_blob_or_400
 from devices.models import Device
 
 from .models import ProfileBlob, User
-from .serializers import (
-    DeviceTokenRefreshSerializer,
-    LoginSerializer,
-    LogoutSerializer,
-    ProfileBlobSerializer,
-    RegisterSerializer,
-)
+from .permissions import IsFullScope
+from .serializers import (DirectoryUserSerializer, LoginSerializer,
+                          ProfileReadSerializer, ProfileWriteSerializer,
+                          RefreshTokenSerializer, RegisterSerializer, UsernameTaken)
 from .tokens import issue_full, issue_register_scope
 
+# A revoked device, a wrong generation, and a deactivated account are all reported
+# identically: the client learns only that this token is finished (§A8).
+TOKEN_REVOKED = {"code": "token_revoked", "detail": "Token is no longer valid."}
 
-def error(code, detail, status):
-    return Response({"code": code, "detail": detail}, status=status)
+# A fixed invalid hash so an unknown-username login still spends Argon2 time (§A8).
+_DUMMY_HASH = make_password("timing-equalizer-not-a-real-password")
+
+
+def error(code, detail, status_code):
+    return Response({"code": code, "detail": detail}, status=status_code)
 
 
 def invalid_request(errors):
@@ -35,165 +36,191 @@ def invalid_request(errors):
     return error("invalid_request", errors, 400)
 
 
-class IsFullScope(BasePermission):
-    """A register-scope token's only power is POST /me/devices (§A8)."""
-
-    message = {"code": "scope_forbidden",
-               "detail": "This token cannot access this endpoint."}
-
-    def has_permission(self, request, view):
-        return bool(request.auth is not None and request.auth.get("scope") == "full")
-
-
-@lru_cache(maxsize=1)
-def dummy_password_hash():
-    """Argon2id hash of a throwaway secret. Verifying against it costs the same as a
-    real check, so login timing does not reveal whether a username exists (§A5)."""
-    return make_password(secrets.token_urlsafe(32))
-
-
 class RegisterView(APIView):
     authentication_classes = []
-    permission_classes = []
+    permission_classes = [AllowAny]
     throttle_scope = "register"
 
     def post(self, request):
-        serializer = RegisterSerializer(data=request.data)
-        if not serializer.is_valid():
-            return invalid_request(serializer.errors)
+        ser = RegisterSerializer(data=request.data)
+        if not ser.is_valid():
+            return invalid_request(ser.errors)
         try:
             with transaction.atomic():
-                user = User.objects.create_user(
-                    username=serializer.validated_data["username"],
-                    password=serializer.validated_data["password"],
-                )
+                user = ser.save()
         except IntegrityError:
-            return error("username_taken", "That username is taken.", 400)
-        # The account stays inactive until the owner activates it in the admin (§7).
-        return Response({"user_id": str(user.id)}, status=201)
+            # The uniqueness probe in validate_username is advisory: two concurrent
+            # registrations can both pass it and only the index settles it.
+            raise UsernameTaken()
+        return Response({"user_id": str(user.id)}, status=status.HTTP_201_CREATED)
 
 
 class LoginView(APIView):
     authentication_classes = []
-    permission_classes = []
+    permission_classes = [AllowAny]
     throttle_scope = "login"
 
     def post(self, request):
-        serializer = LoginSerializer(data=request.data)
-        if not serializer.is_valid():
-            return invalid_request(serializer.errors)
-        username = serializer.validated_data["username"].lower()
-        password = serializer.validated_data["password"]
-        device_id = serializer.validated_data.get("device_id")
+        ser = LoginSerializer(data=request.data)
+        if not ser.is_valid():
+            return invalid_request(ser.errors)
+        username = ser.validated_data["username"].lower()
+        password = ser.validated_data["password"]
+        device_id = ser.validated_data.get("device_id")
 
-        user = User.objects.filter(username=username).first()
+        user = User.objects.filter(username=username).only(
+            "id", "password", "is_active").first()
         if user is None:
-            # Spend the same Argon2id work a real verify would.
-            check_password(password, dummy_password_hash())
+            check_password(password, _DUMMY_HASH)  # equalize timing
             return self.invalid_credentials()
+        # user.check_password (not the bare function) carries the setter that
+        # transparently re-hashes when the configured Argon2 cost changes.
         if not user.check_password(password):
             return self.invalid_credentials()
-        # Only after the password is proven does activation state become observable.
+        # Only once the password is proven does activation state become observable.
         if not user.is_active:
-            return error("account_inactive", "This account is not activated yet.", 403)
+            return error("account_inactive", "This account is awaiting activation.", 403)
 
-        device = None
-        if device_id is not None:
+        if device_id:
+            # Narrowed: the row also carries ik_pub/spk_pub/spk_sig/label_blob, none
+            # of which this path reads.
             device = Device.objects.filter(
                 id=device_id, user_id=user.id, revoked_date__isnull=True,
-            ).first()
-        if device is None:
-            # No usable device: a short-lived token whose only power is adding one.
-            return Response({"access": issue_register_scope(user),
-                             "user_id": str(user.id),
-                             "scope": "register"})
-
-        access, refresh = issue_full(user, device)
-        return Response({"access": access,
-                         "refresh": refresh,
-                         "user_id": str(user.id),
-                         "device_id": str(device.id),
-                         "scope": "full"})
+            ).only("id", "token_generation").first()
+            if device is not None:
+                access, refresh = issue_full(user, device)
+                return Response({"access": access, "refresh": refresh,
+                                 "user_id": str(user.id),
+                                 "device_id": str(device.id), "scope": "full"})
+        # No/unknown device → a short register-scope token whose only power is POST /me/devices.
+        return Response({"access": issue_register_scope(user),
+                         "user_id": str(user.id), "scope": "register"})
 
     @staticmethod
     def invalid_credentials():
-        return error("invalid_credentials", "Invalid username or password.", 401)
+        return error("invalid_credentials", "Username or password is incorrect.", 401)
 
 
-class DeviceTokenRefreshView(TokenRefreshView):
+class RefreshView(APIView):
     authentication_classes = []
-    permission_classes = []
-    serializer_class = DeviceTokenRefreshSerializer
+    permission_classes = [AllowAny]
+    throttle_scope = "refresh"
+
+    def post(self, request):
+        ser = RefreshTokenSerializer(data=request.data)
+        if not ser.is_valid():
+            return error("invalid_token", "Refresh token is missing or malformed.", 401)
+        try:
+            token = RefreshToken(ser.validated_data["refresh"])  # signature/expiry/blacklist
+        except TokenError:
+            return error("invalid_token", "Refresh token is missing or malformed.", 401)
+        # A register-scope token must never rotate its way up to a full-scope pair.
+        if token.get("scope") != "full":
+            return Response(TOKEN_REVOKED, status=401)
+        device_id = token.get("device_id")
+        try:
+            uuid.UUID(str(device_id))
+        except (TypeError, ValueError):
+            return Response(TOKEN_REVOKED, status=401)
+        # Refresh runs every ≤15 min per device, so the join stays narrow: the key
+        # blobs and the rest of the user row are never read here.
+        device = (Device.objects
+                  .filter(id=device_id, revoked_date__isnull=True)
+                  .select_related("user")
+                  .only("id", "user_id", "token_generation", "user__is_active")
+                  .first())
+        if (device is None
+                or str(device.user_id) != str(token.get("user_id"))
+                or token.get("tgen") != device.token_generation
+                or not device.user.is_active):
+            return Response(TOKEN_REVOKED, status=401)
+        token.blacklist()  # rotation: retire the presented refresh
+        access, refresh = issue_full(device.user, device)
+        return Response({"access": access, "refresh": refresh})
 
 
 class LogoutView(APIView):
     permission_classes = [IsAuthenticated, IsFullScope]
+    throttle_scope = "accounts"
 
     def post(self, request):
-        serializer = LogoutSerializer(data=request.data)
-        if not serializer.is_valid():
-            return invalid_request(serializer.errors)
+        ser = RefreshTokenSerializer(data=request.data)
+        if not ser.is_valid():
+            return invalid_request(ser.errors)
         try:
-            token = RefreshToken(serializer.validated_data["refresh"])
+            token = RefreshToken(ser.validated_data["refresh"])
             # Never let one account blacklist another's token.
             if str(token.get("user_id")) == str(request.user.id):
                 token.blacklist()
         except TokenError:
             pass  # already expired or blacklisted; logout is idempotent
-        return Response(status=205)
+        return Response(status=status.HTTP_205_RESET_CONTENT)
 
 
-class UserDirectoryView(APIView):
+class UserDirectoryView(ListAPIView):
     permission_classes = [IsAuthenticated, IsFullScope]
+    throttle_scope = "accounts"
+    serializer_class = DirectoryUserSerializer
+    pagination_class = None
 
-    def get(self, request):
-        users = (User.objects
-                 .filter(is_active=True)
-                 .order_by("username")
-                 .values_list("id", "username"))
-        return Response({"users": [{"user_id": str(user_id), "username": username}
-                                   for user_id, username in users]})
+    def get_queryset(self):
+        return User.objects.filter(is_active=True).only("id", "username").order_by("username")
+
+    def list(self, request, *args, **kwargs):
+        # §A5 specifies the {"users": [...]} envelope; ListAPIView would render a
+        # bare array.
+        data = self.get_serializer(self.get_queryset(), many=True).data
+        return Response({"users": data})
 
 
-class UserProfileView(APIView):
+class ProfileDetailView(APIView):
     permission_classes = [IsAuthenticated, IsFullScope]
+    throttle_scope = "accounts"
 
     def get(self, request, user_id):
-        row = (ProfileBlob.objects
-               .filter(user_id=user_id, user__is_active=True)
-               .values_list("blob", "version")
-               .first())
-        if row is None:
+        prof = ProfileBlob.objects.filter(user_id=user_id,
+                                          user__is_active=True).only("blob", "version").first()
+        if prof is None:
             return error("not_found", "No profile for that user.", 404)
-        blob, version = row
-        return Response({"blob": base64.b64encode(bytes(blob)).decode(),
-                         "version": version})
+        return Response(ProfileReadSerializer(prof).data)
 
 
 class MyProfileView(APIView):
     permission_classes = [IsAuthenticated, IsFullScope]
+    throttle_scope = "accounts"
+
+    def get(self, request):
+        prof = ProfileBlob.objects.filter(
+            user_id=request.user.id).only("blob", "version").first()
+        if prof is None:
+            return error("not_found", "No profile yet.", 404)
+        return Response(ProfileReadSerializer(prof).data)
 
     def put(self, request):
-        serializer = ProfileBlobSerializer(data=request.data)
-        if not serializer.is_valid():
-            return invalid_request(serializer.errors)
-        blob = decode_blob_or_400(serializer.validated_data["blob"], PROFILE_BUCKETS)
-        version = serializer.validated_data["version"]
+        ser = ProfileWriteSerializer(data=request.data)
+        if not ser.is_valid():
+            return invalid_request(ser.errors)
+        raw = ser.validated_data["raw"]
+        new_version = ser.validated_data["version"]
         try:
             with transaction.atomic():
-                profile = (ProfileBlob.objects
-                           .select_for_update()
-                           .filter(user_id=request.user.id)
-                           .first())
-                if profile is None:
-                    ProfileBlob.objects.create(user_id=request.user.id, blob=blob,
-                                               version=version)
-                elif version <= profile.version:
+                # .only("version"): the locked read exists to compare versions, so
+                # there is no reason to drag the stored blob back with it. Branching
+                # here rather than calling update_or_create avoids a second identical
+                # SELECT on the same row.
+                prof = (ProfileBlob.objects.select_for_update()
+                        .filter(user_id=request.user.id).only("version").first())
+                if prof is None:
+                    ProfileBlob.objects.create(user_id=request.user.id, blob=raw,
+                                               version=new_version)
+                elif new_version <= prof.version:
                     return error("stale_version", "Version must increase.", 409)
                 else:
-                    profile.blob = blob
-                    profile.version = version
-                    profile.save(update_fields=["blob", "version", "updated_date"])
+                    prof.blob = raw
+                    prof.version = new_version
+                    prof.save(update_fields=["blob", "version", "updated_date"])
         except IntegrityError:
+            # select_for_update locks nothing when the row does not exist yet, so two
+            # concurrent first-writes can both clear the version check above.
             return error("stale_version", "Version must increase.", 409)
-        return Response({"version": version})
+        return Response(status=200)

@@ -1,18 +1,25 @@
-import uuid
+import base64
 
 from django.contrib.auth.password_validation import validate_password
+from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework import serializers
-from rest_framework.exceptions import AuthenticationFailed
-from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
-from rest_framework_simplejwt.serializers import TokenRefreshSerializer
+from rest_framework.exceptions import APIException
 
-from devices.models import Device
+from core.buckets import PROFILE_BUCKETS
+from core.fields import decode_blob_or_400
 
-from .models import username_validator
+from .models import User, username_validator
 
-# A revoked device, a wrong generation, and a deactivated account are all reported
-# identically: the client learns only that this token is finished (§A8).
-TOKEN_REVOKED = {"code": "token_revoked", "detail": "Token is no longer valid."}
+
+class UsernameTaken(APIException):
+    """§A5 reports a duplicate inline as `400 {"code":"username_taken"}`. Raised both
+    from validation and from the view's IntegrityError guard, so the concurrent-
+    registration race lands on the same contract instead of a 500."""
+
+    status_code = 400
+
+    def __init__(self):
+        super().__init__({"code": "username_taken", "detail": "That username is taken."})
 
 
 class StrictSerializer(serializers.Serializer):
@@ -29,64 +36,69 @@ class StrictSerializer(serializers.Serializer):
 
 
 class RegisterSerializer(StrictSerializer):
+    # The `^[a-z0-9_]{3,32}$` rule is applied through the model validator in
+    # validate_username, i.e. *after* lowercasing. As a RegexField it would reject
+    # "BoB" before the normalisation the User manager and model both perform.
     username = serializers.CharField(max_length=32)
-    # Bounded so an oversized body cannot turn Argon2id into a CPU sink.
-    password = serializers.CharField(max_length=128, trim_whitespace=False)
+    password = serializers.CharField(write_only=True, max_length=256,
+                                     trim_whitespace=False)
 
     def validate_username(self, value):
         value = value.lower()
         username_validator(value)
+        if User.objects.filter(username=value).exists():
+            raise UsernameTaken()
         return value
 
     def validate_password(self, value):
-        validate_password(value)
+        try:
+            validate_password(value)
+        except DjangoValidationError as e:
+            raise serializers.ValidationError(list(e.messages))
         return value
+
+    def create(self, data):
+        # Account is created INACTIVE; the owner activates it (structure §7).
+        return User.objects.create_user(username=data["username"],
+                                        password=data["password"])
 
 
 class LoginSerializer(StrictSerializer):
+    """Login parses through a serializer, not `request.data.get(...)`: a non-string
+    username (`.lower()` on a dict) and a non-UUID device_id (straight into a UUID
+    column filter) are both unauthenticated 500s otherwise."""
+
     username = serializers.CharField(max_length=32)
-    password = serializers.CharField(max_length=128, trim_whitespace=False)
+    password = serializers.CharField(max_length=256, trim_whitespace=False)
     device_id = serializers.UUIDField(required=False)
 
 
-class LogoutSerializer(StrictSerializer):
+class RefreshTokenSerializer(StrictSerializer):
+    """Bounds the token string and keeps a non-string `refresh` out of the JWT
+    decoder, which raises past `except TokenError` into a 500."""
+
     refresh = serializers.CharField(max_length=4096, trim_whitespace=False)
 
 
-class ProfileBlobSerializer(StrictSerializer):
-    # Base64 of the largest PROFILE_BUCKETS entry plus padding headroom; the exact
-    # length check is decode_blob_or_400's job.
+class DirectoryUserSerializer(serializers.Serializer):
+    user_id = serializers.UUIDField(source="id")
+    username = serializers.CharField()
+
+
+class ProfileReadSerializer(serializers.Serializer):
+    blob = serializers.SerializerMethodField()
+    version = serializers.IntegerField()
+
+    def get_blob(self, obj):
+        return base64.b64encode(bytes(obj.blob)).decode()
+
+
+class ProfileWriteSerializer(StrictSerializer):
+    # Base64 of the largest PROFILE_BUCKETS entry plus headroom; the exact length
+    # check is decode_blob_or_400's job.
     blob = serializers.CharField(max_length=8192, trim_whitespace=False)
     version = serializers.IntegerField(min_value=0)
 
-
-class DeviceTokenRefreshSerializer(TokenRefreshSerializer):
-    """Standard rotation plus the §A8 device checks, so revoking a device kills its
-    refresh token immediately rather than at the end of the access-token window."""
-
-    def validate(self, attrs):
-        try:
-            token = self.token_class(attrs["refresh"])
-        except TokenError as exc:
-            raise InvalidToken(exc.args[0])
-
-        if token.get("scope") != "full":
-            raise AuthenticationFailed(TOKEN_REVOKED)
-
-        device_id = token.get("device_id")
-        try:
-            uuid.UUID(str(device_id))
-        except (AttributeError, TypeError, ValueError):
-            raise AuthenticationFailed(TOKEN_REVOKED)
-
-        device = (Device.objects
-                  .select_related("user")
-                  .filter(id=device_id, revoked_date__isnull=True)
-                  .first())
-        if (device is None
-                or str(device.user_id) != str(token.get("user_id"))
-                or token.get("tgen") != device.token_generation
-                or not device.user.is_active):
-            raise AuthenticationFailed(TOKEN_REVOKED)
-
-        return super().validate(attrs)
+    def validate(self, data):
+        data["raw"] = decode_blob_or_400(data["blob"], PROFILE_BUCKETS)
+        return data

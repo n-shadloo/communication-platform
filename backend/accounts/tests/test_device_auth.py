@@ -74,13 +74,23 @@ def test_deactivating_the_account_rejects_its_tokens(
     assert response.status_code in {401, 403}
 
 
-def test_register_scope_token_cannot_reach_a_full_scope_endpoint(
-    api, active_user, protected_url
+@pytest.mark.parametrize("method, url_name, args", [
+    ("get", "user-directory", []),
+    ("get", "user-profile", ["11111111-1111-1111-1111-111111111111"]),
+    ("get", "my-profile", []),
+    ("put", "my-profile", []),
+    ("post", "logout", []),
+])
+def test_register_scope_token_reaches_no_endpoint_in_this_phase(
+    api, active_user, method, url_name, args
 ):
-    # Its only power is POST /me/devices, which does not exist yet (§A8).
+    # §A8: "`register`-scope tokens are accepted **only** by `POST /me/devices`",
+    # which does not exist yet. DeviceJWTAuthentication *authenticates* these tokens,
+    # so IsAuthenticated alone would let every one of these through — the scope check
+    # is what holds the line.
     access = issue_register_scope(active_user)
 
-    response = api.get(protected_url, **bearer(access))
+    response = getattr(api, method)(reverse(url_name, args=args), **bearer(access))
 
     assert response.status_code == 403
     assert response.json()["code"] == "scope_forbidden"
