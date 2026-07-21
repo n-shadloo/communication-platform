@@ -28,6 +28,11 @@ class Device(models.Model):
     created_date = models.DateField(auto_now_add=True)
     last_active_date = models.DateField(null=True)
     revoked_date = models.DateField(null=True)
+    # Per-device envelope counter. Ordering the mailbox needs a monotonic number, and
+    # a server-wide sequence would let row adjacency correlate activity across devices
+    # in a dump (§A4). Incremented with an F() expression inside the enqueue
+    # transaction, whose row lock is what makes concurrent assignment atomic.
+    queue_seq = models.BigIntegerField(default=0)
 
 
 class OneTimePrekey(models.Model):
