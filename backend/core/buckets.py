@@ -1,0 +1,14 @@
+from django.conf import settings
+
+ENVELOPE_BUCKETS = getattr(settings, "ENVELOPE_BUCKETS_OVERRIDE", None) or [
+    1024, 4096, 16384, 65536, 262144,
+]
+PROFILE_BUCKETS = [1024, 4096]
+LABEL_BUCKETS = [256, 1024]
+NAME_BUCKETS = [256, 1024]
+KEYPACKAGE_BUCKETS = [2048, 8192]
+BACKUP_BUCKETS = [4096, 16384, 65536, 262144, 1048576]
+ATTACHMENT_BUCKETS = [65536, 262144, 1048576, 4194304, 16777216, 67108864]
+
+def in_bucket(nbytes, bucket_set):
+    return nbytes in set(bucket_set)
