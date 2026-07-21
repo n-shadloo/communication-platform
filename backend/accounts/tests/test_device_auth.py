@@ -1,5 +1,8 @@
 import pytest
 from django.urls import reverse
+from rest_framework.response import Response
+from rest_framework.test import APIRequestFactory
+from rest_framework.views import APIView
 
 from accounts.tokens import issue_full, issue_register_scope
 
@@ -71,13 +74,23 @@ def test_deactivating_the_account_rejects_its_tokens(
     assert response.status_code in {401, 403}
 
 
-def test_register_scope_token_cannot_reach_a_full_scope_endpoint(
-    api, active_user, protected_url
+@pytest.mark.parametrize("method, url_name, args", [
+    ("get", "user-directory", []),
+    ("get", "user-profile", ["11111111-1111-1111-1111-111111111111"]),
+    ("get", "my-profile", []),
+    ("put", "my-profile", []),
+    ("post", "logout", []),
+])
+def test_register_scope_token_reaches_no_endpoint_in_this_phase(
+    api, active_user, method, url_name, args
 ):
-    # Its only power is POST /me/devices, which does not exist yet (§A8).
+    # §A8: "`register`-scope tokens are accepted **only** by `POST /me/devices`",
+    # which does not exist yet. DeviceJWTAuthentication *authenticates* these tokens,
+    # so IsAuthenticated alone would let every one of these through — the scope check
+    # is what holds the line.
     access = issue_register_scope(active_user)
 
-    response = api.get(protected_url, **bearer(access))
+    response = getattr(api, method)(reverse(url_name, args=args), **bearer(access))
 
     assert response.status_code == 403
     assert response.json()["code"] == "scope_forbidden"
@@ -85,3 +98,20 @@ def test_register_scope_token_cannot_reach_a_full_scope_endpoint(
 
 def test_anonymous_requests_are_rejected(api, protected_url):
     assert api.get(protected_url).status_code == 401
+
+
+def test_a_view_relying_on_project_defaults_is_closed_to_register_scope(active_user):
+    """Phases 3-8 add endpoints. One that inherits DEFAULT_PERMISSION_CLASSES and
+    forgets the scope check must still fail closed (§A8), rather than depending on
+    every future author remembering."""
+
+    class DefaultsOnlyView(APIView):
+        def get(self, request):
+            return Response({"reached": True})
+
+    request = APIRequestFactory().get(
+        "/", HTTP_AUTHORIZATION=f"Bearer {issue_register_scope(active_user)}")
+
+    response = DefaultsOnlyView.as_view()(request)
+
+    assert response.status_code == 403

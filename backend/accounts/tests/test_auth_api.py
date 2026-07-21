@@ -5,8 +5,10 @@ from django.contrib.auth.hashers import check_password
 from django.urls import reverse
 
 from accounts.models import User
+from rest_framework_simplejwt.tokens import RefreshToken
+
 from accounts.tokens import issue_full
-from accounts.views import dummy_password_hash
+from accounts.views import _DUMMY_HASH
 from conftest import PASSWORD
 from devices.models import Device
 
@@ -118,8 +120,8 @@ class TestLogin:
         assert response.status_code == 401
         assert verify.call_count == 1
         # Verified against a real Argon2id hash, so the work matches a live account.
-        assert verify.call_args.args[1] == dummy_password_hash()
-        assert dummy_password_hash().startswith("argon2$argon2id$")
+        assert verify.call_args.args[1] == _DUMMY_HASH
+        assert _DUMMY_HASH.startswith("argon2$argon2id$")
 
     def test_unknown_user_and_wrong_password_are_indistinguishable(
         self, api, login_url, active_user
@@ -199,6 +201,20 @@ class TestLogin:
 
         assert response.json()["scope"] == "register"
 
+    # Login parses anonymous input, so a type confusion here is an unauthenticated 500.
+    @pytest.mark.parametrize("payload", [
+        {"username": {"$ne": None}, "password": GOOD_PASSWORD},
+        {"username": ["alice"], "password": GOOD_PASSWORD},
+        {"username": "alice", "password": GOOD_PASSWORD, "device_id": "not-a-uuid"},
+    ])
+    def test_malformed_input_is_rejected_without_a_server_error(
+        self, api, login_url, payload
+    ):
+        response = api.post(login_url, payload, format="json")
+
+        assert response.status_code == 400
+        assert response.json()["code"] == "invalid_request"
+
     def test_a_device_belonging_to_another_user_is_never_honoured(
         self, api, login_url, active_user
     ):
@@ -253,6 +269,46 @@ class TestRefresh:
         device.save(update_fields=["token_generation"])
 
         response = api.post(reverse("refresh"), {"refresh": refresh}, format="json")
+
+        assert response.status_code == 401
+        assert response.json()["code"] == "token_revoked"
+
+    def test_rotation_costs_a_fixed_number_of_queries(
+        self, api, active_user, device, django_assert_num_queries
+    ):
+        """Refresh runs every <=15 min per device. The device row is fetched with
+        .only(...) over a select_related join, so touching a column outside that set
+        (a key blob, the username) would silently add a deferred load per refresh.
+        1 blacklist check + 1 device join + 6 SimpleJWT blacklist internals
+        (tokens.py:292 fetches the user unconditionally) + 1 outstanding insert."""
+        refresh = self.refresh_for(active_user, device)
+
+        with django_assert_num_queries(9):
+            response = api.post(reverse("refresh"), {"refresh": refresh},
+                                format="json")
+
+        assert response.status_code == 200
+
+    def test_a_refresh_without_full_scope_is_refused(self, api, active_user):
+        # A bare SimpleJWT refresh carries no device binding; it must never rotate
+        # up into a full-scope pair (§A8).
+        bare = RefreshToken.for_user(active_user)
+
+        response = api.post(reverse("refresh"), {"refresh": str(bare)}, format="json")
+
+        assert response.status_code == 401
+        assert response.json()["code"] == "token_revoked"
+
+    def test_a_refresh_cannot_borrow_another_users_device(self, api, active_user, device):
+        # device belongs to active_user; the token claims to be someone else's.
+        intruder = User.objects.create_user(username="mallory", password=PASSWORD,
+                                            is_active=True)
+        forged = RefreshToken.for_user(intruder)
+        forged["device_id"] = str(device.id)
+        forged["tgen"] = device.token_generation
+        forged["scope"] = "full"
+
+        response = api.post(reverse("refresh"), {"refresh": str(forged)}, format="json")
 
         assert response.status_code == 401
         assert response.json()["code"] == "token_revoked"
