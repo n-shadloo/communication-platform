@@ -1,0 +1,12 @@
+[Unit]
+Description=Run chatapp retention pruning hourly (ARCHITECTURE §A13)
+
+[Timer]
+OnCalendar=hourly
+# Randomised so pruning does not happen on a predictable wall-clock edge.
+RandomizedDelaySec=5m
+Persistent=true
+Unit=maintenance.service
+
+[Install]
+WantedBy=timers.target
