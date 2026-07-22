@@ -7,6 +7,7 @@ from django.utils import timezone
 
 from attachments.models import Attachment
 from messaging.models import QueuedEnvelope
+from vault.models import HistoryRecord
 
 
 class Command(BaseCommand):
@@ -21,10 +22,12 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         envelopes = self._prune_envelopes()
         attachments, files = self._prune_attachments()
+        history = self._prune_history()
         # Counts only. An id or a blob written here would land in the timer's journal,
         # which is exactly the graph leak §A11.4 forbids.
         self.stdout.write(f"envelopes pruned: {envelopes}")
         self.stdout.write(f"attachments pruned: {attachments} (files removed: {files})")
+        self.stdout.write(f"history pruned: {history}")
 
     @staticmethod
     def _prune_envelopes():
@@ -54,3 +57,14 @@ class Command(BaseCommand):
             expired_ids.append(att.id)
         deleted, _ = Attachment.objects.filter(id__in=expired_ids).delete()
         return deleted, removed_files
+
+    @staticmethod
+    def _prune_history():
+        # History is keep-forever by default (§A13); only prune when the owner-set TTL is
+        # positive. stored_date is day-coarse, so compare against a date cutoff.
+        days = settings.HISTORY_TTL_DAYS
+        if days <= 0:
+            return 0
+        cutoff = timezone.now().date() - timedelta(days=days)
+        deleted, _ = HistoryRecord.objects.filter(stored_date__lt=cutoff).delete()
+        return deleted
