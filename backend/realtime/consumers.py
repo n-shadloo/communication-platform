@@ -3,11 +3,13 @@ import time
 import uuid
 from channels.generic.websocket import AsyncJsonWebsocketConsumer
 from django.conf import settings
-from .auth import authenticate_access, delete_envelopes, touch_active
+from .auth import (_room_exists as _room_exists_query, authenticate_access,
+                   delete_envelopes, room_join_async, room_leave_async, touch_active)
 
 AUTH_DEADLINE_SECONDS = 10
 RATE_WINDOW_SECONDS = 1.0
 RATE_MAX_IN_WINDOW = 100
+ROOM_SUBSCRIPTIONS_MAX = 100                     # bounded like presence_targets (§A6)
 
 class GatewayConsumer(AsyncJsonWebsocketConsumer):
     # ---- lifecycle -------------------------------------------------------
@@ -20,6 +22,7 @@ class GatewayConsumer(AsyncJsonWebsocketConsumer):
         self.device_group = None
         self.authed = False
         self.presence_targets = set()
+        self.rooms = set()
         self._msg_times = []
         self._auth_task = None
 
@@ -51,6 +54,8 @@ class GatewayConsumer(AsyncJsonWebsocketConsumer):
             self._auth_task.cancel()
         if self.authed:
             await self._emit_presence("offline")
+            for rid in list(getattr(self, "rooms", set())):
+                await self._leave_room(rid)
             if self.device_group:
                 await self.channel_layer.group_discard(self.device_group, self.channel_name)
 
@@ -91,6 +96,12 @@ class GatewayConsumer(AsyncJsonWebsocketConsumer):
             await self._handle_signal(content)
         elif mtype == "subscribe_presence":
             await self._handle_subscribe_presence(content)
+        elif mtype == "room_subscribe":
+            await self._handle_room_subscribe(content)
+        elif mtype == "room_leave":
+            await self._handle_room_leave(content)
+        elif mtype == "room_signal":
+            await self._handle_room_signal(content)
         # Unknown types are ignored (but counted by the rate limiter above).
 
     async def _handle_ack(self, content):
@@ -136,6 +147,39 @@ class GatewayConsumer(AsyncJsonWebsocketConsumer):
         self.presence_targets = valid
         await self._emit_presence("online")
 
+    async def _handle_room_subscribe(self, content):
+        room_id = content.get("room_id")
+        if not room_id:
+            return
+        try:
+            # Normalized like _handle_signal: raw client input into the UUID pk lookup
+            # raises ValidationError (a consumer crash whose traceback embeds the value,
+            # §A11.4), and alternate spellings would split the group namespace.
+            rid = str(uuid.UUID(str(room_id)))
+        except (ValueError, TypeError):
+            return
+        if rid not in self.rooms and len(self.rooms) >= ROOM_SUBSCRIPTIONS_MAX:
+            return
+        if not await self._room_exists(rid):
+            return
+        self.rooms.add(rid)
+        await self.channel_layer.group_add(f"room.{rid}", self.channel_name)
+        await self._room_presence(rid, "join")
+        await room_join_async(rid, self.device.id)
+
+    async def _handle_room_leave(self, content):
+        rid = str(content.get("room_id") or "")
+        if rid in self.rooms:
+            await self._leave_room(rid)
+
+    async def _handle_room_signal(self, content):
+        rid = str(content.get("room_id") or "")
+        blob = content.get("blob")
+        # Ephemeral room text/state: relayed to the room group, NEVER persisted or logged (§A9).
+        if rid in self.rooms and isinstance(blob, str) and len(blob) <= settings.SIGNAL_MAX:
+            await self.channel_layer.group_send(
+                f"room.{rid}", {"type": "room.relay", "room_id": rid, "blob": blob})
+
     # ---- channel-layer events (server -> this socket) --------------------
     async def envelope_push(self, event):
         await self.send_json({"type": "envelope", "id": event["id"],
@@ -148,10 +192,33 @@ class GatewayConsumer(AsyncJsonWebsocketConsumer):
         await self.send_json({"type": "presence", "device_id": event["device_id"],
                               "state": event["state"]})
 
+    async def room_relay(self, event):
+        await self.send_json({"type": "room_signal", "room_id": event["room_id"],
+                              "blob": event["blob"]})
+
+    async def room_presence(self, event):
+        await self.send_json({"type": "room_presence", "room_id": event["room_id"],
+                              "device_id": event["device_id"], "state": event["state"]})
+
     async def connection_close(self, event):
         await self.close(code=4003)              # device was revoked (§A8)
 
     # ---- helpers ---------------------------------------------------------
+    # Prompt 7 wiring: `self._room_exists(rid)` resolves to the auth-module query.
+    _room_exists = staticmethod(_room_exists_query)
+
+    async def _leave_room(self, rid):
+        self.rooms.discard(rid)
+        await self._room_presence(rid, "leave")
+        await room_leave_async(rid, self.device.id)
+        await self.channel_layer.group_discard(f"room.{rid}", self.channel_name)
+
+    async def _room_presence(self, rid, state):
+        await self.channel_layer.group_send(
+            f"room.{rid}",
+            {"type": "room.presence", "room_id": rid,
+             "device_id": str(self.device.id), "state": state})
+
     async def _bind(self, token_str):
         result = await authenticate_access(token_str)
         if result is None:
