@@ -23,6 +23,13 @@ def test_create_returns_the_capability_id_and_stores_one_bucketed_blob(
     assert bytes(room.name_blob) == b"q" * NAME_LEN
 
 
+def test_an_unknown_field_is_rejected(api, active_user, device, auth_headers):
+    """§A5: unknown fields rejected, here as everywhere."""
+    resp = api.post("/api/v1/rooms", {"name_blob": name_blob_b64(b"q"), "junk": 1},
+                    format="json", **auth_headers(active_user, device))
+    assert resp.status_code == 400
+
+
 def test_get_round_trips_the_blob_and_reports_zero_live(api, active_user, device,
                                                         auth_headers, room):
     resp = api.get(f"/api/v1/rooms/{room.id}", **auth_headers(active_user, device))

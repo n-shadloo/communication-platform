@@ -1,16 +1,22 @@
 from rest_framework import serializers
+from accounts.serializers import StrictSerializer
 from core.fields import decode_blob_or_400
 from core.buckets import BACKUP_BUCKETS, ENVELOPE_BUCKETS
 
-class KeyBackupSerializer(serializers.Serializer):
-    blob = serializers.CharField()
+# Base64 of the largest bucket plus padding headroom (messaging's pattern): bounds what
+# reaches b64decode; the exact length check is decode_blob_or_400's job.
+MAX_BACKUP_CHARS = 4 * ((max(BACKUP_BUCKETS) + 2) // 3) + 8
+MAX_RECORD_CHARS = 4 * ((max(ENVELOPE_BUCKETS) + 2) // 3) + 8
+
+class KeyBackupSerializer(StrictSerializer):
+    blob = serializers.CharField(max_length=MAX_BACKUP_CHARS, trim_whitespace=False)
     version = serializers.IntegerField(min_value=0)
     def validate(self, d):
         d["raw"] = decode_blob_or_400(d["blob"], BACKUP_BUCKETS); return d
 
-class HistoryAppendSerializer(serializers.Serializer):
-    class _Rec(serializers.Serializer):
-        blob = serializers.CharField()
+class HistoryAppendSerializer(StrictSerializer):
+    class _Rec(StrictSerializer):
+        blob = serializers.CharField(max_length=MAX_RECORD_CHARS, trim_whitespace=False)
         def validate(self, d):
             d["raw"] = decode_blob_or_400(d["blob"], ENVELOPE_BUCKETS); return d
     records = serializers.ListField(child=_Rec(), min_length=1, max_length=100)
