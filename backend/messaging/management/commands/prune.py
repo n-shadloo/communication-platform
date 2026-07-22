@@ -2,8 +2,10 @@ import os
 from datetime import timedelta
 
 from django.conf import settings
+from django.core.management import call_command
 from django.core.management.base import BaseCommand
 from django.utils import timezone
+from rest_framework_simplejwt.token_blacklist.models import OutstandingToken
 
 from attachments.models import Attachment
 from messaging.models import QueuedEnvelope
@@ -21,13 +23,24 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         envelopes = self._prune_envelopes()
+        tokens = self._flush_expired_refresh_tokens()
         attachments, files = self._prune_attachments()
         history = self._prune_history()
         # Counts only. An id or a blob written here would land in the timer's journal,
         # which is exactly the graph leak §A11.4 forbids.
         self.stdout.write(f"envelopes pruned: {envelopes}")
+        self.stdout.write(f"refresh tokens flushed: {tokens}")
         self.stdout.write(f"attachments pruned: {attachments} (files removed: {files})")
         self.stdout.write(f"history pruned: {history}")
+
+    @staticmethod
+    def _flush_expired_refresh_tokens():
+        # §A13: expired refresh JTIs are pruned so token-issue ≈ login times age out of
+        # the DB. Delegated to SimpleJWT's own command; the count uses the same filter
+        # (blacklist rows cascade with their outstanding row).
+        expired = OutstandingToken.objects.filter(expires_at__lte=timezone.now()).count()
+        call_command("flushexpiredtokens")
+        return expired
 
     @staticmethod
     def _prune_envelopes():

@@ -6,6 +6,7 @@ from io import StringIO
 import pytest
 from django.core.management import call_command
 from django.utils import timezone
+from rest_framework_simplejwt.token_blacklist.models import OutstandingToken
 
 from attachments.models import Attachment
 from core.buckets import ATTACHMENT_BUCKETS
@@ -111,6 +112,23 @@ def test_one_unremovable_file_does_not_stall_the_whole_sweep(active_user, attach
     assert Attachment.objects.filter(id=stuck.id).exists()
     assert not ok_path.exists()
     assert "attachments pruned: 1 (files removed: 1)" in output
+
+
+@pytest.mark.django_db
+def test_expired_refresh_tokens_are_flushed_and_live_ones_stay(active_user):
+    """§A13: token-issue ≈ login times must age out of the DB with the refresh TTL."""
+    expired = OutstandingToken.objects.create(
+        user=active_user, jti="expired-jti", token="t1",
+        expires_at=timezone.now() - timedelta(days=1))
+    OutstandingToken.objects.create(
+        user=active_user, jti="live-jti", token="t2",
+        expires_at=timezone.now() + timedelta(days=1))
+
+    output = run_prune()
+
+    assert list(OutstandingToken.objects.values_list("jti", flat=True)) == ["live-jti"]
+    assert "refresh tokens flushed: 1" in output
+    assert expired.jti not in output
 
 
 @pytest.mark.django_db
