@@ -1,0 +1,37 @@
+[Unit]
+Description=chatapp LiveKit SFU (voice media only; never holds a media key)
+Documentation=file:///srv/chatapp/backend/ARCHITECTURE.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=livekit
+Group=livekit
+# The same .env described in .env.example. Root-owned, mode 0640, never in git.
+EnvironmentFile=/etc/chatapp/chatapp.env
+# livekit.yaml holds no secret: the API key pair (an infrastructure secret, §A12) is
+# composed into LIVEKIT_KEYS here so it lives only in the EnvironmentFile. $$ is a
+# literal $ to systemd — the shell expands from the loaded environment.
+ExecStart=/bin/sh -c 'LIVEKIT_KEYS="$${LIVEKIT_API_KEY}: $${LIVEKIT_API_SECRET}" \
+    exec /usr/local/bin/livekit-server --config /etc/chatapp/livekit.yaml'
+Restart=on-failure
+RestartSec=5s
+
+# Hardening, mirroring daphne.service. This process relays ciphertext media and holds
+# one infrastructure secret; it touches neither the database nor any content key.
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+
+[Install]
+WantedBy=multi-user.target
