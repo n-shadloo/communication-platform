@@ -15,4 +15,5 @@ urlpatterns = [
     path("api/v1/", include("vault.urls")),
     path("api/v1/", include("messaging.urls")),
     path("api/v1/", include("attachments.urls")),
+    path("api/v1/", include("voicerooms.urls")),
 ]
