@@ -20,6 +20,13 @@ def test_get_when_absent_is_404(api, active_user, device, auth_headers):
     assert resp.json()["code"] == "not_found"
 
 
+def test_an_unknown_field_is_rejected(api, active_user, device, auth_headers):
+    """§A5: unknown fields rejected — key material writes take no smuggled parameters."""
+    resp = api.put(KEYBACKUP_URL, {"blob": backup_blob(b"R"), "version": 1, "junk": 1},
+                   format="json", **auth_headers(active_user, device))
+    assert resp.status_code == 400
+
+
 def test_put_then_get_round_trips_blob_and_version(api, active_user, device, auth_headers):
     headers = auth_headers(active_user, device)
     blob = backup_blob(b"R")

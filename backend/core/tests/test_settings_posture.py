@@ -1,8 +1,8 @@
 from django.conf import settings
-from django.test import SimpleTestCase
+from django.test import SimpleTestCase, override_settings
 
 from config.settings import prod
-from core.checks import no_foreign_or_telemetry
+from core.checks import no_foreign_or_telemetry, ws_origin_allowlist_set
 
 BANNED_TELEMETRY = {"sentry_sdk", "ddtrace", "newrelic", "elasticapm"}
 
@@ -49,6 +49,15 @@ class BasePostureTests(SimpleTestCase):
 
     def test_core_deploy_check_reports_nothing(self):
         self.assertEqual(no_foreign_or_telemetry(None), [])
+
+    def test_ws_origin_check_passes_when_the_allowlist_is_set(self):
+        self.assertEqual(ws_origin_allowlist_set(None), [])
+
+    def test_ws_origin_check_fails_on_an_empty_allowlist(self):
+        # Empty = allow-any-Origin in the consumer (dev behaviour); prod must set it (§A6).
+        with override_settings(ALLOWED_WS_ORIGINS=[]):
+            errors = ws_origin_allowlist_set(None)
+        self.assertEqual([e.id for e in errors], ["core.E003"])
 
 
 class ProdPostureTests(SimpleTestCase):
