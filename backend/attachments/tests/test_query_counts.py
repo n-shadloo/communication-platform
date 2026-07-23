@@ -1,4 +1,4 @@
-"""Query-shape guard for the upload path (§A5).
+"""Query-shape guard for the upload path.
 
 Counts include the two per-request auth queries `DeviceJWTAuthentication` makes.
 """
@@ -24,8 +24,8 @@ def test_the_quota_check_is_one_aggregate_however_many_files_exist(
     ])
     headers = auth_headers(active_user, device)
 
-    # 2 auth + 1 SUM aggregate + 1 insert.
-    with django_assert_num_queries(AUTH_QUERIES + 2):
+    # 2 auth + savepoint + uploader lock + SUM aggregate + insert + release.
+    with django_assert_num_queries(AUTH_QUERIES + 5):
         resp = api.post(UPLOAD_URL, {"blob": SimpleUploadedFile("blob", b"\x01" * SMALLEST)},
                         format="multipart", **headers)
 
