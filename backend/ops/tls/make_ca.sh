@@ -1,8 +1,9 @@
-# ops/tls/make_ca.sh — private CA + server certificate (ARCHITECTURE §A10, rec-15).
+# ops/tls/make_ca.sh — private CA + server certificate for the network-shutdown
+# posture (see ops/tls/README.md; the public deployment uses Let's Encrypt instead).
 #
-# There is no live foreign CA in this design (§1A.1): the root generated here is
-# pre-distributed to client devices, and clients SPKI-pin the server key. Everything
-# lands in ops/tls/out/, which is gitignored — the private keys must never be committed.
+# The root generated here is pre-distributed to client devices, and clients SPKI-pin
+# the server key. Everything lands in ops/tls/out/, which is gitignored — the private
+# keys must never be committed.
 #
 # Usage: DOMAIN=chat.example.internal bash ops/tls/make_ca.sh
 set -euo pipefail
@@ -18,7 +19,7 @@ umask 077
 if [ ! -f "$OUT/ca.key" ]; then
   openssl req -x509 -newkey rsa:4096 -sha256 -days "$CA_DAYS" -nodes \
     -keyout "$OUT/ca.key" -out "$OUT/ca.crt" \
-    -subj "/CN=chatapp private root CA" \
+    -subj "/CN=chat private root CA" \
     -addext "basicConstraints=critical,CA:TRUE,pathlen:0" \
     -addext "keyUsage=critical,keyCertSign,cRLSign"
   echo "Generated a new root CA. Keep ca.key offline; it is the trust anchor."
@@ -56,7 +57,7 @@ spki_from_key() {
 }
 
 echo
-echo "Install ops/tls/out/server.crt and server.key at /etc/chatapp/tls/ (nginx)."
+echo "Install ops/tls/out/server.crt and server.key at /etc/chat/tls/ (nginx)."
 echo "Pre-distribute ops/tls/out/ca.crt to client devices as the trust anchor."
 echo
 echo "SPKI pin (primary, pin this in the client):"
