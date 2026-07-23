@@ -1,9 +1,13 @@
+from rest_framework.exceptions import AuthenticationFailed
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework_simplejwt.exceptions import InvalidToken
-from rest_framework.exceptions import AuthenticationFailed
+
 from devices.models import Device
 
 class DeviceJWTAuthentication(JWTAuthentication):
+    """Validates the JWT, then binds a full-scope token to its live device and
+    exposes it as `request.auth_device` (None for register scope)."""
+
     def get_user(self, validated_token):
         user = super().get_user(validated_token)
         if not user.is_active:

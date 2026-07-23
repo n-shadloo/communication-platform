@@ -1,21 +1,20 @@
 import redis
 from django.conf import settings
 
-# Redis-backed, non-persistent (redis is configured save "" / appendonly no — §A10). Live
+# Redis-backed and non-persistent (redis runs with save "" and appendonly no). Live
 # room membership is ephemeral state, never written to the database.
 #
-# Native set ops (SADD/SREM/SCARD) instead of cache round-tripping: pickling a Python set
-# through cache.get/cache.set is a read-modify-write that loses concurrent joins (measured
-# pre-phase: 16 simultaneous joins left as few as 3 members). Each command below is a
-# single atomic Redis op, and Redis deletes a set key the moment its last member is
-# removed, so an empty room leaves nothing behind.
+# Native set ops (SADD/SREM/SCARD) instead of cache round-tripping: pickling a Python
+# set through cache.get/cache.set is a read-modify-write that loses concurrent joins.
+# Each command below is a single atomic Redis op, and Redis deletes a set key the
+# moment its last member is removed, so an empty room leaves nothing behind.
 
 _client = None
 
 # Self-healing bound: a worker that dies without running disconnect() strands its
 # members in the set, so every join/leave refreshes a day-long TTL. A room whose
-# membership sees zero churn for 24h self-clears — best-effort ephemerality, worded
-# honestly (§A14) — and ghosts from a crash never outlive the day.
+# membership sees zero churn for 24h self-clears, and ghosts from a crash never
+# outlive the day.
 ROOMLIVE_TTL_SECONDS = 86400
 
 

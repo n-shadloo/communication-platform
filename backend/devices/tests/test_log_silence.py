@@ -1,9 +1,8 @@
-"""Nothing on the device or key-distribution paths logs an identifier or key material
-(§A11.4).
+"""Nothing on the device or key-distribution paths logs an identifier or key material.
 
-`assertLogs` swaps in its own root handler, so the configured `ScrubFilter` is *not*
-applied to what it captures — that is deliberate. This asserts the code never emits an
-identifier in the first place; `core/tests/test_scrub.py` covers the filter itself.
+`assertLogs` swaps in its own root handler, so the configured `ScrubFilter` is not
+applied to what it captures. That is deliberate: these tests assert the code never
+emits an identifier in the first place; `core/tests/test_scrub.py` covers the filter.
 """
 import logging
 

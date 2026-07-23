@@ -12,9 +12,8 @@ from .models import User, username_validator
 
 
 class UsernameTaken(APIException):
-    """§A5 reports a duplicate inline as `400 {"code":"username_taken"}`. Raised both
-    from validation and from the view's IntegrityError guard, so the concurrent-
-    registration race lands on the same contract instead of a 500."""
+    """Raised both from validation and from the view's IntegrityError guard, so the
+    concurrent-registration race lands on the same 400 contract instead of a 500."""
 
     status_code = 400
 
@@ -23,7 +22,7 @@ class UsernameTaken(APIException):
 
 
 class StrictSerializer(serializers.Serializer):
-    """Unknown fields are rejected rather than silently ignored (§A5)."""
+    """Rejects unknown fields rather than silently ignoring them."""
 
     def to_internal_value(self, data):
         if isinstance(data, dict):
@@ -37,8 +36,8 @@ class StrictSerializer(serializers.Serializer):
 
 class RegisterSerializer(StrictSerializer):
     # The `^[a-z0-9_]{3,32}$` rule is applied through the model validator in
-    # validate_username, i.e. *after* lowercasing. As a RegexField it would reject
-    # "BoB" before the normalisation the User manager and model both perform.
+    # validate_username, after lowercasing. As a RegexField it would reject "BoB"
+    # before the normalisation the User manager and model both perform.
     username = serializers.CharField(max_length=32)
     password = serializers.CharField(write_only=True, max_length=256,
                                      trim_whitespace=False)
@@ -58,7 +57,7 @@ class RegisterSerializer(StrictSerializer):
         return value
 
     def create(self, data):
-        # Account is created INACTIVE; the owner activates it (structure §7).
+        # Accounts are created inactive; the owner activates them.
         return User.objects.create_user(username=data["username"],
                                         password=data["password"])
 

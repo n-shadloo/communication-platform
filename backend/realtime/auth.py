@@ -1,11 +1,11 @@
 from channels.db import database_sync_to_async
-from rest_framework_simplejwt.tokens import AccessToken
 from rest_framework_simplejwt.exceptions import TokenError
+from rest_framework_simplejwt.tokens import AccessToken
 
 @database_sync_to_async
 def authenticate_access(token_str):
-    """Validate an access token exactly like DeviceJWTAuthentication (§A8). Returns
-    (user, device) on success, or None on any failure. Full scope + a live device required."""
+    """Validate an access token exactly like DeviceJWTAuthentication: full scope and
+    a live device required. Returns (user, device) on success, None on any failure."""
     from devices.models import Device
     try:
         token = AccessToken(token_str)          # signature + expiry

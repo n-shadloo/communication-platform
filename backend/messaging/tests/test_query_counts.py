@@ -1,13 +1,13 @@
-"""Query-shape guards for the hot paths (§A5).
+"""Query-shape guards for the hot paths.
 
-These lock in the *shape*, not a micro-benchmark: the drain must stay one indexed query
-no matter how full the mailbox is, and the fan-out's device check must stay one query no
-matter how many recipients there are.
+These lock in the shape, not a micro-benchmark: the drain must stay one indexed query
+no matter how full the mailbox is, and the fan-out's device check must stay one query
+no matter how many recipients there are.
 
-Counts include the two per-request auth queries `DeviceJWTAuthentication` makes (the user
-row and the device row), and — under pytest's per-test transaction — a SAVEPOINT/RELEASE
-pair per `atomic()` block. In production, with autocommit, those savepoints are a real
-BEGIN/COMMIT instead.
+Counts include the two per-request auth queries `DeviceJWTAuthentication` makes (the
+user row and the device row) and, under pytest's per-test transaction, a
+SAVEPOINT/RELEASE pair per `atomic()` block. In production, with autocommit, those
+savepoints are a real BEGIN/COMMIT instead.
 """
 import pytest
 

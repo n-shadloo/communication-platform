@@ -84,10 +84,9 @@ def test_deactivating_the_account_rejects_its_tokens(
 def test_register_scope_token_reaches_no_endpoint_in_this_phase(
     api, active_user, method, url_name, args
 ):
-    # §A8: "`register`-scope tokens are accepted **only** by `POST /me/devices`",
-    # which does not exist yet. DeviceJWTAuthentication *authenticates* these tokens,
-    # so IsAuthenticated alone would let every one of these through — the scope check
-    # is what holds the line.
+    # DeviceJWTAuthentication authenticates register-scope tokens, so IsAuthenticated
+    # alone would let every one of these through; the scope check is what holds the
+    # line.
     access = issue_register_scope(active_user)
 
     response = getattr(api, method)(reverse(url_name, args=args), **bearer(access))
@@ -101,9 +100,8 @@ def test_anonymous_requests_are_rejected(api, protected_url):
 
 
 def test_a_view_relying_on_project_defaults_is_closed_to_register_scope(active_user):
-    """Phases 3-8 add endpoints. One that inherits DEFAULT_PERMISSION_CLASSES and
-    forgets the scope check must still fail closed (§A8), rather than depending on
-    every future author remembering."""
+    """An endpoint that inherits DEFAULT_PERMISSION_CLASSES and forgets the scope
+    check must still fail closed, rather than depending on every author remembering."""
 
     class DefaultsOnlyView(APIView):
         def get(self, request):

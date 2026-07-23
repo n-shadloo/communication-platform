@@ -20,10 +20,10 @@ from .serializers import (DirectoryUserSerializer, LoginSerializer,
 from .tokens import issue_full, issue_register_scope
 
 # A revoked device, a wrong generation, and a deactivated account are all reported
-# identically: the client learns only that this token is finished (§A8).
+# identically: the client learns only that this token is finished.
 TOKEN_REVOKED = {"code": "token_revoked", "detail": "Token is no longer valid."}
 
-# A fixed invalid hash so an unknown-username login still spends Argon2 time (§A8).
+# A fixed invalid hash so an unknown-username login still spends Argon2 time.
 _DUMMY_HASH = make_password("timing-equalizer-not-a-real-password")
 
 
@@ -42,12 +42,13 @@ class RegisterView(APIView):
     throttle_scope = "register"
 
     def post(self, request):
-        ser = RegisterSerializer(data=request.data)
-        if not ser.is_valid():
-            return invalid_request(ser.errors)
+        serializer = RegisterSerializer(data=request.data)
+        if not serializer.is_valid():
+            return invalid_request(serializer.errors)
+
         try:
             with transaction.atomic():
-                user = ser.save()
+                user = serializer.save()
         except IntegrityError:
             # The uniqueness probe in validate_username is advisory: two concurrent
             # registrations can both pass it and only the index settles it.
@@ -61,12 +62,12 @@ class LoginView(APIView):
     throttle_scope = "login"
 
     def post(self, request):
-        ser = LoginSerializer(data=request.data)
-        if not ser.is_valid():
-            return invalid_request(ser.errors)
-        username = ser.validated_data["username"].lower()
-        password = ser.validated_data["password"]
-        device_id = ser.validated_data.get("device_id")
+        serializer = LoginSerializer(data=request.data)
+        if not serializer.is_valid():
+            return invalid_request(serializer.errors)
+        username = serializer.validated_data["username"].lower()
+        password = serializer.validated_data["password"]
+        device_id = serializer.validated_data.get("device_id")
 
         user = User.objects.filter(username=username).only(
             "id", "password", "is_active").first()
@@ -82,8 +83,6 @@ class LoginView(APIView):
             return error("account_inactive", "This account is awaiting activation.", 403)
 
         if device_id:
-            # Narrowed: the row also carries ik_pub/spk_pub/spk_sig/label_blob, none
-            # of which this path reads.
             device = Device.objects.filter(
                 id=device_id, user_id=user.id, revoked_date__isnull=True,
             ).only("id", "token_generation").first()
@@ -92,7 +91,9 @@ class LoginView(APIView):
                 return Response({"access": access, "refresh": refresh,
                                  "user_id": str(user.id),
                                  "device_id": str(device.id), "scope": "full"})
-        # No/unknown device → a short register-scope token whose only power is POST /me/devices.
+
+        # No or unknown device: a short register-scope token whose only power is
+        # POST /me/devices.
         return Response({"access": issue_register_scope(user),
                          "user_id": str(user.id), "scope": "register"})
 
@@ -107,13 +108,14 @@ class RefreshView(APIView):
     throttle_scope = "refresh"
 
     def post(self, request):
-        ser = RefreshTokenSerializer(data=request.data)
-        if not ser.is_valid():
+        serializer = RefreshTokenSerializer(data=request.data)
+        if not serializer.is_valid():
             return error("invalid_token", "Refresh token is missing or malformed.", 401)
         try:
-            token = RefreshToken(ser.validated_data["refresh"])  # signature/expiry/blacklist
+            token = RefreshToken(serializer.validated_data["refresh"])  # signature/expiry/blacklist
         except TokenError:
             return error("invalid_token", "Refresh token is missing or malformed.", 401)
+
         # A register-scope token must never rotate its way up to a full-scope pair.
         if token.get("scope") != "full":
             return Response(TOKEN_REVOKED, status=401)
@@ -122,8 +124,7 @@ class RefreshView(APIView):
             uuid.UUID(str(device_id))
         except (TypeError, ValueError):
             return Response(TOKEN_REVOKED, status=401)
-        # Refresh runs every ≤15 min per device, so the join stays narrow: the key
-        # blobs and the rest of the user row are never read here.
+
         device = (Device.objects
                   .filter(id=device_id, revoked_date__isnull=True)
                   .select_related("user")
@@ -134,6 +135,7 @@ class RefreshView(APIView):
                 or token.get("tgen") != device.token_generation
                 or not device.user.is_active):
             return Response(TOKEN_REVOKED, status=401)
+
         token.blacklist()  # rotation: retire the presented refresh
         access, refresh = issue_full(device.user, device)
         return Response({"access": access, "refresh": refresh})
@@ -144,11 +146,12 @@ class LogoutView(APIView):
     throttle_scope = "accounts"
 
     def post(self, request):
-        ser = RefreshTokenSerializer(data=request.data)
-        if not ser.is_valid():
-            return invalid_request(ser.errors)
+        serializer = RefreshTokenSerializer(data=request.data)
+        if not serializer.is_valid():
+            return invalid_request(serializer.errors)
+
         try:
-            token = RefreshToken(ser.validated_data["refresh"])
+            token = RefreshToken(serializer.validated_data["refresh"])
             # Never let one account blacklist another's token.
             if str(token.get("user_id")) == str(request.user.id):
                 token.blacklist()
@@ -167,8 +170,8 @@ class UserDirectoryView(ListAPIView):
         return User.objects.filter(is_active=True).only("id", "username").order_by("username")
 
     def list(self, request, *args, **kwargs):
-        # §A5 specifies the {"users": [...]} envelope; ListAPIView would render a
-        # bare array.
+        # The response contract wraps the list in {"users": [...]}; ListAPIView would
+        # render a bare array.
         data = self.get_serializer(self.get_queryset(), many=True).data
         return Response({"users": data})
 
@@ -178,11 +181,11 @@ class ProfileDetailView(APIView):
     throttle_scope = "accounts"
 
     def get(self, request, user_id):
-        prof = ProfileBlob.objects.filter(user_id=user_id,
-                                          user__is_active=True).only("blob", "version").first()
-        if prof is None:
+        profile = ProfileBlob.objects.filter(
+            user_id=user_id, user__is_active=True).only("blob", "version").first()
+        if profile is None:
             return error("not_found", "No profile for that user.", 404)
-        return Response(ProfileReadSerializer(prof).data)
+        return Response(ProfileReadSerializer(profile).data)
 
 
 class MyProfileView(APIView):
@@ -190,35 +193,35 @@ class MyProfileView(APIView):
     throttle_scope = "accounts"
 
     def get(self, request):
-        prof = ProfileBlob.objects.filter(
+        profile = ProfileBlob.objects.filter(
             user_id=request.user.id).only("blob", "version").first()
-        if prof is None:
+        if profile is None:
             return error("not_found", "No profile yet.", 404)
-        return Response(ProfileReadSerializer(prof).data)
+        return Response(ProfileReadSerializer(profile).data)
 
     def put(self, request):
-        ser = ProfileWriteSerializer(data=request.data)
-        if not ser.is_valid():
-            return invalid_request(ser.errors)
-        raw = ser.validated_data["raw"]
-        new_version = ser.validated_data["version"]
+        serializer = ProfileWriteSerializer(data=request.data)
+        if not serializer.is_valid():
+            return invalid_request(serializer.errors)
+        raw = serializer.validated_data["raw"]
+        new_version = serializer.validated_data["version"]
+
         try:
             with transaction.atomic():
-                # .only("version"): the locked read exists to compare versions, so
-                # there is no reason to drag the stored blob back with it. Branching
-                # here rather than calling update_or_create avoids a second identical
-                # SELECT on the same row.
-                prof = (ProfileBlob.objects.select_for_update()
-                        .filter(user_id=request.user.id).only("version").first())
-                if prof is None:
+                # .only("version"): the locked read exists to compare versions, so the
+                # stored blob is not dragged back with it. Branching here rather than
+                # calling update_or_create avoids a second identical SELECT.
+                profile = (ProfileBlob.objects.select_for_update()
+                           .filter(user_id=request.user.id).only("version").first())
+                if profile is None:
                     ProfileBlob.objects.create(user_id=request.user.id, blob=raw,
                                                version=new_version)
-                elif new_version <= prof.version:
+                elif new_version <= profile.version:
                     return error("stale_version", "Version must increase.", 409)
                 else:
-                    prof.blob = raw
-                    prof.version = new_version
-                    prof.save(update_fields=["blob", "version", "updated_date"])
+                    profile.blob = raw
+                    profile.version = new_version
+                    profile.save(update_fields=["blob", "version", "updated_date"])
         except IntegrityError:
             # select_for_update locks nothing when the row does not exist yet, so two
             # concurrent first-writes can both clear the version check above.

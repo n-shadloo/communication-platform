@@ -1,10 +1,8 @@
-"""§A8: a register-scope token's only power is `POST /me/devices`.
+"""A register-scope token's only power is `POST /me/devices`.
 
-`DeviceJWTAuthentication` *authenticates* register-scope tokens, so `IsAuthenticated`
+`DeviceJWTAuthentication` authenticates register-scope tokens, so `IsAuthenticated`
 alone is satisfied by one. Every device endpoint except registration must therefore
-carry the scope check — measured before these views were written, a view shaped like
-the phase prompt's returned `204` to a register token on `DELETE /me/devices/{id}`,
-letting a 10-minute token revoke devices.
+carry the scope check; without it, a ten-minute register token could revoke devices.
 """
 import pytest
 

@@ -1,4 +1,3 @@
-"""POST /envelopes — fan-out, staleness, and the scope/bucket gates (§A5)."""
 import base64
 import uuid
 
@@ -110,7 +109,7 @@ def test_an_off_bucket_blob_is_rejected_without_echoing_the_payload(
 
 @pytest.mark.django_db
 def test_a_register_scope_token_cannot_send(api, active_user, auth_headers, bob_devices):
-    """§A8: a register-scope token's only power is POST /me/devices."""
+    """A register-scope token's only power is POST /me/devices."""
     resp = send(api, auth_headers(active_user, scope="register"),
                 [{"device_id": str(bob_devices[0].id), "blob": envelope_blob()}])
 
@@ -120,7 +119,6 @@ def test_a_register_scope_token_cannot_send(api, active_user, auth_headers, bob_
 
 @pytest.mark.django_db
 def test_an_unknown_field_is_rejected(api, active_user, device, auth_headers, bob_devices):
-    """§A5: unknown fields are rejected rather than silently ignored."""
     resp = api.post(SEND_URL, {"messages": [{"device_id": str(bob_devices[0].id),
                                              "blob": envelope_blob(),
                                              "sender": "alice"}]},

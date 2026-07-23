@@ -3,8 +3,8 @@ from django.test import SimpleTestCase
 
 from core.fields import OpaqueBlobField
 
-# Column names that would mean the server had grown a plaintext store, key material, or a
-# conversation graph (ARCHITECTURE §A11.1–3). None of these may ever exist on any model.
+# Column names that would mean the server had grown a plaintext store, key material,
+# or a conversation graph. None of these may ever exist on any model.
 FORBIDDEN_FIELD_NAMES = frozenset({
     "plaintext", "content", "message_text", "body",
     "private_key", "secret_key", "session_key",
@@ -13,24 +13,24 @@ FORBIDDEN_FIELD_NAMES = frozenset({
     "password_plain",
 })
 
-# `password` holds an Argon2id hash: auth material, not a content key (§A12). It is
+# `password` holds an Argon2id hash: auth material, not a content key. It is
 # legitimate on the user model and nowhere else.
 PASSWORD_ALLOWED_ON = frozenset({"accounts.User"})
 
-# §A4 audits the framework tables once and accepts them. Django's `session_key` is an
-# opaque session identifier used only by the admin — the API is token-only — and is not
-# key material under the §A12 inventory. Nothing else gets an exemption.
+# The framework tables are audited once and accepted. Django's `session_key` is an
+# opaque session identifier used only by the admin (the API is token-only) and is
+# not key material. Nothing else gets an exemption.
 AUDITED_FRAMEWORK_COLUMNS = frozenset({
     "sessions.Session.session_key",
 })
 
 # Public halves of client keypairs are explicitly fine to store and are not bucketed
-# ciphertext, so they stay plain BinaryFields (§A4).
+# ciphertext, so they stay plain BinaryFields.
 PUBLIC_KEY_SUFFIXES = ("_pub", "_sig")
 
 
 def columns(model):
-    """Concrete columns and m2m fields — reverse accessors are not columns."""
+    """Concrete columns and m2m fields; reverse accessors are not columns."""
     for field in model._meta.get_fields():
         if field.auto_created and not field.concrete:
             continue
@@ -70,8 +70,8 @@ class FieldManifestTests(SimpleTestCase):
 
         self.assertEqual(
             offenders, [],
-            "Forbidden columns found — this server stores no plaintext, no key material, "
-            f"and no conversation graph (ARCHITECTURE §A11): {offenders}",
+            "Forbidden columns found; this server stores no plaintext, no key "
+            f"material, and no conversation graph: {offenders}",
         )
 
     def test_every_ciphertext_field_is_a_bucketed_opaque_blob(self):
@@ -86,7 +86,7 @@ class FieldManifestTests(SimpleTestCase):
 
         self.assertEqual(
             problems, [],
-            f"Every stored blob must be exact-bucket-validated (ARCHITECTURE §A7): {problems}",
+            f"Every stored blob must be exact-bucket-validated: {problems}",
         )
 
     def test_guard_actually_sees_the_known_ciphertext_fields(self):

@@ -13,10 +13,7 @@ from .models import Room
 from .presence import room_live_count
 from .serializers import RoomNameSerializer
 
-# §A8: DeviceJWTAuthentication authenticates register-scope tokens, so `IsAuthenticated`
-# alone would let one create, read, and rename rooms. Every view keeps the project default
-# [IsAuthenticated, IsFullScope], and every endpoint carries a throttle scope (§A5) — the
-# CRUD views share the general per-user "accounts" scope like vault does; the token mint
+# The CRUD views share the general per-user "accounts" throttle scope; the token mint
 # has its own tighter "roomtoken" scope.
 
 
@@ -25,9 +22,9 @@ class RoomListCreateView(APIView):
     throttle_scope = "accounts"
 
     def post(self, request):
-        ser = RoomNameSerializer(data=request.data)
-        ser.is_valid(raise_exception=True)
-        room = Room.objects.create(name_blob=ser.validated_data["raw"])
+        serializer = RoomNameSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        room = Room.objects.create(name_blob=serializer.validated_data["raw"])
         return Response({"room_id": str(room.id)}, status=201)
 
 
@@ -48,20 +45,22 @@ class RoomDetailView(APIView):
         })
 
     def put(self, request, room_id):
-        ser = RoomNameSerializer(data=request.data)
-        ser.is_valid(raise_exception=True)
-        # auto_now never fires on a queryset .update() (measured pre-phase), so the
-        # rename bumps updated_date explicitly — §A5's GET exposes it so peers notice
-        # renames. Still a single UPDATE.
+        serializer = RoomNameSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        # auto_now never fires on a queryset .update(), so the rename bumps
+        # updated_date explicitly; GET exposes it so peers notice renames. Still a
+        # single UPDATE.
         updated = Room.objects.filter(id=room_id).update(
-            name_blob=ser.validated_data["raw"],
+            name_blob=serializer.validated_data["raw"],
             updated_date=timezone.now().date())
         return Response(status=200 if updated else 404)
 
 
 class RoomTokenView(APIView):
-    """Mint a LiveKit join token for this room + this device. Requires a device-scoped token.
-    The server never joins the media path (§A9)."""
+    """Mint a LiveKit join token for this room and this device. Requires a
+    device-scoped token. The server never joins the media path."""
+
     permission_classes = [IsAuthenticated, IsFullScope]
     throttle_scope = "roomtoken"
 

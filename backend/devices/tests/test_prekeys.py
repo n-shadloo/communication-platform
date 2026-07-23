@@ -1,5 +1,3 @@
-"""`PUT /me/devices/{id}/prekeys` and its count — replenishment, confined to the
-device itself (§A5)."""
 import base64
 
 import pytest
@@ -53,8 +51,8 @@ def test_a_duplicate_key_id_within_one_payload_is_a_400(api, active_user, device
 
 
 def test_the_signed_prekey_is_replaced_and_dated(api, active_user, device, auth_headers):
-    """The server stores spk_pub/spk_sig and never verifies the signature — that is the
-    client's job against ik_pub (§A11.2, §A12)."""
+    """The server stores spk_pub/spk_sig and never verifies the signature; that is
+    the client's job against ik_pub."""
     body = {"spk": {"spk_id": 77, "pub": pubkey(b"n"), "sig": pubkey(b"z")}}
 
     response = api.put(prekeys_url(device.id), body, format="json",
@@ -126,7 +124,7 @@ def test_the_count_endpoint_reports_the_pool(api, active_user, device, auth_head
 def test_a_device_cannot_touch_another_devices_prekeys(api, active_user, device,
                                                        auth_headers, method, suffix,
                                                        body):
-    """Token device_id must equal the path device — including a sibling device on the
+    """Token device_id must equal the path device, including a sibling device on the
     caller's own account."""
     sibling = make_device(active_user, registration_id=42)
     headers = auth_headers(active_user, device)

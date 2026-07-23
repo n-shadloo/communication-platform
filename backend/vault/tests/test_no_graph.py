@@ -1,8 +1,8 @@
-"""No-graph seizure proof for vault_historyrecord (§A4, exit test).
+"""No-graph proof for vault_historyrecord.
 
 A dump of the table shows only {id, owner_id, seq, blob, stored_date}: the blob is an
-exact ENVELOPE bucket length, stored_date is day-coarse, and the single user reference is
-`owner` (the log owner) — no column links a second user.
+exact bucket length, stored_date is day-coarse, and the single user reference is
+`owner`, the log owner. No column links a second user.
 """
 import datetime
 

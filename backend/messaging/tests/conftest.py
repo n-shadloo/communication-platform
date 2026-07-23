@@ -10,7 +10,7 @@ SMALLEST_BUCKET = 1024
 
 
 def envelope_blob(filler=b"a", size=SMALLEST_BUCKET):
-    """Base64 of an exactly-bucket-sized opaque payload (§A7)."""
+    """Base64 of an exactly bucket-sized payload."""
     return base64.b64encode((filler * size)[:size]).decode()
 
 

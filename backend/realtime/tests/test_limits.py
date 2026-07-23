@@ -1,5 +1,5 @@
-"""Backpressure and protocol bounds (§A6, a06): every violation is a clean 4008 close,
-never a consumer crash."""
+"""Backpressure and protocol bounds: every violation is a clean 4008 close, never a
+consumer crash."""
 import pytest
 
 from .conftest import bearer, connect_ok, expect_close, mint_access
@@ -42,8 +42,8 @@ async def test_undecodable_json_closes_4008_instead_of_crashing(active_user, dev
 
 
 async def test_non_object_json_closes_4008_instead_of_crashing(active_user, device):
-    """'"hello"' decodes to a str with no .get() — the WS twin of the REST non-dict
-    body guard (messaging/views.py)."""
+    """'"hello"' decodes to a str with no .get(): the WS twin of the REST non-dict
+    body guard."""
     comm = await connect_ok(bearer(await mint_access(active_user, device)))
 
     await comm.send_to(text_data='"hello"')

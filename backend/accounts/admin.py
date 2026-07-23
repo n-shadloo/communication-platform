@@ -4,11 +4,10 @@ from .models import User
 
 
 def _close_user_sockets(user_ids):
-    """Best-effort: deactivation must reach live sockets too. REST re-checks
-    `is_active` on every request, but a WebSocket authenticated at connect time (§A8)
-    would otherwise keep relaying volatile signals until it happened to drop. Same
-    safe no-op pattern as the device-revoke cascade; silent because the error would
-    name device ids (§A11.4)."""
+    """Deactivation must reach live sockets too: REST re-checks `is_active` on every
+    request, but a WebSocket authenticated at connect time would otherwise keep
+    relaying volatile signals until it happened to drop. Best-effort and silent,
+    because the error would name device ids."""
     try:
         from asgiref.sync import async_to_sync
         from channels.layers import get_channel_layer

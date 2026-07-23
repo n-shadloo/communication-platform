@@ -1,5 +1,3 @@
-"""`PUT /me/devices/{id}/keypackages` and its count — the MLS key-package store,
-capped at 100 per device (§A4)."""
 import pytest
 
 from devices.models import KeyPackage
@@ -39,7 +37,6 @@ def test_uploads_accumulate(api, active_user, device, auth_headers):
 
 
 def test_the_hundred_stored_cap_is_enforced(api, active_user, device, auth_headers):
-    """§A4: "cap 100 stored/device"."""
     stock_keypackages(device, MAX_STORED_KEYPACKAGES)
 
     response = api.put(keypackages_url(device.id), {"keypackages": blobs(1)},

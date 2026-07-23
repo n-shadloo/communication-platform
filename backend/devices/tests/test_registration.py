@@ -1,4 +1,3 @@
-"""`POST /me/devices` — registration, the device cap, and input that must not 500 (§A5)."""
 import pytest
 from django.urls import reverse
 
@@ -16,7 +15,7 @@ def bearer(access):
 
 
 def test_a_register_scope_token_registers_a_device_and_gets_full_tokens(api, active_user):
-    """The register-scope token from login exists only to reach this endpoint (§A8)."""
+    """The register-scope token from login exists only to reach this endpoint."""
     response = api.post(DEVICES_URL, register_payload(otpks=3, keypackages=2),
                         format="json", **bearer(issue_register_scope(active_user)))
 
@@ -146,7 +145,6 @@ def test_a_keypackage_outside_its_bucket_is_rejected(api, active_user, device,
 
 
 def test_unknown_fields_are_rejected(api, active_user, device, auth_headers):
-    """§A5: "Unknown fields rejected"."""
     response = api.post(DEVICES_URL, register_payload(private_key="oops"),
                         format="json", **auth_headers(active_user, device))
 

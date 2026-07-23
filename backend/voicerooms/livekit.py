@@ -1,14 +1,15 @@
 import time
 
-import jwt  # PyJWT (pinned in Prompt 1); no LiveKit SDK / no foreign dependency
+import jwt  # PyJWT; no LiveKit SDK, no foreign dependency
 from django.conf import settings
 
 
 def mint_join_token(room_id, device_id):
-    """A short-lived LiveKit access token: a JWT signed with the LiveKit API secret (an
-    infrastructure secret, NOT a media key — §A12). Grants audio join/publish/subscribe for
-    exactly this room + this device. No media key is included; SFrame keys are derived
-    client-side from the live MLS subgroup and never reach the server or SFU (§A9)."""
+    """A short-lived LiveKit access token: a JWT signed with the LiveKit API secret
+    (an infrastructure secret, not a media key). Grants audio join/publish/subscribe
+    for exactly this room and this device. No media key is included; SFrame keys are
+    derived client-side from the live MLS subgroup and never reach the server or the
+    SFU."""
     now = int(time.time())
     ttl = settings.LIVEKIT_TOKEN_TTL_SECONDS
     payload = {
@@ -22,9 +23,9 @@ def mint_join_token(room_id, device_id):
             "room": str(room_id),
             "canPublish": True,
             "canSubscribe": True,
-            # §A9 scopes the grant to publish+subscribe *audio only*: microphone is the
-            # single publishable source, and the LiveKit data channel stays closed —
-            # ephemeral room text rides the WS `room.<id>` group (§A6), never the SFU.
+            # The grant covers audio only: microphone is the single publishable
+            # source, and the LiveKit data channel stays closed. Ephemeral room text
+            # rides the WS `room.<id>` group, never the SFU.
             "canPublishData": False,
             "canPublishSources": ["microphone"],
         },

@@ -1,7 +1,8 @@
-"""`DELETE /me/devices/{id}` — the revocation cascade (§A5, §A8).
+"""The revocation cascade.
 
-One removal must cut the device off completely: its tokens, its mailbox, its published
-key material, its presence in peers' device lists, and the ETag siblings poll.
+One removal must cut the device off completely: its tokens, its mailbox, its
+published key material, its presence in peers' device lists, and the ETag siblings
+poll.
 """
 import pytest
 from django.urls import reverse
@@ -44,8 +45,8 @@ def test_revocation_returns_204_and_marks_the_row(api, active_user, device,
 
 def test_the_revoked_devices_access_token_is_rejected(api, active_user, device,
                                                       auth_headers, doomed):
-    """(a) — `token_generation` is bumped, so DeviceJWTAuthentication refuses every
-    outstanding access token for it (§A8)."""
+    """(a) `token_generation` is bumped, so DeviceJWTAuthentication refuses every
+    outstanding access token for it."""
     access, _refresh = issue_full(active_user, doomed)
     assert api.get(reverse("user-directory"), **bearer(access)).status_code == 200
 
@@ -58,7 +59,7 @@ def test_the_revoked_devices_access_token_is_rejected(api, active_user, device,
 
 def test_the_revoked_devices_refresh_token_fails(api, active_user, device,
                                                  auth_headers, doomed):
-    """(b) — refresh re-checks the device, so it cannot mint a fresh pair."""
+    """(b) Refresh re-checks the device, so it cannot mint a fresh pair."""
     _access, refresh = issue_full(active_user, doomed)
 
     api.delete(f"{DEVICES_URL}/{doomed.id}", **auth_headers(active_user, device))
@@ -70,7 +71,7 @@ def test_the_revoked_devices_refresh_token_fails(api, active_user, device,
 
 def test_the_queue_prekeys_and_keypackages_are_deleted(api, active_user, device,
                                                        auth_headers, doomed):
-    """(c) — nothing of the device's data survives the revoke."""
+    """(c) Nothing of the device's data survives the revoke."""
     api.delete(f"{DEVICES_URL}/{doomed.id}", **auth_headers(active_user, device))
 
     assert OneTimePrekey.objects.filter(device=doomed).count() == 0
@@ -81,7 +82,7 @@ def test_the_queue_prekeys_and_keypackages_are_deleted(api, active_user, device,
 def test_the_revoked_device_leaves_the_peer_list(api, active_user, device,
                                                  auth_headers, doomed, peer,
                                                  peer_device):
-    """(d) — peers stop seeing it, so they stop encrypting to it."""
+    """(d) Peers stop seeing it, so they stop encrypting to it."""
     peer_headers = auth_headers(peer, peer_device)
     url = f"/api/v1/users/{active_user.id}/devices"
     assert str(doomed.id) in {d["device_id"]
@@ -95,7 +96,7 @@ def test_the_revoked_device_leaves_the_peer_list(api, active_user, device,
 
 def test_the_device_list_etag_changes(api, active_user, device, auth_headers, doomed,
                                       peer, peer_device):
-    """(e) — both the owner's siblings and peers notice on their next poll."""
+    """(e) Both the owner's siblings and peers notice on their next poll."""
     own_headers = auth_headers(active_user, device)
     peer_headers = auth_headers(peer, peer_device)
     peer_url = f"/api/v1/users/{active_user.id}/devices"

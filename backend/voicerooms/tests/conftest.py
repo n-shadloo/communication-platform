@@ -9,7 +9,7 @@ NAME_LEN = min(NAME_BUCKETS)
 
 
 def name_blob_b64(fill=b"n", length=NAME_LEN):
-    """A base64 name blob of exactly one NAME bucket (the client pads, §A7)."""
+    """A base64 name blob of exactly one NAME bucket; the client does the padding."""
     return base64.b64encode(fill * length).decode()
 
 

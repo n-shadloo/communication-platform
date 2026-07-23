@@ -1,8 +1,9 @@
-"""History append/read/delete/usage semantics (§A5, §A4, exit test).
+"""History append/read/delete/usage semantics.
 
 `seq` is per-owner, contiguous and gapless across batches; two owners' logs are
-independent; paging is keyset-ascending with an honest `has_more`; delete and usage are
-strictly owner-scoped. The hostile-input cases confirm the hardened parsing never 500s.
+independent; paging is keyset-ascending with an honest `has_more`; delete and usage
+are strictly owner-scoped. The hostile-input cases confirm the hardened parsing
+never 500s.
 """
 import pytest
 
@@ -21,7 +22,7 @@ def append(api, headers, blobs):
 
 
 def append_batched(api, headers, blobs, chunk=100):
-    """The §A5 per-batch ceiling is 100 records, so a larger log is uploaded in chunks."""
+    """The per-batch ceiling is 100 records, so a larger log is uploaded in chunks."""
     for i in range(0, len(blobs), chunk):
         resp = append(api, headers, blobs[i:i + chunk])
         assert resp.status_code == 201
@@ -86,7 +87,7 @@ def test_keyset_paging_reads_in_order_with_has_more(api, active_user, device, au
 def test_limit_is_capped_at_500(api, active_user, device, auth_headers):
     headers = auth_headers(active_user, device)
     append(api, headers, [history_blob() for _ in range(100)])
-    # Ask for more than the ceiling across two 100-record batches → still one page ≤ 500.
+    # Asking for more than the ceiling still returns a single capped page.
     page = api.get(f"{HISTORY_URL}?after=-1&limit=100000", **headers).json()
     assert len(page["records"]) == 100 and page["has_more"] is False
 
@@ -140,7 +141,7 @@ def test_usage_is_a_single_aggregate_query(api, active_user, device, auth_header
         api.get(HISTORY_USAGE_URL, **headers)
 
 
-# --- hardened input: the verbatim int()/.get() shapes would 500 on these -----------------
+# --- hostile input: naive int()/.get() parsing would 500 on these ------------------------
 
 def test_nonnumeric_after_falls_back_to_start(api, active_user, device, auth_headers):
     headers = auth_headers(active_user, device)
@@ -186,8 +187,9 @@ def test_delete_too_many_seqs_is_400(api, active_user, device, auth_headers):
 
 
 def test_delete_out_of_range_float_seq_is_400_not_500(api, active_user, device, auth_headers):
-    # A raw body bypasses the client JSON encoder; DRF's parser turns `1e400` into float
-    # inf, and int(inf) raises OverflowError — which must be caught, not surfaced as a 500.
+    # A raw body bypasses the client JSON encoder; DRF's parser turns `1e400` into
+    # float inf, and int(inf) raises OverflowError, which must be caught rather than
+    # surfaced as a 500.
     resp = api.post(HISTORY_DELETE_URL, data='{"seqs": [1e400]}',
                     content_type="application/json", **auth_headers(active_user, device))
     assert resp.status_code == 400 and resp.json()["code"] == "bad_request"

@@ -1,4 +1,4 @@
-"""Room CRUD (§A5): create/read/rename an id + encrypted-name row — nothing else."""
+"""Room CRUD: create/read/rename an id plus encrypted-name row, nothing else."""
 import base64
 import uuid
 from datetime import date
@@ -24,7 +24,6 @@ def test_create_returns_the_capability_id_and_stores_one_bucketed_blob(
 
 
 def test_an_unknown_field_is_rejected(api, active_user, device, auth_headers):
-    """§A5: unknown fields rejected, here as everywhere."""
     resp = api.post("/api/v1/rooms", {"name_blob": name_blob_b64(b"q"), "junk": 1},
                     format="json", **auth_headers(active_user, device))
     assert resp.status_code == 400
@@ -90,8 +89,8 @@ def test_missing_name_blob_is_a_400(api, active_user, device, auth_headers):
 
 def test_register_scope_tokens_are_locked_out_of_every_room_endpoint(
         api, active_user, auth_headers, room):
-    """§A8: a register-scope token's only power is POST /me/devices. The prompt's bare
-    [IsAuthenticated] would have admitted one here — the retained guard is load-bearing."""
+    """A register-scope token's only power is POST /me/devices; a bare
+    [IsAuthenticated] would have admitted one here."""
     headers = auth_headers(active_user, scope="register")
 
     assert api.post("/api/v1/rooms", {"name_blob": name_blob_b64()},

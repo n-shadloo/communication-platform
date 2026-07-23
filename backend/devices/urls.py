@@ -3,8 +3,8 @@ from django.urls import path
 from . import views
 
 urlpatterns = [
-    # §A5 puts register (POST) and the own-device list (GET) on one path; the view
-    # accepts a register-scope token for POST only (§A8).
+    # Register (POST) and the own-device list (GET) share one path; the view accepts
+    # a register-scope token for POST only.
     path("me/devices", views.MyDevicesView.as_view(), name="my-devices"),
     path("me/devices/<uuid:device_id>", views.MyDeviceDetailView.as_view(),
          name="my-device-detail"),

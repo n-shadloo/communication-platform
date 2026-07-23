@@ -3,8 +3,8 @@ from django.urls import include, path
 
 from core.env import env
 
-# Operator-chosen: the stock admin behind a non-obvious path is one less thing to scan
-# for (ARCHITECTURE §A3).
+# Operator-chosen: the stock admin behind a non-obvious path is one less thing to
+# scan for.
 ADMIN_PATH = env("ADMIN_PATH", default="admin/")
 
 urlpatterns = [

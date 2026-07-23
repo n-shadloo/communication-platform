@@ -1,4 +1,4 @@
-"""The live push is an optimization layered over the durable mailbox (§A6)."""
+"""The live push is an optimization layered over the durable mailbox."""
 import asyncio
 
 import pytest
@@ -53,8 +53,8 @@ def test_a_send_to_a_device_with_no_socket_is_a_no_op(api, active_user, device,
 @pytest.mark.django_db
 def test_a_dead_channel_layer_does_not_fail_the_send(api, active_user, device,
                                                      auth_headers, bob_devices, settings):
-    """The rows are already committed, so a push failure must not 500 — the client would
-    retry and duplicate every envelope."""
+    """The rows are already committed, so a push failure must not 500; the client
+    would retry and duplicate every envelope."""
     settings.CHANNEL_LAYERS = {
         "default": {"BACKEND": "channels_redis.core.RedisChannelLayer",
                     "CONFIG": {"hosts": ["redis://127.0.0.1:6390"]}},

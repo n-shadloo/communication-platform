@@ -15,13 +15,13 @@ HISTORY_USAGE_URL = "/api/v1/me/history/usage"
 
 
 def backup_blob(filler=b"B", size=None):
-    """Base64 of an exactly-BACKUP_BUCKETS-sized opaque recovery blob (§A7)."""
+    """Base64 of an exactly bucket-sized recovery blob."""
     size = size if size is not None else min(BACKUP_BUCKETS)
     return base64.b64encode((filler * size)[:size]).decode()
 
 
 def history_blob(filler=b"h", size=None):
-    """Base64 of an exactly-ENVELOPE_BUCKETS-sized opaque history record (§A7)."""
+    """Base64 of an exactly bucket-sized history record."""
     size = size if size is not None else min(ENVELOPE_BUCKETS)
     return base64.b64encode((filler * size)[:size]).decode()
 

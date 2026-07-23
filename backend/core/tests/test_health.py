@@ -3,7 +3,7 @@ from django.urls import reverse
 
 
 class HealthEndpointTests(SimpleTestCase):
-    """Serves the client's Splash reachability probe (design §1)."""
+    """Serves the client's startup reachability probe."""
 
     def test_health_is_anonymous_and_reports_ok(self):
         response = self.client.get(reverse("health"))

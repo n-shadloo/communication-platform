@@ -1,8 +1,8 @@
-"""Key backup upload/download and version monotonicity (§A5, §A4, exit test).
+"""Key backup upload/download and version monotonicity.
 
-The backup is opaque: the server stores it and can never open it. The one rule it does
-enforce is that a PUT with a version `<=` the stored one is refused, so a stale write can
-never clobber the current key material.
+The backup is opaque: the server stores it and can never open it. The one rule it
+does enforce is that a PUT with a version `<=` the stored one is refused, so a stale
+write can never clobber the current key material.
 """
 import base64
 
@@ -21,7 +21,6 @@ def test_get_when_absent_is_404(api, active_user, device, auth_headers):
 
 
 def test_an_unknown_field_is_rejected(api, active_user, device, auth_headers):
-    """§A5: unknown fields rejected — key material writes take no smuggled parameters."""
     resp = api.put(KEYBACKUP_URL, {"blob": backup_blob(b"R"), "version": 1, "junk": 1},
                    format="json", **auth_headers(active_user, device))
     assert resp.status_code == 400
@@ -72,5 +71,5 @@ def test_off_bucket_blob_is_rejected_without_echo(api, active_user, device, auth
 def test_backup_is_per_user(api, active_user, device, auth_headers, bob, bob_device):
     api.put(KEYBACKUP_URL, {"blob": backup_blob(b"A"), "version": 1},
             format="json", **auth_headers(active_user, device))
-    # bob has uploaded nothing, so bob sees nothing — alice's backup is not shared.
+    # bob has uploaded nothing, so bob sees nothing; alice's backup is not shared.
     assert api.get(KEYBACKUP_URL, **auth_headers(bob, bob_device)).status_code == 404

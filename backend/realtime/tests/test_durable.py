@@ -1,5 +1,5 @@
-"""Durable path (§A6): a live push mirrors the queue row; an ack deletes it. The row,
-not the frame, is the source of truth — REST enqueues, the socket optimizes."""
+"""Durable path: a live push mirrors the queue row; an ack deletes it. The row, not
+the frame, is the source of truth. REST enqueues, the socket optimizes."""
 import pytest
 from channels.db import database_sync_to_async
 from rest_framework.test import APIClient
@@ -50,8 +50,8 @@ async def test_enqueued_envelope_is_pushed_acked_and_deleted(active_user, device
 
 async def test_ack_only_touches_the_calling_devices_rows(active_user, device,
                                                          peer, peer_device):
-    """Device A acking device B's envelope id must delete nothing: the socket's device
-    identity scopes the delete exactly like REST's ack (§A5)."""
+    """Device A acking device B's envelope id must delete nothing: the socket's
+    device identity scopes the delete exactly like REST's ack."""
     row = await database_sync_to_async(QueuedEnvelope.objects.create)(
         recipient_device_id=peer_device.id, seq=1, blob=b"e" * min(ENVELOPE_BUCKETS))
     comm = await connect_ok(bearer(await mint_access(active_user, device)))

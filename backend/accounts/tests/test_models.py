@@ -42,7 +42,7 @@ def test_username_is_relowercased_on_every_save():
 
 
 def test_last_login_is_never_written():
-    # A NULL last_login keeps login timing out of the database entirely (§A4/§A8).
+    # A NULL last_login keeps login timing out of the database entirely.
     user = User.objects.create_user(username="bob", password="a-long-enough-pw")
 
     assert user.last_login is None

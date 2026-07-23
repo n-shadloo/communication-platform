@@ -11,8 +11,9 @@ def _new_capability_id():
 
 
 class Attachment(models.Model):
-    """Opaque encrypted bytes on disk. The unguessable id IS the access capability; it is
-    delivered inside E2E messages with the content key (§A4). No recipient/ACL data exists."""
+    """Opaque encrypted bytes on disk. The unguessable id is the access capability,
+    delivered to recipients inside end-to-end encrypted messages. No recipient or
+    ACL data exists."""
 
     id = models.CharField(primary_key=True, max_length=43, default=_new_capability_id,
                           editable=False)

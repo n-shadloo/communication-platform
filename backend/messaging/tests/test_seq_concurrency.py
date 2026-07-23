@@ -1,8 +1,8 @@
-"""Per-device `seq` assignment is atomic under concurrency (§A4).
+"""Per-device `seq` assignment is atomic under concurrency.
 
-`TransactionTestCase` because the point is real committed transactions racing each other:
-the enqueue relies on the row lock that `UPDATE ... SET queue_seq = queue_seq + 1` holds
-until commit, which a wrapping test transaction would hide.
+`TransactionTestCase` because the point is real committed transactions racing each
+other: the enqueue relies on the row lock that `UPDATE ... SET queue_seq = queue_seq + 1`
+holds until commit, which a wrapping test transaction would hide.
 """
 import threading
 

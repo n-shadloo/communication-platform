@@ -8,6 +8,6 @@ CSRF_COOKIE_SECURE = True
 SECURE_HSTS_SECONDS = 31536000
 SECURE_HSTS_INCLUDE_SUBDOMAINS = True
 SECURE_HSTS_PRELOAD = True
-# TLS is terminated by nginx (private CA, TLS 1.3, 0-RTT off — ARCHITECTURE §A10).
+# TLS is terminated by nginx; Django trusts only the proxy's forwarded scheme.
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 USE_X_FORWARDED_HOST = True
