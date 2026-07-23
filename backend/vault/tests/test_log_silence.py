@@ -1,7 +1,8 @@
-"""No vault endpoint logs an identifier or a payload (§A11.4, audit a09).
+"""No vault endpoint logs an identifier or a payload.
 
-`assertLogs` installs its own handler, so the configured ScrubFilter is not applied here
-— that is the point: this asserts the code never emits an id or blob in the first place.
+`assertLogs` installs its own handler, so the configured ScrubFilter is not applied
+here. That is the point: this asserts the code never emits an id or blob in the
+first place.
 """
 import logging
 
@@ -25,17 +26,18 @@ class VaultLogSilenceTests(TestCase):
         self.client = APIClient()
 
     def test_backup_and_history_paths_emit_no_identifier_or_blob(self):
-        kb = backup_blob(b"S")
-        hb = history_blob(b"z")
+        backup_payload = backup_blob(b"S")
+        history_payload = history_blob(b"z")
 
         with self.assertLogs(level="DEBUG") as captured:
             # assertLogs fails if nothing is logged; a clean request logs nothing at all,
             # so the canary keeps the block honest.
             logging.getLogger("test.canary").debug("canary")
 
-            put = self.client.put("/api/v1/me/keybackup", {"blob": kb, "version": 1},
+            put = self.client.put("/api/v1/me/keybackup",
+                                  {"blob": backup_payload, "version": 1},
                                   format="json", **self.headers)
-            post = self.client.post("/api/v1/me/history", {"records": [{"blob": hb}]},
+            post = self.client.post("/api/v1/me/history", {"records": [{"blob": history_payload}]},
                                     format="json", **self.headers)
             self.client.get("/api/v1/me/history?after=-1&limit=100", **self.headers)
             self.client.get("/api/v1/me/history/usage", **self.headers)
@@ -48,8 +50,8 @@ class VaultLogSilenceTests(TestCase):
         forbidden = {
             "owner id": str(self.owner.id),
             "device id": str(self.device.id),
-            "backup blob": kb,
-            "history blob": hb,
+            "backup blob": backup_payload,
+            "history blob": history_payload,
         }
         for line in captured.output:
             for label, secret in forbidden.items():

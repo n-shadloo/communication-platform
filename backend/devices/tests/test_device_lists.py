@@ -1,5 +1,3 @@
-"""`GET /me/devices` and `GET /users/{id}/devices` — contents, and the ETag siblings
-and peers poll for freshness (§A5)."""
 import base64
 
 import pytest
@@ -82,7 +80,7 @@ def test_the_peer_list_exposes_only_public_identity(api, active_user, device,
     entry = response.json()["devices"][0]
     assert set(entry) == {"device_id", "ik_pub", "registration_id"}
     assert base64.b64decode(entry["ik_pub"]) == bytes(peer_device.ik_pub)
-    # No label, no dates, no activity — those belong to the account owner (§A4).
+    # No label, no dates, no activity; those belong to the account owner.
     assert "label_blob" not in entry
     assert "spk_pub" not in entry
 
@@ -125,8 +123,8 @@ def test_deactivating_a_peer_hides_its_devices_and_changes_the_etag(
 
 def test_the_etag_does_not_leak_that_a_peer_revoked_devices(api, active_user, device,
                                                             auth_headers, peer):
-    """Both accounts serve an empty device list, so both must serve the same ETag —
-    otherwise the tag is a side channel for device churn the peer list hides (§A4)."""
+    """Both accounts serve an empty device list, so both must serve the same ETag;
+    otherwise the tag is a side channel for device churn the peer list hides."""
     import uuid
     headers = auth_headers(active_user, device)
     make_device(peer, registration_id=1, revoked_date=timezone.now().date())

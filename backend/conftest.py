@@ -24,7 +24,7 @@ def api():
 
 @pytest.fixture
 def active_user(db):
-    """An activated account — the owner has already approved it (§7)."""
+    """An account the owner has already activated."""
     return User.objects.create_user(username="alice", password=PASSWORD, is_active=True)
 
 
@@ -44,7 +44,7 @@ def device(active_user):
 @pytest.fixture
 def auth_headers():
     """Build request headers for a user. `scope="register"` mints the short-lived
-    token whose only power is adding a device (§A8)."""
+    token whose only power is adding a device."""
     def build(user, device=None, scope="full"):
         if scope == "register":
             access = issue_register_scope(user)

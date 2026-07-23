@@ -1,4 +1,4 @@
-# Development and test dependencies — pinned and hashed (ARCHITECTURE §A10).
+# Development and test dependencies, pinned and hashed.
 # Installing this file installs production dependencies too.
 
 -r prod.txt

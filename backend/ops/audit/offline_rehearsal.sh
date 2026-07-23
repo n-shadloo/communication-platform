@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# ops/audit/offline_rehearsal.sh — prove the no-foreign-dependency build (§1A.1, §10.9).
+# ops/audit/offline_rehearsal.sh — prove the no-foreign-dependency build.
 #
 # Rebuilds a throwaway venv STRICTLY from vendor/wheels: --no-index forbids pip from
 # touching any package index or the network at all, and --require-hashes pins every
@@ -42,7 +42,7 @@ PIP_DISABLE_PIP_VERSION_CHECK=1 "$tmp/venv/bin/python" -m pip install --quiet \
 
 echo "running the full suite inside the offline-built venv…"
 if "$tmp/venv/bin/python" -m pytest -q; then
-    echo "PASS: offline rebuild + full suite green (§10.9)."
+    echo "PASS: offline rebuild + full suite green."
 else
     echo "FAIL: suite failed inside the offline-built venv."
     exit 1

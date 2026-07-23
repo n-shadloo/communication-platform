@@ -1,10 +1,10 @@
-"""There is NO server-side recovery-secret verification (§2.7, design §16.1, §A4).
+"""There is no server-side recovery-secret verification.
 
-A wrong recovery secret fails client-side only. Assert, three ways, that nothing in the
-vault app takes a secret or returns a pass/fail for one:
+A wrong recovery secret fails client-side only. Assert, three ways, that nothing in
+the vault app takes a secret or returns a pass/fail for one:
   1. the only routes are the four documented blob/history endpoints;
-  2. the key-backup serializer accepts exactly {blob, version} — no secret field;
-  3. the app's *code* (comments and docstrings stripped, so prose that merely says "no
+  2. the key-backup serializer accepts exactly {blob, version}, no secret field;
+  3. the app's code (comments and docstrings stripped, so prose that merely says "no
      secret" doesn't trip it) mentions no secret/verify/decrypt identifier.
 """
 import io
@@ -28,7 +28,7 @@ EXPECTED_ROUTES = {"me/keybackup", "me/history", "me/history/delete", "me/histor
 
 def code_only(path):
     """Source with comments and string literals removed, so only real identifiers and
-    operators remain — a `recovery_secret` variable would survive, a docstring won't."""
+    operators remain: a `recovery_secret` variable would survive, a docstring won't."""
     kept = []
     with open(path) as fh:
         for tok in tokenize.generate_tokens(fh.readline):

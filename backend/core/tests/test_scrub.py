@@ -10,8 +10,7 @@ JWT = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJhYmMifQ.s1gn4tur3-v4lu3_here"
 
 
 class ScrubFilterTests(SimpleTestCase):
-    """The filter must strip identifiers and ciphertext before anything is emitted
-    (ARCHITECTURE §A11.4: no content or graph in logs)."""
+    """The filter must strip identifiers and ciphertext before anything is emitted."""
 
     def emit(self, message, *args):
         logger = logging.getLogger("core.tests.scrub")

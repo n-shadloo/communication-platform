@@ -1,4 +1,4 @@
-"""The 10-device cap holds under concurrent registration (§A4).
+"""The device cap holds under concurrent registration.
 
 `TransactionTestCase` for the same reason as the claim race: the guard is a row lock
 held to commit, which a wrapping test transaction would hide.
@@ -62,11 +62,11 @@ class DeviceLimitRaceTests(TransactionTestCase):
         self.assertEqual(statuses.count(409), CONCURRENT_REGISTRATIONS - 1)
 
     def test_locking_the_device_rows_would_not_have_held(self):
-        """Guards the guard. The obvious implementation — `select_for_update()` over the
-        account's existing devices — does not stop a concurrent INSERT, and Django
-        silently drops FOR UPDATE altogether when the queryset ends in `.count()`. Under
-        this same load it lets the account past the cap, which is why the view locks the
-        *user* row instead."""
+        """Guards the guard. The obvious implementation, `select_for_update()` over
+        the account's existing devices, does not stop a concurrent INSERT, and Django
+        silently drops FOR UPDATE altogether when the queryset ends in `.count()`.
+        Under this same load it lets the account past the cap, which is why the view
+        locks the user row instead."""
         cap = 10
         self._fill_to(cap - 1)
         start = threading.Barrier(CONCURRENT_REGISTRATIONS)

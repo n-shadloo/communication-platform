@@ -1,5 +1,5 @@
-"""Presence (§A6): derived purely from socket up/down, disclosed only to the device
-groups the client authorized via subscribe_presence, and held in memory only."""
+"""Presence: derived purely from socket up/down, disclosed only to the device groups
+the client authorized via subscribe_presence, and held in memory only."""
 import pytest
 
 from .conftest import bearer, connect_ok, mint_access, probe, table_counts
@@ -28,7 +28,7 @@ async def test_subscriber_comes_online_then_offline_for_the_watched_peer(
 async def test_presence_reaches_nobody_who_was_not_authorized(active_user, device,
                                                               peer, peer_device):
     """An empty subscription list means silence: the server tells only the groups the
-    client authorized (§A6) — never every peer it happens to know a socket for."""
+    client authorized, never every peer it happens to know a socket for."""
     comm_b = await connect_ok(bearer(await mint_access(peer, peer_device)))
     comm_a = await connect_ok(bearer(await mint_access(active_user, device)))
 
@@ -41,7 +41,7 @@ async def test_presence_reaches_nobody_who_was_not_authorized(active_user, devic
 
 async def test_oversized_subscription_lists_are_ignored(active_user, device,
                                                         peer, peer_device):
-    """The 500-target cap bounds the per-disconnect fan-out (a06)."""
+    """The 500-target cap bounds the per-disconnect fan-out."""
     comm_b = await connect_ok(bearer(await mint_access(peer, peer_device)))
     comm_a = await connect_ok(bearer(await mint_access(active_user, device)))
 
@@ -68,7 +68,7 @@ async def test_invalid_ids_are_skipped_but_valid_ones_kept(active_user, device,
 
 
 async def test_subscriptions_leave_zero_rows(active_user, device, peer, peer_device):
-    """The subscription set lives in consumer memory only (§A6) — never any table."""
+    """The subscription set lives in consumer memory only, never any table."""
     comm_b = await connect_ok(bearer(await mint_access(peer, peer_device)))
     comm_a = await connect_ok(bearer(await mint_access(active_user, device)))
     before = await table_counts()

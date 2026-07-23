@@ -1,4 +1,3 @@
-"""The `prune` command the maintenance timer runs (§A13)."""
 import os
 from datetime import timedelta
 from io import StringIO
@@ -31,14 +30,14 @@ def queue_row(device, seq, age_days=0):
 
 
 def stored_attachment(user, root, age_days=0):
-    att = Attachment.objects.create(uploader=user, size=min(ATTACHMENT_BUCKETS))
-    path = root / att.id[:2] / att.id
+    attachment = Attachment.objects.create(uploader=user, size=min(ATTACHMENT_BUCKETS))
+    path = root / attachment.id[:2] / attachment.id
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(b"\x01" * min(ATTACHMENT_BUCKETS))
     if age_days:
-        Attachment.objects.filter(id=att.id).update(
+        Attachment.objects.filter(id=attachment.id).update(
             created_date=timezone.now().date() - timedelta(days=age_days))
-    return att, path
+    return attachment, path
 
 
 @pytest.fixture
@@ -92,7 +91,7 @@ def test_a_missing_file_does_not_stop_the_row_being_cleared(active_user, attachm
 def test_one_unremovable_file_does_not_stall_the_whole_sweep(active_user, attachments_root,
                                                              settings, monkeypatch):
     """Rows are cleared in one pass after the loop, so an escaping OSError would stop
-    retention altogether — and retention is a privacy control (§A13)."""
+    retention altogether."""
     settings.ATTACH_TTL_DAYS = 30
     stuck, stuck_path = stored_attachment(active_user, attachments_root, age_days=31)
     ok, ok_path = stored_attachment(active_user, attachments_root, age_days=31)
@@ -116,7 +115,8 @@ def test_one_unremovable_file_does_not_stall_the_whole_sweep(active_user, attach
 
 @pytest.mark.django_db
 def test_expired_refresh_tokens_are_flushed_and_live_ones_stay(active_user):
-    """§A13: token-issue ≈ login times must age out of the DB with the refresh TTL."""
+    """Token-issue times approximate login times, so they must age out of the DB with
+    the refresh TTL."""
     expired = OutstandingToken.objects.create(
         user=active_user, jti="expired-jti", token="t1",
         expires_at=timezone.now() - timedelta(days=1))
@@ -149,21 +149,21 @@ def test_prune_is_safe_to_run_repeatedly(device, active_user, attachments_root, 
 @pytest.mark.django_db
 def test_prune_prints_counts_but_never_an_identifier(device, active_user, attachments_root,
                                                      settings):
-    """The timer's stdout lands in the journal, so an id here is a graph leak (§A11.4)."""
+    """The timer's stdout lands in the journal, so an id here would be a graph leak."""
     settings.ENVELOPE_TTL_DAYS = 30
     settings.ATTACH_TTL_DAYS = 30
     row = queue_row(device, 1, age_days=31)
-    att, _path = stored_attachment(active_user, attachments_root, age_days=31)
+    attachment, _path = stored_attachment(active_user, attachments_root, age_days=31)
 
     output = run_prune()
 
-    for identifier in (str(row.id), str(device.id), str(active_user.id), att.id):
+    for identifier in (str(row.id), str(device.id), str(active_user.id), attachment.id):
         assert identifier not in output
 
 
 @pytest.mark.django_db
 def test_pruning_a_device_out_of_existence_takes_its_queue(active_user, settings):
-    """Cascade check: revoking a device in a later phase must not strand queue rows."""
+    """Cascade check: deleting a device must not strand its queue rows."""
     doomed = make_device(active_user, 77)
     queue_row(doomed, 1)
 

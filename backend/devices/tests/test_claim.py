@@ -1,6 +1,5 @@
-"""`POST /users/{id}/keys/claim` and `/keypackages/claim` — bundle contents and
-single consumption in the sequential case (§A5). The concurrent case is
-test_claim_race.py."""
+"""Bundle contents and single consumption in the sequential case. The concurrent
+case is test_claim_race.py."""
 import base64
 
 import pytest
@@ -48,8 +47,8 @@ def test_claiming_consumes_the_one_time_prekey(api, active_user, device, auth_he
 
 def test_an_empty_pool_yields_a_bundle_without_an_otpk(api, active_user, device,
                                                        auth_headers, peer, peer_device):
-    """§A5: absent when a pool is empty — the client handles it per protocol, the
-    server does not error and never fabricates a key (§A13)."""
+    """The otpk field is absent when the pool is empty: the client handles that per
+    protocol, and the server neither errors nor fabricates a key."""
     response = api.post(claim_url(peer.id), {}, format="json",
                         **auth_headers(active_user, device))
 
@@ -154,7 +153,7 @@ def test_key_packages_are_handed_out_once_each(api, active_user, device, auth_he
 
 
 def test_claiming_a_users_own_devices_is_normal(api, active_user, device, auth_headers):
-    """Self-sync: a user claims their own other devices to start a session (§2.5)."""
+    """Self-sync: a user claims their own other devices to start a session."""
     mine = make_device(active_user, registration_id=77)
     stock_prekeys(mine, 1)
 

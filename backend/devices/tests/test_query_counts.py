@@ -1,14 +1,14 @@
-"""Query-shape guards for the device endpoints (§A5).
+"""Query-shape guards for the device endpoints.
 
-These lock in the *shape*: the list endpoints must stay constant-query however many
+These lock in the shape: the list endpoints must stay constant-query however many
 devices an account has, and the claim must stay one bounded set of queries per target
-device — never one per stored prekey.
+device, never one per stored prekey.
 
-Counts include the per-request auth queries `DeviceJWTAuthentication` makes, and — under
-pytest's per-test transaction — a SAVEPOINT/RELEASE pair per `atomic()` block, which in
-production is a real BEGIN/COMMIT instead. Headers are always built *before* the
-assertion block: `auth_headers` mints a refresh token, which writes an outstanding-token
-row of its own.
+Counts include the per-request auth queries `DeviceJWTAuthentication` makes and,
+under pytest's per-test transaction, a SAVEPOINT/RELEASE pair per `atomic()` block,
+which in production is a real BEGIN/COMMIT instead. Headers are always built before
+the assertion block: `auth_headers` mints a refresh token, which writes an
+outstanding-token row of its own.
 """
 import pytest
 
@@ -90,8 +90,9 @@ def test_a_claim_does_not_scale_with_the_prekey_pool(api, active_user, device,
 def test_a_claim_costs_one_bounded_transaction_per_target_device(
         api, active_user, device, auth_headers, peer, peer_device,
         django_assert_num_queries, device_count):
-    """§A5 hands back a bundle per device, so the per-device transaction is inherent —
-    what must not happen is a query per *prekey* or a second lookup per device."""
+    """The response is a bundle per device, so the per-device transaction is
+    inherent; what must not happen is a query per prekey or a second lookup per
+    device."""
     for i in range(device_count - 1):
         stock_prekeys(make_device(peer, registration_id=600 + i), 2)
     stock_prekeys(peer_device, 2)

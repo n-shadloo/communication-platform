@@ -1,4 +1,3 @@
-"""GET /me/envelopes and POST /me/envelopes/ack — draining, paging and ack scoping (§A5)."""
 import base64
 import uuid
 
@@ -56,8 +55,8 @@ def test_limit_pages_and_reports_has_more(api, active_user, device, auth_headers
 @pytest.mark.django_db
 @pytest.mark.parametrize("raw", ["abc", "-5", "0", "", "1e3", "999999999999999999999999"])
 def test_a_hostile_limit_never_500s(api, active_user, device, auth_headers, raw):
-    """`int("abc")` raises and a negative limit poisons the slice; both are 500s if the
-    §A5 cap is applied the obvious way."""
+    """`int("abc")` raises and a negative limit poisons the slice; both are 500s if
+    the cap is applied the obvious way."""
     enqueue(device, 3)
 
     resp = api.get(f"{DRAIN_URL}?limit={raw}", **auth_headers(active_user, device))
@@ -115,7 +114,7 @@ def test_device_a_cannot_ack_device_bs_envelopes(api, active_user, device, auth_
 @pytest.mark.django_db
 def test_a_sibling_device_cannot_ack_its_twins_envelopes(api, active_user, device,
                                                          auth_headers):
-    """Same user, different device: scoping is per device, not per account (§A5)."""
+    """Same user, different device: scoping is per device, not per account."""
     sibling = make_device(active_user, 99)
     rows = enqueue(sibling, 1)
 

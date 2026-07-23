@@ -1,5 +1,5 @@
-"""The headline volatile exit test (§A6, §A11.5): signals relay between live sockets and
-leave **zero** trace — no new row in any table, no signal/presence table to write to."""
+"""Signals relay between live sockets and leave zero trace: no new row in any table,
+and no signal or presence table to write to."""
 import uuid
 
 import pytest
@@ -19,8 +19,8 @@ async def test_signal_relays_and_writes_zero_rows_anywhere(active_user, device,
                                "blob": "ciphertext-opaque-to-the-server"})
 
     frame = await comm_b.receive_json_from(timeout=2)
-    # The relayed frame carries type and blob ONLY: no to_device, and structurally no
-    # sender — sealed sender on the wire, not just at rest.
+    # The relayed frame carries type and blob only: no to_device, and structurally no
+    # sender.
     assert frame == {"type": "signal", "blob": "ciphertext-opaque-to-the-server"}
 
     after = await table_counts()
@@ -30,7 +30,8 @@ async def test_signal_relays_and_writes_zero_rows_anywhere(active_user, device,
 
 
 async def test_there_is_no_signal_or_presence_table_at_all(db):
-    """§A1: the server has no schema for volatile traffic — nothing to persist into."""
+    """The server has no schema for volatile traffic, so there is nothing to persist
+    into."""
     labels = list(await table_counts())
     assert not [l for l in labels
                 if "signal" in l.lower() or "presence" in l.lower() or
@@ -79,8 +80,8 @@ async def test_malformed_signal_frames_are_dropped(active_user, device):
 
 async def test_alternate_uuid_spellings_still_reach_a_live_target(active_user, device,
                                                                   peer, peer_device):
-    """uuid.UUID accepts braces/urn/uppercase; the group name must use the normalized
-    form or a live target silently misses the signal (§A6 'forwards to any live socket')."""
+    """uuid.UUID accepts braces/urn/uppercase; the group name must use the
+    normalized form or a live target silently misses the signal."""
     comm_a = await connect_ok(bearer(await mint_access(active_user, device)))
     comm_b = await connect_ok(bearer(await mint_access(peer, peer_device)))
 

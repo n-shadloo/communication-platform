@@ -1,10 +1,11 @@
-"""Nothing on the realtime path logs an identifier, a target, or a payload (§A11.4/5).
+"""Nothing on the realtime path logs an identifier, a target, or a payload.
 
 Like the messaging/devices suites, capture must bypass the configured ScrubFilter to
-assert the code never *emits* an identifier in the first place. caplog is NOT enough:
-the filter mutates records in place, so the console handler launders the message before
-caplog's (later-attached) handler stores it — a leak would grade its own homework. So,
-like assertLogs, all root handlers are swapped out for the capture window."""
+assert the code never emits an identifier in the first place. caplog is not enough:
+the filter mutates records in place, so the console handler launders the message
+before caplog's later-attached handler stores it, and a leak would grade its own
+homework. So, like assertLogs, all root handlers are swapped out for the capture
+window."""
 import logging
 import uuid
 from contextlib import contextmanager
@@ -55,7 +56,7 @@ async def test_every_socket_scenario_emits_no_identifier_or_payload(
         comm_b = await connect_ok([])
         await comm_b.send_json_to({"type": "auth", "access": access_b})
 
-        # Durable push and ack — including a malformed ack.
+        # Durable push and ack, including a malformed ack.
         from channels.layers import get_channel_layer
         await get_channel_layer().group_send(
             f"dev.{device.id}", {"type": "envelope.push", "id": str(uuid.uuid4()),

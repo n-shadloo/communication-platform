@@ -1,7 +1,7 @@
 # PostgreSQL setup
 
 PostgreSQL 16, self-hosted, **listening on localhost only**. The same setup serves
-development and production (ARCHITECTURE §A10).
+development and production.
 
 ## One-time database and role
 
@@ -10,20 +10,21 @@ Run as a superuser (`psql -d postgres`):
 ```sql
 -- Generate the password with:
 --   python -c "import secrets; print(secrets.token_urlsafe(64))"
-CREATE ROLE chatapp WITH LOGIN CREATEDB PASSWORD 'replace-me-with-a-generated-secret';
-CREATE DATABASE chatapp OWNER chatapp;
+CREATE ROLE chat WITH LOGIN CREATEDB PASSWORD 'replace-me-with-a-generated-secret';
+CREATE DATABASE chat OWNER chat;
 ```
 
-`CREATEDB` is granted because `pytest-django` creates and drops a `test_chatapp`
+`CREATEDB` is granted because `pytest-django` creates and drops a `test_<name>`
 database on every run. On a production host you may drop the attribute after the last
 test run:
 
 ```sql
-ALTER ROLE chatapp NOCREATEDB;
+ALTER ROLE chat NOCREATEDB;
 ```
 
-Put the same credentials in `.env` as `POSTGRES_DB`, `POSTGRES_USER` and
-`POSTGRES_PASSWORD`.
+Put the same credentials in the env file (`.env` in development,
+`/srv/chat/backend/.env.production` on the VPS) as `POSTGRES_DB`, `POSTGRES_USER`
+and `POSTGRES_PASSWORD`.
 
 ## Bind to localhost only
 
@@ -54,5 +55,4 @@ attack surface of a machine that is meant to hold nothing readable.
 
 Opaque ciphertext blobs in fixed size buckets, public keys, Argon2id password hashes,
 the user list, and coarse (day- or hour-granularity) timestamps. No message content,
-no content keys, and no sender↔recipient graph. See ARCHITECTURE §A4 for the
-per-table seizure analysis and §A14 for the residual metadata that remains.
+no content keys, and no sender↔recipient graph.

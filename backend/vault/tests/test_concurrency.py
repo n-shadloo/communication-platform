@@ -1,4 +1,4 @@
-"""Same-owner history appends assign `seq` atomically under the owner-row lock (§A4).
+"""Same-owner history appends assign `seq` atomically under the owner-row lock.
 
 `TransactionTestCase` because the guarantee rests on a real committed row lock racing
 other transactions, which a wrapping test transaction would hide (mirrors messaging's
@@ -71,12 +71,12 @@ class SameOwnerAppendConcurrencyTests(TransactionTestCase):
 
 
 class KeyBackupVersionRaceTests(TransactionTestCase):
-    """A concurrent FIRST key-backup upload must not let a lower version win (§A4, §16.1).
+    """A concurrent first key-backup upload must not let a lower version win.
 
-    The owner-row lock makes this deterministic: whichever write commits first sets the
-    version, and the other either sees it and 409s (lower) or applies over it (higher), so
-    the stored version is always the maximum. Without the lock both writes read version=None
-    and the lower one clobbers the higher (measured ~33/40 before the fix)."""
+    The owner-row lock makes this deterministic: whichever write commits first sets
+    the version, and the other either sees it and 409s (lower) or applies over it
+    (higher), so the stored version is always the maximum. Without the lock both
+    writes read version=None and the lower one can clobber the higher."""
 
     def setUp(self):
         self.owner = User.objects.create_user(username="alice", password=PASSWORD,
@@ -112,6 +112,6 @@ class KeyBackupVersionRaceTests(TransactionTestCase):
             for thread in threads:
                 thread.join(timeout=30)
 
-            kb = KeyBackup.objects.get(user_id=self.owner.id)
-            self.assertEqual(kb.version, 5)
-            self.assertEqual(bytes(kb.blob), expected_high)
+            key_backup = KeyBackup.objects.get(user_id=self.owner.id)
+            self.assertEqual(key_backup.version, 5)
+            self.assertEqual(bytes(key_backup.blob), expected_high)

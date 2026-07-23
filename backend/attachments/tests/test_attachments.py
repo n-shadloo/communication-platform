@@ -1,4 +1,4 @@
-"""The attachment store: the capability id is the only gate (§A4, §A5)."""
+"""The attachment store: the capability id is the only gate."""
 import pytest
 from django.core.files.uploadedfile import SimpleUploadedFile
 
@@ -24,11 +24,11 @@ def test_an_upload_returns_a_43_char_capability_id(api, active_user, device, aut
     body = resp.json()
     assert len(body["attachment_id"]) == 43
     assert body["size"] == SMALLEST
-    att = Attachment.objects.get(id=body["attachment_id"])
+    attachment = Attachment.objects.get(id=body["attachment_id"])
     # Bytes land under a two-char shard of the id, never under a client-chosen name.
     stored = attachments_root / body["attachment_id"][:2] / body["attachment_id"]
     assert stored.read_bytes() == b"\x01" * SMALLEST
-    assert att.disk_path() == str(stored)
+    assert attachment.disk_path() == str(stored)
 
 
 @pytest.mark.django_db
@@ -96,7 +96,7 @@ def test_a_download_hands_the_bytes_to_nginx(api, active_user, device, auth_head
 @pytest.mark.django_db
 def test_any_authenticated_user_may_fetch_by_capability(api, active_user, device,
                                                         auth_headers, bob, bob_device):
-    """§A4: the unguessable id IS the access control — a per-recipient ACL would rebuild
+    """The unguessable id is the access control; a per-recipient ACL would rebuild
     the conversation graph."""
     cap = upload(api, auth_headers(active_user, device)).json()["attachment_id"]
 

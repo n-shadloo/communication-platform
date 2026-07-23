@@ -1,4 +1,4 @@
-# Production dependencies — pinned and hashed (ARCHITECTURE §A10).
+# Production dependencies, pinned and hashed.
 #
 # Every install is offline and hash-verified:
 #   ops/vendor.sh           downloads these wheels while the internet is available
@@ -7,7 +7,7 @@
 # Hashes cover every distribution file of each pinned version, so the same pins verify
 # on the Linux VPS and on a developer machine. Regenerate after any version change.
 #
-# No telemetry, error-reporting or cloud SDK appears here, by design (§1A.1).
+# No telemetry, error-reporting or cloud SDK appears here, by design.
 
 argon2-cffi==25.1.0 \
     --hash=sha256:694ae5cc8a42f4c4e2bf2ca0e64e51e23a040c6a517a85074683d3959e1346c1 \

@@ -1,4 +1,4 @@
-"""LiveKit join tokens (§A9): short-lived, scoped to one room + one device, audio only,
+"""LiveKit join tokens: short-lived, scoped to one room and one device, audio only,
 and carrying no key material. The server mints; it never joins the media path."""
 import time
 import types
@@ -47,7 +47,7 @@ def test_token_endpoint_mints_a_room_and_device_scoped_audio_grant(
         "canPublish": True,
         "canSubscribe": True,
         "canPublishData": False,                    # room text rides the WS, not the SFU
-        "canPublishSources": ["microphone"],        # §A9: publish audio only
+        "canPublishSources": ["microphone"],        # publish audio only
     }
 
 
@@ -94,8 +94,8 @@ def test_unknown_room_is_404_even_when_configured(api, active_user, device,
 
 def test_full_scope_without_a_device_binding_is_refused(active_user, room,
                                                         voice_settings):
-    """Defense in depth behind IsFullScope: even a (mis)authenticated full-scope request
-    with no bound device gets no token — identity=device_id must exist (§A9)."""
+    """Defense in depth behind IsFullScope: even a misauthenticated full-scope request
+    with no bound device gets no token; the identity must be a device id."""
     request = APIRequestFactory().post(f"/api/v1/rooms/{room.id}/token")
     force_authenticate(request, user=active_user, token={"scope": "full"})
 

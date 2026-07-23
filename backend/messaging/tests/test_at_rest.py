@@ -1,8 +1,8 @@
-"""What a seized `messaging_queuedenvelope` yields (ARCHITECTURE §A4, §A11.1–3).
+"""What a seized `messaging_queuedenvelope` table yields: fan-out must leave N
+independent rows that a dump cannot join back into a conversation.
 
-This is the headline invariant of the whole phase: fan-out must leave N independent rows
-that a dump cannot join back into a conversation. `transaction=True` matters — the dump
-runs in a separate process over a separate connection, so it sees only committed rows.
+`transaction=True` matters on these tests: pg_dump runs in a separate process over a
+separate connection, so it sees only committed rows.
 """
 from datetime import datetime
 from datetime import timezone as dt_timezone
@@ -47,8 +47,8 @@ def three_recipient_devices(db):
 @pytest.mark.django_db(transaction=True)
 def test_a_seized_queue_shows_no_sender_and_no_link_between_co_recipients(
         api, active_user, device, auth_headers, three_recipient_devices):
-    # One logical message to 3 devices across 2 users; a real client encrypts separately
-    # per device, so the three copies differ (§A7 client contract).
+    # One logical message to 3 devices across 2 users; a real client encrypts per
+    # device, so the three copies differ.
     resp = api.post("/api/v1/envelopes", {"messages": [
         {"device_id": str(d.id), "blob": envelope_blob(bytes([65 + i]))}
         for i, d in enumerate(three_recipient_devices)
@@ -63,11 +63,9 @@ def test_a_seized_queue_shows_no_sender_and_no_link_between_co_recipients(
 
     # (b) Three independent rows. The only thing tying a row to anyone is its own
     # recipient device; no shared row id and no shared blob to join co-recipients on.
-    #
-    # `seq` and `queued_hour` DO coincide across the three rows and that is intended:
-    # seq is per-device (every fresh mailbox starts at 1) and the hour is deliberately
-    # coarse (§A4). Neither links co-recipients — a third party's row would carry the
-    # same values.
+    # `seq` and `queued_hour` coincide across the three rows by design: seq is
+    # per-device (every fresh mailbox starts at 1) and the hour is deliberately coarse.
+    # Neither links co-recipients; a third party's row would carry the same values.
     assert len(rows) == 3
     assert len({r["recipient_device_id"] for r in rows}) == 3
     assert len({r["id"] for r in rows}) == 3

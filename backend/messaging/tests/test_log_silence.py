@@ -1,8 +1,8 @@
-"""Nothing on the messaging or attachment paths logs an identifier or a payload (§A11.4).
+"""Nothing on the messaging or attachment paths logs an identifier or a payload.
 
-`assertLogs` swaps in its own root handler, so the configured `ScrubFilter` is *not*
-applied to what it captures — that is deliberate. This asserts the code never emits an
-identifier in the first place; `core/tests/test_scrub.py` covers the filter itself.
+`assertLogs` swaps in its own root handler, so the configured `ScrubFilter` is not
+applied to what it captures. That is deliberate: these tests assert the code never
+emits an identifier in the first place; `core/tests/test_scrub.py` covers the filter.
 """
 import base64
 import logging

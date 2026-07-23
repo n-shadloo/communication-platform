@@ -15,9 +15,9 @@ PASSWORD = "correct-horse-battery-staple"
 
 @pytest.fixture(autouse=True)
 def in_memory_layer(settings):
-    """Volatile means volatile (§A11.5): the whole suite runs on the in-memory layer, so
-    a signal that survives a test could only have done so through the database — which is
-    exactly what the zero-rows assertions check."""
+    """Volatile means volatile: the whole suite runs on the in-memory layer, so a
+    signal that survives a test could only have done so through the database, which
+    is exactly what the zero-rows assertions check."""
     settings.CHANNEL_LAYERS = {
         "default": {"BACKEND": "channels.layers.InMemoryChannelLayer"}}
 
@@ -35,8 +35,8 @@ def peer_device(peer):
 
 @database_sync_to_async
 def mint_access(user, device):
-    """A valid full-scope access token for a test device (§A8; reuses issue_full).
-    DB-wrapped because the blacklist app records every refresh issued."""
+    """A valid full-scope access token for a test device. DB-wrapped because the
+    blacklist app records every refresh issued."""
     access, _refresh = issue_full(user, device)
     return access
 
@@ -67,8 +67,9 @@ async def expect_close(comm, code, timeout=2):
 
 
 async def probe(comm, own_device_id):
-    """Round-trip a self-signal. Frames are processed in order, so when the probe comes
-    back every previously sent frame has been fully handled — a deterministic barrier."""
+    """Round-trip a self-signal. Frames are processed in order, so when the probe
+    comes back every previously sent frame has been fully handled: a deterministic
+    barrier."""
     await comm.send_json_to({"type": "signal", "to_device": str(own_device_id),
                              "blob": "probe"})
     frame = await comm.receive_json_from(timeout=2)

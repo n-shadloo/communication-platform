@@ -1,8 +1,7 @@
-"""§A8: a register-scope token's only power is POST /me/devices.
+"""A register-scope token's only power is POST /me/devices.
 
-Every vault endpoint holds the key backup or the entire history log, so none may admit a
-register-scope token. This is the guard the prompt's verbatim `[IsAuthenticated]` would
-have dropped (the project default is `[IsAuthenticated, IsFullScope]`).
+Every vault endpoint holds the key backup or the entire history log, so none may
+admit a register-scope token.
 """
 import pytest
 

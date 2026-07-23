@@ -13,8 +13,8 @@ def b64(nbytes):
 
 
 class DecodeBlobOrBadBucketTests(SimpleTestCase):
-    """Exactly one property is enforced on every blob: length ∈ bucket set
-    (ARCHITECTURE §A7)."""
+    """Exactly one property is enforced on every blob: its length is in the bucket
+    set."""
 
     def test_exact_bucket_lengths_are_accepted(self):
         for bucket_set in BUCKET_SETS:

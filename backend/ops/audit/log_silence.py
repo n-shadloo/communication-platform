@@ -1,21 +1,21 @@
-"""Log-silence audit (§A11.4): one scripted pass over every traffic surface — auth,
-devices, messaging, attachments, realtime, voice — captured at DEBUG, then scanned for
-every identifier, blob, and token the pass generated. Returns a list of leaks; the
-system is honest only when it is empty.
+"""Log-silence audit: one scripted pass over every traffic surface (auth, devices,
+messaging, attachments, realtime, voice), captured at DEBUG, then scanned for every
+identifier, blob, and token the pass generated. Returns a list of leaks; the system
+is honest only when it is empty.
 
 Two properties make this stricter than per-app spot checks:
 
 - The capture bypasses the ScrubFilter. The filter mutates records in place, so any
-  capture attached after the console handler grades the scrubber, not the code
-  (the Phase-6 lesson). The scrubber is a backstop; the primary control — audited here —
-  is that nothing is ever logged in the first place.
-- The capture swaps the handlers of the root logger AND of every named logger that has
-  its own (django.request/django.server/daphne set propagate=False, so a root-only swap
-  — what assertLogs does — never sees them).
+  capture attached after the console handler grades the scrubber, not the code. The
+  scrubber is a backstop; the primary control, audited here, is that nothing is ever
+  logged in the first place.
+- The capture swaps the handlers of the root logger and of every named logger that
+  has its own (django.request/django.server/daphne set propagate=False, so a
+  root-only swap, which is what assertLogs does, never sees them).
 
 Driven by core/tests/test_log_silence.py; needs the test DB, the in-memory channel
 layer, a temp ATTACHMENTS_ROOT, and fake LIVEKIT_* settings (token minting is local
-PyJWT — no network is ever touched).
+PyJWT; no network is ever touched).
 """
 import base64
 import logging
@@ -37,7 +37,7 @@ class _RawCapture(logging.Handler):
 @contextmanager
 def capture_all_logging():
     """Route every logger that owns handlers (plus root) into one raw capture list,
-    at DEBUG, with the configured handlers — and therefore the ScrubFilter — bypassed."""
+    at DEBUG, with the configured handlers, and therefore the ScrubFilter, bypassed."""
     handler = _RawCapture()
     root = logging.getLogger()
     named = [logging.getLogger(name) for name in list(logging.root.manager.loggerDict)]
@@ -60,7 +60,7 @@ def _b64_filled(size, fill):
 
 
 def _scripted_rest_traffic():
-    """The REST half of the sequence. Returns {label: generated secret} — everything a
+    """The REST half of the sequence. Returns {label: generated secret}, everything a
     log line must never contain. Runs in a worker thread via database_sync_to_async;
     logging is process-global, so the capture still sees every record."""
     from django.core.cache import cache
@@ -76,7 +76,7 @@ def _scripted_rest_traffic():
     s = {"username": f"aud{random_secrets.token_hex(6)}",
          "password": random_secrets.token_urlsafe(24)}
 
-    # Register, then activate — activation is the owner's admin action (§7); its
+    # Register, then activate. Activation is the owner's admin action; its
     # server-side effect is the is_active flip.
     r = api.post("/api/v1/auth/register",
                  {"username": s["username"], "password": s["password"]}, format="json")
@@ -129,7 +129,7 @@ def _scripted_rest_traffic():
     r = api.get(f"/api/v1/attachments/{s['attachment id']}", **auth)
     assert r.status_code == 200, f"download: {r.status_code}"
 
-    # Create a room and mint a LiveKit join token (local HS256 signing, §A9).
+    # Create a room and mint a LiveKit join token (local HS256 signing).
     s["room name blob"] = _b64_filled(min(NAME_BUCKETS), 0xB6)
     r = api.post("/api/v1/rooms", {"name_blob": s["room name blob"]},
                  format="json", **auth)
@@ -173,8 +173,9 @@ def scan(lines, secrets):
 async def run_audit(probe=None):
     """Run the scripted sequence under full capture. Returns (leaks, secrets, lines).
 
-    `probe(secrets)` — test hook, called inside the capture window after the scripted
-    traffic — lets the suite prove the audit still catches a deliberate leak."""
+    `probe(secrets)` is a test hook, called inside the capture window after the
+    scripted traffic, so the suite can prove the audit still catches a deliberate
+    leak."""
     from channels.db import database_sync_to_async
 
     with capture_all_logging() as lines:

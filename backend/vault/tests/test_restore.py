@@ -1,9 +1,9 @@
-"""Headline restore exit test (mirrors §10.4).
+"""The headline restore flow.
 
 Device 1 uploads a key backup and 250 history records across 3 batches; a brand-new
-device 2 for the SAME user reads every record via keyset paging in order, and reads the
-backup blob back byte-identical. History is owner-scoped, so a new device sees the log
-without anything device-specific being shared.
+device 2 for the same user reads every record via keyset paging in order, and reads
+the backup blob back byte-identical. History is owner-scoped, so a new device sees
+the log without anything device-specific being shared.
 """
 import pytest
 
@@ -17,8 +17,8 @@ def test_new_device_restores_history_in_order_and_backup_byte_identical(
         api, active_user, device, auth_headers):
     device1 = auth_headers(active_user, device)
 
-    kb = backup_blob(b"K", size=16384)
-    assert api.put(KEYBACKUP_URL, {"blob": kb, "version": 1},
+    backup_payload = backup_blob(b"K", size=16384)
+    assert api.put(KEYBACKUP_URL, {"blob": backup_payload, "version": 1},
                    format="json", **device1).status_code == 200
 
     idx = 0
@@ -46,4 +46,4 @@ def test_new_device_restores_history_in_order_and_backup_byte_identical(
     assert [r["blob"] for r in seen] == [uniq_history_blob(i) for i in range(250)]
 
     # The backup comes back byte-identical to what device 1 uploaded.
-    assert api.get(KEYBACKUP_URL, **device2).json() == {"blob": kb, "version": 1}
+    assert api.get(KEYBACKUP_URL, **device2).json() == {"blob": backup_payload, "version": 1}

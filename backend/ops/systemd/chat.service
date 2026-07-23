@@ -1,26 +1,26 @@
 [Unit]
-Description=chatapp Daphne ASGI server
-Documentation=file:///srv/chatapp/backend/ARCHITECTURE.md
+Description=chat backend Daphne ASGI server
 After=network-online.target postgresql.service redis.service
 Wants=network-online.target
 Requires=postgresql.service redis.service
 
 [Service]
 Type=simple
-User=chatapp
-Group=chatapp
-WorkingDirectory=/srv/chatapp/backend
-# The .env described in .env.example. Root-owned, mode 0640, never in git.
-EnvironmentFile=/etc/chatapp/chatapp.env
+User=deploy
+Group=www-data
+UMask=0027
+WorkingDirectory=/srv/chat/backend
+# The production env described in .env.example. Root-owned, mode 0640, never in git.
+EnvironmentFile=/srv/chat/backend/.env.production
 Environment=DJANGO_SETTINGS_MODULE=config.settings.prod
 # Bound to loopback only: nginx terminates TLS and reverse-proxies /api and /ws.
-ExecStart=/srv/chatapp/backend/.venv/bin/daphne \
+ExecStart=/srv/chat/backend/.venv/bin/daphne \
     -b 127.0.0.1 -p 8000 \
     config.asgi:application
 Restart=on-failure
 RestartSec=5s
 
-# Hardening. This process holds infrastructure secrets (§A12) and nothing else.
+# Hardening. This process holds infrastructure secrets and nothing else.
 NoNewPrivileges=true
 PrivateTmp=true
 PrivateDevices=true
@@ -33,7 +33,7 @@ RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
 RestrictNamespaces=true
 LockPersonality=true
 MemoryDenyWriteExecute=true
-ReadWritePaths=/etc/chatapp/media_root /etc/chatapp/static_root
+ReadWritePaths=/srv/chat/backend/media_root /srv/chat/backend/static_root
 
 [Install]
 WantedBy=multi-user.target

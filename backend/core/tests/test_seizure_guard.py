@@ -1,14 +1,14 @@
-"""Repo-wide seizure/graph guard (ARCHITECTURE §A11) — the durable regression check.
+"""Repo-wide seizure/graph guard: the durable regression check.
 
-Iterates EVERY concrete model in the app registry and fails loudly if any model — in any
-app, present or future — grows a plaintext column, key material, or a conversation graph.
-`core/tests/test_manifest.py` is the Phase-1 field manifest; this guard is the final,
-stricter superset written by the hardening phase. Both stay: each is self-contained, so
-weakening one cannot silently weaken the other.
+Iterates every concrete model in the app registry and fails loudly if any model, in
+any app, present or future, grows a plaintext column, key material, or a conversation
+graph. `core/tests/test_manifest.py` is the narrower field manifest; this guard is
+the stricter superset. Both stay: each is self-contained, so weakening one cannot
+silently weaken the other.
 
-The checks are pure module-level functions returning offender lists so they can be driven
-outside this file (test_success_criteria.py, and break-the-guard proofs that register a
-canary model and assert the function flags it).
+The checks are pure module-level functions returning offender lists so they can be
+driven outside this file (test_success_criteria.py, and break-the-guard proofs that
+register a canary model and assert the function flags it).
 """
 from django.apps import apps
 from django.db.models import BinaryField
@@ -16,9 +16,9 @@ from django.test import SimpleTestCase
 
 from core.fields import OpaqueBlobField
 
-# Column names that would mean plaintext content, key material, or a stored graph
-# (§A11.1–3, plus the voice media-key isolation of §A9). Checked against both the field
-# name and its column attname, so an FK spelled `sender` cannot hide behind `sender_id`.
+# Column names that would mean plaintext content, key material, or a stored graph.
+# Checked against both the field name and its column attname, so an FK spelled
+# `sender` cannot hide behind `sender_id`.
 FORBIDDEN_FIELD_NAMES = frozenset({
     "plaintext", "content", "message_text", "body",
     "private_key", "secret_key", "session_key",
@@ -28,23 +28,23 @@ FORBIDDEN_FIELD_NAMES = frozenset({
     "password_plain",
 })
 
-# `password` holds an Argon2id hash — auth material, never a content key (§A12).
+# `password` holds an Argon2id hash: auth material, never a content key.
 PASSWORD_ALLOWED_ON = frozenset({"accounts.User"})
 
-# §A4 audits the framework tables once. Django's `session_key` is the opaque id of an
-# admin-only session (the API is token-auth), not key material under the §A12 inventory.
-# Nothing else is exempt, and a test below pins this set so it cannot quietly grow.
+# The framework tables are audited once. Django's `session_key` is the opaque id of
+# an admin-only session (the API is token-auth), not key material. Nothing else is
+# exempt, and a test below pins this set so it cannot quietly grow.
 AUDITED_FRAMEWORK_COLUMNS = frozenset({
     "sessions.Session.session_key",
 })
 
-# This project's own apps — the tables a seizure of this backend would yield (§A4).
+# This project's own apps: the tables a seizure of this backend would yield.
 APP_LABELS = frozenset({
     "accounts", "devices", "vault", "messaging", "attachments", "voicerooms",
     "core", "realtime",
 })
 
-# Public halves of client keypairs are stored as plain BinaryFields (§A4): suffixed
+# Public halves of client keypairs are stored as plain BinaryFields: suffixed
 # `_pub`/`_sig`, plus OneTimePrekey's bare `pub`.
 PUBLIC_KEY_SUFFIXES = ("_pub", "_sig")
 PUBLIC_KEY_NAMES = frozenset({"pub"})
@@ -63,7 +63,7 @@ def _concrete_fields(model):
 
 
 def forbidden_column_offenders():
-    """§A11.1–3: no model may declare a plaintext/key/graph column."""
+    """No model may declare a plaintext/key/graph column."""
     offenders = []
     for model in apps.get_models():
         label = _label(model)
@@ -79,7 +79,7 @@ def forbidden_column_offenders():
 
 
 def unbucketed_blob_offenders():
-    """§A7: every ciphertext field (`blob` / `*_blob`) is an OpaqueBlobField with a
+    """Every ciphertext field (`blob` / `*_blob`) is an OpaqueBlobField with a
     non-empty bucket_set; public-key byte fields may stay plain BinaryFields."""
     offenders = []
     for model in apps.get_models():
@@ -97,8 +97,9 @@ def unbucketed_blob_offenders():
 
 def raw_binary_offenders():
     """Belt-and-braces for this project's own tables: a BinaryField that is neither a
-    declared public key nor an OpaqueBlobField is an unvalidated byte store — the exact
-    shape a future plaintext/key column would take while dodging the name checks."""
+    declared public key nor an OpaqueBlobField is an unvalidated byte store, the
+    exact shape a future plaintext/key column would take while dodging the name
+    checks."""
     offenders = []
     for model in apps.get_models():
         if model._meta.app_label not in APP_LABELS:
@@ -116,7 +117,7 @@ def raw_binary_offenders():
 
 
 def envelope_graph_offenders():
-    """§A11.3: the envelope's only relation is to a recipient device — no sender in any
+    """The envelope's only relation is to a recipient device: no sender in any
     spelling, structurally (sealed sender at rest)."""
     from messaging.models import QueuedEnvelope
 
@@ -136,8 +137,8 @@ def envelope_graph_offenders():
 
 
 def dual_user_fk_offenders():
-    """§A11.3: outside `accounts`, no table may hold two references to users — the shape
-    that would encode a sender↔recipient pair at rest. history/keybackup/attachment each
+    """Outside `accounts`, no table may hold two references to users: the shape that
+    would encode a sender-recipient pair at rest. history/keybackup/attachment each
     reference only their owner/uploader."""
     from accounts.models import User
 
@@ -153,34 +154,34 @@ def dual_user_fk_offenders():
 
 
 class SeizureGuardTests(SimpleTestCase):
-    """One test per invariant; each message names the §A11 rule it enforces."""
+    """One test per invariant."""
 
     def test_no_model_declares_a_plaintext_key_or_graph_column(self):
         self.assertEqual(
             forbidden_column_offenders(), [],
-            "A model grew a column this architecture forbids (§A11.1–3)")
+            "A model grew a column this architecture forbids")
 
     def test_every_ciphertext_field_is_an_exact_bucket_opaque_blob(self):
         self.assertEqual(
             unbucketed_blob_offenders(), [],
-            "Every stored blob must be OpaqueBlobField with buckets (§A7)")
+            "Every stored blob must be OpaqueBlobField with buckets")
 
     def test_no_app_table_holds_unclassified_binary_data(self):
         self.assertEqual(
             raw_binary_offenders(), [],
-            "A raw BinaryField outside the public-key set appeared (§A11.1–2)")
+            "A raw BinaryField outside the public-key set appeared")
 
     def test_envelopes_have_no_sender_and_route_only_to_a_device(self):
         self.assertEqual(envelope_graph_offenders(), [],
-                         "Sealed sender at rest was broken (§A11.3)")
+                         "Sealed sender at rest was broken")
 
     def test_no_table_outside_accounts_references_users_twice(self):
         self.assertEqual(dual_user_fk_offenders(), [],
-                         "A sender↔recipient-shaped table appeared (§A11.3)")
+                         "A sender-recipient-shaped table appeared")
 
     def test_the_framework_exemption_list_cannot_quietly_grow(self):
         self.assertEqual(AUDITED_FRAMEWORK_COLUMNS, {"sessions.Session.session_key"},
-                         "Every new exemption needs an §A4 audit entry and review here")
+                         "Every new exemption needs an audit entry and review here")
 
     def test_the_guard_actually_sees_this_schema(self):
         # Anti-vacuity: introspection must be walking the real registry. If any known

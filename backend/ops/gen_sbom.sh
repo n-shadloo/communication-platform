@@ -1,4 +1,4 @@
-# ops/gen_sbom.sh — CycloneDX SBOM of the pinned set (supply-chain record, rec-15).
+# ops/gen_sbom.sh — CycloneDX SBOM of the pinned dependency set.
 set -euo pipefail
 python -m pip install --no-index --find-links vendor/wheels cyclonedx-bom || true
 cyclonedx-py requirements requirements/prod.txt -o ops/sbom.prod.json || \

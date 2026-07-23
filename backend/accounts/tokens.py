@@ -1,6 +1,7 @@
-from rest_framework_simplejwt.tokens import RefreshToken, AccessToken
-from django.conf import settings
 from datetime import timedelta
+
+from django.conf import settings
+from rest_framework_simplejwt.tokens import AccessToken, RefreshToken
 
 def issue_full(user, device):
     refresh = RefreshToken.for_user(user)

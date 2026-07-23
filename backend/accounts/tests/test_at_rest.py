@@ -1,4 +1,4 @@
-"""What a stolen disk yields for `accounts_user` (ARCHITECTURE §A8, §A11).
+"""What a stolen disk yields for `accounts_user`.
 
 `transaction=True` matters: the dump runs in a separate process over a separate
 connection, so it can only see committed rows.

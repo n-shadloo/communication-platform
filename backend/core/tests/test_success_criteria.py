@@ -1,16 +1,13 @@
-"""Success-criteria aggregator (`structure.md` §10 → docs/SUCCESS_CRITERIA.md).
+"""Success-criteria aggregator.
 
-The doc maps every numbered §10 criterion to its phase tests; this file keeps the four
-headline invariants *executable in one place*, through the public surface, so the map
-cannot silently rot when phase suites are refactored:
+Keeps the four headline invariants executable in one place, through the public
+surface, so they cannot silently rot when the per-app suites are refactored:
 
-1. no plaintext / no content key / no graph at rest — re-runs the seizure-guard audit;
-2. a brand-new device restores the key backup and full history (vault flow, §10.4);
+1. no plaintext, no content key, no graph at rest (re-runs the seizure-guard audit);
+2. a brand-new device restores the key backup and full history (vault flow);
 3. revoking a device cuts its access and destroys its server state (devices flow);
 4. fan-out writes one independent row per recipient device and stores no sender
    (messaging proof).
-
-Everything else §10 requires is referenced from the doc, not duplicated here.
 """
 import base64
 
@@ -44,17 +41,17 @@ def _second_device(user, registration_id):
 
 
 def test_nothing_readable_or_graph_shaped_can_exist_at_rest():
-    """§10.1–10.2 (read per §A12: no *content* key; infrastructure secrets exist and are
-    expected). Executes the full seizure-guard audit over the live app registry."""
+    """Executes the full seizure-guard audit over the live app registry.
+    Infrastructure secrets exist and are expected; content keys and graphs may not."""
     for audit in (forbidden_column_offenders, unbucketed_blob_offenders,
                   raw_binary_offenders, envelope_graph_offenders,
                   dual_user_fk_offenders):
-        assert audit() == [], f"{audit.__name__} found §A11 violations"
+        assert audit() == [], f"{audit.__name__} found violations"
 
 
 def test_a_new_device_restores_the_backup_and_the_whole_history(api, active_user,
                                                                 device, auth_headers):
-    """§10.4: log in on a new device → chats are there. Device 1 writes the backup and
+    """Log in on a new device and the chats are there: device 1 writes the backup and
     history; a brand-new device for the same user reads both back through the API."""
     first = auth_headers(active_user, device)
     backup = _b64(min(BACKUP_BUCKETS), 0x4B)
@@ -74,8 +71,8 @@ def test_a_new_device_restores_the_backup_and_the_whole_history(api, active_user
 
 def test_revoking_a_device_cuts_its_access_and_destroys_its_state(api, active_user,
                                                                   device, auth_headers):
-    """§10 device control: after DELETE, the revoked device's tokens die and its queue
-    is gone (full cascade + ETag behaviour in devices/tests/test_revocation.py)."""
+    """After DELETE, the revoked device's tokens die and its queue is gone (the full
+    cascade and ETag behaviour live in devices/tests/test_revocation.py)."""
     doomed = _second_device(active_user, 9002)
     doomed_access, _ = issue_full(active_user, doomed)
     QueuedEnvelope.objects.create(recipient_device=doomed, seq=1,
@@ -92,7 +89,7 @@ def test_revoking_a_device_cuts_its_access_and_destroys_its_state(api, active_us
 
 def test_fanout_writes_independent_copies_and_never_a_sender(api, active_user, device,
                                                              auth_headers):
-    """§10 no-graph fan-out: N targets → N independent rows, each knowing only its
+    """No-graph fan-out: N targets become N independent rows, each knowing only its
     recipient device; the sender appears in no stored value (messaging/tests/
     test_send_fanout.py and test_at_rest.py prove the full property)."""
     from accounts.models import User

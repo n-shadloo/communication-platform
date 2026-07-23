@@ -1,10 +1,10 @@
-"""System-wide log-silence audit (§A11.4) — drives ops/audit/log_silence.py.
+"""System-wide log-silence audit, driving ops/audit/log_silence.py.
 
 The per-app suites spot-check their own paths; this pass runs one scripted sequence
-across auth, devices, messaging, attachments, realtime, and voice, and asserts none of
-the identifiers/blobs/tokens it generated reached any log line. The second test proves
-the audit itself still has teeth — including against loggers that do not propagate to
-root, the exact blind spot that once let a leak grade its own homework (Phase 6).
+across auth, devices, messaging, attachments, realtime, and voice, and asserts none
+of the identifiers/blobs/tokens it generated reached any log line. The second test
+proves the audit itself still has teeth, including against loggers that do not
+propagate to root, the blind spot that would let a leak grade its own homework.
 """
 import logging
 
@@ -39,7 +39,7 @@ async def test_scripted_traffic_across_every_surface_leaks_nothing():
 
 
 async def test_the_audit_catches_a_leak_even_on_a_non_propagating_logger():
-    """django.request has its own handler and propagate=False — the spot assertLogs
+    """django.request has its own handler and propagate=False, the spot assertLogs
     misses. A deliberate leak there must come back non-empty, or the audit is dead."""
     def leak(secrets):
         logging.getLogger("django.request").error(

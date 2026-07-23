@@ -1,11 +1,12 @@
-"""Pins the query count of every DB touch the consumer can make (§A6: each is a single
-statement, wrapped for the event loop). Each helper's *underlying* sync function
-(`.func`) is measured directly: the async boundary is exercised by the live consumer
-tests, and `database_sync_to_async`'s close_old_connections would sever the test
-transaction's connection under CONN_MAX_AGE=0."""
+"""Pins the query count of every DB touch the consumer can make.
+
+Each helper's underlying sync function (`.func`) is measured directly: the async
+boundary is exercised by the live consumer tests, and `database_sync_to_async`'s
+close_old_connections would sever the test transaction's connection under
+CONN_MAX_AGE=0."""
 import pytest
-from django.test.utils import CaptureQueriesContext
 from django.db import connection
+from django.test.utils import CaptureQueriesContext
 
 from accounts.tokens import issue_full
 from core.buckets import ENVELOPE_BUCKETS
@@ -25,8 +26,8 @@ def _count(wrapped, *args):
 
 
 def test_authenticate_access_is_one_joined_query(active_user, device):
-    """Device + user in one SELECT via select_related — the socket's auth is actually
-    one query cheaper than REST's two-step lookup (§A8 parity, better plan)."""
+    """Device and user in one SELECT via select_related: the socket's auth is one
+    query cheaper than REST's two-step lookup."""
     access, _ = issue_full(active_user, device)
 
     queries = _count(authenticate_access, access)

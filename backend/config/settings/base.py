@@ -1,4 +1,6 @@
+from datetime import timedelta
 from pathlib import Path
+
 from core.env import env, env_bool, env_int, env_list
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
@@ -73,7 +75,7 @@ CHANNEL_LAYERS = {"default": {
     "CONFIG": {"hosts": [REDIS_URL]},
 }}
 
-# Argon2id first — password auth only, never protects content (ARCHITECTURE §A8/§A12).
+# Argon2id first. Password hashing protects auth only, never content.
 PASSWORD_HASHERS = [
     "django.contrib.auth.hashers.Argon2PasswordHasher",
     "django.contrib.auth.hashers.PBKDF2PasswordHasher",
@@ -101,7 +103,7 @@ REST_FRAMEWORK = {
     # Fail closed on scope as well as identity: DeviceJWTAuthentication authenticates
     # register-scope tokens, so IsAuthenticated alone would admit them to any view
     # that forgets the check. POST /me/devices is the one endpoint expected to opt
-    # down (§A8).
+    # down.
     "DEFAULT_PERMISSION_CLASSES": [
         "rest_framework.permissions.IsAuthenticated",
         "accounts.permissions.IsFullScope",
@@ -126,7 +128,6 @@ REST_FRAMEWORK = {
     "EXCEPTION_HANDLER": "core.exceptions.api_exception_handler",
 }
 
-from datetime import timedelta
 SIMPLE_JWT = {
     "ACCESS_TOKEN_LIFETIME": timedelta(minutes=env_int("ACCESS_MIN", default=15)),
     "REFRESH_TOKEN_LIFETIME": timedelta(days=env_int("REFRESH_DAYS", default=14)),
@@ -141,7 +142,7 @@ SIMPLE_JWT = {
 
 REGISTER_SCOPE_ACCESS_MIN = env_int("REGISTER_SCOPE_ACCESS_MIN", default=10)
 
-# Storage / limits (ARCHITECTURE §A4, §A7, §A13).
+# Storage limits and retention.
 ATTACHMENTS_ROOT = Path(env("ATTACHMENTS_ROOT", default=str(BASE_DIR / "media_root")))
 ATTACH_USER_QUOTA_BYTES = env_int("ATTACH_USER_QUOTA_BYTES", default=2 * 1024**3)
 ATTACH_TTL_DAYS = env_int("ATTACH_TTL_DAYS", default=30)
@@ -149,12 +150,12 @@ ENVELOPE_TTL_DAYS = env_int("ENVELOPE_TTL_DAYS", default=30)
 HISTORY_TTL_DAYS = env_int("HISTORY_TTL_DAYS", default=0)  # 0 = keep forever
 MAX_DEVICES_PER_USER = env_int("MAX_DEVICES_PER_USER", default=10)
 
-# Realtime (ARCHITECTURE §A6).
+# Realtime gateway bounds.
 ALLOWED_WS_ORIGINS = env_list("ALLOWED_WS_ORIGINS", default=[])
 WS_MAX_FRAME = env_int("WS_MAX_FRAME", default=512 * 1024)
 SIGNAL_MAX = env_int("SIGNAL_MAX", default=16 * 1024)
 
-# Voice (ARCHITECTURE §A9). API secret is infrastructure, never a media key.
+# Voice. The API secret is infrastructure, never a media key.
 LIVEKIT_URL = env("LIVEKIT_URL", default="")
 LIVEKIT_API_KEY = env("LIVEKIT_API_KEY", default="")
 LIVEKIT_API_SECRET = env("LIVEKIT_API_SECRET", default="")
@@ -177,7 +178,7 @@ LOGGING = {
     }},
     "root": {"handlers": ["console"], "level": "INFO"},
     "loggers": {
-        # No request/access logging: never record method+path+bodies (§A11.4).
+        # No request/access logging: never record method, path, or bodies.
         "django.request": {"handlers": ["console"], "level": "ERROR", "propagate": False},
         "django.server": {"handlers": ["console"], "level": "ERROR", "propagate": False},
         "daphne": {"handlers": ["console"], "level": "WARNING", "propagate": False},

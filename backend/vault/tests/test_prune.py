@@ -1,7 +1,6 @@
-"""History retention (§A13): keep-forever by default; a positive TTL prunes old rows.
+"""History retention: keep-forever by default; a positive TTL prunes old rows.
 
-The `prune` command (Prompt 3) gained a history sweep gated on HISTORY_TTL_DAYS. Records
-are backdated by writing `stored_date` directly, since it is `auto_now_add`.
+Records are backdated by writing `stored_date` directly, since it is `auto_now_add`.
 """
 import datetime
 
@@ -38,8 +37,8 @@ def test_default_ttl_keeps_history_forever(settings):
 def test_positive_ttl_prunes_only_rows_past_the_cutoff(settings):
     settings.HISTORY_TTL_DAYS = 30
     user = owner()
-    record(user, 0, days_old=31)   # past cutoff → pruned
-    record(user, 1, days_old=5)    # within TTL → kept
+    record(user, 0, days_old=31)   # past cutoff: pruned
+    record(user, 1, days_old=5)    # within TTL: kept
     call_command("prune")
     kept = list(HistoryRecord.objects.filter(owner=user).values_list("seq", flat=True))
     assert kept == [1]

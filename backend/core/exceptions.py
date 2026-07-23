@@ -1,5 +1,6 @@
-from rest_framework.views import exception_handler as drf_handler
 from rest_framework.response import Response
+from rest_framework.views import exception_handler as drf_handler
+
 from core.fields import BadBucket
 
 def api_exception_handler(exc, context):

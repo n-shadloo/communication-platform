@@ -1,0 +1,232 @@
+# messaging API
+
+The durable message queue: fan-out send, per-device drain, and acknowledgement. Every
+payload is an opaque, padded, client-encrypted blob in an exact envelope bucket
+(1024, 4096, 16384, 65536, or 262144 bytes), base64-encoded on the wire. All paths
+are under `/api/v1`; `Authorization: Bearer` with `full` scope is required, and drain
+and ack additionally require the token to be bound to a device. Serializer validation
+failures return the DRF field-error object directly (no `code` key); the project-wide
+`401` bodies listed in `accounts/API.md` apply here too. All three endpoints share
+the `envelopes` throttle scope (default 600/min).
+
+The server never stores who sent an envelope. The sender's identity is used only for
+authentication and throttling; each accepted item becomes an independent row keyed
+solely by its recipient device.
+
+## Send envelopes
+
+**Method:** `POST`
+**Path:** `/api/v1/envelopes`
+
+Accepts a batch of per-device ciphertext copies. The client encrypts the same logical
+message separately for every recipient device (including the sender's own other
+devices) and submits up to 256 `{device_id, blob}` items. Each accepted item is
+queued with a per-device sequence number; live recipients are also pushed a copy over
+the WebSocket immediately, but the queue row is the source of truth.
+
+Targets that are revoked, unknown, or belong to a deactivated account are skipped and
+reported in `stale_devices`; the sender should drop those devices from its session
+state and refresh the peer's device list. The whole batch validates before anything
+is written: one off-bucket blob rejects the entire request.
+
+**Headers**
+
+| Header | Required | Value |
+|---|---|---|
+| `Authorization` | yes | `Bearer <access token>`, full scope |
+| `Content-Type` | yes | `application/json` |
+
+**Path parameters**
+
+| Name | Type | Required | Description |
+|---|---|---|---|
+| — | | | none |
+
+**Query parameters**
+
+| Name | Type | Required | Default | Description |
+|---|---|---|---|---|
+| — | | | | none |
+
+**Request body**
+
+```json
+{
+  "messages": [
+    { "device_id": "2a77d4b9-e611-4c0f-9f1c-6a2e3b7d4e0f", "blob": "kzXhc9Qp…" }
+  ]
+}
+```
+
+1–256 items; each blob exactly one envelope bucket. Unknown fields are rejected.
+
+**Responses**
+
+### Accepted — `202 Accepted`
+
+```json
+{ "accepted": 2, "stale_devices": ["b3a91c77-2e5d-4f28-a1c9-8d64e0f3b522"] }
+```
+
+### Invalid request — `400 Bad Request`
+
+```json
+{ "messages": { "0": { "device_id": ["Must be a valid UUID."] } } }
+```
+
+### Off-bucket blob — `400 Bad Request`
+
+```json
+{ "code": "bad_bucket", "detail": "Invalid payload." }
+```
+
+The rejected payload is never echoed.
+
+### Register-scope token — `403 Forbidden`
+
+```json
+{ "code": "scope_forbidden", "detail": "This token cannot access this endpoint." }
+```
+
+### Rate limited — `429 Too Many Requests`
+
+```json
+{ "detail": "Request was throttled." }
+```
+
+## Drain my mailbox
+
+**Method:** `GET`
+**Path:** `/api/v1/me/envelopes`
+
+Returns the calling device's queued envelopes in ascending sequence order. `has_more`
+signals a further page. Envelopes stay queued until acked, so a crash between drain
+and processing loses nothing; clients drain, decrypt, persist locally, then ack.
+
+The `limit` parameter is clamped into 1–100 and never errors: a non-numeric value
+falls back to 100, a negative one clamps to 1.
+
+**Headers**
+
+| Header | Required | Value |
+|---|---|---|
+| `Authorization` | yes | `Bearer <access token>`, full scope, device-bound |
+
+**Path parameters**
+
+| Name | Type | Required | Description |
+|---|---|---|---|
+| — | | | none |
+
+**Query parameters**
+
+| Name | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `limit` | integer | no | `100` | Page size, clamped into 1–100 |
+
+**Request body**
+
+None.
+
+**Responses**
+
+### Drained — `200 OK`
+
+```json
+{
+  "envelopes": [
+    { "id": "e4f8a1c2-9b3d-4e5f-8a70-6c1d2e3f4a5b", "seq": 12, "blob": "kzXhc9Qp…" }
+  ],
+  "has_more": false
+}
+```
+
+### No device binding — `403 Forbidden`
+
+```json
+{ "code": "device_scope_required", "detail": "This endpoint requires a device-scoped token." }
+```
+
+### Register-scope token — `403 Forbidden`
+
+```json
+{ "code": "scope_forbidden", "detail": "This token cannot access this endpoint." }
+```
+
+### Rate limited — `429 Too Many Requests`
+
+```json
+{ "detail": "Request was throttled." }
+```
+
+## Acknowledge envelopes
+
+**Method:** `POST`
+**Path:** `/api/v1/me/envelopes/ack`
+
+Deletes up to 200 envelopes from the calling device's own queue by id. Ids from any
+other mailbox — even a sibling device of the same account — match nothing, and acking
+an already-acked id is an idempotent no-op, so retrying after a lost response is
+safe. Ack only after the envelope's contents are durably stored client-side.
+
+**Headers**
+
+| Header | Required | Value |
+|---|---|---|
+| `Authorization` | yes | `Bearer <access token>`, full scope, device-bound |
+| `Content-Type` | yes | `application/json` |
+
+**Path parameters**
+
+| Name | Type | Required | Description |
+|---|---|---|---|
+| — | | | none |
+
+**Query parameters**
+
+| Name | Type | Required | Default | Description |
+|---|---|---|---|---|
+| — | | | | none |
+
+**Request body**
+
+```json
+{ "ids": ["e4f8a1c2-9b3d-4e5f-8a70-6c1d2e3f4a5b"] }
+```
+
+A missing `ids` key acks nothing and returns `{"deleted": 0}`.
+
+**Responses**
+
+### Acked — `200 OK`
+
+```json
+{ "deleted": 1 }
+```
+
+### Malformed body — `400 Bad Request`
+
+```json
+{ "code": "bad_request", "detail": "Malformed request." }
+```
+
+Non-object bodies, a non-list `ids`, more than 200 entries, and non-UUID values all
+land here.
+
+### No device binding — `403 Forbidden`
+
+```json
+{ "code": "device_scope_required", "detail": "This endpoint requires a device-scoped token." }
+```
+
+### Register-scope token — `403 Forbidden`
+
+```json
+{ "code": "scope_forbidden", "detail": "This token cannot access this endpoint." }
+```
+
+### Rate limited — `429 Too Many Requests`
+
+```json
+{ "detail": "Request was throttled." }
+```

@@ -1,9 +1,11 @@
 import uuid
-from django.contrib.auth.models import AbstractBaseUser, PermissionsMixin, BaseUserManager
+
+from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, PermissionsMixin
 from django.core.validators import RegexValidator
 from django.db import models
-from core.fields import OpaqueBlobField
+
 from core.buckets import PROFILE_BUCKETS
+from core.fields import OpaqueBlobField
 
 username_validator = RegexValidator(r"^[a-z0-9_]{3,32}$",
     "3–32 chars: lowercase letters, digits, underscore.")
@@ -27,7 +29,7 @@ class UserManager(BaseUserManager):
 class User(AbstractBaseUser, PermissionsMixin):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     username = models.CharField(max_length=32, unique=True, validators=[username_validator])
-    is_active = models.BooleanField(default=False)   # owner activates (§7)
+    is_active = models.BooleanField(default=False)   # the owner activates accounts
     is_staff = models.BooleanField(default=False)
     created_date = models.DateField(auto_now_add=True)
 

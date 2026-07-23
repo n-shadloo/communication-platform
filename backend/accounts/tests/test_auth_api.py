@@ -4,9 +4,9 @@ import pytest
 from django.contrib.auth.hashers import check_password
 from django.urls import reverse
 
-from accounts.models import User
 from rest_framework_simplejwt.tokens import RefreshToken
 
+from accounts.models import User
 from accounts.tokens import issue_full
 from accounts.views import _DUMMY_HASH
 from conftest import PASSWORD
@@ -291,7 +291,7 @@ class TestRefresh:
 
     def test_a_refresh_without_full_scope_is_refused(self, api, active_user):
         # A bare SimpleJWT refresh carries no device binding; it must never rotate
-        # up into a full-scope pair (§A8).
+        # up into a full-scope pair.
         bare = RefreshToken.for_user(active_user)
 
         response = api.post(reverse("refresh"), {"refresh": str(bare)}, format="json")

@@ -8,7 +8,7 @@ BANNED_TELEMETRY = {"sentry_sdk", "ddtrace", "newrelic", "elasticapm"}
 
 
 class BasePostureTests(SimpleTestCase):
-    """Posture that must hold in every environment (ARCHITECTURE §A3, §A8, §A11)."""
+    """Posture that must hold in every environment."""
 
     def test_argon2id_is_the_first_password_hasher(self):
         self.assertTrue(settings.PASSWORD_HASHERS[0].endswith("Argon2PasswordHasher"))
@@ -54,14 +54,14 @@ class BasePostureTests(SimpleTestCase):
         self.assertEqual(ws_origin_allowlist_set(None), [])
 
     def test_ws_origin_check_fails_on_an_empty_allowlist(self):
-        # Empty = allow-any-Origin in the consumer (dev behaviour); prod must set it (§A6).
+        # Empty means allow-any-Origin in the consumer (dev behaviour); prod must set it.
         with override_settings(ALLOWED_WS_ORIGINS=[]):
             errors = ws_origin_allowlist_set(None)
         self.assertEqual([e.id for e in errors], ["core.E003"])
 
 
 class ProdPostureTests(SimpleTestCase):
-    """`config.settings.prod` is what `check --deploy` runs against (§A10)."""
+    """`config.settings.prod` is what `check --deploy` runs against."""
 
     def test_debug_is_off(self):
         self.assertFalse(prod.DEBUG)

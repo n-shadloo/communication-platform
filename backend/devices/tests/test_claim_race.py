@@ -1,8 +1,8 @@
-"""Single-consumption under concurrency — the headline invariant of this phase (§A4).
+"""Single consumption under concurrency.
 
-`TransactionTestCase` because the point is real committed transactions racing: the claim
-relies on `SELECT ... LIMIT 1 FOR UPDATE SKIP LOCKED` plus a delete inside the same
-transaction, and a wrapping test transaction would hide exactly that.
+`TransactionTestCase` because the point is real committed transactions racing: the
+claim relies on `SELECT ... LIMIT 1 FOR UPDATE SKIP LOCKED` plus a delete inside the
+same transaction, and a wrapping test transaction would hide exactly that.
 """
 import threading
 
@@ -111,7 +111,7 @@ class ClaimRaceTests(TransactionTestCase):
 
     def test_the_race_is_real_without_skip_locked(self):
         """Guards the guard. Read-then-delete over the same row, under the same load,
-        double-spends — so the assertions above are not passing vacuously because the
+        double-spends, so the assertions above are not passing vacuously because the
         threads never actually overlapped."""
         stock_prekeys(self.owner_device, 1, start=1)
         start = threading.Barrier(CONCURRENT_CLAIMS)
