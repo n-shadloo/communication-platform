@@ -107,7 +107,10 @@ Before every production release, isolate the environment from foreign networks a
 - application assets, fonts, Wasm, CA material, APIs, Redis/PostgreSQL, nginx, LiveKit,
   and TURN are local/self-hosted;
 - Android installation/update and web loading work;
-- register/login/message/attachment/voice/recovery flows work;
+- non-circular enrollment, cross-signing/SAS, PQXDH/PQ-MLS, device-log gossip,
+  register/login/message/attachment/voice/identity-recovery flows work;
+- seven-day queue gaps trigger fresh-Welcome recovery and history transfers succeed only
+  device-to-device with no server-history dependency;
 - DNS and connectivity checks do not contact foreign services.
 
 ## Incident response

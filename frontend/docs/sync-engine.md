@@ -35,9 +35,13 @@ boolean combination such as `isLoading && !hasToken` defines authentication beha
 4. Load/refresh the device-bound session through a single-flight token coordinator.
 5. Open WebSocket; native sends the bearer header and web sends the required first auth
    frame within the backend deadline.
-6. Drain `GET /api/v1/me/envelopes` until `has_more` is false.
-7. Process persisted outbox work and prekey/key-package maintenance.
-8. Subscribe to only the presence/rooms required by visible or active features.
+6. Drain `GET /api/v1/me/envelopes`; before processing a page, compare its
+   `pruned_through` with the durable highest contiguous acked sequence.
+7. If `last_acked_seq < pruned_through`, enter queue-gap recovery before accepting
+   potentially dependent MLS traffic; otherwise drain until `has_more` is false.
+8. Process persisted outbox work, cross-signing/device-log verification, and
+   classical/PQ prekey and KeyPackage maintenance.
+9. Subscribe to only the presence/rooms required by visible or active features.
 
 Socket events may arrive during drain. Inbox uniqueness and event IDs make ordering safe.
 
@@ -51,13 +55,32 @@ For each envelope:
 4. Validate protocol schema, sender binding, replay state, authorization, and
    dependencies.
 5. In one transaction apply the event and mark the envelope `applied`.
-6. Queue any delivered receipt and encrypted history record.
+6. Queue any delivered receipt; local message history is already durable in Drift and is
+   never uploaded to a history API.
 7. Ack via WebSocket or REST only after the transaction commits.
 8. Mark acked locally; an ambiguous ack is retried idempotently.
 
 Authentication failure, unknown session, missing MLS epoch, and unsupported version are
 different quarantine reasons. Recoverable dependency gaps trigger bounded repair; forged
 or malformed input never triggers an unbounded network loop.
+
+## Queue-gap recovery
+
+The backend retains undelivered envelopes for seven days. `pruned_through` is the highest
+sequence pruned from this device mailbox. If the durable highest contiguous acked
+sequence is lower, at least one envelope is permanently missing and may have been an MLS
+commit. The client:
+
+1. persists a blocking `queue_gap` security state and stops group sends/epoch mutation;
+2. keeps safely decryptable DM/local content but never guesses missing MLS state;
+3. marks every current group as potentially affected until peers confirm otherwise;
+4. sends authenticated recovery signals where sessions remain usable;
+5. asks peers to remove and re-add this device to affected groups, producing fresh
+   Welcomes; and
+6. clears the state only after each group is safely rejoined or explicitly left.
+
+Device-to-device history transfer cannot repair ratchets or MLS epochs and is not used as
+a substitute for this flow.
 
 ## Outbox
 
@@ -71,8 +94,9 @@ queued -> preparing -> ready -> sending -> accepted
                                            -> permanently_failed
 ```
 
-- `preparing` refreshes device lists, creates/repairs sessions, and encrypts independently
-  for each recipient.
+- `preparing` refreshes identity, device list, and device-log head; refuses unsigned,
+  unverified, forked, or classical-only peers; then creates/repairs hybrid sessions and
+  encrypts independently for each recipient.
 - The operation snapshots eligible devices, sorts targets by UUID bytes, and creates one
   durable target row containing the exact encrypted blob for every recipient. Pending
   targets are sent in deterministic batches of at most 256, matching the backend limit.
@@ -113,27 +137,40 @@ with the backend/proxy configuration and a REST health probe only when necessary
 
 ## Device maintenance
 
-- Own/peer device ETags prevent unnecessary transfers.
-- A changed peer list creates sessions for additions, invalidates removals, and marks a
-  verified safety number changed.
+- Own/peer device ETags cover device sets and log heads and prevent unnecessary transfers.
+- A changed peer list is accepted only after exact device cross-signature verification
+  and device-log extension. A valid addition under the verified master creates sessions;
+  a master-key change, invalid signature, or log fork blocks sensitive operations.
 - One-time prekeys are replenished when the server count falls below 50, up to a target
   of 150, staying below the backend cap of 200.
-- Signed prekeys rotate periodically with a bounded delayed-message overlap.
+- ML-KEM one-time prekeys are replenished below 25 up to a target of 75, staying below
+  the backend cap of 100.
+- Signed classical/PQ prekeys rotate every seven days with an eight-day delayed-message
+  overlap. Rotation atomically supplies a new `cross_sig` and increments
+  `bundle_version`.
 - MLS key packages are replenished when the server count falls below 25, up to a target
   of 75, staying below the backend cap of 100.
+- One PQ MLS last-resort KeyPackage is maintained separately from the consumable count;
+  its use is surfaced as degraded initial-join forward secrecy and triggers immediate
+  consumable replenishment.
+- Every own device-set/identity change appends a self-signing-key-signed hash-chain record.
+  Verified peer log heads are piggybacked in ordinary encrypted events for equivocation
+  detection.
 - `stale_devices` responses immediately invalidate matching outbox targets and trigger one
   ETag refresh. Newly discovered eligible replacement devices receive independently
   encrypted target rows with the same logical event ID; already accepted targets do not.
 
-## History archive
+## Device-to-device history transfer
 
-After a durable event is applied, an encrypted archive record is queued. Records append
-in bounded batches to `/api/v1/me/history`. The client tracks the server-assigned sequence
-range only as an archive cursor. Restore pages from `after=-1` until `has_more=false`,
-authenticates/decrypts each record, and applies it idempotently by event ID.
+The server has no history endpoint. After a new device is cross-signing-authorized, an
+existing online device snapshots locally held history into bounded transfer events,
+encrypts each to the new device through ordinary hybrid pairwise envelopes, and records
+transfer progress by event ID. The receiver authenticates, stores, and deduplicates each
+event before acknowledging it. Transfer is resumable, may be partial when the source
+device has partial history, and never includes ratchet private state or MLS epoch secrets.
 
-An archive failure never blocks live message acknowledgement once the local event is
-durable, but remains visible in security/recovery status until retried.
+No online existing device means no history transfer. The UI states that limitation and
+does not imply that the recovery secret or server can reconstruct content.
 
 ## Volatile signals
 
@@ -143,9 +180,11 @@ a signal into durable message or membership state.
 
 ## Android and web lifecycle
 
-- Android foreground mode may keep the socket and local notification pipeline active.
-  Without it, resume performs a full drain.
-- WorkManager may schedule best-effort catch-up but is not advertised as instant delivery.
+- Android keeps the WebSocket only while the application lifecycle permits. WorkManager
+  performs best-effort background polling/drain; it is not instant, exact-periodic, or
+  reliable after force-stop. Messaging never starts a persistent foreground service.
+- An active voice session alone uses the required microphone/communication foreground
+  service.
 - Web listens while the page is active. Visibility resume and network recovery refresh
   auth, reconnect, and drain.
 - Browser service-worker background sync is optional enhancement only; limited cross-

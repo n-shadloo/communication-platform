@@ -14,6 +14,9 @@ LiveKit device testing; lowering it may not weaken required security controls si
   takes precedence and the documented threat model does not trust a remote Google check.
 - Store identity/ratchet/MLS material only through the encrypted database/crypto-core
   boundary.
+- Store cross-signing private keys in platform-protected storage and in the
+  recovery-encrypted backup only; device X25519/ML-KEM/ratchet/MLS private state never
+  enters that backup.
 - Disable Android Auto Backup/data extraction for databases, keys, tokens, caches, and
   attachments.
 - Use internal app storage and scoped `content://` sharing only.
@@ -35,20 +38,18 @@ not instant background notification.
 
 Modes:
 
-- **Normal:** socket while app is active; on resume reconnect and drain. WorkManager may
-  perform best-effort maintenance/catch-up under network constraints.
-- **Stay connected:** explicitly enabled by the user and represented by a persistent
-  notification. A native foreground service owns the socket and hands encrypted
-  envelopes to the same transactional inbox pipeline.
+- **Active app:** WebSocket delivery plus REST drain.
+- **Background messaging:** WorkManager performs best-effort polling/drain under network
+  constraints. It is not advertised as instant or exact-periodic, and no persistent
+  foreground messaging service is started.
 - **Active voice:** microphone/communication foreground service for the duration of the
   joined room with visible controls.
 
-The implementation spike MUST select truthful Android foreground-service types and comply
-with the targeted OS rules. Android 14+ requires declared types/permissions;
-`remoteMessaging` is evaluated for message transfer, and `microphone` is used only while
-capturing. The app MUST NOT mislabel perpetual work as `dataSync` to evade Android 15
-timeouts or distribution policy. If the OS/user stops the service, the UI reports that
-instant background delivery is unavailable and later drains safely.
+The implementation spike MUST configure truthful Android foreground-service types only
+for active voice. Android 14+ requires the declared microphone type/permissions. The app
+MUST NOT label background polling as `remoteMessaging` or `dataSync` to evade lifecycle
+or distribution policy. Force-stop, Doze, and OEM restrictions may delay messages; resume
+always drains the authoritative queue and checks `pruned_through`.
 
 ## Notifications
 
@@ -65,7 +66,7 @@ instant background delivery is unavailable and later drains safely.
 
 Request only at point of use:
 
-- notifications for message alerts/foreground connection disclosure;
+- notifications for locally received message alerts and active-voice disclosure;
 - microphone for joining voice;
 - camera for capture/optional safety QR;
 - media/files through system pickers without broad storage permission.

@@ -66,8 +66,12 @@ Voice room capability IDs remain backend UUIDs but are hashed into protocol cont
 | `receipt.read` | Explicit read message IDs | yes |
 | `typing.set` | Short-lived typing state | no, signal only |
 | `profile.publish` | Profile version/key/material announcement | yes |
+| `contact.master_verify` | User-signing-key signature over a verified peer master key | yes, own devices and optionally peer |
 | `group.control` | Signed group metadata, role, policy, or membership transition | yes |
 | `group.history_batch` | Re-shared past events for a new member | yes |
+| `history.transfer_manifest` | Authorize and describe own-device history transfer | yes |
+| `history.transfer_batch` | Bounded own-device history content batch | yes |
+| `device_log.gossip` | Latest verified contact device-log heads | yes |
 | `room.invite` | Voice-room capability and encrypted membership material | yes |
 | `room.control` | Room metadata or removal event | yes |
 | `session.repair` | Authenticated request/response for pairwise repair | yes |
@@ -76,6 +80,12 @@ Voice room capability IDs remain backend UUIDs but are hashed into protocol cont
 
 Unknown kinds are stored as unsupported encrypted events, bounded in size, and never
 partially interpreted.
+
+`contact.master_verify` contains the exact peer user ID, master-key bytes/fingerprint,
+verification protocol version, and user-signing-key signature. It is created only after
+successful out-of-band SAS/QR confirmation, synchronized to the user's own cross-signed
+devices, and included in the recovery-protected identity material. It never makes a
+server-supplied first-seen key trusted.
 
 ## Message creation
 
@@ -132,7 +142,8 @@ a socket, not that the person is actively viewing a chat.
 
 Blocking is private account state, not a backend ACL. `contact.block_set` contains the
 target user ID, blocked boolean, monotonic revision, and event ID and is encrypted only
-to the user's other live devices/history. It is never sent to the blocked contact.
+to the user's other live devices. It remains in each device's local history and is never
+sent to the blocked contact.
 
 For a blocked DM sender, the client still authenticates/decrypts enough to prevent queue
 abuse, records the envelope as processed, and acknowledges it, but does not persist or
@@ -171,6 +182,12 @@ When history sharing is enabled, an existing authorized device sends bounded
 event ID and author attribution and is marked as recovered history. The backend cannot
 construct this history.
 
+Own-device history transfer uses a cross-signing-authorized manifest followed by bounded
+`history.transfer_batch` events over ordinary per-device envelopes. It transfers content
+only, preserves original event IDs for deduplication, states source completeness, and
+never contains Double Ratchet state or MLS epoch secrets. A mailbox `pruned_through` gap
+is repaired by fresh sessions/group Welcomes, not by replaying history batches.
+
 ## Multi-device rules
 
 - A user's devices are independent cryptographic recipients.
@@ -181,6 +198,9 @@ construct this history.
 - Read state is merged as an idempotent set of explicit IDs; it is not inferred from one
   device's queue sequence.
 - Revoked devices are removed from sessions and MLS at the next authenticated update.
+- Each ordinary encrypted event may carry bounded `device_log.gossip` head tuples. A
+  non-extending head or two valid heads for the same sequence triggers the global fork
+  state; it is never resolved by arrival order.
 
 ## Ordering
 

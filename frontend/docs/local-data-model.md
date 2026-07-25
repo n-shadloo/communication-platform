@@ -30,10 +30,12 @@ Names are conceptual; migrations may refine physical layout without changing own
 | Table | Purpose |
 |---|---|
 | `account_session` | Current user/device IDs, scope, token metadata, server profile |
-| `secure_secrets` | Wrapped references to device/archive keys; never raw loggable bytes |
+| `secure_secrets` | Wrapped cross-signing/device/PQ/storage key handles; never raw loggable bytes |
+| `account_identity` | Verified master/self/user-signing public state, backup version, recovery status |
 | `users` | Activated directory entries and local presentation state |
 | `profiles` | Encrypted/decrypted profile cache, version, verification state |
 | `devices` | Own and peer public bundles, ETags, labels, revocation state |
+| `device_log` | Verified signed hash-chain records, last head/hash, fork state, gossip state |
 | `pairwise_sessions` | Opaque crypto-core Double Ratchet state per device pair |
 | `prekeys` | Local private prekey handles and upload/use state |
 | `mls_groups` | Opaque crypto-core MLS state and accepted epoch |
@@ -46,8 +48,8 @@ Names are conceptual; migrations may refine physical layout without changing own
 | `outbox_operations` | Durable logical sends, deterministic <=256-target batches, and per-recipient attempts/ciphertext |
 | `receipts` | Per-message/device/user delivered/read projection |
 | `voice_rooms` | Local room capability, encrypted metadata, live state |
-| `history_checkpoint` | Vault append/restore sequence checkpoints |
-| `sync_checkpoint` | Device drain sequence, ETags, retry state, protocol version |
+| `history_transfers` | Device-to-device content transfer manifests, event progress, source completeness |
+| `sync_checkpoint` | Highest contiguous acked seq, `pruned_through`, ETags, retry state, protocol version |
 | `local_preferences` | Theme, language, mute, pin, star, preview policy |
 | `quarantine` | Bounded metadata about rejected input; never plaintext or raw secrets |
 
@@ -66,14 +68,15 @@ Names are conceptual; migrations may refine physical layout without changing own
 
 ### Send
 
-One transaction creates/updates the logical event, optimistic message projection,
-archive work, and outbox operation. Encryption/network execution occurs outside the DB
+One transaction creates/updates the logical event, optimistic message projection, and
+outbox operation. Encryption/network execution occurs outside the DB
 transaction; its result is committed in a second transaction.
 
 ### Receive
 
 One transaction records the envelope, applies a verified event, updates projections,
-creates receipts/archive work, and marks the envelope ready to acknowledge. The ack is
+creates receipts, advances the contiguous sequence checkpoint when allowed, and marks
+the envelope ready to acknowledge. The ack is
 sent only after commit. A crash before ack causes a safe duplicate.
 
 ### MLS state
@@ -94,7 +97,7 @@ state was not persisted.
 
 ## Retention and deletion
 
-- Acked raw envelopes are removed after their logical event and archive state are safe.
+- Acked raw envelopes are removed after their logical event and local projection are safe.
 - Ratchet skipped keys and old MLS states obey strict protocol bounds.
 - Decrypted attachment files and thumbnails use bounded LRU caches with explicit expiry.
 - Delete-for-me creates a tombstone before cache cleanup.

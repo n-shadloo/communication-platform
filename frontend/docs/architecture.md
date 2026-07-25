@@ -57,7 +57,8 @@ recorded as processed before it is acknowledged.
 
 Feature modules correspond to product capabilities: bootstrap, authentication, devices,
 contacts/profiles, conversations, messaging, groups, attachments, search, voice rooms,
-recovery/history, settings, and shared shell/design system.
+identity recovery/device-to-device history transfer, settings, and shared shell/design
+system.
 
 Features own their use cases and presentation. Shared domain concepts live in narrowly
 scoped core packages. A generic `utils` dumping ground is prohibited.
@@ -89,7 +90,8 @@ Android and web implement the same ports but may provide different guarantees:
 
 - Android uses encrypted SQLite and Android Keystore wrapping.
 - Web stores only ciphertext records persistently and keeps decrypted content in memory.
-- Android may maintain an explicit foreground connection service.
+- Android uses active-page/socket delivery plus best-effort background polling for
+  messaging; only an active voice session owns a foreground service.
 - Web synchronizes while a page is alive and drains the durable queue after resume.
 
 No platform-specific conditional is allowed inside domain or protocol logic.
@@ -100,6 +102,8 @@ No platform-specific conditional is allowed inside domain or protocol logic.
 - Malformed or unauthenticated protocol input is quarantined and never partially applied.
 - Unknown future event kinds are retained as unsupported records without crashing.
 - Security failures fail closed.
+- A queue `pruned_through` gap blocks potentially affected group sending until the
+  device is removed and re-added with a fresh MLS Welcome.
 - Network failures preserve outbox work and surface honest connection state.
 
 ## Source references

@@ -34,6 +34,10 @@ is not called the production release.
   scripts, or public connectivity probes.
 - Search is local only.
 - Login passwords and recovery secrets are distinct in storage, behavior, and wording.
+- Cross-signing master keys are verified out of band before messaging; unsigned devices,
+  master-key changes, and device-log forks fail closed.
+- New direct-message sessions use hybrid X25519 + ML-KEM-768 without silent classical
+  downgrade, and groups require a reviewed PQ MLS ciphersuite.
 - Delete-for-everyone, ephemeral room text, and recovery limitations are described
   honestly and never as guarantees.
 - Logs and diagnostics MUST exclude plaintext, identifiers, tokens, keys, ciphertext
@@ -47,6 +51,12 @@ is not called the production release.
   presented as capable of reliable message delivery.
 - A message received from REST and WebSocket is displayed once.
 - Multi-device delivery includes every live peer device and the sender's other devices.
+- The server stores no history. Message history remains on client devices and a new
+  device receives it only through an encrypted transfer from an existing online device.
+- The recovery backup restores cross-signing identity material, not message history,
+  ratchets, MLS epochs, or authorization.
+- A mailbox `pruned_through` gap is a blocking recovery state; potentially affected MLS
+  memberships are removed and re-added with a fresh Welcome.
 - Revoked devices lose tokens, queued content, local session access, and future group
   access.
 - Voice is audio-only and uses the self-hosted LiveKit and TURN deployment.
@@ -64,9 +74,10 @@ is not called the production release.
 
 ## Known platform limits
 
-- Android cannot guarantee a private, always-on socket after process termination without
-  OS-visible foreground execution. The app uses an explicit foreground connection mode
-  and documents its battery/notification cost.
+- Android background messaging uses best-effort local polling only. There is no
+  always-on messaging socket or foreign push; delayed delivery is expected under Doze,
+  force-stop, or OEM restrictions. A foreground service is used only while voice audio
+  is actively connected.
 - A closed browser cannot maintain the application WebSocket. Messages remain in the
   backend's durable device queue until the user returns.
 - A server able to replace the web bundle can attack future browser sessions. CSP and
