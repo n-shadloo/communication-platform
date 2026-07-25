@@ -114,6 +114,49 @@ def test_one_unremovable_file_does_not_stall_the_whole_sweep(active_user, attach
 
 
 @pytest.mark.django_db
+def test_pruning_sets_the_watermark_to_the_max_pruned_seq_per_device(active_user,
+                                                                     settings):
+    """A pruned envelope may have been an MLS commit the device can never re-obtain,
+    so the prune must leave a per-device high-water mark for the drain to surface."""
+    settings.ENVELOPE_TTL_DAYS = 7
+    lagging = make_device(active_user, 71)
+    current = make_device(active_user, 72)
+    queue_row(lagging, 3, age_days=8)
+    queue_row(lagging, 4, age_days=8)
+    queue_row(lagging, 5)               # fresh: survives, stays above the watermark
+    queue_row(current, 9, age_days=8)
+
+    run_prune()
+
+    lagging.refresh_from_db()
+    current.refresh_from_db()
+    assert lagging.queue_pruned_through == 4
+    assert current.queue_pruned_through == 9
+    assert list(QueuedEnvelope.objects.values_list("seq", flat=True)) == [5]
+
+
+@pytest.mark.django_db
+def test_the_watermark_is_idempotent_and_never_regresses(active_user, settings):
+    settings.ENVELOPE_TTL_DAYS = 7
+    device = make_device(active_user, 73)
+    queue_row(device, 6, age_days=8)
+
+    run_prune()
+    device.refresh_from_db()
+    first = device.queue_pruned_through
+
+    # A second pass deletes nothing and must not move the mark; nor may a later
+    # pass over lower-seq stragglers pull it backwards.
+    run_prune()
+    queue_row(device, 2, age_days=8)
+    run_prune()
+
+    device.refresh_from_db()
+    assert first == 6
+    assert device.queue_pruned_through == 6
+
+
+@pytest.mark.django_db
 def test_expired_refresh_tokens_are_flushed_and_live_ones_stay(active_user):
     """Token-issue times approximate login times, so they must age out of the DB with
     the refresh TTL."""
@@ -159,6 +202,31 @@ def test_prune_prints_counts_but_never_an_identifier(device, active_user, attach
 
     for identifier in (str(row.id), str(device.id), str(active_user.id), attachment.id):
         assert identifier not in output
+
+
+@pytest.mark.django_db
+def test_stale_keypackages_rotate_out_but_the_last_resort_survives(active_user,
+                                                                   settings):
+    """KEYPACKAGE_TTL_DAYS ages out the consumable pool; the last-resort package
+    is exempt — deleting it would make an idle device unaddable to groups, the
+    exact failure it exists to prevent."""
+    from datetime import timedelta as td
+    from devices.models import KeyPackage
+    settings.KEYPACKAGE_TTL_DAYS = 30
+    device = make_device(active_user, 74)
+    stale = KeyPackage.objects.create(device=device, blob=b"S" * 4096)
+    fresh = KeyPackage.objects.create(device=device, blob=b"F" * 4096)
+    last = KeyPackage.objects.create(device=device, blob=b"L" * 4096,
+                                     is_last_resort=True)
+    old = timezone.now().date() - td(days=31)
+    KeyPackage.objects.filter(id__in=[stale.id, last.id]).update(created_date=old)
+
+    output = run_prune()
+
+    remaining = set(KeyPackage.objects.values_list("id", flat=True))
+    assert remaining == {fresh.id, last.id}
+    assert "keypackages pruned: 1" in output
+    assert str(stale.id) not in output
 
 
 @pytest.mark.django_db

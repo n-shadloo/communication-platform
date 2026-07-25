@@ -146,8 +146,16 @@ REGISTER_SCOPE_ACCESS_MIN = env_int("REGISTER_SCOPE_ACCESS_MIN", default=10)
 ATTACHMENTS_ROOT = Path(env("ATTACHMENTS_ROOT", default=str(BASE_DIR / "media_root")))
 ATTACH_USER_QUOTA_BYTES = env_int("ATTACH_USER_QUOTA_BYTES", default=2 * 1024**3)
 ATTACH_TTL_DAYS = env_int("ATTACH_TTL_DAYS", default=30)
-ENVELOPE_TTL_DAYS = env_int("ENVELOPE_TTL_DAYS", default=30)
-HISTORY_TTL_DAYS = env_int("HISTORY_TTL_DAYS", default=0)  # 0 = keep forever
+# 7 days bounds what a live seizure captures to at most a week of *undelivered*
+# ciphertext (delivery deletes on ack). It is also a group-membership parameter:
+# an envelope pruned before an offline device collects it may have been an MLS
+# commit, leaving that device permanently desynced until peers re-add it — see
+# queue_pruned_through.
+ENVELOPE_TTL_DAYS = env_int("ENVELOPE_TTL_DAYS", default=7)
+# Stale MLS KeyPackages are rotated out so a claimed package is never too old for
+# the joiner's ciphersuite/credential expectations; the last-resort package is
+# exempt (it is the exhausted-pool fallback and replaced only by upload).
+KEYPACKAGE_TTL_DAYS = env_int("KEYPACKAGE_TTL_DAYS", default=30)
 MAX_DEVICES_PER_USER = env_int("MAX_DEVICES_PER_USER", default=10)
 
 # Realtime gateway bounds.

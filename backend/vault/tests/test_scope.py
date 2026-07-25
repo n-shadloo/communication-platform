@@ -1,13 +1,13 @@
 """A register-scope token's only power is POST /me/devices.
 
-Every vault endpoint holds the key backup or the entire history log, so none may
-admit a register-scope token.
+The vault endpoint holds the recovery-protected key backup, so it may not admit a
+register-scope token.
 """
 import pytest
 
 from accounts.tokens import issue_register_scope
-from .conftest import (HISTORY_DELETE_URL, HISTORY_URL, HISTORY_USAGE_URL, KEYBACKUP_URL,
-                       backup_blob, history_blob)
+
+from .conftest import KEYBACKUP_URL, backup_blob
 
 pytestmark = pytest.mark.django_db
 
@@ -25,10 +25,6 @@ def endpoints():
     return {
         "read key backup": ("get", KEYBACKUP_URL, None),
         "write key backup": ("put", KEYBACKUP_URL, {"blob": backup_blob(), "version": 1}),
-        "read history": ("get", HISTORY_URL, None),
-        "append history": ("post", HISTORY_URL, {"records": [{"blob": history_blob()}]}),
-        "delete history": ("post", HISTORY_DELETE_URL, {"all": True}),
-        "history usage": ("get", HISTORY_USAGE_URL, None),
     }
 
 
@@ -43,5 +39,6 @@ def test_a_register_scope_token_reaches_no_vault_endpoint(api, register_headers,
 
 def test_full_scope_is_accepted(api, active_user, device, auth_headers):
     """Guards the guard: the 403s above must be about scope, not a broken token."""
-    resp = api.get(HISTORY_USAGE_URL, **auth_headers(active_user, device))
+    resp = api.put(KEYBACKUP_URL, {"blob": backup_blob(), "version": 1},
+                   format="json", **auth_headers(active_user, device))
     assert resp.status_code == 200

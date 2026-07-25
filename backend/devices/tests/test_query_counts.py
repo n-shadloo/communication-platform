@@ -18,7 +18,9 @@ from .conftest import (DEVICES_URL, make_device, pubkey, stock_keypackages,
 pytestmark = pytest.mark.django_db
 
 AUTH_QUERIES = 2  # the user row and the device row
-ETAG_QUERY = 1
+# Live device ids + the device-log head (an ETag input since the log landed).
+# Constant: neither scales with the device count or the log length.
+ETAG_QUERY = 2
 LIST_QUERY = 1
 # savepoint, locked select, delete, release
 CLAIM_QUERIES_PER_DEVICE = 4
@@ -131,6 +133,46 @@ def test_a_keypackage_claim_does_not_scale_with_the_store(
     assert len(response.json()["keypackages"]) == 1
 
 
+@pytest.mark.parametrize("log_length", [0, 5, 60])
+def test_the_device_list_stays_constant_query_as_the_log_grows(
+        api, active_user, device, auth_headers, django_assert_num_queries,
+        log_length):
+    """The ETag reads only the head record, so a longer log must not add queries
+    (or the ETag becomes a per-poll scan of the whole log)."""
+    from devices.models import DeviceLogRecord
+    DeviceLogRecord.objects.bulk_create([
+        DeviceLogRecord(user=active_user, seq=i, blob=b"r" * 256)
+        for i in range(log_length)])
+    headers = auth_headers(active_user, device)
+
+    with django_assert_num_queries(AUTH_QUERIES + ETAG_QUERY + LIST_QUERY):
+        response = api.get(DEVICES_URL, **headers)
+
+    expected_head = log_length - 1 if log_length else None
+    assert response.json()["log_head_seq"] == expected_head
+
+
+def test_cross_signing_fields_ride_the_existing_queries(api, active_user, device,
+                                                        auth_headers, peer,
+                                                        peer_device,
+                                                        django_assert_num_queries):
+    """cross_sig and bundle_version are columns on the rows the list and claim
+    already fetch, so surfacing them must not add a query."""
+    peer_device.cross_sig = b"\xc5" * 64
+    peer_device.bundle_version = 4
+    peer_device.save(update_fields=["cross_sig", "bundle_version"])
+    stock_prekeys(peer_device, 1)
+    headers = auth_headers(active_user, device)
+
+    with django_assert_num_queries(AUTH_QUERIES + ETAG_QUERY + LIST_QUERY):
+        listed = api.get(peer_url(peer.id), **headers)
+    with django_assert_num_queries(AUTH_QUERIES + 1 + CLAIM_QUERIES_PER_DEVICE):
+        claimed = api.post(claim_url(peer.id), {}, format="json", **headers)
+
+    assert listed.json()["devices"][0]["cross_sig"] is not None
+    assert claimed.json()["bundles"][0]["bundle_version"] == 4
+
+
 @pytest.mark.parametrize("pool_size", [0, 50, 199])
 def test_replenishment_is_constant_query(api, active_user, device, auth_headers,
                                          django_assert_num_queries, pool_size):
@@ -149,12 +191,14 @@ def test_replenishment_is_constant_query(api, active_user, device, auth_headers,
 def test_registration_is_constant_query_whatever_the_payload(
         api, active_user, device, auth_headers, django_assert_num_queries):
     """200 prekeys and 100 key packages go in as two bulk inserts, not 300."""
-    from .conftest import register_payload
+    from .conftest import publish_identity, register_payload
+    publish_identity(active_user)
     headers = auth_headers(active_user, device)
     payload = register_payload(otpks=200, keypackages=100)
-    # savepoint, user lock, cap count, device insert, otpk bulk, keypackage bulk,
-    # release, then the refresh-token row the issued pair writes
-    with django_assert_num_queries(AUTH_QUERIES + 8):
+    # savepoint, user lock, cap count, identity-exists check, device insert,
+    # otpk bulk, keypackage bulk, release, then the refresh-token row the issued
+    # pair writes
+    with django_assert_num_queries(AUTH_QUERIES + 9):
         response = api.post(DEVICES_URL, payload, format="json", **headers)
 
     assert response.status_code == 201

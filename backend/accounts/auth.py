@@ -23,8 +23,11 @@ class DeviceJWTAuthentication(JWTAuthentication):
         device_id = token.get("device_id")
         if scope == "full":
             try:
+                # queue_pruned_through rides along so the envelope drain can report
+                # it without a second device query.
                 device = Device.objects.only(
-                    "id", "user_id", "token_generation", "revoked_date"
+                    "id", "user_id", "token_generation", "revoked_date",
+                    "queue_pruned_through"
                 ).get(id=device_id, user_id=user.id)
             except Device.DoesNotExist:
                 raise AuthenticationFailed({"code": "token_revoked"})
