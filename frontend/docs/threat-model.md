@@ -8,8 +8,9 @@ that a device contacted the service or eliminate traffic-analysis metadata.
 
 ## Protected assets
 
-- Message, profile, group, room, attachment, history, and voice plaintext.
-- Device identity, ratchet, MLS, archive, attachment, and media keys.
+- Message, profile, group, room, attachment, locally held history, and voice plaintext.
+- Cross-signing, device identity, ML-KEM, ratchet, MLS, attachment, and media private
+  keys.
 - Login and refresh credentials.
 - Recovery secrets.
 - Local decrypted indexes, thumbnails, drafts, and notification previews.
@@ -20,6 +21,9 @@ that a device contacted the service or eliminate traffic-analysis metadata.
 - An active network attacker without the provisioned trust anchors.
 - A malicious or seized backend that returns forged keys, drops, reorders, duplicates,
   delays, or replays traffic.
+- A state actor with live root access to the VPS, including TLS-terminated request
+  metadata, authenticated routing, timing, IP addresses, and the ability to modify server
+  responses.
 - Theft of backend disks, database dumps, Redis state, attachment storage, or logs.
 - A recipient who retains content after a deletion request.
 - A person with filesystem access to a locked but otherwise uncompromised Android device.
@@ -33,8 +37,9 @@ that a device contacted the service or eliminate traffic-analysis metadata.
 - Traffic-analysis resistance, anonymity, or cover traffic.
 - Availability against a server or network that refuses service.
 - Guaranteed remote deletion after another device decrypted content.
-- Reliable delivery to a terminated Android process without an OS-visible foreground
-  service, or to a closed browser without a push service.
+- Reliable delivery to a terminated Android process or closed browser without a push
+  service; Android background polling remains best-effort.
+- Hiding the social graph, group fan-out, or communication timing from live server root.
 
 ## Trust boundaries
 
@@ -70,7 +75,13 @@ builds.
   origin controls.
 - Authenticated end-to-end encryption with domain-separated associated data.
 - Safety-number verification and prominent identity-change state.
+- Cross-signing of the exact canonical device-bundle key bytes against an out-of-band
+  confirmed account master key; unsigned devices are never messaged.
+- Client-signed device-log verification and encrypted head gossip; a fork raises a global
+  blocking equivocation alert.
+- Hybrid X25519 + ML-KEM-768 session establishment with no silent classical downgrade.
 - Exact replay and duplicate handling with bounded caches.
+- Explicit `pruned_through` mailbox-gap detection and fresh-Welcome group recovery.
 - Limits on message size, nesting, skipped ratchet keys, pending epochs, attachments,
   retries, and decompression.
 - Encrypted local Android database; no persistent web plaintext.
@@ -85,7 +96,10 @@ builds.
 The server can observe usernames, public device bundles, day-level activity, recipient
 device IDs for pending envelopes, timing, IP addresses, size buckets, room IDs presented
 to room endpoints, attachment capabilities during download, and voice connection
-metadata. The client MUST not claim otherwise.
+metadata. Live root can observe which authenticated connection writes to which device
+queues and infer the social graph and group fan-out. At rest there is no sender column or
+conversation graph, but that does not protect routing metadata from a live operator. The
+client MUST not claim otherwise.
 
 ## Security release gates
 
@@ -100,6 +114,7 @@ metadata. The client MUST not claim otherwise.
 ## Primary references
 
 - [Backend security contract](../../backend/SECURITY.md)
+- [Binding client contract](../../backend/CLIENT_CONTRACT.md)
 - [OWASP MASVS](https://mas.owasp.org/MASVS/)
 - [Android Keystore](https://developer.android.com/privacy-and-security/keystore)
 - [Web Cryptography API](https://www.w3.org/TR/WebCryptoAPI/)

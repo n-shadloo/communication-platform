@@ -79,9 +79,9 @@ logic.
 - **Register:** username/password confirmation, server-authoritative errors, transition to
   Pending Activation.
 - **Pending Activation:** Check Again and Back to Login; no fake activation polling.
-- **Encryption Setup:** generating a device identity; new-account one-time recovery-secret
-  display/confirmation or existing-account secret entry/restore; upload retry and
-  mandatory Security Notice.
+- **Encryption Setup:** account cross-signing plus X25519/ML-KEM/MLS device generation;
+  new-account recovery-secret display or existing-account identity restore; explicit
+  backend-enrollment-blocked state; mandatory Security Notice.
 - **Security Notice:** exact protected/unprotected boundaries and mandatory acknowledgement
   during onboarding.
 
@@ -95,7 +95,8 @@ logic.
 - **Profile bootstrap:** use backend username and deterministic local avatar until an
   authenticated profile key/payload arrives; never render unverified cached identity.
 - **DM Chat:** profile header, local/volatile presence, paged timeline, pinned banner,
-  reply/edit composer, all message actions and honest deletion dialog.
+  verification-withheld composer, PQ-key-unavailable state, all message actions, and
+  honest deletion dialog.
 - **Attachment Sheet/Preview:** photo, file, mobile camera, caption, encrypt/upload states.
 - **Pinned Messages:** list, jump, authorized unpin.
 - **Forward Picker:** multi-select DMs/groups/Saved Messages; forwarding creates new
@@ -107,7 +108,8 @@ logic.
 
 - **Contact Profile:** message, mute, safety verification, shared media, clear, and honest
   client-side Block/Unblock.
-- **Safety Number:** text and QR, verify state, prominent changed/mismatch warning.
+- **Safety Number:** master-key SAS and QR, cross-sign confirmation, messaging-withheld
+  unverified state, master-key change, invalid device, and device-log-fork blocking states.
 - **Shared Media:** local decrypted index, open and jump, safe file handling.
 - **Create Group:** pick members, encrypted details, owner creation, progress/failure.
 - **Group Info:** encrypted header, policy/role/member list, add/remove/leave actions.
@@ -129,10 +131,12 @@ logic.
 - **Settings:** profile, Saved Messages, devices, security/recovery, notifications,
   appearance, notice, logout, About.
 - **Edit Profile:** encrypted display name/avatar and visibility wording.
-- **Security Settings:** recovery guidance, verified-contact review, notice.
+- **Security Settings:** identity-recovery guidance, verified-contact/device-log review,
+  notice.
 - **Linked Devices:** this/other devices, last-active coarseness, relabel/revoke.
-- **Add Device/Restore:** recovery-secret input, wrong-secret, history restored, secure
-  sessions reconnecting, group re-invitation required, done, and unrecoverable wording.
+- **Add Device/Restore:** enrollment blocker, recovery-secret identity restore, wrong
+  secret, waiting for an existing online history source, partial transfer, queue-gap/group
+  re-invitation, done, and unrecoverable wording.
 
 ### Shared modal surfaces
 

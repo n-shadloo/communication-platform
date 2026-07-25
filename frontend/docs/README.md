@@ -45,7 +45,10 @@ The documents use three requirement words:
 ## Authority and change control
 
 The backend `API.md` files are authoritative for available endpoints, HTTP/WebSocket
-behavior, scopes, limits, and server guarantees. Frontend documents define client-owned
+behavior, scopes, limits, and server guarantees. The backend
+[`CLIENT_CONTRACT.md`](../../backend/CLIENT_CONTRACT.md) is additionally binding for
+client-side security behavior, and [`SECURITY.md`](../../backend/SECURITY.md) is binding
+for protected properties and residual risk. Frontend documents define client-owned
 encrypted content and UX only within those guarantees. If a UI/product statement
 conflicts with backend documentation, the backend contract takes precedence and the
 frontend documentation MUST be corrected before implementation. A conflict is never

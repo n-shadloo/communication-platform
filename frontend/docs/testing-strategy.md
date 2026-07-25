@@ -26,11 +26,13 @@
 
 ### Crypto-core tests
 
-- Official X3DH/Double Ratchet, RFC 9420/OpenMLS, Argon2id, CBOR, secretstream, and SFrame
-  vectors applicable to the selected implementation.
-- Project golden vectors for device bundles, domain labels, safety numbers, every event,
-  archive records, attachment headers, and protocol upgrades.
-- Cross-target byte equality between Rust native Android architectures and browser Wasm.
+- FIPS 203 ML-KEM, hybrid PQXDH/Double Ratchet, PQ MLS/OpenMLS, Argon2id, CBOR,
+  secretstream, and SFrame vectors applicable to the selected implementation.
+- Project golden vectors for canonical cross-signing/device bundles, master signatures,
+  SAS/QR values, device-log records/gossip, every event, history-transfer batches,
+  attachment headers, and protocol upgrades.
+- Cross-target byte equality between Android `mlkem_native`/shared native code and the
+  reviewed browser Wasm implementation.
 - Interoperability between independent devices/versions and, where available, independent
   MLS implementations.
 - Property tests for encode/decode, encrypt/decrypt, state serialization, replay, skipped
@@ -57,13 +59,17 @@ and LiveKit/coturn where applicable:
 - every documented status/error and auth scope;
 - rotating refresh and concurrent single-flight requests;
 - device registration/revocation and 4003 close;
-- ETag/304 handling;
-- prekey/key-package races and depletion;
+- explicit failure test for the current circular device-ID/cross-signing enrollment
+  contract, replaced by successful bootstrap tests once the backend is corrected;
+- identity versioning, ETag/device-log-head invalidation, device-log paging, and opaque
+  record behavior;
+- classical/PQ prekey races, atomic signed-prekey/cross-signature rotation, consumable
+  KeyPackage depletion, last-resort reuse, and 4096/16384 buckets;
 - envelope fan-out above 256 targets, partial-batch progress, ambiguous retry with exact
   ciphertext reuse, drain pagination, duplicates, ack, stale devices, and TTL behavior;
 - WebSocket frame/size/rate limits and all close codes;
 - attachment buckets, quota, nginx streaming, expiry;
-- history append concurrency, restore pagination, gaps, and delete;
+- seven-day pruning, `pruned_through` detection, and no-history-endpoint assertions;
 - voice token expiration/reconnect and disabled configuration.
 
 Contract fixtures MUST fail when backend documentation and behavior diverge.
@@ -81,12 +87,17 @@ Contract fixtures MUST fail when backend documentation and behavior diverge.
 
 Use at least two accounts and multiple Android/browser devices:
 
-- register, activate, first-device setup, save/recover secret;
+- register, activate, first-device identity publication, cross-signing backup, and
+  recovery-secret handling after the enrollment blocker is resolved;
+- SAS/QR cross-signing, unsigned-device withholding, master-key change, device-log gossip,
+  and server-equivocation fork alarm;
 - DM send offline/online, process death, ambiguous retry, delivery/read;
-- add/revoke devices and verify safety-number change;
+- add/revoke devices, verify valid cross-signed additions, and reject invalid/PQ-missing
+  devices;
 - create group, concurrent admin changes, add/remove, epoch rotation, history sharing;
 - attachment upload/download/corruption/expiry;
-- history backup, new-device restore, wrong/lost secret;
+- device-to-device full/partial history transfer, no source online, wrong/lost recovery
+  secret, identity recovered without history, and mailbox-gap fresh-Welcome recovery;
 - voice create/invite/join/reconnect/remove with encrypted media validation;
 - logout, remote revocation, local wipe, deep links, and hidden notifications.
 
@@ -98,7 +109,8 @@ against each supported engine; one browser is not a sufficient web test.
 - No network, local-only server, high latency, packet loss, reordering, duplicate frames,
   proxy reset, TLS/pin failure, Redis/backend restart.
 - Expired access during REST/WS, refresh response loss, revoked refresh, clock skew.
-- Android Doze/standby/force-stop/reboot/permission changes/foreground-service stop.
+- Android Doze/standby/force-stop/reboot/permission changes/background-poll delay and
+  active-voice foreground-service stop.
 - Web tab sleep/reload/multiple tabs/storage eviction/private mode/browser upgrade.
 - Low disk, database full/corrupt, attachment cancellation, OOM pressure.
 - Malicious peer sending maximum valid and malformed payloads.
@@ -112,7 +124,7 @@ browsers:
 - 50,000-message conversation open/search/pagination;
 - steady 60 fps interaction for target displays with bounded jank;
 - encryption/decryption latency and memory for largest envelope/attachment;
-- background battery/network use in Stay Connected mode;
+- background battery/network use of best-effort polling;
 - voice join time and sustained audio quality;
 - no unbounded growth in providers, stream subscriptions, skipped keys, inbox, or cache.
 

@@ -26,12 +26,13 @@ opaque/client-owned; **Pending** = Flutter implementation not started.
 | Login/refresh/logout | Ready | Pending token coordinator |
 | User directory | Ready | Pending local repository/UI |
 | Encrypted profile blob | Ready opaque storage | Bootstrap fallback specified; implementation pending |
-| Register/list/label/revoke devices | Ready | Pending |
-| Peer device lists and ETags | Ready | Pending |
-| X3DH prekeys | Ready public distribution | Pending reviewed crypto core |
-| MLS key packages | Ready public distribution | Pending OpenMLS integration |
-| Safety verification | Client protocol | Pending |
-| Recovery onboarding | Backup API ready | History/session distinction specified; implementation pending |
+| Cross-signing identity publish/fetch | Ready opaque transport | Pending master/self/user-signing implementation |
+| Register/list/label/revoke devices | Registration contract circular; backend blocker | Blocked pending signable client-known device ID/bootstrap |
+| Peer device lists, ETags, signed device log | Ready opaque transport | Pending verification, head gossip, fork alert |
+| Hybrid X25519 + ML-KEM prekeys | Ready public distribution | Pending reviewed PQXDH core; no classical fallback |
+| PQ MLS key packages | 4096/16384 buckets + last-resort ready | Pending reviewed PQ suite/OpenMLS integration |
+| SAS/QR master-key verification | Client protocol | Pending; messaging withheld until verified |
+| Recovery onboarding | Identity backup API ready | Pending identity restore; no server-history restore |
 
 ## Messaging
 
@@ -40,14 +41,15 @@ opaque/client-owned; **Pending** = Flutter implementation not started.
 | Per-device durable envelope queue | Ready | Pending inbox/outbox |
 | Batched fan-out/stale devices | Ready | <=256 deterministic batching specified; implementation pending |
 | Drain/ack | Ready | Pending crash-safe pipeline |
+| Seven-day TTL / `pruned_through` gaps | Ready signal | Pending blocking detection and fresh-Welcome recovery |
 | WebSocket live delivery | Ready | Pending gateway |
-| DM identity/session | Client protocol | Pending X3DH/Double Ratchet |
+| DM identity/session | Client protocol | Pending hybrid PQXDH/Double Ratchet |
 | Text messages | Client protocol | Pending |
 | Replies/edits/deletes | Client protocol | Pending |
 | Reactions/pins/receipts | Client protocol | Pending |
 | Typing/presence meaning | Volatile relay ready | Pending encrypted semantics |
 | Private contact blocking | No server ACL by design | Protocol specified; implementation pending |
-| Multi-device self-sync | Queue primitives ready | Pending protocol/reconciliation |
+| Multi-device self-sync/history | Envelope primitives ready; no history API | Pending authorized device-to-device transfer |
 | Saved Messages | Client protocol | Pending |
 | Local search | No plaintext server search by design | Pending Android/web indexes |
 
@@ -60,8 +62,8 @@ opaque/client-owned; **Pending** = Flutter implementation not started.
 | Group creation/membership | Client protocol | Pending |
 | Owner/admin/member roles | Client protocol | Pending signed control state |
 | Invite/remove/leave | Client protocol | Pending MLS commits/UI |
-| Encrypted metadata | Opaque transport/history ready | Pending |
-| History for new members | History/envelope primitives ready | Pending client re-share |
+| Encrypted metadata | Opaque envelope transport ready | Pending |
+| History for new members | Envelope transport ready; no server history | Pending client re-share |
 | Fork/conflict handling | Client protocol | Safe quarantine/blocking specified; reviewed crypto-core convergence remains a release gate |
 
 ## Attachments and recovery
@@ -72,9 +74,9 @@ opaque/client-owned; **Pending** = Flutter implementation not started.
 | Quota and TTL | Ready | Pending UI/error handling |
 | Encrypted attachment metadata/key | Client protocol | Pending |
 | Bounded secure cache | Not applicable | Pending |
-| Key backup blob | Ready | Pending Argon2id/wrapping |
-| Append/read/delete history | Ready | Pending archive engine |
-| New-device restore | Storage primitives ready | Pending recovery flow |
+| Key backup blob | Ready for cross-signing identity material | Pending Argon2id/wrapping |
+| Server history | Deliberately absent | Device-to-device transfer specified; implementation pending |
+| New-device restore | Enrollment contract currently circular | Backend-blocked before identity/history flow |
 
 ## Voice rooms and realtime
 
@@ -107,7 +109,7 @@ opaque/client-owned; **Pending** = Flutter implementation not started.
 |---|---|---|
 | Android encrypted database/Keystore | Not applicable | Pending |
 | Android normal resume/drain | Durable queue supports it | Pending |
-| Android Stay Connected mode | Socket supports it | Pending OS/policy spike |
+| Android background polling | Seven-day durable queue supports it | Pending WorkManager polling/gap handling |
 | Android local notifications | No foreign push by design | Pending |
 | Web persistent encrypted device | Device API supports it | Pending WebCrypto/IndexedDB |
 | Web open-tab realtime | WebSocket auth supports it | Pending |
@@ -120,12 +122,22 @@ opaque/client-owned; **Pending** = Flutter implementation not started.
 - [ ] Deterministic-CBOR CDDL, `EnvelopeV1` encoders, and Android/Web golden byte/error
   fixtures are generated from one versioned protocol package.
 - [ ] Shared crypto core builds and passes identical vectors on Android and browser Wasm.
-- [ ] X3DH/Double Ratchet implementation selection is license/security reviewed.
-- [ ] OpenMLS Android/Wasm persistence and fork behavior pass interoperability tests.
+- [ ] Android `mlkem_native` and reviewed Web Wasm ML-KEM pass identical FIPS/PQXDH
+  vectors; no educational/pure-Dart ML-KEM is present.
+- [ ] Hybrid PQXDH/Double Ratchet composition is independently reviewed.
+- [ ] A PQ MLS ciphersuite, 4096/16384 KeyPackage wrappers, last-resort behavior,
+  Android/Wasm persistence, and fork handling pass interoperability tests.
+- [ ] Backend enrollment is made non-circular: the client can know the signed device ID
+  and obtain/authorize cross-signing material before `cross_sig` is required.
+- [ ] The protocol owner defines and vectors the exact `master_sig` canonical input and
+  the `ik_pub` representation of separate Ed25519 signing/X25519 identity keys.
+- [ ] Device-log chain verification, ETag refresh, encrypted head gossip, and fork alarms
+  pass malicious-server tests.
 - [ ] LiveKit Flutter E2EE meets the SFrame/media threat-model requirement on both targets.
 - [ ] Drift encrypted Android and ciphertext-only web storage/migrations work.
 - [ ] Flyer builders pass long-history, scroll, RTL, accessibility, and media tests.
-- [ ] Android background mode is valid under target-SDK foreground-service rules.
+- [ ] Android WorkManager polling is tested under Doze/standby/force-stop; only active
+  voice uses a foreground service.
 - [ ] Private CA/SPKI and strict WebSocket origin behavior work in staging.
 - [ ] Final product name/logo/app icon replace the neutral placeholder and pass light,
   dark, small-size, contrast, and Android/web asset review before release.

@@ -33,8 +33,10 @@ does not apply to browser networking APIs.
   metadata.
 - Decrypt the active session into bounded memory and clear references on logout, Forget
   This Browser, integrity failure, and page teardown where observable.
-- A browser storage reset is equivalent to losing/revoking the local device; recovery
-  requires login plus the recovery secret and registers fresh device keys.
+- A browser storage reset is equivalent to losing/revoking the local device. Recovery can
+  restore cross-signing identity material but not browser history; a fresh browser gets
+  history only from an existing online device and registers fresh device/PQ keys after
+  the enrollment contract blocker is resolved.
 
 Non-extractable means browser APIs refuse export; trusted page code can still ask the key
 to decrypt. It is not a defense against malicious same-origin JavaScript.
@@ -42,8 +44,10 @@ to decrypt. It is not a defense against malicious same-origin JavaScript.
 ## Browser execution
 
 Crypto and large parsing work run in dedicated workers/Wasm and use transfer/bounded
-buffers so the UI thread remains responsive. The LiveKit E2EE worker is built and hashed
-as part of the release. Workers do not log or post secrets to arbitrary origins.
+buffers so the UI thread remains responsive. The Web build uses a reviewed Wasm build of
+the same FIPS 203 ML-KEM implementation as Android and passes identical PQXDH/PQ-MLS
+vectors; pure-Dart ML-KEM is forbidden. The LiveKit E2EE worker is built and hashed as
+part of the release. Workers do not log or post secrets to arbitrary origins.
 
 The page reconnects and drains on load, visibility resume, `online` events, and socket
 failure. Service workers may cache the signed static application shell, but correctness
@@ -53,9 +57,10 @@ available across target browsers and workers are not persistent.
 ## Closed/suspended behavior
 
 When the tab is closed or suspended, the client may be unreachable. The backend queues
-durable envelopes for up to its configured TTL. On return, the client refreshes auth,
-drains, decrypts, stores, and acknowledges them. The UI and documentation never promise
-closed-browser notifications.
+durable envelopes for seven days. On return, the client refreshes auth, drains, checks
+`pruned_through`, decrypts, stores, and acknowledges them. A detected gap enters the
+documented group-rejoin flow. The UI and documentation never promise closed-browser
+notifications.
 
 ## Web hardening
 

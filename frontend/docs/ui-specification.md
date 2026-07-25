@@ -56,17 +56,20 @@ These recur across screens. They are stated here so the individual screens can s
   normal chat app. Design for a small delay; don't treat them as instant.
 - **Search is client-side only.** The server never indexes or helps search. Search covers
   only history stored and decrypted on **this device**.
-- **Notifications come over a persistent connection to the app's own server — never
-  Google/Apple push.** Do not offer FCM/APNs-style options anywhere. When the app is
-  reachable it delivers; when it isn't, messages queue.
+- **Foreground delivery uses the app's own server; Android background delivery is
+  best-effort polling — never Google/Apple push.** Do not offer FCM/APNs-style options.
+  Uncollected envelopes expire after seven days; a detected queue gap becomes a visible
+  group-rejoin state.
 - **Honesty over false comfort.** Several actions are **best-effort, not guarantees**, and
   the UI must say so plainly (detailed at each spot): *Delete for everyone*, voice-room
   *ephemeral* text, and history recovery. Never word a dialog to imply a stronger promise
   than the system can keep.
-- **Two separate secrets, never conflated.** A **login password** (signs the user in to
-  the server) and a **recovery secret** (protects message history; the server never sees
-  it). The UI must never imply the password can recover messages, or that the recovery
-  secret logs you in.
+- **Two separate secrets, never conflated.** A **login password** authenticates to the
+  server; a **recovery secret** protects cross-signing private identity material. Neither
+  recovers message history from the server because the server stores none.
+- **Verification precedes messaging.** SAS/QR verifies a contact's master key out of
+  band. Until verified, Message/Invite actions are blocked. Unsigned devices, master-key
+  changes, and device-log forks are blocking security states.
 
 ---
 
@@ -204,18 +207,23 @@ only**.
 
 ## 4. Encryption Setup (First Run on a Device)
 
-**Purpose.** The first time an installation is used, the app creates an independent
-device encryption identity. After device registration it checks the account's encrypted
-key backup. A new account with no backup generates a **recovery secret** and makes the
-user save it; an existing account restores with its already-issued recovery secret. This
-is the most security-critical onboarding step. It's a **multi-step flow**, each step its
-own screen with a progress indicator.
+**Purpose.** The first installation creates account cross-signing keys plus independent
+X25519, ML-KEM-768, and MLS device material. A new account creates a recovery-protected
+identity backup; an existing account restores that identity material. Message history is
+a later transfer from an existing online device, not part of the backup.
+
+**Backend blocker.** Registration currently requires a signature containing the
+server-generated device ID before returning that ID, and register scope cannot fetch the
+backup needed to sign a later device. Until the backend supplies a non-circular
+enrollment contract, show a blocking "Secure device enrollment unavailable" state; never
+offer an unsigned or placeholder-key bypass.
 
 ### 4.1 Step — Generating identity
 - **Layout.** Centered status ("Setting up encryption on this device") + progress
   indicator.
-- **Behavior.** Keys are created and stored **on this device only**. **[PRIVACY]** Nothing
-  secret leaves the device. Auto-advances; no user action.
+- **Behavior.** Device-private keys remain on this device. Cross-signing private keys may
+  leave only inside the recovery-encrypted backup. Auto-advances when secure enrollment
+  is possible; no user action.
 
 ### 4.2 Step — Recovery
 
@@ -223,8 +231,9 @@ own screen with a progress indicator.
 **once** and make the user save it.
 - **Layout (top → bottom).**
   1. Title "Your recovery secret".
-  2. Explanation: this is the **only** way to get history back if all devices are lost; the
-     server cannot help; losing it means history is gone **permanently and by design**.
+  2. Explanation: this restores the account's cross-signing identity if devices are
+     lost. It does **not** restore messages; losing every device that holds history makes
+     that history permanently unavailable because the server has no copy.
   3. The recovery secret in a clearly presented block.
   4. **Copy** button and, where the platform allows, **Download / Save**.
   5. **Continue** — disabled until the user copies/downloads or ticks an "I've saved it"
@@ -232,18 +241,18 @@ own screen with a progress indicator.
 - **[PRIVACY]** This recovery secret is **separate from the login password**, and the
   server never sees it. State that plainly on-screen.
 
-**Existing-account branch — Restore history.** Ask for the existing recovery secret,
-download the opaque key backup, and attempt decryption locally. Show wrong-secret,
-restoring, Retry, and Skip History states honestly. Skipping creates fresh live sessions
-but does not make old history recoverable without the secret.
+**Existing-account branch — Restore identity.** Ask for the recovery secret, download
+the opaque key backup, and decrypt cross-signing identity locally. Show wrong-secret,
+restoring, and Retry states. History remains a separate online-device transfer.
 
 ### 4.3 Step — Confirm or restore
 - **New-account purpose.** Stop users skipping the save.
 - **Layout.** Either re-enter part of the secret, or an explicit "Yes, I've stored my
   recovery secret somewhere safe" checkbox + **Confirm**, plus a **Back** link to view it
   again during this onboarding flow only.
-- **Existing-account purpose.** Show authenticated restore progress and completion; never
-  display or persist the entered recovery secret after the archive key is unwrapped.
+- **Existing-account purpose.** Show authenticated identity-restore progress and
+  completion; never display or persist the entered recovery secret after the backup is
+  unwrapped.
 
 ### 4.4 Step — Security notice handoff
 - On completing setup, route into the **Security Notice** (§5) as a mandatory full-screen
@@ -275,6 +284,9 @@ section must not be softened or omitted.
    - the **fact and timing** that a device connected to the server (a network operator can
      see *that* you connected, and when, even though not *what* you said);
    - **traffic-analysis metadata** — timing, IP addresses, connection patterns;
+   - the **social graph from a live hostile server operator** — the operator can observe
+     which authenticated connection writes to which device queues and infer group fan-out;
+   - first contact before users compare SAS/QR master-key fingerprints out of band;
    - a **compromised or seized device** — encryption can't protect messages already
      decrypted on a phone in someone else's hands.
    Wording must not imply the app makes communication "safe from the government"; it makes
@@ -406,8 +418,8 @@ search covers only history stored and decrypted on this device.**
 **States.**
 - *Loading* — history loads locally; older messages page in on scroll-up.
 - *Empty* — new-conversation placeholder.
-- *Sending / queued* — pending state; **offline** sends queue locally and flush on
-  reconnect (delivery is via the persistent server connection, not push).
+- *Sending / queued* — pending state; **offline** sends queue locally and flush on the
+  next active connection or background poll; there is no foreign push.
 - *Failed send* — retry affordance on the message.
 - *Offline* — connection strip; existing history fully readable; composing allowed, sends
   queued.
@@ -453,9 +465,9 @@ banner.
 **Role-gated actions** (owner/admins only): appear on member rows within Group Info
 (§12.2), not on individual messages.
 
-**States.** As §8, plus: *membership updating* (a brief state while a member change
-propagates) and *removed* (if the user is removed, the screen becomes read-only/exited —
-they cannot read messages sent after removal).
+**States.** As §8, plus: *membership updating*; *removed* (read-only/exited, with no access
+to future epochs); and *queue gap — rejoin required*. The queue-gap state disables the
+composer until peers remove and re-add this device with a fresh Welcome.
 
 ---
 
@@ -518,12 +530,13 @@ hierarchy.
 ### 11.1 Safety Number screen
 - **Purpose.** Compare a contact's key fingerprint to make sure no one — not even a
   malicious server — is impersonating them or intercepting messages.
-- **Layout.** The safety number / fingerprint as text and (optionally) a scannable code; a
-  **Mark as verified** toggle; instructions to compare in person or over another trusted
-  channel.
-- **States.** *Unverified*, *verified*, and **changed/mismatch** — a prominent warning that
-  the contact's key changed, which could mean interception, and that they should
-  re-verify.
+- **Layout.** SAS emoji/number text derived from both users' exact master keys, a QR code
+  containing the master-key fingerprint, a **Confirm verified** action, and instructions
+  to compare in person or over another trusted channel. Confirmation cross-signs the
+  peer's exact master-key bytes with the user's user-signing key.
+- **States.** *Unverified — messaging withheld*, *verified*, **master key changed**,
+  **unsigned/invalid device**, and **device-log fork**. The latter states block sending;
+  they are not dismissible warnings or automatic TOFU resets.
 
 ### 11.2 Shared media screen
 - A grid of images/files from the conversation, decrypted locally, with tap-to-open and
@@ -639,14 +652,15 @@ appear pinned in the Chats list.
 3. **Linked Devices** → §16.
 4. **Security & recovery** → Security settings (§15.2).
 5. **Notifications** — global notification/mute preferences (a client-side preference).
-   **[PRIVACY]** Delivery is via the persistent server connection, **not** Google/Apple
-   push — do not offer push-service options.
+   **[PRIVACY]** Active-app delivery uses the self-hosted connection and Android
+   background delivery is best-effort polling, **not** Google/Apple push. Do not offer
+   push-service or always-instant options.
 6. **Appearance** — client-only display preferences (the option *set* is your call; no
    styling prescribed here).
 7. **Security notice** — re-open the honest boundary screen (§5).
-8. **Log out** → confirm. **[PRIVACY]** The confirm must clearly say whether local
-   history/keys are wiped on this device, and remind that history is only recoverable via
-   the recovery secret.
+8. **Log out** → confirm. **[PRIVACY]** The confirm clearly states whether local
+   history/keys are wiped. The recovery secret can recover cross-signing identity, not
+   messages; history returns only from another device that still has it.
 9. **About** — app/version info (all local; no external calls).
 
 ### 15.1 Edit Profile
@@ -656,10 +670,9 @@ appear pinned in the Chats list.
 ### 15.2 Security settings
 - **Recovery secret** — replacement guidance; an already-saved secret is never re-shown
   because the app does not retain it. An unlocked device may generate a fresh secret,
-  rewrap the same archive key, upload a higher backup version, show the new secret once,
-  and invalidate the old secret for future restores. Honest note: the server holds only
-  an **unreadable backup blob**; losing every valid secret and unlocked device means
-  history is unrecoverable by design.
+  rewrap the same cross-signing identity material, upload a higher backup version, show
+  the new secret once, and invalidate the old secret. Honest note: the server holds only
+  an **unreadable identity backup** and no message history.
 - **Safety numbers** — a shortcut to review verified contacts (§11.1).
 - **Security notice** link (§5).
 
@@ -667,8 +680,9 @@ appear pinned in the Chats list.
 
 ## 16. Linked Devices
 
-**Purpose.** Manage the user's Android device and browser profiles. Each device is its
-own identity. Add a new device and restore history.
+**Purpose.** Manage the user's Android device and browser profiles. Devices are
+independently keyed but cross-signed by the account identity. Add a device, authorize it,
+and optionally transfer locally held history.
 
 **Layout (top → bottom).**
 1. **Top bar:** back; title "Linked Devices".
@@ -678,21 +692,21 @@ own identity. Add a new device and restore history.
 4. **Add device** → Add Device flow (§16.1).
 
 ### 16.1 Add Device flow
-- **Purpose.** Bring a new device online and restore encrypted history.
+- **Purpose.** Bring a new device online, recover/cross-sign identity, then optionally
+  transfer encrypted history from an existing online device.
 - **Steps.**
-  1. On the **new** device: after login + Encryption Setup (§4), it requests history.
-  2. **Restore via recovery secret** — the user enters their recovery secret to unlock the
-     backup and gain access to encrypted history. **[PRIVACY]** The server supplies only
-     the unreadable backup and ciphertext history; it cannot open either.
-  3. Confirmation that history is syncing.
-  4. Re-establish fresh pairwise sessions and request current MLS state from authenticated
-     group members. History restoration can finish before live secure sessions do.
-- **States.** *awaiting secret*, *restoring history*, *wrong secret* (can't unlock the
-  backup — honest error), *history restored / reconnecting secure sessions*, *group needs
-  re-invitation*, and *done*. Archived group history may be readable while its composer is
-  disabled. **[PRIVACY]** A wrong or lost secret means history stays unrecoverable by
-  design, and recovery cannot recreate current group authorization without a member; the
-  flow must state both limits plainly, not imply a server-side reset.
+  1. On the **new** device, login and enter Encryption Setup (§4).
+  2. Restore cross-signing identity using the recovery secret, or authorize through an
+     existing device once the backend enrollment flow supports it.
+  3. Establish fresh hybrid sessions; peers remove/re-add the device to groups for fresh
+     Welcomes where required.
+  4. Ask an existing online device to send its locally held history through ordinary
+     encrypted envelopes. Show the source device and whether its history is partial.
+- **States.** *enrollment contract unavailable*, *awaiting secret*, *restoring identity*,
+  *wrong secret*, *identity recovered*, *waiting for existing device*, *transferring
+  history*, *no history source online*, *group re-invitation required*, *queue gap
+  recovery*, and *done*. **[PRIVACY]** The server supplies no ciphertext history and the
+  recovery secret cannot reconstruct it.
 
 ---
 
