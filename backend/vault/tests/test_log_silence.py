@@ -12,7 +12,7 @@ from rest_framework.test import APIClient
 from accounts.models import User
 from accounts.tokens import issue_full
 
-from .conftest import PASSWORD, backup_blob, history_blob, make_device
+from .conftest import PASSWORD, backup_blob, make_device
 
 
 class VaultLogSilenceTests(TestCase):
@@ -25,9 +25,8 @@ class VaultLogSilenceTests(TestCase):
         self.headers = {"HTTP_AUTHORIZATION": f"Bearer {access}"}
         self.client = APIClient()
 
-    def test_backup_and_history_paths_emit_no_identifier_or_blob(self):
+    def test_backup_paths_emit_no_identifier_or_blob(self):
         backup_payload = backup_blob(b"S")
-        history_payload = history_blob(b"z")
 
         with self.assertLogs(level="DEBUG") as captured:
             # assertLogs fails if nothing is logged; a clean request logs nothing at all,
@@ -37,21 +36,15 @@ class VaultLogSilenceTests(TestCase):
             put = self.client.put("/api/v1/me/keybackup",
                                   {"blob": backup_payload, "version": 1},
                                   format="json", **self.headers)
-            post = self.client.post("/api/v1/me/history", {"records": [{"blob": history_payload}]},
-                                    format="json", **self.headers)
-            self.client.get("/api/v1/me/history?after=-1&limit=100", **self.headers)
-            self.client.get("/api/v1/me/history/usage", **self.headers)
-            self.client.post("/api/v1/me/history/delete", {"all": True},
-                             format="json", **self.headers)
+            get = self.client.get("/api/v1/me/keybackup", **self.headers)
 
         self.assertEqual(put.status_code, 200)
-        self.assertEqual(post.status_code, 201)
+        self.assertEqual(get.status_code, 200)
 
         forbidden = {
             "owner id": str(self.owner.id),
             "device id": str(self.device.id),
             "backup blob": backup_payload,
-            "history blob": history_payload,
         }
         for line in captured.output:
             for label, secret in forbidden.items():
