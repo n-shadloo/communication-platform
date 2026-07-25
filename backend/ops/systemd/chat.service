@@ -14,8 +14,15 @@ WorkingDirectory=/srv/chat/backend
 EnvironmentFile=/srv/chat/backend/.env.production
 Environment=DJANGO_SETTINGS_MODULE=config.settings.prod
 # Bound to loopback only: nginx terminates TLS and reverse-proxies /api and /ws.
+# --access-log /dev/null is load-bearing, not tidiness: daphne writes an HTTP
+# access log to stdout whenever verbosity is 1 or more, which is its default, and
+# that stream is written directly rather than through Django's LOGGING, so
+# ScrubFilter never sees it. Left on, systemd collects every request path into the
+# journal — including the user UUID in the peer-device and key-claim routes, and
+# the admin path — which is the conversation graph at rest that the schema exists
+# to exclude.
 ExecStart=/srv/chat/backend/.venv/bin/daphne \
-    -b 127.0.0.1 -p 8000 \
+    -b 127.0.0.1 -p 8000 --access-log /dev/null \
     config.asgi:application
 Restart=on-failure
 RestartSec=5s

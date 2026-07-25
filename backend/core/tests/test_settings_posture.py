@@ -47,6 +47,16 @@ class BasePostureTests(SimpleTestCase):
         for logger in ("django.request", "django.server"):
             self.assertEqual(logging["loggers"][logger]["level"], "ERROR")
 
+    def test_the_asgi_unit_disables_daphnes_own_access_log(self):
+        """The Django half of access logging is off above, but daphne keeps its own:
+        it writes an HTTP access log to stdout whenever verbosity is 1 or more (the
+        default) and writes to that stream directly, never through Django's LOGGING,
+        so ScrubFilter cannot reach it. Without the flag every request path reaches
+        the journal, user UUIDs in the peer-key routes included."""
+        unit = (settings.BASE_DIR / "ops" / "systemd" / "chat.service").read_text()
+
+        self.assertIn("--access-log /dev/null", unit)
+
     def test_core_deploy_check_reports_nothing(self):
         self.assertEqual(no_foreign_or_telemetry(None), [])
 
