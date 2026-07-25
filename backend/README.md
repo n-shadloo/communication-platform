@@ -54,10 +54,16 @@ disk under a 43-character unguessable capability id. Download responses carry an
 Django never serves file contents.
 
 **Padding buckets.** Every stored ciphertext — envelopes, profiles, device labels,
-room names, key packages, key backups, history records, attachments — must be exactly
-one of a fixed set of sizes for its type. Off-bucket payloads are rejected
+room names, key packages, key backups, device-log records, attachments — must be
+exactly one of a fixed set of sizes for its type. Off-bucket payloads are rejected
 (`400 {"code": "bad_bucket"}`) without being echoed. Size-within-a-bucket is therefore
 the only content-derived signal the server can observe.
+
+**No server-side history.** The server stores message ciphertext only in the delivery
+queue: rows are deleted when the recipient device acks them, and undelivered rows are
+pruned after 7 days. History sync between a user's devices is client-to-client over the
+ordinary envelope endpoint — a new device has no history until an existing device is
+online to transfer it. There is no server history API.
 
 ## Runtime dependencies
 
@@ -74,8 +80,8 @@ the only content-derived signal the server can observe.
 | Path | Owns |
 |---|---|
 | `accounts` | User model, register/login/refresh/logout, user directory, encrypted profile blobs, device-aware JWT authentication |
-| `devices` | Device registry, one-time prekeys and key packages, peer bundles and claims, revocation cascade |
-| `vault` | Recovery key backup and the owner's encrypted history log |
+| `devices` | Device registry, cross-signing identity, classical + ML-KEM prekeys, key packages, device-list log, peer bundles and claims, revocation cascade |
+| `vault` | Recovery key backup (cross-signing private key material, opaque to the server) |
 | `messaging` | Durable envelope queue: fan-out send, per-device drain, ack |
 | `attachments` | Bucketed encrypted blob store with capability-id access |
 | `voicerooms` | Persistent room records, LiveKit join tokens, live participant counts |
@@ -135,8 +141,8 @@ Every environment variable the code reads, with its default:
 | `ATTACHMENTS_ROOT` | `<repo>/media_root` | Directory for attachment bytes |
 | `ATTACH_USER_QUOTA_BYTES` | `2147483648` | Per-user attachment quota (2 GiB) |
 | `ATTACH_TTL_DAYS` | `30` | Attachment retention, days |
-| `ENVELOPE_TTL_DAYS` | `30` | Undelivered-envelope retention, days |
-| `HISTORY_TTL_DAYS` | `0` | History retention, days; `0` keeps forever |
+| `ENVELOPE_TTL_DAYS` | `7` | Undelivered-envelope retention, days (delivered rows are deleted on ack; pruning records the per-device `pruned_through` watermark) |
+| `KEYPACKAGE_TTL_DAYS` | `30` | Consumable MLS KeyPackage rotation, days; the last-resort package is kept |
 | `MAX_DEVICES_PER_USER` | `10` | Live-device cap per account |
 | `ALLOWED_WS_ORIGINS` | empty (dev: `http://localhost`) | WebSocket Origin allowlist; empty is a deploy-blocking error in prod |
 | `WS_MAX_FRAME` | `524288` | Maximum WebSocket frame, bytes |
@@ -162,7 +168,12 @@ duplicate it.
 End-to-end encryption bounds what this server stores, not what it can observe while
 running. The operator can see which accounts exist, which devices connect and when,
 connection metadata such as IP addresses, and the size bucket and timing of every
-stored or relayed blob. Message content, membership, and who talks to whom at rest are
-outside that view by construction.
+stored or relayed blob — and a live operator watching the routing can log which
+connection writes to and reads from which device queue, i.e. who talks to whom and
+when. The social graph is not hidden from a live, hostile operator; message content is.
+The schema stores none of that graph at rest, so a seized disk yields only what
+[SECURITY.md](SECURITY.md) enumerates.
 
-Further reading: [SECURITY.md](SECURITY.md).
+Further reading: [SECURITY.md](SECURITY.md) for the full threat model and residual
+risk, [CLIENT_CONTRACT.md](CLIENT_CONTRACT.md) for the client-side halves of every
+security property.
