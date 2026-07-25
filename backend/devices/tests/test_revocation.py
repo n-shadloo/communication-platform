@@ -9,10 +9,11 @@ from django.urls import reverse
 
 from accounts.tokens import issue_full
 from core.buckets import ENVELOPE_BUCKETS
-from devices.models import Device, KeyPackage, OneTimePrekey
+from devices.models import Device, KeyPackage, OneTimePrekey, PqOneTimePrekey
 from messaging.models import QueuedEnvelope
 
-from .conftest import (DEVICES_URL, make_device, stock_keypackages, stock_prekeys)
+from .conftest import (DEVICES_URL, make_device, stock_keypackages,
+                       stock_pq_prekeys, stock_prekeys)
 
 pytestmark = pytest.mark.django_db
 
@@ -26,7 +27,9 @@ def doomed(active_user):
     """A fully-provisioned second device, about to be revoked."""
     device = make_device(active_user, registration_id=8080)
     stock_prekeys(device, 4)
+    stock_pq_prekeys(device, 4)
     stock_keypackages(device, 3)
+    KeyPackage.objects.create(device=device, blob=b"L" * 4096, is_last_resort=True)
     QueuedEnvelope.objects.bulk_create([
         QueuedEnvelope(recipient_device=device, seq=i + 1,
                        blob=b"c" * min(ENVELOPE_BUCKETS)) for i in range(5)])
@@ -71,12 +74,35 @@ def test_the_revoked_devices_refresh_token_fails(api, active_user, device,
 
 def test_the_queue_prekeys_and_keypackages_are_deleted(api, active_user, device,
                                                        auth_headers, doomed):
-    """(c) Nothing of the device's data survives the revoke."""
+    """(c) Nothing of the device's data survives the revoke: classical and PQ
+    one-time prekeys, every KeyPackage including the last-resort one, and the
+    mailbox, all purged in the one revocation transaction (FS/PCS: no key
+    material of a removed device may remain claimable)."""
     api.delete(f"{DEVICES_URL}/{doomed.id}", **auth_headers(active_user, device))
 
     assert OneTimePrekey.objects.filter(device=doomed).count() == 0
+    assert PqOneTimePrekey.objects.filter(device=doomed).count() == 0
     assert KeyPackage.objects.filter(device=doomed).count() == 0
     assert QueuedEnvelope.objects.filter(recipient_device=doomed).count() == 0
+
+
+def test_a_revoked_devices_material_is_never_served_to_claimants(api, active_user,
+                                                                 device, auth_headers,
+                                                                 doomed, peer,
+                                                                 peer_device):
+    """The claim side of the same property: after the revoke, a claim against the
+    account neither returns the revoked device nor hands out any of its one-time
+    material (classical or PQ) or KeyPackages."""
+    api.delete(f"{DEVICES_URL}/{doomed.id}", **auth_headers(active_user, device))
+    peer_headers = auth_headers(peer, peer_device)
+
+    bundles = api.post(f"/api/v1/users/{active_user.id}/keys/claim", {},
+                       format="json", **peer_headers).json()["bundles"]
+    packages = api.post(f"/api/v1/users/{active_user.id}/keypackages/claim", {},
+                        format="json", **peer_headers).json()["keypackages"]
+
+    assert str(doomed.id) not in {b["device_id"] for b in bundles}
+    assert str(doomed.id) not in {p["device_id"] for p in packages}
 
 
 def test_the_revoked_device_leaves_the_peer_list(api, active_user, device,

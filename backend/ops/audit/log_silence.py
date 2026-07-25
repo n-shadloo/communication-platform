@@ -68,8 +68,8 @@ def _scripted_rest_traffic():
     from rest_framework.test import APIClient
 
     from accounts.models import User
-    from core.buckets import (ATTACHMENT_BUCKETS, ENVELOPE_BUCKETS, KEYPACKAGE_BUCKETS,
-                              NAME_BUCKETS)
+    from core.buckets import (ATTACHMENT_BUCKETS, DEVICELOG_BUCKETS, ENVELOPE_BUCKETS,
+                              KEYPACKAGE_BUCKETS, NAME_BUCKETS)
 
     api = APIClient()
     cache.clear()  # DRF throttle counters live in the shared cache
@@ -90,10 +90,12 @@ def _scripted_rest_traffic():
     assert r.status_code == 200, f"login: {r.status_code}"
     s["register-scope access token"] = r.json()["access"]
 
+    s["cross signature"] = _b64_filled(64, 0x78)
     r = api.post(
         "/api/v1/me/devices",
         {"ik_pub": _b64_filled(32, 0x69), "spk_id": 1, "spk_pub": _b64_filled(32, 0x73),
          "spk_sig": _b64_filled(32, 0x67), "registration_id": 4242,
+         "cross_sig": s["cross signature"], "bundle_version": 1,
          "otpks": [{"key_id": 1, "pub": _b64_filled(32, 0x6F)}],
          "keypackages": [_b64_filled(min(KEYPACKAGE_BUCKETS), 0x6B)]},
         format="json",
@@ -104,6 +106,23 @@ def _scripted_rest_traffic():
     s["access token"] = body["access"]
     s["refresh token"] = body["refresh"]
     auth = {"HTTP_AUTHORIZATION": f"Bearer {s['access token']}"}
+
+    # Publish the cross-signing identity and append a device-log record: both new
+    # surfaces carry key material and must stay as silent as the rest.
+    s["master public key"] = _b64_filled(32, 0x6D)
+    r = api.put("/api/v1/me/identity",
+                {"master_pub": s["master public key"],
+                 "self_signing_pub": _b64_filled(32, 0x74),
+                 "user_signing_pub": _b64_filled(32, 0x75),
+                 "master_sig": _b64_filled(64, 0x76), "version": 1},
+                format="json", **auth)
+    assert r.status_code == 200, f"identity publish: {r.status_code}"
+    s["device log blob"] = _b64_filled(min(DEVICELOG_BUCKETS), 0xD1)
+    r = api.post("/api/v1/me/devicelog",
+                 {"records": [{"blob": s["device log blob"]}]}, format="json", **auth)
+    assert r.status_code == 201, f"devicelog append: {r.status_code}"
+    r = api.get(f"/api/v1/users/{s['user id']}/devicelog", **auth)
+    assert r.status_code == 200, f"devicelog read: {r.status_code}"
 
     # Send an envelope to our own device (self-sync shape), drain it, ack it.
     s["envelope blob"] = _b64_filled(min(ENVELOPE_BUCKETS), 0xA5)

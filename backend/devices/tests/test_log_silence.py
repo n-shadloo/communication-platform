@@ -22,6 +22,8 @@ class DeviceLogSilenceTests(TestCase):
     def setUp(self):
         self.alice = User.objects.create_user(username="alice", password=PASSWORD,
                                               is_active=True)
+        from .conftest import publish_identity
+        publish_identity(self.alice)  # registration past the first device needs one
         self.device = make_device(self.alice, 1)
         self.peer = User.objects.create_user(username="peer", password=PASSWORD,
                                              is_active=True)

@@ -101,3 +101,92 @@ def test_more_than_a_hundred_in_one_request_is_rejected(api, active_user, device
                        format="json", **auth_headers(active_user, device))
 
     assert response.status_code == 400
+
+
+def claim_keypackages(api, headers, user_id):
+    return api.post(f"/api/v1/users/{user_id}/keypackages/claim", {},
+                    format="json", **headers).json()["keypackages"]
+
+
+def test_a_non_last_resort_package_is_preferred_and_deleted(api, active_user, device,
+                                                            auth_headers, peer,
+                                                            peer_device):
+    last = KeyPackage.objects.create(device=peer_device, blob=b"L" * 4096,
+                                     is_last_resort=True)
+    regular = KeyPackage.objects.create(device=peer_device, blob=b"R" * 4096)
+    headers = auth_headers(active_user, device)
+
+    import base64
+    first = claim_keypackages(api, headers, peer.id)
+
+    assert base64.b64decode(first[0]["blob"]) == b"R" * 4096
+    assert not KeyPackage.objects.filter(id=regular.id).exists()
+    assert KeyPackage.objects.filter(id=last.id).exists()
+
+
+def test_the_last_resort_package_is_served_but_never_deleted(api, active_user, device,
+                                                             auth_headers, peer,
+                                                             peer_device):
+    """An exhausted device stays addable via its last-resort package, claim after
+    claim. The forward-secrecy cost of that reuse is the client's problem to
+    weigh (CLIENT_CONTRACT.md); the server's job is only to never destroy the
+    fallback."""
+    import base64
+    KeyPackage.objects.create(device=peer_device, blob=b"L" * 4096,
+                              is_last_resort=True)
+    headers = auth_headers(active_user, device)
+
+    first = claim_keypackages(api, headers, peer.id)
+    second = claim_keypackages(api, headers, peer.id)
+
+    for result in (first, second):
+        assert base64.b64decode(result[0]["blob"]) == b"L" * 4096
+    assert KeyPackage.objects.filter(device=peer_device,
+                                     is_last_resort=True).count() == 1
+
+
+def test_an_exhausted_device_with_no_last_resort_yields_nothing(api, active_user,
+                                                                device, auth_headers,
+                                                                peer, peer_device):
+    assert claim_keypackages(api, auth_headers(active_user, device), peer.id) == []
+
+
+def test_uploading_a_last_resort_package_replaces_the_previous_one(api, active_user,
+                                                                   device,
+                                                                   auth_headers):
+    headers = auth_headers(active_user, device)
+    api.put(keypackages_url(device.id),
+            {"keypackages": [keypackage_blob(b"1")], "is_last_resort": True},
+            format="json", **headers)
+
+    response = api.put(keypackages_url(device.id),
+                       {"keypackages": [keypackage_blob(b"2")],
+                        "is_last_resort": True},
+                       format="json", **headers)
+
+    assert response.status_code == 200
+    stored = KeyPackage.objects.filter(device=device, is_last_resort=True)
+    assert stored.count() == 1
+    assert bytes(stored.get().blob) == (b"2" * 4096)[:4096]
+
+
+def test_a_batch_cannot_be_marked_last_resort(api, active_user, device, auth_headers):
+    response = api.put(keypackages_url(device.id),
+                       {"keypackages": blobs(2), "is_last_resort": True},
+                       format="json", **auth_headers(active_user, device))
+
+    assert response.status_code == 400
+
+
+def test_the_count_reports_only_the_consumable_pool(api, active_user, device,
+                                                    auth_headers):
+    """The last-resort package never leaves, so counting it would mask exhaustion
+    and stall replenishment at a permanent floor of one."""
+    headers = auth_headers(active_user, device)
+    api.put(keypackages_url(device.id),
+            {"keypackages": [keypackage_blob(b"9")], "is_last_resort": True},
+            format="json", **headers)
+
+    response = api.get(f"{keypackages_url(device.id)}/count", **headers)
+
+    assert response.json()["keypackage_count"] == 0

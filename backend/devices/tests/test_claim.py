@@ -30,7 +30,8 @@ def test_a_bundle_carries_the_public_x3dh_material(api, active_user, device,
     assert response.status_code == 200
     bundle = response.json()["bundles"][0]
     assert set(bundle) == {"device_id", "registration_id", "ik_pub", "spk_id",
-                           "spk_pub", "spk_sig", "otpk"}
+                           "spk_pub", "spk_sig", "cross_sig", "bundle_version",
+                           "otpk"}
     assert base64.b64decode(bundle["ik_pub"]) == bytes(peer_device.ik_pub)
     assert bundle["otpk"]["key_id"] == 5
 

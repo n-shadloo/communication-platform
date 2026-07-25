@@ -4,8 +4,8 @@ from django.urls import reverse
 from accounts.tokens import issue_register_scope
 from devices.models import Device, KeyPackage, OneTimePrekey
 
-from .conftest import (DEVICES_URL, keypackage_blob, label_blob, make_device, pubkey,
-                       register_payload)
+from .conftest import (DEVICES_URL, keypackage_blob, label_blob, make_device,
+                       publish_identity, pubkey, register_payload)
 
 pytestmark = pytest.mark.django_db
 
@@ -34,6 +34,7 @@ def test_a_register_scope_token_registers_a_device_and_gets_full_tokens(api, act
 
 def test_a_full_scope_token_may_also_register_another_device(api, active_user, device,
                                                              auth_headers):
+    publish_identity(active_user)
     response = api.post(DEVICES_URL, register_payload(), format="json",
                         **auth_headers(active_user, device))
 
@@ -42,6 +43,7 @@ def test_a_full_scope_token_may_also_register_another_device(api, active_user, d
 
 
 def test_the_label_blob_is_stored_when_supplied(api, active_user, auth_headers, device):
+    publish_identity(active_user)
     response = api.post(DEVICES_URL, register_payload(label_blob=label_blob()),
                         format="json", **auth_headers(active_user, device))
 
@@ -65,6 +67,7 @@ def test_the_eleventh_live_device_is_refused(api, active_user, auth_headers, set
 def test_revoked_devices_do_not_count_against_the_cap(api, active_user, auth_headers,
                                                       settings):
     from django.utils import timezone
+    publish_identity(active_user)
     live = make_device(active_user, registration_id=1)
     for i in range(settings.MAX_DEVICES_PER_USER + 4):
         make_device(active_user, registration_id=200 + i,
@@ -171,3 +174,44 @@ def test_more_than_a_hundred_keypackages_are_rejected(api, active_user, device,
 
 def test_an_anonymous_registration_is_rejected(api):
     assert api.post(DEVICES_URL, register_payload(), format="json").status_code == 401
+
+
+@pytest.mark.parametrize("missing", ["cross_sig", "bundle_version"])
+def test_registration_without_the_cross_signing_fields_is_rejected(
+        api, active_user, missing):
+    """A completeness check, not a security control: a device registered without
+    its cross-signature could only be a client bug, and would sit unverifiable in
+    every peer's list — but a modified server would simply not apply this check,
+    so the actual rejection of unsigned devices belongs to peers
+    (CLIENT_CONTRACT.md)."""
+    payload = register_payload()
+    del payload[missing]
+
+    response = api.post(DEVICES_URL, payload, format="json",
+                        **bearer(issue_register_scope(active_user)))
+
+    assert response.status_code == 400
+    assert Device.objects.filter(user=active_user).count() == 0
+
+
+def test_a_second_device_requires_a_published_identity(api, active_user, device,
+                                                       auth_headers):
+    """Same completeness-check framing: past the first device, an account with no
+    published identity registering another device can only be a mis-sequenced
+    client, so it is told so instead of producing an unverifiable device."""
+    response = api.post(DEVICES_URL, register_payload(), format="json",
+                        **auth_headers(active_user, device))
+
+    assert response.status_code == 400
+    assert response.json()["code"] == "identity_required"
+    assert Device.objects.filter(user=active_user).count() == 1
+
+
+def test_the_first_device_is_exempt_from_the_identity_precondition(api, active_user):
+    """The bootstrap exemption: a fresh account's register-scope token reaches
+    only this endpoint, so it cannot have published an identity yet. The client
+    publishes immediately after with the full token issued here."""
+    response = api.post(DEVICES_URL, register_payload(), format="json",
+                        **bearer(issue_register_scope(active_user)))
+
+    assert response.status_code == 201
