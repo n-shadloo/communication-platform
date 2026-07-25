@@ -189,8 +189,9 @@ class SeizureGuardTests(SimpleTestCase):
         seen = {_label(m) for m in apps.get_models()}
         self.assertLessEqual(
             {"accounts.User", "accounts.ProfileBlob", "devices.Device",
-             "devices.OneTimePrekey", "devices.KeyPackage", "vault.KeyBackup",
-             "vault.HistoryRecord", "messaging.QueuedEnvelope",
+             "devices.OneTimePrekey", "devices.PqOneTimePrekey",
+             "devices.KeyPackage", "devices.DeviceLogRecord", "devices.UserIdentity",
+             "vault.KeyBackup", "messaging.QueuedEnvelope",
              "attachments.Attachment", "voicerooms.Room"},
             seen)
         blob_names = {
@@ -198,7 +199,7 @@ class SeizureGuardTests(SimpleTestCase):
             for f in _concrete_fields(m) if isinstance(f, OpaqueBlobField)}
         self.assertLessEqual(
             {"accounts.ProfileBlob.blob", "devices.Device.label_blob",
-             "devices.KeyPackage.blob", "vault.KeyBackup.blob",
-             "vault.HistoryRecord.blob", "messaging.QueuedEnvelope.blob",
+             "devices.KeyPackage.blob", "devices.DeviceLogRecord.blob",
+             "vault.KeyBackup.blob", "messaging.QueuedEnvelope.blob",
              "voicerooms.Room.name_blob"},
             blob_names)

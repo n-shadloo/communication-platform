@@ -25,6 +25,8 @@ class DeviceLimitRaceTests(TransactionTestCase):
         cache.clear()
         self.user = User.objects.create_user(username="collector", password=PASSWORD,
                                              is_active=True)
+        from .conftest import publish_identity
+        publish_identity(self.user)  # registration past the first device needs one
 
     def _fill_to(self, live_devices):
         for i in range(live_devices):

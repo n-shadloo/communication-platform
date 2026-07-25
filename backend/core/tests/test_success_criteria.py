@@ -4,7 +4,8 @@ Keeps the four headline invariants executable in one place, through the public
 surface, so they cannot silently rot when the per-app suites are refactored:
 
 1. no plaintext, no content key, no graph at rest (re-runs the seizure-guard audit);
-2. a brand-new device restores the key backup and full history (vault flow);
+2. a brand-new device restores the key backup, and no server-side history exists
+   for it to restore — history is client-to-client (vault flow);
 3. revoking a device cuts its access and destroys its server state (devices flow);
 4. fan-out writes one independent row per recipient device and stores no sender
    (messaging proof).
@@ -27,7 +28,6 @@ pytestmark = pytest.mark.django_db
 
 DEVICES_URL = "/api/v1/me/devices"
 KEYBACKUP_URL = "/api/v1/me/keybackup"
-HISTORY_URL = "/api/v1/me/history"
 ENVELOPES_URL = "/api/v1/envelopes"
 
 
@@ -49,24 +49,22 @@ def test_nothing_readable_or_graph_shaped_can_exist_at_rest():
         assert audit() == [], f"{audit.__name__} found violations"
 
 
-def test_a_new_device_restores_the_backup_and_the_whole_history(api, active_user,
-                                                                device, auth_headers):
-    """Log in on a new device and the chats are there: device 1 writes the backup and
-    history; a brand-new device for the same user reads both back through the API."""
+def test_a_new_device_restores_the_backup_and_no_server_history_exists(
+        api, active_user, device, auth_headers):
+    """A brand-new device reads the key backup back byte-identical — and that is
+    all the server has for it. History is client-to-client on enrollment; the old
+    "log in on a new device and your chats are there" flow is superseded, and the
+    server-side half of it must stay gone (vault/tests/test_no_history.py pins the
+    full removal)."""
     first = auth_headers(active_user, device)
     backup = _b64(min(BACKUP_BUCKETS), 0x4B)
-    records = [_b64(min(ENVELOPE_BUCKETS), fill) for fill in (0x01, 0x02, 0x03)]
 
     assert api.put(KEYBACKUP_URL, {"blob": backup, "version": 1},
                    format="json", **first).status_code == 200
-    assert api.post(HISTORY_URL, {"records": [{"blob": b} for b in records]},
-                    format="json", **first).status_code == 201
 
     fresh = auth_headers(active_user, _second_device(active_user, 9001))
     assert api.get(KEYBACKUP_URL, **fresh).json() == {"blob": backup, "version": 1}
-    page = api.get(f"{HISTORY_URL}?after=-1&limit=100", **fresh).json()  # seq is 0-based
-    assert [r["blob"] for r in page["records"]] == records
-    assert page["has_more"] is False
+    assert api.get("/api/v1/me/history", **fresh).status_code == 404
 
 
 def test_revoking_a_device_cuts_its_access_and_destroys_its_state(api, active_user,

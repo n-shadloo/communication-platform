@@ -3,7 +3,8 @@ import base64
 import pytest
 from django.utils import timezone
 
-from .conftest import DEVICES_URL, label_blob, make_device, register_payload
+from .conftest import (DEVICES_URL, label_blob, make_device, publish_identity,
+                       register_payload)
 
 pytestmark = pytest.mark.django_db
 
@@ -24,6 +25,7 @@ def test_the_own_list_marks_the_calling_device(api, active_user, device, auth_he
 
 def test_the_own_list_returns_the_label_blob_verbatim(api, active_user, device,
                                                       auth_headers):
+    publish_identity(active_user)
     api.post(DEVICES_URL, register_payload(label_blob=label_blob()), format="json",
              **auth_headers(active_user, device))
 
@@ -53,6 +55,7 @@ def test_a_matching_if_none_match_gets_a_304(api, active_user, device, auth_head
 
 def test_adding_a_device_changes_the_own_list_etag(api, active_user, device,
                                                    auth_headers):
+    publish_identity(active_user)
     headers = auth_headers(active_user, device)
     before = api.get(DEVICES_URL, **headers)["ETag"]
 
@@ -78,7 +81,8 @@ def test_the_peer_list_exposes_only_public_identity(api, active_user, device,
 
     assert response.status_code == 200
     entry = response.json()["devices"][0]
-    assert set(entry) == {"device_id", "ik_pub", "registration_id"}
+    assert set(entry) == {"device_id", "ik_pub", "registration_id", "cross_sig",
+                          "bundle_version"}
     assert base64.b64decode(entry["ik_pub"]) == bytes(peer_device.ik_pub)
     # No label, no dates, no activity; those belong to the account owner.
     assert "label_blob" not in entry

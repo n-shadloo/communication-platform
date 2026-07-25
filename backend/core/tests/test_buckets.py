@@ -2,10 +2,12 @@ import base64
 
 from django.test import SimpleTestCase
 
-from core.buckets import ENVELOPE_BUCKETS, NAME_BUCKETS
+from core.buckets import (DEVICELOG_BUCKETS, ENVELOPE_BUCKETS, KEYPACKAGE_BUCKETS,
+                          NAME_BUCKETS)
 from core.fields import BadBucket, decode_blob_or_400
 
-BUCKET_SETS = (ENVELOPE_BUCKETS, NAME_BUCKETS)
+BUCKET_SETS = (ENVELOPE_BUCKETS, NAME_BUCKETS, KEYPACKAGE_BUCKETS,
+               DEVICELOG_BUCKETS)
 
 
 def b64(nbytes):
@@ -42,6 +44,12 @@ class DecodeBlobOrBadBucketTests(SimpleTestCase):
             with self.subTest(junk=junk):
                 with self.assertRaises(BadBucket):
                     decode_blob_or_400(junk, ENVELOPE_BUCKETS)
+
+    def test_the_keypackage_buckets_fit_pq_mls_keypackages(self):
+        """[4096, 16384] is a client contract: PQ (ML-KEM-768) MLS KeyPackages do
+        not fit the old 2048 floor, and clients pad to these exact sizes. Changing
+        this set breaks every client's padding."""
+        self.assertEqual(KEYPACKAGE_BUCKETS, [4096, 16384])
 
     def test_rejection_never_echoes_the_payload(self):
         secret = b64(ENVELOPE_BUCKETS[0] + 1)

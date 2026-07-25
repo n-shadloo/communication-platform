@@ -25,6 +25,10 @@ def register_headers(active_user):
 
 def endpoints(device_id, user_id):
     return {
+        "publish identity": ("put", "/api/v1/me/identity", {}),
+        "peer identity": ("get", f"/api/v1/users/{user_id}/identity", None),
+        "append devicelog": ("post", "/api/v1/me/devicelog", {}),
+        "peer devicelog": ("get", f"/api/v1/users/{user_id}/devicelog", None),
         "own device list": ("get", DEVICES_URL, None),
         "relabel a device": ("put", f"{DEVICES_URL}/{device_id}",
                              {"label_blob": label_blob()}),
