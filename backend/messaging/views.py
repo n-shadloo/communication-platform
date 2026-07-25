@@ -89,6 +89,9 @@ class MyEnvelopesView(APIView):
                            "blob": base64.b64encode(bytes(row.blob)).decode()}
                           for row in rows],
             "has_more": has_more,
+            # A client whose last acked seq is below this lost envelopes to the
+            # TTL prune — possibly MLS commits — and must trigger a group re-add.
+            "pruned_through": device.queue_pruned_through,
         })
 
     @staticmethod

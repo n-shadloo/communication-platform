@@ -4,6 +4,7 @@ independent rows that a dump cannot join back into a conversation.
 `transaction=True` matters on these tests: pg_dump runs in a separate process over a
 separate connection, so it sees only committed rows.
 """
+import base64
 from datetime import datetime
 from datetime import timezone as dt_timezone
 
@@ -90,6 +91,36 @@ def test_a_seized_queue_shows_no_sender_and_no_link_between_co_recipients(
     dump = pg_dump_table(TABLE)
     assert str(active_user.id) not in dump
     assert str(device.id) not in dump
+
+
+@pytest.mark.skipif(PG_DUMP is None, reason="pg_dump not on PATH")
+@pytest.mark.django_db(transaction=True)
+def test_an_acked_envelope_leaves_no_trace_in_a_raw_table_dump(api, active_user,
+                                                               device, auth_headers,
+                                                               three_recipient_devices):
+    """Retention honored: delivery-ack deletes the row, so a dump taken afterwards
+    holds neither the row nor the ciphertext. What a seizure captures is bounded by
+    the undelivered set, never by delivered traffic."""
+    recipient = three_recipient_devices[0]
+    blob = envelope_blob(b"W")
+    resp = api.post("/api/v1/envelopes",
+                    {"messages": [{"device_id": str(recipient.id), "blob": blob}]},
+                    format="json", **auth_headers(active_user, device))
+    assert resp.status_code == 202
+
+    from accounts.tokens import issue_full
+    owner_access, _ = issue_full(recipient.user, recipient)
+    owner_headers = {"HTTP_AUTHORIZATION": f"Bearer {owner_access}"}
+    drained = api.get("/api/v1/me/envelopes", **owner_headers).json()["envelopes"]
+    assert len(drained) == 1
+    acked = api.post("/api/v1/me/envelopes/ack", {"ids": [drained[0]["id"]]},
+                     format="json", **owner_headers)
+    assert acked.json() == {"deleted": 1}
+
+    dump = pg_dump_table(TABLE)
+    _cols, rows = copy_block(dump, TABLE)
+    assert rows == []
+    assert base64.b64decode(blob).hex() not in dump  # bytea renders as \x<hex>
 
 
 @pytest.mark.django_db

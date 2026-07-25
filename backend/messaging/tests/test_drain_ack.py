@@ -86,6 +86,36 @@ def test_ack_deletes_only_the_named_rows(api, active_user, device, auth_headers)
 
 
 @pytest.mark.django_db
+def test_the_drain_surfaces_the_pruned_watermark(api, active_user, device,
+                                                 auth_headers):
+    """`pruned_through` is the queue-gap signal: a client whose last acked seq is
+    below it lost envelopes to the TTL prune (possibly MLS commits) and must
+    trigger a group re-add. Zero means nothing was ever pruned."""
+    headers = auth_headers(active_user, device)
+    assert api.get(DRAIN_URL, **headers).json()["pruned_through"] == 0
+
+    device.queue_pruned_through = 41  # what a TTL prune pass writes
+    device.save(update_fields=["queue_pruned_through"])
+
+    assert api.get(DRAIN_URL, **headers).json()["pruned_through"] == 41
+
+
+@pytest.mark.django_db
+def test_ack_removes_the_row_from_the_database_not_just_the_response(
+        api, active_user, device, auth_headers):
+    """Delete-on-ack is a retention guarantee, so the row must be gone from a
+    direct table query, not merely filtered out of later drains."""
+    row = enqueue(device, 1)[0]
+    headers = auth_headers(active_user, device)
+
+    resp = api.post(ACK_URL, {"ids": [str(row.id)]}, format="json", **headers)
+
+    assert resp.json() == {"deleted": 1}
+    assert not QueuedEnvelope.objects.filter(id=row.id).exists()
+    assert QueuedEnvelope.objects.count() == 0
+
+
+@pytest.mark.django_db
 def test_ack_is_idempotent(api, active_user, device, auth_headers):
     rows = enqueue(device, 1)
     headers = auth_headers(active_user, device)
