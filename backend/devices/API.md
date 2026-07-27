@@ -25,7 +25,8 @@ guard, never a security control. The verifying party is always the peer client �
 Uploads the account's cross-signing public keys: the master key, the self-signing key
 (signs device bundles), the user-signing key (signs other users' master keys after
 out-of-band verification), and `master_sig`, the master key's Ed25519 signature over
-the canonical encoding of the two subkeys. All are opaque to the server. The `version`
+the canonical subkey encoding (`chat:v1:cross-signing-keys` — exact bytes and golden
+vectors below). All are opaque to the server. The `version`
 must be strictly greater than the stored one; the check exists so a stale client
 cannot accidentally clobber a newer identity — a modified server would simply not
 apply it, so clients must detect identity changes themselves (fetch + compare against
@@ -176,28 +177,75 @@ a stale signature is detectable client-side.
 > fresh `cross_sig` and incremented `bundle_version` **in the same request** will be
 > correctly rejected by peers. See "Replenish prekeys" below.
 
+> **`cross_sig` cannot be computed at registration time.** Field 2 is the `device_id`
+> that `POST /me/devices` assigns, so the first call goes out without a cross-signature
+> and the client supplies it in the follow-up `PUT /me/devices/{id}/prekeys`. Full
+> enrollment order: `CLIENT_CONTRACT.md` §M.
+
+### `ik_pub` layout
+
+`ik_pub` is exactly **64 bytes**: the device's Ed25519 signing public key (bytes 0–31)
+followed by its X25519 identity public key (bytes 32–63). The Ed25519 half verifies
+`spk_sig` and `pq_spk_sig`; the X25519 half is the identity key in X3DH/PQXDH. The
+server's 32–256-byte range check deliberately does **not** enforce this — enforcing it
+would mean the server parsing key material and committing to a curve. A peer whose
+`ik_pub` is not 64 bytes is malformed to clients, not to the server.
+
+### The other three signature encodings
+
+Same rule as the bundle: ASCII domain separator, then a 4-byte big-endian length before
+each field. Distinct separators are what stop a signature from one context being
+replayed into another.
+
+| Signature | Signed by | Domain separator | Fields, in order |
+|---|---|---|---|
+| `master_sig` | master key | `chat:v1:cross-signing-keys` | `user_id` (16 B) · `self_signing_pub` (raw) · `user_signing_pub` (raw) |
+| `spk_sig` | Ed25519 half of `ik_pub` | `chat:v1:signed-prekey` | `user_id` (16 B) · `spk_id` (4 B BE) · `spk_pub` (raw) |
+| `pq_spk_sig` | Ed25519 half of `ik_pub` | `chat:v1:pq-signed-prekey` | `user_id` (16 B) · `pq_spk_id` (4 B BE) · `pq_spk_pub` (raw) |
+
+`master_sig` does not cover `version`: the version is this server's anti-accident
+monotonic check, and signing it would imply the served number carries a guarantee it
+does not. The two prekey signatures do not cover `device_id`, which would otherwise be
+unknowable at registration — the bundle above is what binds a prekey to a device.
+
+**Golden vectors for all four encodings: `devices/vectors/`.** Reproducing them byte for
+byte is the only way two client platforms can be sure they agree; the server never
+computes or checks any of it.
+
 ## Register a device / list my devices
 
 **Method:** `POST`, `GET`
 **Path:** `/api/v1/me/devices`
 
 `POST` registers a cryptographic device: identity key, signed prekey with signature,
-registration id, the device's `cross_sig` (the self-signing key's signature over the
-canonical bundle above) and `bundle_version`, optional ML-KEM-768 signed prekey and
-one-time prekeys, optional encrypted label, and optional initial classical one-time
-prekeys and key packages, all in one transaction. It is the only endpoint that accepts
-a register-scope token, and it responds with a full-scope token pair for the new
-device, so a fresh install goes login → register device → publish identity → full
-session. Live devices are capped per account (default 10); revoked devices do not
-count.
+registration id, optional ML-KEM-768 signed prekey and one-time prekeys, optional
+encrypted label, and optional initial classical one-time prekeys and key packages, all
+in one transaction. It is the only endpoint that accepts a register-scope token, and it
+responds with a full-scope token pair for the new device. Live devices are capped per
+account (default 10); revoked devices do not count.
 
-`cross_sig` and `bundle_version` are required, and any registration past the account's
-first live device additionally requires a published identity (`400
-{"code":"identity_required"}` otherwise — the first device is exempt because a
-register-scope token cannot have published one yet). Both requirements are
-completeness checks that stop an unverifiable device entering the system by client
-bug; they are **not** security controls — a modified server would skip them, and peers
-must reject unsigned devices regardless.
+**`cross_sig` and `bundle_version` are not accepted here.** Sending either is a `400`
+whose message names the endpoint that does accept them. No valid value exists: the
+canonical bundle above covers `device_id` (field 2), and this request is what mints it,
+so a cross-signature computed before the `201` cannot cover the device it describes. A
+later device has a second reason: cross-signing needs the account's self-signing private
+key, which lives in the key backup, and reading that needs the full-scope token this
+endpoint returns. The cross-signature therefore belongs in the client's **next** call,
+`PUT /me/devices/{id}/prekeys`.
+
+Every device is consequently born with `cross_sig` null — the "never cross-signed" state
+peers already refuse — and null here does **not** mean a pre-cross-signing device. The
+field is refused rather than quietly ignored because storing a signature over the wrong
+`device_id` is worse than storing nothing: peers read null as "unverified, withhold", but
+read the later correction as a **cross-signature change**, which `CLIENT_CONTRACT.md`
+§D/§E requires them to treat as a safety-number event and block the conversation over.
+
+Any registration past the account's first live device additionally requires a published
+identity (`400 {"code":"identity_required"}` — the first device is exempt because a
+register-scope token cannot have published one yet). None of these are security
+controls: a modified server would skip them, and peers must reject unverifiable devices
+regardless. What they buy is that a client cannot believe it cross-signed a device it
+did not. The full enrollment order is `CLIENT_CONTRACT.md` §M.
 
 `GET` (full scope only) lists the caller's live devices with their encrypted labels
 and coarse dates, marking which entry is the calling device, plus `log_head_seq`, the
@@ -235,8 +283,6 @@ expect more frequent invalidation than under the device-set-only tag.
   "spk_pub": "aX9cR3tYvB…",
   "spk_sig": "Zk4wPq8sLm…",
   "registration_id": 4242,
-  "cross_sig": "eENyb3NzU2ln…",
-  "bundle_version": 1,
   "pq_spk": { "spk_id": 1, "pub": "cVBxU3BrS2V5…", "sig": "c1BxU2ln…" },
   "pq_otpks": [ { "key_id": 1, "pub": "cVBxT3Rwaw…" } ],
   "label_blob": "cGFkZGVkLWxhYmVs…",
@@ -245,9 +291,12 @@ expect more frequent invalidation than under the device-set-only tag.
 }
 ```
 
-Classical key fields decode to 32–256 bytes; `cross_sig` and `pq_spk.sig` to exactly
-64 bytes (Ed25519); PQ public keys to exactly 1184 bytes (an ML-KEM-768 encapsulation
-key is fixed-size, so the exact check rejects nothing a real client would send).
+Classical key fields decode to 32–256 bytes; `pq_spk.sig` to exactly 64 bytes (Ed25519);
+PQ public keys to exactly 1184 bytes (an ML-KEM-768 encapsulation key is fixed-size, so
+the exact check rejects nothing a real client would send). `ik_pub` is the 64-byte
+Ed25519-then-X25519 pair the client contract defines; the server's range check is
+deliberately looser than that and commits to nothing about the bytes, so a wrong-sized
+`ik_pub` is caught only by peers.
 `otpks` ≤ 200 and `pq_otpks` ≤ 100 items with unique `key_id`s per list;
 `keypackages` ≤ 100, each exactly one key-package bucket (4096 or 16384 bytes);
 `label_blob` optional, one label bucket (256 or 1024 bytes). Integer ids must fit a
@@ -301,6 +350,12 @@ Empty body, when `If-None-Match` matches the current `ETag`.
 
 ```json
 { "code": "bad_bucket", "detail": "Invalid payload." }
+```
+
+### Cross-signature sent at registration — `400 Bad Request` (POST)
+
+```json
+{ "cross_sig": "Not accepted at registration: the canonical device bundle covers device_id, which this request assigns, so no signature computed before the response can be valid. Send cross_sig and bundle_version to PUT /me/devices/{device_id}/prekeys once you have the device_id." }
 ```
 
 ### No published identity (second device onward) — `400 Bad Request` (POST)
@@ -421,12 +476,18 @@ an idempotent retry, not an error; a duplicated `key_id` inside one payload is a
 cross either cap is refused whole and, in that case, nothing else in the request is
 applied either — no prekey rotation, no signature update.
 
+> **This is also where a device's first `cross_sig` arrives.** Registration cannot
+> carry one — the canonical bundle covers the `device_id` that registration assigns —
+> so every newly registered device cross-signs itself here, with the `device_id` from
+> its `201`. See `CLIENT_CONTRACT.md` §M for the full order.
+
 > **Rotating `spk` stales your `cross_sig`.** The signed prekey is a field of the
 > canonical device bundle, so replacing it invalidates the stored cross-signature.
 > Send a fresh `cross_sig` and an incremented `bundle_version` **in the same call**,
-> or peers fetching your bundle will correctly reject this device. The server stores
-> whatever it is given and never checks the pairing — only peers can, so there is no
-> server error to save a client that forgets.
+> or peers fetching your bundle will correctly reject this device. Sending one without
+> the other is a `400`; beyond that the server stores whatever it is given and never
+> checks that the signature matches the bundle — only peers can, so there is no server
+> error to save a client that signs the wrong bytes.
 
 Clients watch the count endpoint (or the `otpk_count` in this response) and replenish
 when the pools run low, since every peer claim consumes one of each.

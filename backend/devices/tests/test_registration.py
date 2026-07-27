@@ -4,8 +4,8 @@ from django.urls import reverse
 from accounts.tokens import issue_register_scope
 from devices.models import Device, KeyPackage, OneTimePrekey
 
-from .conftest import (DEVICES_URL, keypackage_blob, label_blob, make_device,
-                       publish_identity, pubkey, register_payload)
+from .conftest import (DEVICES_URL, cross_sig_b64, keypackage_blob, label_blob,
+                       make_device, publish_identity, pubkey, register_payload)
 
 pytestmark = pytest.mark.django_db
 
@@ -176,21 +176,47 @@ def test_an_anonymous_registration_is_rejected(api):
     assert api.post(DEVICES_URL, register_payload(), format="json").status_code == 401
 
 
-@pytest.mark.parametrize("missing", ["cross_sig", "bundle_version"])
-def test_registration_without_the_cross_signing_fields_is_rejected(
-        api, active_user, missing):
-    """A completeness check, not a security control: a device registered without
-    its cross-signature could only be a client bug, and would sit unverifiable in
-    every peer's list — but a modified server would simply not apply this check,
-    so the actual rejection of unsigned devices belongs to peers
-    (CLIENT_CONTRACT.md)."""
+def test_registration_leaves_the_device_never_cross_signed(api, active_user):
+    """The enrollment order the client can actually execute: the signed bundle
+    covers `device_id`, which this request mints, so no first call can carry a
+    valid cross_sig. The row is therefore born in the null/0 "never cross-signed"
+    state peers already refuse, and nothing substitutes or synthesizes a value."""
+    response = api.post(DEVICES_URL, register_payload(), format="json",
+                        **bearer(issue_register_scope(active_user)))
+
+    assert response.status_code == 201
+    stored = Device.objects.get(id=response.json()["device_id"])
+    assert stored.cross_sig is None
+    assert stored.bundle_version == 0
+
+
+@pytest.mark.parametrize("extra", [
+    {"cross_sig": cross_sig_b64()},
+    {"bundle_version": 1},
+    # The payload a client written against the old contract sends: both must be
+    # named in the error, not just the first one found.
+    {"cross_sig": cross_sig_b64(), "bundle_version": 1},
+])
+def test_registration_refuses_the_cross_signing_fields_with_a_pointer(
+        api, active_user, extra):
+    """No valid value exists for either field here, so the endpoint refuses both
+    rather than storing bytes that can only be wrong — and the error names the
+    endpoint that does accept them, since "Unexpected field." on a field that was
+    mandatory until recently reads like a version mismatch.
+
+    Not a security control: peers must reject unverifiable devices on their own,
+    and a modified server would accept anything. It stops a client from believing
+    it cross-signed a device it did not."""
     payload = register_payload()
-    del payload[missing]
+    payload.update(extra)
 
     response = api.post(DEVICES_URL, payload, format="json",
                         **bearer(issue_register_scope(active_user)))
 
     assert response.status_code == 400
+    body = response.json()
+    for field in extra:
+        assert "prekeys" in str(body[field]), f"{field} not pointed at the right endpoint"
     assert Device.objects.filter(user=active_user).count() == 0
 
 

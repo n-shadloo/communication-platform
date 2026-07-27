@@ -40,9 +40,9 @@ def register_payload(otpks=1, keypackages=0, **overrides):
         "spk_pub": pubkey(b"s"),
         "spk_sig": pubkey(b"g"),
         "registration_id": 1234,
-        # Required completeness fields since the Phase-5 tightening.
-        "cross_sig": cross_sig_b64(),
-        "bundle_version": 1,
+        # No cross_sig/bundle_version: the endpoint refuses them, because the bundle
+        # they sign covers the device_id this call assigns. Cross-signing happens in
+        # the follow-up PUT .../prekeys call.
         "otpks": [{"key_id": i, "pub": pubkey(bytes([65 + (i % 26)]))}
                   for i in range(otpks)],
         "keypackages": [keypackage_blob(bytes([65 + (i % 26)]))
