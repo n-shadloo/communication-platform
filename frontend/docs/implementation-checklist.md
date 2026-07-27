@@ -2,8 +2,9 @@
 
 This is the live delivery checklist. Backend checkmarks mean an API/capability exists and
 is documented, not that the Flutter integration exists. Flutter documentation is now
-specified; pieces 01–03 now provide the Android/Web foundation, architecture skeleton,
-app-owned design system, and responsive routed shell. Later capabilities remain pending.
+specified; pieces 01–05 now provide the Android/Web foundation, architecture skeleton,
+app-owned design system, responsive routed shell, guarded bootstrap, and secure local
+storage foundation. Later capabilities remain pending.
 
 Legend: **Ready** = implemented backend contract; **Client protocol** = intentionally
 opaque/client-owned; **Pending** = Flutter implementation not started.
@@ -108,11 +109,11 @@ opaque/client-owned; **Pending** = Flutter implementation not started.
 
 | Capability | Backend | Flutter |
 |---|---|---|
-| Android encrypted database/Keystore | Not applicable | Pending |
+| Android encrypted database/Keystore | Not applicable | Piece 05 versioned Drift schema, SQLCipher database, Keystore AES-GCM wrapping with StrongBox/TEE preference, transactional repositories, bounded cleanup, and cryptographic wipe flows complete; physical-device process-death/Keystore matrix remains a release gate |
 | Android normal resume/drain | Durable queue supports it | Pending |
 | Android background polling | Seven-day durable queue supports it | Pending WorkManager polling/gap handling |
 | Android local notifications | No foreign push by design | Pending |
-| Web persistent encrypted device | Device API supports it | Pending WebCrypto/IndexedDB |
+| Web persistent encrypted device | Device API supports it | Piece 05 ciphertext-only Drift persistence, non-extractable WebCrypto wrapping key in IndexedDB, authenticated wrapped storage key, unsafe-storage rejection, memory clearing hooks, and key-loss/tamper wipe complete; supported-browser persistence matrix remains a release gate |
 | Web open-tab realtime | WebSocket auth supports it | Pending |
 | Closed-browser notification | Not supported without push by design | Explicitly out of scope |
 | Direct signed APK distribution | Self-hosted operation supports it | Pending release pipeline |
@@ -136,7 +137,10 @@ opaque/client-owned; **Pending** = Flutter implementation not started.
 - [ ] Device-log chain verification, ETag refresh, encrypted head gossip, and fork alarms
   pass malicious-server tests.
 - [ ] LiveKit Flutter E2EE meets the SFrame/media threat-model requirement on both targets.
-- [ ] Drift encrypted Android and ciphertext-only web storage/migrations work.
+- [x] Piece 05 Drift foundation: SQLCipher Android plus ciphertext-only Web schema,
+  transactional migrations/repositories, constraints, reactive Riverpod projections,
+  restart/privacy checks, and key-loss/tamper/logout/revocation wipe tests pass. The
+  physical-device and supported-browser release matrix remains tracked below.
 - [ ] Flyer builders pass long-history, scroll, RTL, accessibility, and media tests.
 - [ ] Android WorkManager polling is tested under Doze/standby/force-stop; only active
   voice uses a foreground service.
