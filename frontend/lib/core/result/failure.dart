@@ -28,7 +28,13 @@ final class TransportFailure extends Failure {
   FailureCategory get category => FailureCategory.transport;
 }
 
-enum TransportFailureKind { offline, timeout, connectionRejected }
+enum TransportFailureKind {
+  offline,
+  timeout,
+  connectionRejected,
+  responseTooLarge,
+  requestTooLarge,
+}
 
 final class AuthenticationFailure extends Failure {
   const AuthenticationFailure(this.kind);
@@ -65,6 +71,7 @@ enum SecurityFailureKind {
   unauthenticatedInput,
   integrityCheckFailed,
   policyBlocked,
+  malformedServerResponse,
 }
 
 final class StorageFailure extends Failure {
@@ -99,3 +106,63 @@ final class CancellationFailure extends Failure {
 }
 
 enum CancellationFailureKind { requestedByUser, lifecycleInterrupted }
+
+/// Stable backend reasons. Arbitrary backend `detail` values never cross this type.
+enum BackendFailureCode {
+  invalidRequest,
+  badRequest,
+  usernameTaken,
+  invalidCredentials,
+  accountInactive,
+  invalidToken,
+  tokenNotValid,
+  tokenRevoked,
+  scopeForbidden,
+  deviceScopeRequired,
+  forbidden,
+  notFound,
+  badBucket,
+  staleVersion,
+  identityRequired,
+  deviceLimit,
+  prekeyLimit,
+  keypackageLimit,
+  quotaExceeded,
+  voiceUnconfigured,
+  rateLimited,
+  unknown,
+}
+
+/// A documented backend error mapped to a safe, exhaustive client value.
+final class BackendFailure extends Failure {
+  const BackendFailure(this.code, {this.retryAfter});
+
+  final BackendFailureCode code;
+  final Duration? retryAfter;
+
+  @override
+  FailureCategory get category => switch (code) {
+    BackendFailureCode.invalidCredentials ||
+    BackendFailureCode.accountInactive ||
+    BackendFailureCode.invalidToken ||
+    BackendFailureCode.tokenNotValid ||
+    BackendFailureCode.tokenRevoked ||
+    BackendFailureCode.scopeForbidden ||
+    BackendFailureCode.deviceScopeRequired ||
+    BackendFailureCode.forbidden => FailureCategory.authentication,
+    BackendFailureCode.quotaExceeded => FailureCategory.storage,
+    BackendFailureCode.voiceUnconfigured => FailureCategory.unsupportedProtocol,
+    BackendFailureCode.rateLimited => FailureCategory.transport,
+    BackendFailureCode.invalidRequest ||
+    BackendFailureCode.badRequest ||
+    BackendFailureCode.usernameTaken ||
+    BackendFailureCode.notFound ||
+    BackendFailureCode.badBucket ||
+    BackendFailureCode.staleVersion ||
+    BackendFailureCode.identityRequired ||
+    BackendFailureCode.deviceLimit ||
+    BackendFailureCode.prekeyLimit ||
+    BackendFailureCode.keypackageLimit ||
+    BackendFailureCode.unknown => FailureCategory.validation,
+  };
+}

@@ -23,6 +23,7 @@ dependencies:
   intl: 0.20.2
   riverpod_annotation: 4.0.3
   sqlite3: 3.5.0
+  web_socket_channel: 3.0.3
 
 hooks:
   user_defines:

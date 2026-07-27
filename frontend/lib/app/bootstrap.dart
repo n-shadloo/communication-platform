@@ -4,7 +4,7 @@ import 'package:communication_platform/app/config/app_environment.dart';
 import 'package:communication_platform/app/dependencies/local_storage_providers.dart';
 import 'package:communication_platform/features/bootstrap/application/bootstrap_flow.dart';
 import 'package:communication_platform/features/bootstrap/domain/bootstrap_model.dart';
-import 'package:communication_platform/features/bootstrap/infrastructure/fail_closed_bootstrap_ports.dart';
+import 'package:communication_platform/features/bootstrap/infrastructure/dio_health_reachability_port.dart';
 import 'package:communication_platform/features/bootstrap/infrastructure/provisioned_trust_port.dart';
 import 'package:communication_platform/features/local_storage/infrastructure/platform/platform_local_storage.dart';
 import 'package:communication_platform/features/local_storage/infrastructure/protected_storage_bootstrap_adapter.dart';
@@ -23,7 +23,7 @@ void bootstrap(AppEnvironment environment) {
     ),
     storage: ProtectedStorageBootstrapAdapter(localStorageRuntime),
     trust: const ProvisionedTrustPort(),
-    health: const PendingHealthReachabilityPort(),
+    health: DioHealthReachabilityPort(),
     platform: platform,
   );
   runApp(

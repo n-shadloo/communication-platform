@@ -2,9 +2,10 @@
 
 This is the live delivery checklist. Backend checkmarks mean an API/capability exists and
 is documented, not that the Flutter integration exists. Flutter documentation is now
-specified; pieces 01–05 now provide the Android/Web foundation, architecture skeleton,
-app-owned design system, responsive routed shell, guarded bootstrap, and secure local
-storage foundation. Later capabilities remain pending.
+specified; pieces 01–06 now provide the Android/Web foundation, architecture skeleton,
+app-owned design system, responsive routed shell, guarded bootstrap, secure local
+storage, and the typed REST/authentication/WebSocket transport foundation. Later
+capabilities remain pending.
 
 Legend: **Ready** = implemented backend contract; **Client protocol** = intentionally
 opaque/client-owned; **Pending** = Flutter implementation not started.
@@ -13,19 +14,19 @@ opaque/client-owned; **Pending** = Flutter implementation not started.
 
 | Capability | Backend | Flutter |
 |---|---|---|
-| Health/reachability | Ready: `/api/v1/health` | Piece 04 typed single-origin port/state machine complete with deterministic fakes; reviewed pinned transport adapter remains piece 06 |
+| Health/reachability | Ready: `/api/v1/health` | Pieces 04/06 typed single-origin state machine and bounded Dio health adapter complete; provisioned staging trust integration remains a release gate |
 | Private CA/TLS deployment | Ready | Piece 04 Android network-security template, CA/primary+backup-pin interfaces, Web external-trust gate, and blocking failures complete; provisioned-device staging integration remains pending |
 | Android/Web project | Not applicable | Piece 01 scaffold complete; development/production Android flavors and Web entry points compile |
 | Architecture and protocol docs | Backend docs ready | Piece 02 feature-first Clean Architecture skeleton compiled with sealed typed failures, scoped Riverpod composition, and source-layout/inward-dependency tests; normative fixtures/security gates pending |
 | CI/reproducible offline builds | Backend ready | Local CI commands, SDK pin, and lockfile ready; isolated offline-cache rehearsal pending |
-| Redacted diagnostics | Backend ready | Pending local-only export |
+| Redacted diagnostics | Backend ready | Piece 06 typed payload-free network diagnostic events and redaction tests complete; user-initiated local export remains piece 21 |
 
 ## Accounts and devices
 
 | Capability | Backend | Flutter |
 |---|---|---|
 | Register/manual activation | Ready | Pending screens/use cases |
-| Login/refresh/logout | Ready | Pending token coordinator |
+| Login/refresh/logout | Ready | Piece 06 proactive single-flight rotating-token coordinator, one safe authenticated retry, revocation, and local-first logout foundation complete; feature use cases/screens remain piece 09 |
 | User directory | Ready | Pending local repository/UI |
 | Encrypted profile blob | Ready opaque storage | Bootstrap fallback specified; implementation pending |
 | Cross-signing identity publish/fetch | Ready opaque transport | Pending master/self/user-signing implementation |
@@ -44,7 +45,7 @@ opaque/client-owned; **Pending** = Flutter implementation not started.
 | Batched fan-out/stale devices | Ready | <=256 deterministic batching specified; implementation pending |
 | Drain/ack | Ready | Pending crash-safe pipeline |
 | Seven-day TTL / `pruned_through` gaps | Ready signal | Pending blocking detection and fresh-Welcome recovery |
-| WebSocket live delivery | Ready | Pending gateway |
+| WebSocket live delivery | Ready | Piece 06 authenticated native/Web gateway, bounded frame parsing, close-code mapping, and reconnect hooks complete; durable inbox/business-state integration remains pending |
 | DM identity/session | Client protocol | Pending hybrid PQXDH/Double Ratchet |
 | Text messages | Client protocol | Pending |
 | Replies/edits/deletes | Client protocol | Pending |
@@ -114,7 +115,7 @@ opaque/client-owned; **Pending** = Flutter implementation not started.
 | Android background polling | Seven-day durable queue supports it | Pending WorkManager polling/gap handling |
 | Android local notifications | No foreign push by design | Pending |
 | Web persistent encrypted device | Device API supports it | Piece 05 ciphertext-only Drift persistence, non-extractable WebCrypto wrapping key in IndexedDB, authenticated wrapped storage key, unsafe-storage rejection, memory clearing hooks, and key-loss/tamper wipe complete; supported-browser persistence matrix remains a release gate |
-| Web open-tab realtime | WebSocket auth supports it | Pending |
+| Web open-tab realtime | WebSocket auth supports it | Piece 06 origin-derived `wss` gateway and first-frame browser authentication complete; page lifecycle/drain integration remains pending |
 | Closed-browser notification | Not supported without push by design | Explicitly out of scope |
 | Direct signed APK distribution | Self-hosted operation supports it | Pending release pipeline |
 | Self-hosted hardened web bundle | nginx deployment base exists | Pending build/header config |
@@ -141,6 +142,10 @@ opaque/client-owned; **Pending** = Flutter implementation not started.
   transactional migrations/repositories, constraints, reactive Riverpod projections,
   restart/privacy checks, and key-loss/tamper/logout/revocation wipe tests pass. The
   physical-device and supported-browser release matrix remains tracked below.
+- [x] Piece 06 networking foundation: one bounded typed Dio client, contract DTO
+  boundaries, safe replay/cancellation/timeout policy, payload-free diagnostics,
+  proactive single-flight token rotation, and authenticated native/Web WebSocket
+  gateway pass mock-adapter, race, size, redaction, and close-code tests.
 - [ ] Flyer builders pass long-history, scroll, RTL, accessibility, and media tests.
 - [ ] Android WorkManager polling is tested under Doze/standby/force-stop; only active
   voice uses a foreground service.

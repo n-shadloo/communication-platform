@@ -51,3 +51,4 @@ app.*.map.json
 /android/app/src/production/res/xml/network_security_config.xml
 
 /.agents
+/docs/implementation-prompts.md
