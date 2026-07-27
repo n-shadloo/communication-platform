@@ -24,14 +24,23 @@ source of truth.
 - [Vault API](../../backend/vault/API.md)
 - [Voice Rooms API](../../backend/voicerooms/API.md)
 
-## Known contract blockers
+## Contract status
 
-The current device-registration request cannot satisfy its own canonical-signature
-requirement because the server-generated `device_id` is returned only after the request,
-although `cross_sig` must cover that ID before the request. Later-device recovery is also
-circular because register-scope tokens cannot read the key backup needed to recover the
-self-signing key. The exact canonical input for `master_sig` and the representation of
-the contract's separate Ed25519 device-signing and X25519 identity keys in the single
-`ik_pub` field are not defined. These issues are release blockers; see
-[Cryptographic protocol: Enrollment contract blocker](cryptographic-protocol.md#enrollment-contract-blocker)
-and the [implementation checklist](implementation-checklist.md#required-spikes-before-broad-implementation).
+The former device-enrollment circularity is resolved. The binding flow is now
+two-phase: register without `cross_sig`/`bundle_version`, receive the backend-assigned
+`device_id` and full-scope tokens, then submit the valid signature and version through
+`PUT /me/devices/{device_id}/prekeys`. A later device retrieves the recovery backup only
+after registration gives it full scope. Until the follow-up succeeds, peers see
+`cross_sig: null` and withhold messages.
+
+The Devices API and its [golden vectors](../../backend/devices/vectors/README.md) now
+freeze the four canonical signature encodings and the 64-byte `ik_pub` layout (Ed25519
+followed by X25519). Android and Web implementations MUST reproduce those vectors
+byte-for-byte.
+
+One client-side security gate remains: the backend requires a reviewed PQ MLS
+ciphersuite for groups. The frontend-owned [PQ MLS profile](mls-profile.md) selects the
+IETF hybrid ML-KEM-768/X25519 candidate, but its ciphersuite identifier is still
+unassigned and maintained Android/Web library support and interoperability evidence are
+not yet available. Group production release remains blocked by that profile's gates;
+the client MUST NOT invent an identifier or silently use a classical MLS suite.

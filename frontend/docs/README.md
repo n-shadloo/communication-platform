@@ -23,6 +23,7 @@ The documents use three requirement words:
 
 - [Threat model](threat-model.md)
 - [Cryptographic protocol](cryptographic-protocol.md)
+- [Post-quantum MLS profile](mls-profile.md)
 - [Application-message protocol](message-protocol.md)
 - [Authentication and devices](authentication-and-devices.md)
 - [Attachments](attachments.md)
@@ -38,6 +39,7 @@ The documents use three requirement words:
 ## Delivery
 
 - [Backend API index](backend-api.md)
+- [Ordered Codex implementation prompts](implementation-prompts.md)
 - [Backend/Flutter implementation checklist](implementation-checklist.md)
 - [Testing strategy](testing-strategy.md)
 - [Deployment and release](deployment-and-release.md)

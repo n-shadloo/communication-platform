@@ -148,11 +148,12 @@ with the backend/proxy configuration and a REST health probe only when necessary
 - Signed classical/PQ prekeys rotate every seven days with an eight-day delayed-message
   overlap. Rotation atomically supplies a new `cross_sig` and increments
   `bundle_version`.
-- MLS key packages are replenished when the server count falls below 25, up to a target
-  of 75, staying below the backend cap of 100.
-- One PQ MLS last-resort KeyPackage is maintained separately from the consumable count;
-  its use is surfaced as degraded initial-join forward secrecy and triggers immediate
-  consumable replenishment.
+- After the [PQ MLS production gates](mls-profile.md#production-gates) pass, MLS key
+  packages are replenished when the server count falls below 25, up to a target of 75,
+  staying below the backend cap of 100. Before then, no production package is uploaded.
+- One PQ MLS last-resort KeyPackage is then maintained separately from the consumable
+  count; its use is surfaced as degraded initial-join forward secrecy and triggers
+  immediate consumable replenishment.
 - Every own device-set/identity change appends a self-signing-key-signed hash-chain record.
   Verified peer log heads are piggybacked in ordinary encrypted events for equivocation
   detection.

@@ -26,11 +26,13 @@
 
 ### Crypto-core tests
 
-- FIPS 203 ML-KEM, hybrid PQXDH/Double Ratchet, PQ MLS/OpenMLS, Argon2id, CBOR,
-  secretstream, and SFrame vectors applicable to the selected implementation.
-- Project golden vectors for canonical cross-signing/device bundles, master signatures,
-  SAS/QR values, device-log records/gossip, every event, history-transfer batches,
-  attachment headers, and protocol upgrades.
+- FIPS 203 ML-KEM, hybrid PQXDH/Double Ratchet, the finalized PQ MLS/OpenMLS profile,
+  Argon2id, CBOR, secretstream, and SFrame vectors applicable to the selected
+  implementation. Experimental PQ MLS fixtures cannot satisfy the production gate.
+- The binding backend golden vectors for `cross_sig`, `master_sig`, `spk_sig`,
+  `pq_spk_sig`, optional-field encoding, and the Ed25519/X25519 `ik_pub` layout, plus
+  project vectors for SAS/QR values, device-log records/gossip, every event,
+  history-transfer batches, attachment headers, and protocol upgrades.
 - Cross-target byte equality between Android `mlkem_native`/shared native code and the
   reviewed browser Wasm implementation.
 - Interoperability between independent devices/versions and, where available, independent
@@ -59,8 +61,10 @@ and LiveKit/coturn where applicable:
 - every documented status/error and auth scope;
 - rotating refresh and concurrent single-flight requests;
 - device registration/revocation and 4003 close;
-- explicit failure test for the current circular device-ID/cross-signing enrollment
-  contract, replaced by successful bootstrap tests once the backend is corrected;
+- first- and later-device two-phase enrollment, including rejection of registration-time
+  `cross_sig`, null/withheld intermediate state, full-scope backup retrieval, idempotent
+  resume after idempotent boundaries, ambiguous registration-response reconciliation,
+  orphan revocation/device-log updates, and successful prekey cross-signature follow-up;
 - identity versioning, ETag/device-log-head invalidation, device-log paging, and opaque
   record behavior;
 - classical/PQ prekey races, atomic signed-prekey/cross-signature rotation, consumable
@@ -87,8 +91,8 @@ Contract fixtures MUST fail when backend documentation and behavior diverge.
 
 Use at least two accounts and multiple Android/browser devices:
 
-- register, activate, first-device identity publication, cross-signing backup, and
-  recovery-secret handling after the enrollment blocker is resolved;
+- register, activate, complete first-device identity publication/two-phase
+  cross-signing/backup, and handle the recovery secret;
 - SAS/QR cross-signing, unsigned-device withholding, master-key change, device-log gossip,
   and server-equivocation fork alarm;
 - DM send offline/online, process death, ambiguous retry, delivery/read;

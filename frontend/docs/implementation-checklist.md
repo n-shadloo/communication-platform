@@ -27,10 +27,10 @@ opaque/client-owned; **Pending** = Flutter implementation not started.
 | User directory | Ready | Pending local repository/UI |
 | Encrypted profile blob | Ready opaque storage | Bootstrap fallback specified; implementation pending |
 | Cross-signing identity publish/fetch | Ready opaque transport | Pending master/self/user-signing implementation |
-| Register/list/label/revoke devices | Registration contract circular; backend blocker | Blocked pending signable client-known device ID/bootstrap |
+| Register/list/label/revoke devices | Ready; two-phase enrollment contract | Pending register → full scope → cross-sign follow-up and resumable UI |
 | Peer device lists, ETags, signed device log | Ready opaque transport | Pending verification, head gossip, fork alert |
 | Hybrid X25519 + ML-KEM prekeys | Ready public distribution | Pending reviewed PQXDH core; no classical fallback |
-| PQ MLS key packages | 4096/16384 buckets + last-resort ready | Pending reviewed PQ suite/OpenMLS integration |
+| PQ MLS key packages | 4096/16384 buckets + last-resort ready | Candidate selected; blocked on IANA ID, maintained OpenMLS/provider support, vectors, and review |
 | SAS/QR master-key verification | Client protocol | Pending; messaging withheld until verified |
 | Recovery onboarding | Identity backup API ready | Pending identity restore; no server-history restore |
 
@@ -76,7 +76,7 @@ opaque/client-owned; **Pending** = Flutter implementation not started.
 | Bounded secure cache | Not applicable | Pending |
 | Key backup blob | Ready for cross-signing identity material | Pending Argon2id/wrapping |
 | Server history | Deliberately absent | Device-to-device transfer specified; implementation pending |
-| New-device restore | Enrollment contract currently circular | Backend-blocked before identity/history flow |
+| New-device restore | Two-phase enrollment and identity backup APIs ready | Pending restore/cross-sign follow-up; history remains device-to-device |
 
 ## Voice rooms and realtime
 
@@ -97,7 +97,7 @@ opaque/client-owned; **Pending** = Flutter implementation not started.
 | Capability | Backend | Flutter |
 |---|---|---|
 | Responsive shell | Not applicable | Specified; pending implementation |
-| Forui design system | Not applicable | Visual tokens specified; wrapper components pending |
+| Forui design system and Lucide icons | Not applicable | Visual/icon tokens specified; wrappers and semantic `AppIcons` mapping pending |
 | Flyer Chat builders | Not applicable | Selected; pending technical spike |
 | 34-screen inventory | Supporting APIs/primitives ready as above | Specified; pending implementation |
 | English/Persian RTL | Not applicable | Specified; pending localization |
@@ -125,12 +125,13 @@ opaque/client-owned; **Pending** = Flutter implementation not started.
 - [ ] Android `mlkem_native` and reviewed Web Wasm ML-KEM pass identical FIPS/PQXDH
   vectors; no educational/pure-Dart ML-KEM is present.
 - [ ] Hybrid PQXDH/Double Ratchet composition is independently reviewed.
-- [ ] A PQ MLS ciphersuite, 4096/16384 KeyPackage wrappers, last-resort behavior,
-  Android/Wasm persistence, and fork handling pass interoperability tests.
-- [ ] Backend enrollment is made non-circular: the client can know the signed device ID
-  and obtain/authorize cross-signing material before `cross_sig` is required.
-- [ ] The protocol owner defines and vectors the exact `master_sig` canonical input and
-  the `ik_pub` representation of separate Ed25519 signing/X25519 identity keys.
+- [ ] The selected PQ MLS candidate receives an IANA ID and maintained
+  OpenMLS/provider support; 4096/16384 wrappers, last-resort behavior, Android/Wasm
+  persistence, and fork handling then pass interoperability tests.
+- [ ] First/later-device two-phase enrollment is crash-safe and resumable; unsigned
+  intermediate devices remain withheld until the prekey cross-signature follow-up.
+- [ ] Android and Web reproduce the backend `cross_sig`, `master_sig`, `spk_sig`, and
+  `pq_spk_sig` golden vectors, including optional fields and the 64-byte `ik_pub` layout.
 - [ ] Device-log chain verification, ETag refresh, encrypted head gossip, and fork alarms
   pass malicious-server tests.
 - [ ] LiveKit Flutter E2EE meets the SFrame/media threat-model requirement on both targets.

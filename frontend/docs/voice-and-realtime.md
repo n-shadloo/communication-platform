@@ -33,9 +33,9 @@ capability endpoint cannot enforce it. A malicious capability holder can still c
 backend rename API; clients authenticate accepted metadata updates and surface conflicts
 rather than trusting server ciphertext alone.
 
-Room MLS credentials obey the same verified account-master/device-cross-signature and PQ
-ciphersuite requirements as group chat. An unsigned, unverified, forked, or classical-
-only peer cannot receive room membership/media keys.
+Room MLS credentials obey the same verified account-master/device-cross-signature and
+[PQ MLS production gates](mls-profile.md#production-gates) as group chat. An unsigned,
+unverified, forked, or classical-only peer cannot receive room membership/media keys.
 
 Leaving is a client-protocol action, not a backend deletion. The client sends an
 authenticated `room.control` leave/removal event, commits the MLS membership change,

@@ -33,23 +33,27 @@ a production artifact accidentally.
 
 ## Login and first device
 
-Login without a known live device ID returns register scope. The binding intended order
-is: create/restore account cross-signing identity, generate X25519 + ML-KEM-768 device
-keys and PQ MLS KeyPackages, cross-sign the canonical device bundle, register the device,
-publish the identity at `PUT /api/v1/me/identity` immediately after the first
-registration, append the signed record at `POST /api/v1/me/devicelog`, then enter the
-full session.
+Login without a known live device ID returns register scope. Before registration, the
+client generates the device Ed25519/X25519 identity, classical and ML-KEM-768 prekeys,
+and—only after the [PQ MLS production gates](mls-profile.md#production-gates) pass—MLS
+KeyPackages. It calls `POST /api/v1/me/devices` without `cross_sig` or `bundle_version`;
+the `201` response supplies the assigned `device_id` and full-scope tokens.
 
-This flow is currently **blocked by the backend registration contract**. The bundle
-signature includes `device_id`, but the registration request does not accept a
-client-chosen ID and returns the server-generated ID only after registration. Later
-devices additionally cannot read `/api/v1/me/keybackup` with register scope before they
-must submit `cross_sig`. Implementation MUST wait for a non-circular backend enrollment
-contract; it must not submit a placeholder signature or register an unverifiable device.
+For the first device, the client publishes the account identity, signs the canonical
+bundle containing the assigned ID, sends `cross_sig` plus `bundle_version: 1` through
+the prekey endpoint, uploads the recovery-protected key backup, and appends the first
+device-log record. A later device registers unsigned, retrieves and unwraps the backup
+with its new full-scope token, then cross-signs itself and appends the device-log change.
+Until the cross-signature follow-up succeeds, the device remains in a resumable
+"finishing secure setup" state and sensitive messaging stays withheld. The client never
+sends a placeholder signature.
 
-A failure before server registration keeps uncommitted keys in a resumable pending state.
-A failure after a 201 but before local commit is resolved by login/device discovery; the
-client never blindly registers devices until the account cap is exhausted.
+A failure before server registration keeps uncommitted keys in a resumable pending
+state. The client persists the registration intent and generated public-key fingerprint
+before sending the request. If the registration outcome is ambiguous, it does not erase
+that state or blindly create devices until the account cap is exhausted; recovery must
+reconcile unsigned devices by the same key fingerprint after a full-scope session is
+obtained, revoke an orphan explicitly, and append the corresponding device-log changes.
 
 ## Returning device
 
@@ -92,9 +96,11 @@ Concrete low/target watermarks are configuration constants below the classical c
 material; a maintenance use case uploads it only for the current device. Signed
 classical/PQ prekeys rotate on schedule and after suspicion of compromise, atomically
 with a fresh device `cross_sig` and incremented `bundle_version`. Each device maintains
-one last-resort PQ MLS KeyPackage outside the consumable count; reuse is recorded as a
+one last-resort PQ MLS KeyPackage outside the consumable count after the
+[PQ MLS production gates](mls-profile.md#production-gates) pass; reuse is recorded as a
 forward-secrecy degradation, not treated as equivalent inventory. Failed signature or
-cross-signature verification blocks session setup.
+cross-signature verification blocks session setup. No production KeyPackage is generated
+or uploaded while those gates remain open.
 
 ## Recovery
 
