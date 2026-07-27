@@ -169,8 +169,8 @@ class MyDevicesView(APIView):
             # necessity: register-scope tokens reach exactly this endpoint, so a
             # fresh account cannot publish an identity before registering (the
             # client publishes immediately after, with the full token issued
-            # below). Like the cross_sig requirement, this is a completeness
-            # check against a mis-sequenced client, NOT a security control: a
+            # below). This is a completeness check against a mis-sequenced
+            # client, NOT a security control: a
             # modified server would simply not apply it, and peers must treat a
             # device with no verifiable identity chain as unverified regardless.
             if count and not UserIdentity.objects.filter(
@@ -183,7 +183,13 @@ class MyDevicesView(APIView):
                 user_id=request.user.id,
                 ik_pub=data["ik_raw"], spk_id=data["spk_id"], spk_pub=data["spk_raw"],
                 spk_sig=data["spk_sig_raw"], registration_id=data["registration_id"],
-                cross_sig=data["cross_sig_raw"], bundle_version=data["bundle_version"],
+                # cross_sig/bundle_version are not settable here and the serializer
+                # refuses them: the client cannot sign a bundle whose device_id this
+                # INSERT is about to mint, and a later device cannot reach its
+                # self-signing key without the token issued below. The row is born in
+                # the model-default "never cross-signed" state (null/0) that peers
+                # already refuse, and the client cross-signs via the prekeys endpoint
+                # as its next call (CLIENT_CONTRACT.md §M).
                 pq_spk_id=pq_spk["spk_id"] if pq_spk else None,
                 pq_spk_pub=pq_spk["pub_raw"] if pq_spk else None,
                 pq_spk_sig=pq_spk["sig_raw"] if pq_spk else None,

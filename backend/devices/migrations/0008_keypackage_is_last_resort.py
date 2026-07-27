@@ -9,7 +9,16 @@ class Migration(migrations.Migration):
     before cross-signing landed keep cross_sig = NULL: nothing is backfilled or
     auto-generated — the server holds no key that could sign anything, and a
     fabricated signature would be worse than none. Such devices are surfaced to
-    peers as unverified (cross_sig: null) until the client re-enrolls them."""
+    peers as unverified (cross_sig: null) until the client re-enrolls them.
+
+    **Superseded 2026-07-27 — do not infer current behaviour from the first
+    sentence.** Registration now *refuses* cross_sig and bundle_version: the
+    canonical bundle covers device_id, which registration itself assigns, so no
+    valid signature can exist before the response. Every device is therefore born
+    with cross_sig = NULL and cross-signs itself via
+    `PUT /me/devices/{id}/prekeys`. A NULL cross_sig no longer implies a
+    pre-cross-signing row. The rest of this note still holds, and is the part that
+    matters here: nothing is ever backfilled or synthesized."""
 
     dependencies = [
         ('devices', '0007_device_queue_pruned_through'),

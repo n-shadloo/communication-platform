@@ -33,6 +33,21 @@ MAX_KEYPACKAGE_CHARS = 4 * ((max(KEYPACKAGE_BUCKETS) + 2) // 3) + 8
 # input the serializer was supposed to be filtering.
 MAX_KEY_INT = 2147483647
 
+# Registration accepts neither, because no valid value exists for either: the canonical
+# device bundle covers `device_id`, and registration is what assigns it. Anything a
+# client could put here would be a signature over bytes describing a different device,
+# and storing one is worse than storing null — peers read null as "never cross-signed,
+# withhold messages", but a cross_sig that later changes to the real one looks like a
+# cross-signature change, which CLIENT_CONTRACT.md §D/§E requires them to treat as a
+# safety-number event and block the conversation over. So the impossible state is made
+# unrepresentable rather than merely optional.
+PREMATURE_BUNDLE_FIELDS = {"cross_sig", "bundle_version"}
+PREMATURE_BUNDLE_DETAIL = (
+    "Not accepted at registration: the canonical device bundle covers device_id, which "
+    "this request assigns, so no signature computed before the response can be valid. "
+    "Send cross_sig and bundle_version to PUT /me/devices/{device_id}/prekeys once you "
+    "have the device_id.")
+
 MAX_OTPKS = 200
 MAX_PQ_OTPKS = 100
 MAX_KEYPACKAGES = 100
@@ -159,12 +174,8 @@ class RegisterDeviceSerializer(StrictSerializer):
     spk_pub = serializers.CharField(max_length=MAX_PUBKEY_CHARS, trim_whitespace=False)
     spk_sig = serializers.CharField(max_length=MAX_PUBKEY_CHARS, trim_whitespace=False)
     registration_id = serializers.IntegerField(min_value=0, max_value=MAX_KEY_INT)
-    # Required as a completeness check: a device registered without its
-    # cross-signature could only be a client bug, and would sit unverifiable in
-    # every peer's list. NOT a security control — a modified server would simply
-    # not require it, and peers must reject unsigned devices on their own.
-    cross_sig = serializers.CharField(max_length=MAX_SIG_CHARS, trim_whitespace=False)
-    bundle_version = serializers.IntegerField(min_value=0, max_value=MAX_KEY_INT)
+    # cross_sig and bundle_version are deliberately absent — see PREMATURE_BUNDLE_FIELDS
+    # and to_internal_value below.
     pq_spk = PqSignedPrekeySerializer(required=False)
     pq_otpks = serializers.ListField(child=PqOtpkSerializer(),
                                      max_length=MAX_PQ_OTPKS, allow_empty=True,
@@ -178,11 +189,25 @@ class RegisterDeviceSerializer(StrictSerializer):
                                     trim_whitespace=False),
         max_length=MAX_KEYPACKAGES, allow_empty=True)
 
+    def to_internal_value(self, data):
+        """Reject the cross-signature fields with an answer, not just a refusal.
+
+        StrictSerializer would already reject them as unknown, but "Unexpected
+        field." on an endpoint that required `cross_sig` until recently reads like a
+        version mismatch and sends the reader hunting. Naming the reason and the
+        right endpoint costs eight lines and saves that.
+        """
+        if isinstance(data, dict):
+            premature = sorted(PREMATURE_BUNDLE_FIELDS & set(data))
+            if premature:
+                raise serializers.ValidationError(
+                    {name: PREMATURE_BUNDLE_DETAIL for name in premature})
+        return super().to_internal_value(data)
+
     def validate(self, data):
         data["ik_raw"] = _b64_pubkey(data["ik_pub"], "ik_pub")
         data["spk_raw"] = _b64_pubkey(data["spk_pub"], "spk_pub")
         data["spk_sig_raw"] = _b64_pubkey(data["spk_sig"], "spk_sig")
-        data["cross_sig_raw"] = _b64_ed25519_sig(data["cross_sig"], "cross_sig")
         if data.get("label_blob"):
             data["label_raw"] = decode_blob_or_400(data["label_blob"], LABEL_BUCKETS)
         else:
@@ -213,6 +238,15 @@ class PrekeyReplenishSerializer(StrictSerializer):
                                   allow_empty=True, required=False, default=list)
 
     def validate(self, data):
+        # Same pairing guard as registration, and load-bearing here for the same
+        # reason: this endpoint is where a device's first cross_sig arrives, since
+        # registration cannot carry one. A signature stored against bundle_version
+        # 0 is one peers must reject, so half a pair is caught as malformed input
+        # rather than persisted. Not a security control — the server still never
+        # checks that the signature matches the bundle, only peers can.
+        if ("cross_sig" in data) != ("bundle_version" in data):
+            raise serializers.ValidationError(
+                {"cross_sig": "cross_sig and bundle_version must be sent together"})
         if "cross_sig" in data:
             data["cross_sig_raw"] = _b64_ed25519_sig(data["cross_sig"], "cross_sig")
         _reject_duplicate_key_ids(data["otpks"])

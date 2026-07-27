@@ -90,12 +90,14 @@ def _scripted_rest_traffic():
     assert r.status_code == 200, f"login: {r.status_code}"
     s["register-scope access token"] = r.json()["access"]
 
-    s["cross signature"] = _b64_filled(64, 0x78)
+    # No cross_sig here: the bundle it signs covers the device_id this call assigns,
+    # so registration refuses the field. It goes to the prekeys endpoint below, which
+    # is where a real client cross-signs — and where this audit must therefore prove
+    # a cross signature never reaches a log line.
     r = api.post(
         "/api/v1/me/devices",
-        {"ik_pub": _b64_filled(32, 0x69), "spk_id": 1, "spk_pub": _b64_filled(32, 0x73),
+        {"ik_pub": _b64_filled(64, 0x69), "spk_id": 1, "spk_pub": _b64_filled(32, 0x73),
          "spk_sig": _b64_filled(32, 0x67), "registration_id": 4242,
-         "cross_sig": s["cross signature"], "bundle_version": 1,
          "otpks": [{"key_id": 1, "pub": _b64_filled(32, 0x6F)}],
          "keypackages": [_b64_filled(min(KEYPACKAGE_BUCKETS), 0x6B)]},
         format="json",
@@ -106,6 +108,13 @@ def _scripted_rest_traffic():
     s["access token"] = body["access"]
     s["refresh token"] = body["refresh"]
     auth = {"HTTP_AUTHORIZATION": f"Bearer {s['access token']}"}
+
+    # Cross-sign the device now that its device_id is known (CLIENT_CONTRACT.md §M).
+    s["cross signature"] = _b64_filled(64, 0x78)
+    r = api.put(f"/api/v1/me/devices/{s['device id']}/prekeys",
+                {"cross_sig": s["cross signature"], "bundle_version": 1},
+                format="json", **auth)
+    assert r.status_code == 200, f"cross-sign: {r.status_code}"
 
     # Publish the cross-signing identity and append a device-log record: both new
     # surfaces carry key material and must stay as silent as the rest.

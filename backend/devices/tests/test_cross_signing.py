@@ -143,8 +143,8 @@ def test_an_unsigned_device_stays_visibly_unsigned_everywhere(api, active_user, 
                                                               auth_headers, peer,
                                                               peer_device):
     """Server-side half of "forged enrollment rejected": a device with no cross_sig
-    (registration now requires one, so only a device from before the tightening
-    can be unsigned — created here directly, as the migration left them) must
+    (the state every device is in between registering and its follow-up
+    cross-signing call, and the state a pre-cross-signing row was left in) must
     appear with cross_sig null in the list and the claim, and the DB column must
     be null — no code path may substitute, default, or synthesize a signature.
     The other half — a peer refusing to encrypt to an unsigned device — is client
@@ -186,20 +186,6 @@ def test_a_substituted_master_key_is_served_verbatim_not_smoothed_over(
     assert body["version"] == 2
 
 
-def test_registration_stores_the_cross_sig_and_bundle_version(api, active_user, device,
-                                                              auth_headers):
-    from .conftest import publish_identity
-    publish_identity(active_user)
-    payload = register_payload(cross_sig=b64sig(b"r"), bundle_version=5)
-
-    response = api.post(DEVICES_URL, payload, format="json",
-                        **auth_headers(active_user, device))
-
-    stored = Device.objects.get(id=response.json()["device_id"])
-    assert bytes(stored.cross_sig) == b"r" * 64
-    assert stored.bundle_version == 5
-
-
 def test_a_prekey_replenish_can_refresh_the_cross_signature(api, active_user, device,
                                                             auth_headers):
     from .conftest import pubkey
@@ -216,9 +202,60 @@ def test_a_prekey_replenish_can_refresh_the_cross_signature(api, active_user, de
     assert device.bundle_version == 2
 
 
-def test_a_malformed_cross_sig_at_registration_is_rejected(api, active_user, device,
-                                                           auth_headers):
-    response = api.post(DEVICES_URL, register_payload(cross_sig="AAAA"),
-                        format="json", **auth_headers(active_user, device))
+def test_a_malformed_cross_sig_at_a_replenish_is_rejected(api, active_user, device,
+                                                          auth_headers):
+    """Length is checked where a cross_sig is actually accepted. Malformed-input
+    guard only — the bytes themselves are never verified."""
+    response = api.put(f"{DEVICES_URL}/{device.id}/prekeys",
+                       {"cross_sig": "AAAA", "bundle_version": 1}, format="json",
+                       **auth_headers(active_user, device))
 
     assert response.status_code == 400
+    device.refresh_from_db()
+    assert device.cross_sig is None
+
+
+@pytest.mark.parametrize("field", ["cross_sig", "bundle_version"])
+def test_a_replenish_with_half_the_cross_signing_pair_is_rejected(
+        api, active_user, device, auth_headers, field):
+    """The prekeys endpoint is where a device's first cross_sig arrives, so the
+    same malformed-input guard applies: a signature stored against bundle_version
+    0 is one peers must reject."""
+    body = {"cross_sig": b64sig(b"f"), "bundle_version": 2}
+    del body[field]
+
+    response = api.put(f"{DEVICES_URL}/{device.id}/prekeys", body, format="json",
+                       **auth_headers(active_user, device))
+
+    assert response.status_code == 400
+    device.refresh_from_db()
+    assert device.cross_sig is None
+    assert device.bundle_version == 0
+
+
+def test_enrollment_can_cross_sign_the_device_id_the_server_assigned(api, active_user):
+    """The whole enrollment order, end to end, with no step the client cannot
+    execute. `cross_sig` covers `device_id`, and only the 201 reveals it, so the
+    first call goes out unsigned; the full-scope token it returns is what lets the
+    device fetch its key backup for the self-signing key and then cross-sign the
+    id it now knows. Before this, both halves of that dependency were required
+    up front and the only way through was uploading signature-shaped garbage."""
+    from accounts.tokens import issue_register_scope
+
+    first = api.post(DEVICES_URL, register_payload(), format="json",
+                     **{"HTTP_AUTHORIZATION":
+                        f"Bearer {issue_register_scope(active_user)}"})
+    assert first.status_code == 201
+    device_id = first.json()["device_id"]
+    full = {"HTTP_AUTHORIZATION": f"Bearer {first.json()['access']}"}
+
+    # Signing happens here, over the assigned device_id — the client is not
+    # guessing, and the server never sees the private half.
+    signed = api.put(f"{DEVICES_URL}/{device_id}/prekeys",
+                     {"cross_sig": b64sig(b"z"), "bundle_version": 1},
+                     format="json", **full)
+
+    assert signed.status_code == 200
+    stored = Device.objects.get(id=device_id)
+    assert bytes(stored.cross_sig) == b"z" * 64
+    assert stored.bundle_version == 1
