@@ -24,6 +24,21 @@ LiveKit device testing; lowering it may not weaken required security controls si
   app-switcher content.
 - Clear clipboard recovery data after a short interval when platform behavior permits.
 
+### Piece-05 storage baseline
+
+The pinned `sqlite3` 3.5.0 build hook selects its SQLCipher community build. Drift opens
+the database only after a 32-byte random database key has been authenticated and
+unwrapped by an Android Keystore AES-256-GCM key. The Keystore adapter prefers StrongBox
+on API 28+ and retries with the ordinary Android Keystore provider when StrongBox is not
+available. Wrapped key material lives in `noBackupFilesDir`; application backup is
+disabled. Logout, self-revocation, remote revocation, wrapping-key loss, and wrapping
+envelope authentication failure close database handles, destroy the Keystore alias,
+and then remove database/cache artifacts.
+
+This baseline was verified on 2026-07-27 against the Android Keystore documentation and
+the `sqlite3` 3.5.0 build-hook documentation. Hardware-backed behavior still requires
+the physical-device matrix; no hardware guarantee is inferred from compilation alone.
+
 ## Network trust
 
 Production accepts only the provisioned origin and private CA. Native network security
@@ -91,6 +106,8 @@ of TLS. A store channel may be added later but cannot become a runtime dependenc
 ## Primary references
 
 - [Android Keystore](https://developer.android.com/privacy-and-security/keystore)
+- [`sqlite3` 3.5.0 build-hook options](https://pub.dev/documentation/sqlite3/3.5.0/topics/hook-topic.html)
+- [SQLCipher keying order](https://github.com/sqlcipher/sqlcipher#encrypting-a-database)
 - [Android background work](https://developer.android.com/develop/background-work)
 - [Foreground service types](https://developer.android.com/develop/background-work/services/fgs/service-types)
 - [Foreground-service timeouts](https://developer.android.com/develop/background-work/services/fgs/timeout)

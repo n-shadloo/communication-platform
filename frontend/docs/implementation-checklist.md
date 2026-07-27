@@ -2,7 +2,9 @@
 
 This is the live delivery checklist. Backend checkmarks mean an API/capability exists and
 is documented, not that the Flutter integration exists. Flutter documentation is now
-specified; Flutter source implementation has not yet been scaffolded.
+specified; pieces 01–05 now provide the Android/Web foundation, architecture skeleton,
+app-owned design system, responsive routed shell, guarded bootstrap, and secure local
+storage foundation. Later capabilities remain pending.
 
 Legend: **Ready** = implemented backend contract; **Client protocol** = intentionally
 opaque/client-owned; **Pending** = Flutter implementation not started.
@@ -11,11 +13,11 @@ opaque/client-owned; **Pending** = Flutter implementation not started.
 
 | Capability | Backend | Flutter |
 |---|---|---|
-| Health/reachability | Ready: `/api/v1/health` | Pending |
-| Private CA/TLS deployment | Ready | Pending trust/pinning adapters |
-| Android/Web project | Not applicable | Pending scaffold |
-| Architecture and protocol docs | Backend docs ready | Client behavior specified; normative fixtures/security gates pending |
-| CI/reproducible offline builds | Backend ready | Pending |
+| Health/reachability | Ready: `/api/v1/health` | Piece 04 typed single-origin port/state machine complete with deterministic fakes; reviewed pinned transport adapter remains piece 06 |
+| Private CA/TLS deployment | Ready | Piece 04 Android network-security template, CA/primary+backup-pin interfaces, Web external-trust gate, and blocking failures complete; provisioned-device staging integration remains pending |
+| Android/Web project | Not applicable | Piece 01 scaffold complete; development/production Android flavors and Web entry points compile |
+| Architecture and protocol docs | Backend docs ready | Piece 02 feature-first Clean Architecture skeleton compiled with sealed typed failures, scoped Riverpod composition, and source-layout/inward-dependency tests; normative fixtures/security gates pending |
+| CI/reproducible offline builds | Backend ready | Local CI commands, SDK pin, and lockfile ready; isolated offline-cache rehearsal pending |
 | Redacted diagnostics | Backend ready | Pending local-only export |
 
 ## Accounts and devices
@@ -96,22 +98,22 @@ opaque/client-owned; **Pending** = Flutter implementation not started.
 
 | Capability | Backend | Flutter |
 |---|---|---|
-| Responsive shell | Not applicable | Specified; pending implementation |
-| Forui design system and Lucide icons | Not applicable | Visual/icon tokens specified; wrappers and semantic `AppIcons` mapping pending |
+| Responsive shell | Not applicable | Pieces 03â€“04 adaptive `go_router` shell plus guarded Splash/Connection bootstrap routing complete; stable branch identity, deep-link placeholders, guard hooks, keyboard navigation, focus restoration, reduced motion, resize preservation, accessible Retry, and Android-only offline entry are tested |
+| Forui design system and Lucide icons | Not applicable | Piece 03 app-owned semantic tokens and Forui wrappers complete; bundled Lucide is isolated behind typed `AppIcons`, with package-boundary, semantics, target-size, disabled, focus, and RTL-mirroring tests |
 | Flyer Chat builders | Not applicable | Selected; pending technical spike |
 | 34-screen inventory | Supporting APIs/primitives ready as above | Specified; pending implementation |
-| English/Persian RTL | Not applicable | Specified; pending localization |
-| Accessibility/high contrast | Not applicable | Specified; pending verification |
+| English/Persian RTL | Not applicable | Piece 03 LTR/RTL foundations complete with pinned local Vazirmatn, localized shell chrome, directional-icon policy, and narrow/medium golden coverage; feature-screen verification remains pending |
+| Accessibility/high contrast | Not applicable | Piece 03 shell/component semantics, keyboard focus, 48 px icon targets, 200% text-scale layout, reduced motion, dark mode, and authored high-contrast token mapping verified; full feature-flow audit remains pending |
 
 ## Platform delivery
 
 | Capability | Backend | Flutter |
 |---|---|---|
-| Android encrypted database/Keystore | Not applicable | Pending |
+| Android encrypted database/Keystore | Not applicable | Piece 05 versioned Drift schema, SQLCipher database, Keystore AES-GCM wrapping with StrongBox/TEE preference, transactional repositories, bounded cleanup, and cryptographic wipe flows complete; physical-device process-death/Keystore matrix remains a release gate |
 | Android normal resume/drain | Durable queue supports it | Pending |
 | Android background polling | Seven-day durable queue supports it | Pending WorkManager polling/gap handling |
 | Android local notifications | No foreign push by design | Pending |
-| Web persistent encrypted device | Device API supports it | Pending WebCrypto/IndexedDB |
+| Web persistent encrypted device | Device API supports it | Piece 05 ciphertext-only Drift persistence, non-extractable WebCrypto wrapping key in IndexedDB, authenticated wrapped storage key, unsafe-storage rejection, memory clearing hooks, and key-loss/tamper wipe complete; supported-browser persistence matrix remains a release gate |
 | Web open-tab realtime | WebSocket auth supports it | Pending |
 | Closed-browser notification | Not supported without push by design | Explicitly out of scope |
 | Direct signed APK distribution | Self-hosted operation supports it | Pending release pipeline |
@@ -135,7 +137,10 @@ opaque/client-owned; **Pending** = Flutter implementation not started.
 - [ ] Device-log chain verification, ETag refresh, encrypted head gossip, and fork alarms
   pass malicious-server tests.
 - [ ] LiveKit Flutter E2EE meets the SFrame/media threat-model requirement on both targets.
-- [ ] Drift encrypted Android and ciphertext-only web storage/migrations work.
+- [x] Piece 05 Drift foundation: SQLCipher Android plus ciphertext-only Web schema,
+  transactional migrations/repositories, constraints, reactive Riverpod projections,
+  restart/privacy checks, and key-loss/tamper/logout/revocation wipe tests pass. The
+  physical-device and supported-browser release matrix remains tracked below.
 - [ ] Flyer builders pass long-history, scroll, RTL, accessibility, and media tests.
 - [ ] Android WorkManager polling is tested under Doze/standby/force-stop; only active
   voice uses a foreground service.

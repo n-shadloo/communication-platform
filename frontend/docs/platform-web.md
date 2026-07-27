@@ -38,6 +38,23 @@ does not apply to browser networking APIs.
   history only from an existing online device. It registers fresh device/PQ keys through
   the two-phase enrollment flow before any history transfer or sensitive messaging.
 
+### Piece-05 storage baseline
+
+The Web adapter generates an AES-256-GCM wrapping key with `extractable: false` and
+structured-clones its `CryptoKey` handle into IndexedDB. It wraps a random storage key
+with fixed versioned associated data and treats a missing key/record pair or failed GCM
+authentication as a destructive local-device loss. Drift persists only ciphertext,
+opaque handles, identifiers, and non-content state; decrypted messages, search tokens,
+filenames, profiles, and room/group metadata have no durable columns. In-memory and
+unsafe multi-tab IndexedDB Drift fallbacks are rejected for persistent device ownership.
+
+The local Drift 2.34.2 worker and Wasm assets are bundled with the application rather
+than loaded at runtime. Their SHA-256 values are respectively
+`167e8b95fdfa54041cc2d061bea283677b7f66d5669493bc9af4c9ea33440e5d` and
+`41cf968998241465d8b1dfffb1eb60dd10c35de5022a3647e14174ea3af84143`.
+This baseline was verified on 2026-07-27 against WebCrypto and Drift 2.34.2 documentation;
+the supported-browser structured-clone/persistence matrix remains a release gate.
+
 Non-extractable means browser APIs refuse export; trusted page code can still ask the key
 to decrypt. It is not a defense against malicious same-origin JavaScript.
 
@@ -105,6 +122,7 @@ forbidden.
 ## Primary references
 
 - [Web Cryptography API](https://www.w3.org/TR/WebCryptoAPI/)
+- [Drift Web storage behavior](https://drift.simonbinder.eu/platforms/web/)
 - [MDN offline and background operation](https://developer.mozilla.org/en-US/docs/Web/Progressive_web_apps/Guides/Offline_and_background_operation)
 - [MDN Background Synchronization availability](https://developer.mozilla.org/en-US/docs/Web/API/Background_Synchronization_API)
 - [MDN strict CSP guidance](https://developer.mozilla.org/en-US/docs/Web/Security/Practical_implementation_guides/CSP)

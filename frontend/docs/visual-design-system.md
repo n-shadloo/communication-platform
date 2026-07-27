@@ -41,8 +41,15 @@ privacy mode requires obscuring it.
 ## Typography
 
 - Bundle one reviewed, redistributable variable sans family with complete Persian and
-  Latin coverage; `Vazirmatn` is the initial candidate and its exact artifact/hash is
-  pinned during scaffolding after license and glyph review.
+  Latin coverage. Piece 03 pins the official Vazirmatn `v33.003` variable TTF at
+  `assets/fonts/vazirmatn/Vazirmatn-Variable.ttf` (SHA-256
+  `696249a2c74b39ffdef55de4df2809c5b639d3ff80d618d8160a095d2fd49dca`) with its local
+  SIL Open Font License 1.1 copy (SHA-256
+  `17e355067c8284f47743a1ee3b1ef7ff684ff0601eda357f9353b10b3016ab31`). The artifact,
+  Latin/Persian coverage, and license were verified from the
+  [official repository](https://github.com/rastikerdar/vazirmatn/tree/v33.003) on
+  2026-07-27. It is bundled into Android/Web artifacts; the app makes no font request at
+  runtime.
 - Type scale: display 32/40, title 24/32, section 20/28, body 16/24, compact 14/20,
   label 12/16. Values are font size/line height in logical pixels at scale 1.0.
 - Body and message content use regular weight; actions use medium; unread/title emphasis

@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Fail-closed source-tree baseline. A controlled provisioned Android build replaces
+  this resource with the generated form documented in android/provisioning/README.md.
+  No flavor trusts user-added certificates from this shared resource, and cleartext is
+  always disabled.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>
