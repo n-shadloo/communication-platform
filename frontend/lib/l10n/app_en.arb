@@ -1,0 +1,19 @@
+{
+  "@@locale": "en",
+  "appTitle": "Communication Platform",
+  "@appTitle": {
+    "description": "The provisional product name used until final branding is approved."
+  },
+  "developmentAppTitle": "Communication Platform (Development)",
+  "@developmentAppTitle": {
+    "description": "The application title for visibly non-production builds."
+  },
+  "developmentConfiguration": "Development configuration",
+  "@developmentConfiguration": {
+    "description": "A persistent warning that the running app is not production."
+  },
+  "foundationReady": "Flutter foundation is ready",
+  "@foundationReady": {
+    "description": "Bootstrap text shown before product screens are implemented."
+  }
+}

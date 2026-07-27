@@ -1,0 +1,68 @@
+# Communication Platform frontend
+
+Minimal Flutter foundation for the Android and Web client. The product name and all
+brand assets remain provisional; no product screens or service integrations are part of
+piece 01.
+
+## Toolchain
+
+- Flutter `3.44.7` (also recorded in `.fvmrc`)
+- Dart `3.12.2`
+- Android and Web targets only
+
+Run dependency resolution from this directory:
+
+```sh
+flutter pub get --enforce-lockfile
+```
+
+The repository `pubspec.lock` is authoritative. Release and isolated build environments
+must provide Flutter, Pub, Gradle, and Android artifacts from an approved local cache or
+mirror; the application has no foreign runtime dependency.
+
+## Environments and identifiers
+
+The Android namespace and application IDs deliberately use the reserved `com.example`
+placeholder until final branding is approved:
+
+| Environment | Dart entry point | Android application ID |
+|---|---|---|
+| Development | `lib/main_development.dart` | `com.example.communication_platform.development` |
+| Production | `lib/main_production.dart` | `com.example.communication_platform` |
+
+Plain `flutter run` uses `lib/main.dart`, which delegates to development and always
+shows a visible non-production label. Production builds must select the production
+entry point explicitly.
+
+```sh
+flutter run --flavor development --target lib/main_development.dart
+flutter build apk --release --flavor production --target lib/main_production.dart
+flutter build web --release --target lib/main_production.dart
+```
+
+Android release signing is intentionally absent until the reviewed release piece.
+
+## Generation and verification
+
+Localization and builder output are deterministic under the pinned SDK, constraints,
+and lockfile. Run the repository generator command after editing ARB or annotated files:
+
+```powershell
+./tool/generate.ps1
+```
+
+```sh
+sh ./tool/generate.sh
+```
+
+The local CI commands run locked dependency resolution, generation with a clean-diff
+check, strict Flutter analysis, widget/unit tests, a development Android build,
+production Android compilation, and a production Web build:
+
+```powershell
+./tool/ci.ps1
+```
+
+```sh
+sh ./tool/ci.sh
+```

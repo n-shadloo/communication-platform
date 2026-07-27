@@ -2,7 +2,8 @@
 
 This is the live delivery checklist. Backend checkmarks mean an API/capability exists and
 is documented, not that the Flutter integration exists. Flutter documentation is now
-specified; Flutter source implementation has not yet been scaffolded.
+specified; the piece-01 Android/Web foundation is scaffolded and later capabilities
+remain pending.
 
 Legend: **Ready** = implemented backend contract; **Client protocol** = intentionally
 opaque/client-owned; **Pending** = Flutter implementation not started.
@@ -13,9 +14,9 @@ opaque/client-owned; **Pending** = Flutter implementation not started.
 |---|---|---|
 | Health/reachability | Ready: `/api/v1/health` | Pending |
 | Private CA/TLS deployment | Ready | Pending trust/pinning adapters |
-| Android/Web project | Not applicable | Pending scaffold |
+| Android/Web project | Not applicable | Piece 01 scaffold complete; development/production Android flavors and Web entry points compile |
 | Architecture and protocol docs | Backend docs ready | Client behavior specified; normative fixtures/security gates pending |
-| CI/reproducible offline builds | Backend ready | Pending |
+| CI/reproducible offline builds | Backend ready | Local CI commands, SDK pin, and lockfile ready; isolated offline-cache rehearsal pending |
 | Redacted diagnostics | Backend ready | Pending local-only export |
 
 ## Accounts and devices
@@ -100,7 +101,7 @@ opaque/client-owned; **Pending** = Flutter implementation not started.
 | Forui design system and Lucide icons | Not applicable | Visual/icon tokens specified; wrappers and semantic `AppIcons` mapping pending |
 | Flyer Chat builders | Not applicable | Selected; pending technical spike |
 | 34-screen inventory | Supporting APIs/primitives ready as above | Specified; pending implementation |
-| English/Persian RTL | Not applicable | Specified; pending localization |
+| English/Persian RTL | Not applicable | Localization plumbing and bootstrap RTL smoke test ready; product UI/golden verification pending |
 | Accessibility/high contrast | Not applicable | Specified; pending verification |
 
 ## Platform delivery
