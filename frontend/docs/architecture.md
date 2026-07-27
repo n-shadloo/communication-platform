@@ -63,6 +63,59 @@ system.
 Features own their use cases and presentation. Shared domain concepts live in narrowly
 scoped core packages. A generic `utils` dumping ground is prohibited.
 
+## Source layout and composition
+
+The package must make product capabilities visible first and keep Clean Architecture
+layers inside each capability:
+
+```text
+lib/
+  app/                         root widget, bootstrap, config, routing, DI composition
+  core/                        framework-free cross-feature policy contracts only
+    application/              command, event, use-case, and port conventions
+    domain/                   shared entity/value-object primitives
+    protocol/                 framework-free protocol values and validation
+    result/                   sealed result and safe failure classifications
+  features/
+    <feature>/
+      domain/                 feature-owned entities, values, and rules
+      application/
+        use_cases/             commands/queries coordinating domain behavior
+        ports/                 repository/gateway interfaces required by use cases
+      infrastructure/         local, remote, crypto, and platform port adapters
+      presentation/           Riverpod controllers, immutable state, and widgets
+  shared/
+    infrastructure/           only cross-feature technical adapters
+    presentation/             app-owned reusable presentation primitives
+  l10n/                       Flutter localization input/generated support files
+  main*.dart                  environment entry points
+```
+
+Folders are created only when a numbered piece adds real code. `core` must not collect
+feature business concepts, and `shared` must not become a generic dumping ground.
+Feature-owned repository interfaces live in that feature's `application/ports`; their
+Drift/Dio/platform implementations live in the same feature's `infrastructure` layer.
+A feature cannot import another feature's infrastructure.
+
+`lib/app/dependencies` is the Riverpod composition root and is the only place allowed
+to select concrete adapters. Provider declarations are immutable descriptors;
+ProviderScope owns instances and test overrides. The app root may import features and
+infrastructure to compose them, but dependencies inside a feature point toward its
+application and domain layers.
+
+The offline-first path keeps a repository adapter as the single mutation boundary:
+remote input and user commands are validated, applied to the local source of truth, and
+then observed as immutable projections. Typed application events describe completed
+facts; durable events are committed before projections publish them. Riverpod manages
+lifecycle and observation but never owns the durable record.
+
+Expected failures use the sealed `Result`/`Failure` model. Failures carry only stable
+categories and reviewed reason codes, never raw backend messages or exception text.
+Presentation maps those codes to localized copy. A source-boundary test guards core and
+feature policy imports against Flutter, Dio, Drift, Forui, Flyer Chat, platform plugins,
+and every other outer package. A source-layout test requires the four top-level
+architecture boundaries and the recognized layer names inside every feature.
+
 ## State management
 
 - Riverpod provides dependency injection, lifecycle, commands, and projections of Drift
@@ -108,5 +161,9 @@ No platform-specific conditional is allowed inside domain or protocol logic.
 
 ## Source references
 
+- [Flutter architecture guide](https://docs.flutter.dev/app-architecture/guide)
+- [Flutter architecture case-study package structure](https://docs.flutter.dev/app-architecture/case-study)
 - [Flutter offline-first guidance](https://docs.flutter.dev/app-architecture/design-patterns/offline-first)
+- [Clean Architecture dependency rule](https://blog.cleancoder.com/uncle-bob/2012/08/13/the-clean-architecture.html)
+- [Riverpod ProviderScope/ProviderContainer](https://riverpod.dev/docs/concepts2/containers)
 - [Flyer Chat customization](https://flyer.chat/docs/flutter/getting-started/customisation/)

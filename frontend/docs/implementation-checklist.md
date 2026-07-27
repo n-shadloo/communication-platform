@@ -15,7 +15,7 @@ opaque/client-owned; **Pending** = Flutter implementation not started.
 | Health/reachability | Ready: `/api/v1/health` | Pending |
 | Private CA/TLS deployment | Ready | Pending trust/pinning adapters |
 | Android/Web project | Not applicable | Piece 01 scaffold complete; development/production Android flavors and Web entry points compile |
-| Architecture and protocol docs | Backend docs ready | Client behavior specified; normative fixtures/security gates pending |
+| Architecture and protocol docs | Backend docs ready | Piece 02 feature-first Clean Architecture skeleton compiled with sealed typed failures, scoped Riverpod composition, and source-layout/inward-dependency tests; normative fixtures/security gates pending |
 | CI/reproducible offline builds | Backend ready | Local CI commands, SDK pin, and lockfile ready; isolated offline-cache rehearsal pending |
 | Redacted diagnostics | Backend ready | Pending local-only export |
 

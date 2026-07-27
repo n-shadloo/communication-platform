@@ -9,7 +9,24 @@ Each prompt assumes Codex is opened at the repository root and automatically rea
 interface or placeholder alone is not completion. If earlier work changed an assumption,
 Codex must reconcile the frontend documentation before proceeding.
 
+Every prompt inherits the external-source policy in `frontend/AGENTS.md`. When the
+repository does not contain a required detail, Codex must consult the relevant current
+official primary source, preserve the documented authority order, record evidence for
+time-sensitive decisions, and stop rather than guess when authoritative information is
+unavailable or contradictory.
+
+## Codex model selection
+
+These recommendations were verified against OpenAI's model guidance on 2026-07-27.
+They balance implementation quality with token usage: use GPT-5.6 Terra for bounded
+foundation or fixture work and GPT-5.6 Sol for security-sensitive, architectural,
+cross-platform, and visual-product work. If `XHigh` is unavailable, use `High`; if
+`Max` is unavailable, use `XHigh`. Recheck current official guidance if the available
+Codex model names change before a later piece begins.
+
 ## Prompt 01 — Flutter project foundation
+
+**Recommended Codex configuration:** GPT-5.6 Terra · Medium reasoning
 
 ~~~text
 Implement frontend piece 01: Flutter project foundation.
@@ -43,6 +60,8 @@ Report commands and results, and stop after piece 01. Do not commit unless asked
 
 ## Prompt 02 — Architecture skeleton
 
+**Recommended Codex configuration:** GPT-5.6 Terra · High reasoning
+
 ~~~text
 Implement frontend piece 02: application architecture skeleton.
 
@@ -72,6 +91,8 @@ after piece 02.
 ~~~
 
 ## Prompt 03 — Design system and responsive shell
+
+**Recommended Codex configuration:** GPT-5.6 Sol · High reasoning
 
 ~~~text
 Implement frontend piece 03: design system and responsive application shell.
@@ -107,6 +128,8 @@ piece 03.
 
 ## Prompt 04 — Secure configuration and bootstrap
 
+**Recommended Codex configuration:** GPT-5.6 Sol · High reasoning
+
 ~~~text
 Implement frontend piece 04: secure configuration and platform bootstrap.
 
@@ -135,6 +158,8 @@ and tests pass; no backend changes. Stop after piece 04.
 ~~~
 
 ## Prompt 05 — Local storage foundation
+
+**Recommended Codex configuration:** GPT-5.6 Sol · High reasoning
 
 ~~~text
 Implement frontend piece 05: secure local storage foundation.
@@ -165,6 +190,8 @@ changes. Update the checklist and stop after piece 05.
 
 ## Prompt 06 — Networking foundation
 
+**Recommended Codex configuration:** GPT-5.6 Sol · High reasoning
+
 ~~~text
 Implement frontend piece 06: networking and backend-contract foundation.
 
@@ -193,6 +220,8 @@ piece 06.
 ~~~
 
 ## Prompt 07 — Shared cryptographic core foundation
+
+**Recommended Codex configuration:** GPT-5.6 Sol · Max reasoning
 
 ~~~text
 Implement frontend piece 07: shared Rust cryptographic core foundation.
@@ -225,6 +254,8 @@ piece 07.
 
 ## Prompt 08 — Backend cryptographic vectors
 
+**Recommended Codex configuration:** GPT-5.6 Terra · High reasoning
+
 ~~~text
 Implement frontend piece 08: backend cryptographic encodings and golden vectors.
 
@@ -253,6 +284,8 @@ and stop after piece 08.
 ~~~
 
 ## Prompt 09 — Registration and authentication
+
+**Recommended Codex configuration:** GPT-5.6 Sol · High reasoning
 
 ~~~text
 Implement frontend piece 09: account registration and authentication.
@@ -283,6 +316,8 @@ no backend changes. Update the checklist and stop after piece 09.
 ~~~
 
 ## Prompt 10 — Two-phase secure device enrollment
+
+**Recommended Codex configuration:** GPT-5.6 Sol · Max reasoning
 
 ~~~text
 Implement frontend piece 10: two-phase secure device enrollment and identity recovery.
@@ -318,6 +353,8 @@ tests/analyze pass; no backend changes. Stop after piece 10.
 
 ## Prompt 11 — Directory, profiles, and identity verification
 
+**Recommended Codex configuration:** GPT-5.6 Sol · High reasoning
+
 ~~~text
 Implement frontend piece 11: user directory, encrypted profiles, and identity
 verification.
@@ -352,6 +389,8 @@ checklist and stop after piece 11.
 
 ## Prompt 12 — Synchronization engine
 
+**Recommended Codex configuration:** GPT-5.6 Sol · Max reasoning
+
 ~~~text
 Implement frontend piece 12: crash-safe synchronization engine.
 
@@ -383,6 +422,8 @@ targets; no backend changes. Stop after piece 12.
 ~~~
 
 ## Prompt 13 — Pairwise encrypted sessions
+
+**Recommended Codex configuration:** GPT-5.6 Sol · Max reasoning
 
 ~~~text
 Implement frontend piece 13: hybrid pairwise session establishment and Double Ratchet.
@@ -417,6 +458,8 @@ changes. Stop after piece 13.
 
 ## Prompt 14 — Messaging domain and local projections
 
+**Recommended Codex configuration:** GPT-5.6 Sol · XHigh reasoning
+
 ~~~text
 Implement frontend piece 14: application-message protocol, conversation domain, and
 local projections.
@@ -447,6 +490,8 @@ tests/analyze pass; no backend changes. Stop after piece 14.
 ~~~
 
 ## Prompt 15 — Chat interface
+
+**Recommended Codex configuration:** GPT-5.6 Sol · High reasoning
 
 ~~~text
 Implement frontend piece 15: production direct-message and Saved Messages interface.
@@ -481,6 +526,8 @@ pass; no backend changes. Stop after piece 15.
 
 ## Prompt 16 — Attachments and local media
 
+**Recommended Codex configuration:** GPT-5.6 Sol · XHigh reasoning
+
 ~~~text
 Implement frontend piece 16: encrypted attachments and local media handling.
 
@@ -510,6 +557,8 @@ backend changes. Stop after piece 16.
 ~~~
 
 ## Prompt 17 — Linked devices and history transfer
+
+**Recommended Codex configuration:** GPT-5.6 Sol · Max reasoning
 
 ~~~text
 Implement frontend piece 17: linked-device management, device-log security, and
@@ -543,6 +592,8 @@ backend changes. Stop after piece 17.
 
 ## Prompt 18 — Group domain and interface
 
+**Recommended Codex configuration:** GPT-5.6 Sol · XHigh reasoning
+
 ~~~text
 Implement frontend piece 18: group domain, authorization, storage, and responsive UI
 behind the PQ MLS production gate.
@@ -574,6 +625,8 @@ backend changes. Stop after piece 18.
 ~~~
 
 ## Prompt 19 — PQ MLS integration
+
+**Recommended Codex configuration:** GPT-5.6 Sol · Max reasoning
 
 ~~~text
 Implement frontend piece 19: production PQ MLS integration only if every prerequisite
@@ -608,6 +661,8 @@ never edit backend.
 
 ## Prompt 20 — Voice rooms and realtime media
 
+**Recommended Codex configuration:** GPT-5.6 Sol · Max reasoning
+
 ~~~text
 Implement frontend piece 20: voice rooms, realtime encrypted media, and ephemeral room
 text. Start only after production MLS piece 19 is complete.
@@ -641,6 +696,8 @@ pass; no backend changes. Stop after piece 20.
 
 ## Prompt 21 — Search, settings, notifications, and finishing features
 
+**Recommended Codex configuration:** GPT-5.6 Sol · High reasoning
+
 ~~~text
 Implement frontend piece 21: local search, settings, notifications, and remaining
 product surfaces.
@@ -673,6 +730,8 @@ changes. Stop after piece 21.
 ~~~
 
 ## Prompt 22 — Production hardening and release
+
+**Recommended Codex configuration:** GPT-5.6 Sol · Max reasoning
 
 ~~~text
 Implement frontend piece 22: production hardening, verification, and release readiness.

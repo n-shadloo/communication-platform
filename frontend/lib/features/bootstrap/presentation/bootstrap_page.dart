@@ -1,36 +1,11 @@
-import 'package:communication_platform/config/app_environment.dart';
 import 'package:communication_platform/l10n/generated/app_localizations.dart';
 import 'package:flutter/material.dart';
 
-class BootstrapApp extends StatelessWidget {
-  const BootstrapApp({required this.environment, this.locale, super.key});
+/// Non-product placeholder retained from piece 01 until the real shell is implemented.
+class BootstrapPage extends StatelessWidget {
+  const BootstrapPage({required this.isProduction, super.key});
 
-  final AppEnvironment environment;
-  final Locale? locale;
-
-  @override
-  Widget build(BuildContext context) => MaterialApp(
-    onGenerateTitle: (context) {
-      final localizations = AppLocalizations.of(context);
-      return environment.isProduction
-          ? localizations.appTitle
-          : localizations.developmentAppTitle;
-    },
-    locale: locale,
-    supportedLocales: AppLocalizations.supportedLocales,
-    localizationsDelegates: AppLocalizations.localizationsDelegates,
-    theme: ThemeData(
-      colorScheme: ColorScheme.fromSeed(seedColor: Colors.indigo),
-      useMaterial3: true,
-    ),
-    home: _BootstrapHome(environment: environment),
-  );
-}
-
-class _BootstrapHome extends StatelessWidget {
-  const _BootstrapHome({required this.environment});
-
-  final AppEnvironment environment;
+  final bool isProduction;
 
   @override
   Widget build(BuildContext context) {
@@ -41,7 +16,7 @@ class _BootstrapHome extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            if (!environment.isProduction)
+            if (!isProduction)
               Semantics(
                 container: true,
                 liveRegion: true,

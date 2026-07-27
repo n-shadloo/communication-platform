@@ -27,6 +27,30 @@ encrypted formats, UX, local state, and platform behavior within those guarantee
 they conflict, stop implementation, identify the exact conflict, and do not invent an
 endpoint, wire format, or weaker security behavior.
 
+## External source policy
+
+- When a required implementation detail is missing, ambiguous, or time-sensitive in
+  the repository documentation, consult current official primary sources before making
+  a decision. Do not guess.
+- Prefer the Flutter and Dart documentation, the documentation/source repository for
+  the exact pinned package version, Android developer documentation, browser-vendor or
+  Web standards documentation, RFC Editor/IETF/IANA/NIST publications, and the official
+  OpenMLS or LiveKit documentation/repositories as applicable.
+- Blogs, tutorials, forums, search-result summaries, generated answers, and unofficial
+  examples may help discovery but are never normative evidence. Trace important claims
+  back to the primary source.
+- External material does not override the authority rules above. If an official source
+  conflicts with the backend contract or an accepted frontend decision, stop, cite the
+  exact conflict, and request a documentation decision instead of silently changing the
+  protocol or product behavior.
+- For a security, interoperability, dependency, browser-compatibility, or other
+  time-sensitive decision, record the source URL, relevant version or revision, and
+  verification date in the completion report and update the owning frontend document
+  when the result becomes a binding project decision.
+- If authoritative information cannot be obtained, leave the affected behavior
+  fail-closed or explicitly incomplete and report the missing evidence. Never fill the
+  gap with a speculative implementation.
+
 ## Architecture
 
 - Preserve Modular Feature-First Clean Architecture with an Offline-First,

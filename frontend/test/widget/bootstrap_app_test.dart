@@ -1,5 +1,5 @@
-import 'package:communication_platform/app/bootstrap_app.dart';
-import 'package:communication_platform/config/app_environment.dart';
+import 'package:communication_platform/app/app.dart';
+import 'package:communication_platform/app/config/app_environment.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -8,7 +8,7 @@ void main() {
     tester,
   ) async {
     await tester.pumpWidget(
-      const BootstrapApp(
+      const CommunicationPlatformApp(
         environment: AppEnvironment.development,
         locale: Locale('en'),
       ),
@@ -24,7 +24,7 @@ void main() {
     tester,
   ) async {
     await tester.pumpWidget(
-      const BootstrapApp(
+      const CommunicationPlatformApp(
         environment: AppEnvironment.production,
         locale: Locale('fa'),
       ),
