@@ -1,0 +1,78 @@
+import 'package:flutter/material.dart';
+import 'package:forui/forui.dart';
+
+/// Typed semantic icon token. Package icon names never escape this layer.
+@immutable
+class AppIconData {
+  const AppIconData._(this.icon, this.debugName, {this.mirrorsInRtl = false});
+
+  final IconData icon;
+  final String debugName;
+  final bool mirrorsInRtl;
+}
+
+/// The only application mapping from semantics to Forui's bundled Lucide set.
+abstract final class AppIcons {
+  static const chats = AppIconData._(FLucideIcons.messagesSquare, 'chats');
+  static const voiceRooms = AppIconData._(FLucideIcons.radio, 'voiceRooms');
+  static const settings = AppIconData._(FLucideIcons.settings, 'settings');
+  static const search = AppIconData._(FLucideIcons.search, 'search');
+  static const add = AppIconData._(FLucideIcons.plus, 'add');
+  static const back = AppIconData._(
+    FLucideIcons.arrowLeft,
+    'back',
+    mirrorsInRtl: true,
+  );
+  static const forward = AppIconData._(
+    FLucideIcons.arrowRight,
+    'forward',
+    mirrorsInRtl: true,
+  );
+  static const success = AppIconData._(FLucideIcons.circleCheck, 'success');
+  static const warning = AppIconData._(FLucideIcons.triangleAlert, 'warning');
+  static const error = AppIconData._(FLucideIcons.circleAlert, 'error');
+  static const info = AppIconData._(FLucideIcons.info, 'info');
+  static const security = AppIconData._(FLucideIcons.shieldCheck, 'security');
+  static const empty = AppIconData._(FLucideIcons.inbox, 'empty');
+  static const retry = AppIconData._(FLucideIcons.rotateCw, 'retry');
+  static const close = AppIconData._(FLucideIcons.x, 'close');
+}
+
+/// App-owned icon renderer with intentional directional mirroring.
+class AppIcon extends StatelessWidget {
+  const AppIcon(
+    this.data, {
+    this.color,
+    this.decorative = true,
+    this.semanticLabel,
+    this.size = 24,
+    super.key,
+  }) : assert(
+         decorative || semanticLabel != null,
+         'A meaningful icon requires a semantic label.',
+       );
+
+  final AppIconData data;
+  final Color? color;
+  final bool decorative;
+  final String? semanticLabel;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    final mirrored =
+        data.mirrorsInRtl && Directionality.of(context) == TextDirection.rtl;
+    final icon = Transform.flip(
+      key: ValueKey('app-icon-${data.debugName}-${mirrored ? 'rtl' : 'ltr'}'),
+      flipX: mirrored,
+      child: Icon(data.icon, color: color, size: size),
+    );
+
+    return Semantics(
+      container: !decorative,
+      label: decorative ? null : semanticLabel,
+      excludeSemantics: true,
+      child: icon,
+    );
+  }
+}

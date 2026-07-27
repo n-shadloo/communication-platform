@@ -3,5 +3,40 @@
   "appTitle": "پلتفرم ارتباطی",
   "developmentAppTitle": "پلتفرم ارتباطی (توسعه)",
   "developmentConfiguration": "پیکربندی توسعه",
-  "foundationReady": "پایهٔ فلاتر آماده است"
+  "foundationReady": "پایهٔ فلاتر آماده است",
+  "chatsDestination": "گفت‌وگوها",
+  "voiceRoomsDestination": "اتاق‌های صوتی",
+  "settingsDestination": "تنظیمات",
+  "chatsPlaceholderTitle": "ساختار گفت‌وگوها",
+  "chatsPlaceholderBody": "فهرست مسیریابی‌شدهٔ گفت‌وگوها و ناحیهٔ جزئیات برای بخش‌های بعدی آماده است.",
+  "voiceRoomsPlaceholderTitle": "ساختار اتاق‌های صوتی",
+  "voiceRoomsPlaceholderBody": "فهرست مسیریابی‌شدهٔ اتاق‌های صوتی و ناحیهٔ جزئیات برای بخش‌های بعدی آماده است.",
+  "settingsPlaceholderTitle": "ساختار تنظیمات",
+  "settingsPlaceholderBody": "فهرست مسیریابی‌شدهٔ تنظیمات و ناحیهٔ جزئیات برای بخش‌های بعدی آماده است.",
+  "threadPlaceholderTitle": "جزئیات گفت‌وگو",
+  "roomPlaceholderTitle": "جزئیات اتاق صوتی",
+  "appearancePlaceholderTitle": "جزئیات نمایش",
+  "newChatPlaceholderTitle": "گفت‌وگوی جدید",
+  "newRoomPlaceholderTitle": "ساخت اتاق صوتی",
+  "placeholderBody": "این مسیر فقط برای بررسی ناوبری تطبیقی و پیوند مستقیم وجود دارد.",
+  "nonShippingPlaceholder": "جای‌نگهدار ساختاری — مناسب انتشار نیست",
+  "openPlaceholderDetail": "باز کردن جزئیات آزمایشی",
+  "openAppearanceDetail": "باز کردن جزئیات نمایش",
+  "composeChat": "شروع گفت‌وگو",
+  "composeVoiceRoom": "ساخت اتاق صوتی",
+  "connectingStatus": "در حال اتصال…",
+  "offlineStatus": "ارتباط با سرور برقرار نیست",
+  "returnToVoiceRoom": "بازگشت به اتاق صوتی: {roomName}",
+  "@returnToVoiceRoom": {
+    "placeholders": {
+      "roomName": {"type": "String"}
+    }
+  },
+  "keyboardNavigationHint": "صفحه‌کلید: Alt+1 گفت‌وگوها، Alt+2 اتاق‌های صوتی، Alt+3 تنظیمات",
+  "routeLabel": "مسیر: {route}",
+  "@routeLabel": {
+    "placeholders": {
+      "route": {"type": "String"}
+    }
+  }
 }

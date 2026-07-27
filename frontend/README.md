@@ -1,8 +1,14 @@
 # Communication Platform frontend
 
 Minimal Flutter foundation for the Android and Web client. The product name and all
-brand assets remain provisional; no product screens or service integrations are part of
-piece 01.
+brand assets remain provisional. Piece 03 adds the adaptive application shell and an
+explicitly non-shipping structural placeholder; no product feature screens or service
+integrations are present.
+
+The app bundles Vazirmatn `v33.003` and its SIL OFL 1.1 license under
+`assets/fonts/vazirmatn/`. The exact artifact and checksum provenance is recorded in
+`docs/visual-design-system.md`; neither Android nor Web fetches fonts or visual assets at
+runtime.
 
 ## Toolchain
 

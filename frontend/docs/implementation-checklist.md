@@ -2,8 +2,8 @@
 
 This is the live delivery checklist. Backend checkmarks mean an API/capability exists and
 is documented, not that the Flutter integration exists. Flutter documentation is now
-specified; the piece-01 Android/Web foundation is scaffolded and later capabilities
-remain pending.
+specified; pieces 01–03 now provide the Android/Web foundation, architecture skeleton,
+app-owned design system, and responsive routed shell. Later capabilities remain pending.
 
 Legend: **Ready** = implemented backend contract; **Client protocol** = intentionally
 opaque/client-owned; **Pending** = Flutter implementation not started.
@@ -97,12 +97,12 @@ opaque/client-owned; **Pending** = Flutter implementation not started.
 
 | Capability | Backend | Flutter |
 |---|---|---|
-| Responsive shell | Not applicable | Specified; pending implementation |
-| Forui design system and Lucide icons | Not applicable | Visual/icon tokens specified; wrappers and semantic `AppIcons` mapping pending |
+| Responsive shell | Not applicable | Piece 03 adaptive `go_router` shell complete for narrow/medium/wide layouts with stable branch identity, deep-link placeholders, guard hooks, keyboard navigation, focus restoration, reduced motion, and resize route-preservation tests |
+| Forui design system and Lucide icons | Not applicable | Piece 03 app-owned semantic tokens and Forui wrappers complete; bundled Lucide is isolated behind typed `AppIcons`, with package-boundary, semantics, target-size, disabled, focus, and RTL-mirroring tests |
 | Flyer Chat builders | Not applicable | Selected; pending technical spike |
 | 34-screen inventory | Supporting APIs/primitives ready as above | Specified; pending implementation |
-| English/Persian RTL | Not applicable | Localization plumbing and bootstrap RTL smoke test ready; product UI/golden verification pending |
-| Accessibility/high contrast | Not applicable | Specified; pending verification |
+| English/Persian RTL | Not applicable | Piece 03 LTR/RTL foundations complete with pinned local Vazirmatn, localized shell chrome, directional-icon policy, and narrow/medium golden coverage; feature-screen verification remains pending |
+| Accessibility/high contrast | Not applicable | Piece 03 shell/component semantics, keyboard focus, 48 px icon targets, 200% text-scale layout, reduced motion, dark mode, and authored high-contrast token mapping verified; full feature-flow audit remains pending |
 
 ## Platform delivery
 

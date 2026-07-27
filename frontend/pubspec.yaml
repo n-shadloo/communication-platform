@@ -37,3 +37,7 @@ flutter:
   uses-material-design: true
   assets:
     - assets/
+  fonts:
+    - family: Vazirmatn
+      fonts:
+        - asset: assets/fonts/vazirmatn/Vazirmatn-Variable.ttf

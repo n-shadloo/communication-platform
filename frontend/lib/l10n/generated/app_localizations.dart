@@ -121,6 +121,156 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Flutter foundation is ready'**
   String get foundationReady;
+
+  /// No description provided for @chatsDestination.
+  ///
+  /// In en, this message translates to:
+  /// **'Chats'**
+  String get chatsDestination;
+
+  /// No description provided for @voiceRoomsDestination.
+  ///
+  /// In en, this message translates to:
+  /// **'Voice Rooms'**
+  String get voiceRoomsDestination;
+
+  /// No description provided for @settingsDestination.
+  ///
+  /// In en, this message translates to:
+  /// **'Settings'**
+  String get settingsDestination;
+
+  /// No description provided for @chatsPlaceholderTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Chats structure'**
+  String get chatsPlaceholderTitle;
+
+  /// No description provided for @chatsPlaceholderBody.
+  ///
+  /// In en, this message translates to:
+  /// **'The routed conversation list and detail regions are ready for later feature pieces.'**
+  String get chatsPlaceholderBody;
+
+  /// No description provided for @voiceRoomsPlaceholderTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Voice Rooms structure'**
+  String get voiceRoomsPlaceholderTitle;
+
+  /// No description provided for @voiceRoomsPlaceholderBody.
+  ///
+  /// In en, this message translates to:
+  /// **'The routed voice-room list and detail regions are ready for later feature pieces.'**
+  String get voiceRoomsPlaceholderBody;
+
+  /// No description provided for @settingsPlaceholderTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Settings structure'**
+  String get settingsPlaceholderTitle;
+
+  /// No description provided for @settingsPlaceholderBody.
+  ///
+  /// In en, this message translates to:
+  /// **'The routed settings list and detail regions are ready for later feature pieces.'**
+  String get settingsPlaceholderBody;
+
+  /// No description provided for @threadPlaceholderTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Conversation detail'**
+  String get threadPlaceholderTitle;
+
+  /// No description provided for @roomPlaceholderTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Voice room detail'**
+  String get roomPlaceholderTitle;
+
+  /// No description provided for @appearancePlaceholderTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Appearance detail'**
+  String get appearancePlaceholderTitle;
+
+  /// No description provided for @newChatPlaceholderTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'New conversation'**
+  String get newChatPlaceholderTitle;
+
+  /// No description provided for @newRoomPlaceholderTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Create voice room'**
+  String get newRoomPlaceholderTitle;
+
+  /// No description provided for @placeholderBody.
+  ///
+  /// In en, this message translates to:
+  /// **'This route exists only to validate adaptive navigation and deep links.'**
+  String get placeholderBody;
+
+  /// No description provided for @nonShippingPlaceholder.
+  ///
+  /// In en, this message translates to:
+  /// **'Structural placeholder — not for shipping'**
+  String get nonShippingPlaceholder;
+
+  /// No description provided for @openPlaceholderDetail.
+  ///
+  /// In en, this message translates to:
+  /// **'Open placeholder detail'**
+  String get openPlaceholderDetail;
+
+  /// No description provided for @openAppearanceDetail.
+  ///
+  /// In en, this message translates to:
+  /// **'Open appearance detail'**
+  String get openAppearanceDetail;
+
+  /// No description provided for @composeChat.
+  ///
+  /// In en, this message translates to:
+  /// **'Start a conversation'**
+  String get composeChat;
+
+  /// No description provided for @composeVoiceRoom.
+  ///
+  /// In en, this message translates to:
+  /// **'Create a voice room'**
+  String get composeVoiceRoom;
+
+  /// No description provided for @connectingStatus.
+  ///
+  /// In en, this message translates to:
+  /// **'Connecting…'**
+  String get connectingStatus;
+
+  /// No description provided for @offlineStatus.
+  ///
+  /// In en, this message translates to:
+  /// **'No connection to server'**
+  String get offlineStatus;
+
+  /// No description provided for @returnToVoiceRoom.
+  ///
+  /// In en, this message translates to:
+  /// **'Return to voice room: {roomName}'**
+  String returnToVoiceRoom(String roomName);
+
+  /// No description provided for @keyboardNavigationHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Keyboard: Alt+1 Chats, Alt+2 Voice Rooms, Alt+3 Settings'**
+  String get keyboardNavigationHint;
+
+  /// No description provided for @routeLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Route: {route}'**
+  String routeLabel(String route);
 }
 
 class _AppLocalizationsDelegate
