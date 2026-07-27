@@ -19,6 +19,12 @@ that," the design has failed — the server is the adversary.
   (`PUT /me/keybackup`).
 - Per device: an Ed25519 device signing key, X25519 identity + prekeys, ML-KEM-768
   prekeys, and the MLS credential/leaf key.
+- **`ik_pub` carries two of those keys in one field: exactly 64 bytes, the Ed25519
+  device signing public key (bytes 0–31) then the X25519 identity public key (bytes
+  32–63).** The Ed25519 half verifies `spk_sig` and `pq_spk_sig`; the X25519 half is the
+  identity key in X3DH/PQXDH. The server treats the field as opaque bytes and enforces
+  only a loose length range, so a peer whose `ik_pub` is not 64 bytes is malformed **to
+  you** — reject it; nothing upstream will.
 - **Libraries:** use `mlkem_native` (FFI to the formally-verified pq-code-package
   mlkem-native, FIPS 203) for ML-KEM. Use `cryptography` or `pinenacl` for
   Ed25519/X25519. **Do not** use pure-Dart ML-KEM implementations such as `kyber-py` or
@@ -32,17 +38,31 @@ that," the design has failed — the server is the adversary.
   verification.
 - **Device-log records** are hash-chained and signed by the self-signing key.
 
-### Canonical device-bundle encoding
+### The one encoding rule
 
-Domain separator: the ASCII string `chat:v1:device-bundle`, followed by the
-length-prefixed concatenation (4-byte big-endian length before each field) of, in this
-exact order:
+Every signature below covers an ASCII **domain separator**, followed by the
+length-prefixed concatenation of its fields: a **4-byte big-endian length before each
+field**. The domain separator itself is not length-prefixed.
+
+An **absent optional field is still emitted — a 4-byte zero length with no content.**
+Never skip it. Skipping would let a bundle with PQ material and one without collide onto
+the same signed bytes, so one `cross_sig` would verify for both.
+
+**Golden vectors: `devices/vectors/vectors.json`.** Reproduce every `signed_bytes_hex`
+byte for byte and verify every `signature_hex` before shipping. Do not treat the tables
+below as sufficient on their own — a client that agrees with the prose but not with the
+vectors cannot talk to the other platforms, and the symptom is silently unverifiable
+devices.
+
+### Canonical device-bundle encoding — `cross_sig`
+
+Signed by the **self-signing key**. Domain separator `chat:v1:device-bundle`, then:
 
 | # | Field | Encoding |
 |---|-------|----------|
 | 1 | `user_id` | 16 bytes, UUID raw |
 | 2 | `device_id` | 16 bytes, UUID raw |
-| 3 | `ik_pub` | raw bytes |
+| 3 | `ik_pub` | raw bytes (the 64-byte pair, §A) |
 | 4 | `spk_id` | 4 bytes, big-endian |
 | 5 | `spk_pub` | raw bytes |
 | 6 | `pq_spk_id` | 4 bytes, big-endian; zero-length field if absent |
@@ -52,6 +72,36 @@ exact order:
 
 The encoding is deliberately self-contained: every signed key appears as its **bytes**,
 never as an identifier to be resolved later.
+
+### Canonical identity encoding — `master_sig`
+
+Signed by the **master key**. Domain separator `chat:v1:cross-signing-keys`, then:
+
+| # | Field | Encoding |
+|---|-------|----------|
+| 1 | `user_id` | 16 bytes, UUID raw |
+| 2 | `self_signing_pub` | raw bytes |
+| 3 | `user_signing_pub` | raw bytes |
+
+`version` is **not** covered. It is the server's anti-accident monotonic check, and
+signing it would imply the served version number carries a guarantee it does not — you
+must detect identity changes by comparing `master_pub`, never by trusting `version`.
+
+### Canonical prekey encodings — `spk_sig` and `pq_spk_sig`
+
+Both signed by the **Ed25519 half of `ik_pub`** (bytes 0–31).
+
+| Signature | Domain separator | Fields, in order |
+|---|---|---|
+| `spk_sig` | `chat:v1:signed-prekey` | `user_id` (16 B) · `spk_id` (4 B BE) · `spk_pub` (raw) |
+| `pq_spk_sig` | `chat:v1:pq-signed-prekey` | `user_id` (16 B) · `pq_spk_id` (4 B BE) · `pq_spk_pub` (raw) |
+
+The separate domains are what stop either signature being replayed as the other. Neither
+covers `device_id`, deliberately: `device_id` does not exist until registration succeeds
+and `spk_sig` is required at registration, so covering it would make the first
+registration impossible. Nothing is lost — the device bundle above already binds
+`spk_pub` and `pq_spk_pub` to a `device_id` under `cross_sig`, so **that** is the
+signature you rely on to know a prekey belongs to the device serving it. Verify both.
 
 ## C. What the client verifies
 
@@ -132,13 +182,50 @@ never as an identifier to be resolved later.
 
 - No foreign push (FCM/APNs) is available. Background polling only.
 
-## M. Enrollment ordering (server-imposed)
+## M. Enrollment ordering (load-bearing — read before implementing registration)
 
-- The **first** device registers without a published identity (a register-scope token
-  reaches only `POST /me/devices`); the client must `PUT /me/identity` immediately after
-  receiving its full-scope tokens.
-- Every later registration requires the identity to already be published
-  (`400 {"code":"identity_required"}` otherwise) and always requires `cross_sig` +
-  `bundle_version`. These are completeness checks against mis-sequenced clients, not
-  security controls — a modified server would skip them, and peers must verify
-  regardless.
+`cross_sig` covers `device_id`, and **`device_id` does not exist until registration
+succeeds**. No first call can carry a valid cross-signature, so registration **refuses**
+`cross_sig`/`bundle_version` outright (`400`) rather than storing bytes that could only
+be wrong, and the device is stored uncross-signed until you supply one. Both flows below
+end with the same `PUT /me/devices/{id}/prekeys` call; until it lands, peers see
+`cross_sig: null` and correctly withhold messages.
+
+Do not work around this by sending a placeholder. A stored-then-corrected `cross_sig` is
+a **cross-signature change** to any peer that polled in between, and §D requires them to
+block the conversation and demand re-verification over it. Null is the state that means
+"not yet"; there is no signature-shaped value that means the same.
+
+**First device on a new account:**
+
+1. `POST /auth/login` → register-scope token (10 min; its only power is step 2).
+2. `POST /me/devices`, omitting `cross_sig`/`bundle_version` → `201` with the assigned
+   `device_id` and a full-scope token pair.
+3. `PUT /me/identity` — publish the cross-signing identity. Required before any *later*
+   device can register, so do not defer it.
+4. `PUT /me/devices/{device_id}/prekeys` with `cross_sig` (over the bundle for the
+   `device_id` from step 2) + `bundle_version: 1`.
+5. `PUT /me/keybackup` — the recovery-protected blob carrying the cross-signing private
+   keys. Skipping this strands every future device: step 3 of the flow below has no other
+   source for the self-signing key.
+6. `POST /me/devicelog` — the first signed log record.
+
+**Every later device:**
+
+1. `POST /auth/login` → register-scope token.
+2. `POST /me/devices`, omitting `cross_sig`/`bundle_version` → `201`, `device_id`,
+   full-scope tokens. The account's identity must already be published or this is
+   `400 {"code":"identity_required"}`.
+3. `GET /me/keybackup` (needs the full scope from step 2) → unwrap with the user's
+   recovery secret → the account's **self-signing private key**. This is the only path to
+   it; a device that cannot unwrap the backup can never be cross-signed, and the user
+   must verify it out-of-band from an existing device instead.
+4. `PUT /me/devices/{device_id}/prekeys` with `cross_sig` + `bundle_version`.
+5. `POST /me/devicelog` — append the device-set change.
+
+In the `prekeys` call, sending only one of `cross_sig`/`bundle_version` is `400`: the
+version is what tells peers which bundle the signature covers, so half a pair is
+unusable. That, and the `identity_required` check, are completeness checks —
+**not** security controls. A modified server would skip them, so peers must verify
+regardless, and a device that never reaches step 4 must stay unverified in your UI
+forever rather than being trusted on the server's word.
