@@ -63,6 +63,26 @@ privacy mode requires obscuring it.
 - Content uses an 8-pixel alignment rhythm. Optical exceptions for icons and bubble tails
   are encoded inside components, never repeated as screen literals.
 
+## Iconography
+
+- Use the Lucide icon set bundled with Forui, exposed by `FLucideIcons`, as the default
+  product UI icon family. Do not add a separate Lucide, Material, Cupertino, or other
+  general-purpose icon package for ordinary application controls.
+- Feature code MUST request app-owned semantic icons such as `AppIcons.search`,
+  `AppIcons.send`, or `AppIcons.security`; it MUST NOT reference `FLucideIcons` directly.
+  The mapping layer keeps icon meaning consistent and isolates package/API changes.
+- Keep Forui's widget-level `FIcons` mapping on its default Lucide family unless a
+  reviewed product requirement and ADR explicitly replace it.
+- Icon-only actions have localized semantic labels, tooltips where appropriate, visible
+  focus/pressed/disabled states, and the minimum target sizes defined above. Decorative
+  icons are excluded from accessibility semantics.
+- Directional icons mirror with the interface only when their meaning is directional.
+  Universal symbols such as search, security, media state, and verification do not
+  mirror merely because the locale is RTL.
+- Icons and color never carry state alone. Product logos, avatars, thumbnails, flags,
+  and illustrations are reviewed assets rather than substitutions from the icon set;
+  emoji are not used as functional controls.
+
 ## Component grammar
 
 - App-owned wrappers are the only layer that configures Forui. Feature screens do not

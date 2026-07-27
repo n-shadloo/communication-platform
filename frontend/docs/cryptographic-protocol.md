@@ -21,7 +21,8 @@ The preferred implementation direction is Rust:
   implementation and identical vectors;
 - `cryptography` or `pinenacl` for Ed25519/X25519, composed by a reviewed hybrid PQXDH
   implementation with Double Ratchet;
-- OpenMLS for RFC 9420 group state with a reviewed PQ ciphersuite;
+- OpenMLS for RFC 9420 group state with the candidate and release gates frozen in
+  [Post-quantum MLS profile](mls-profile.md);
 - reviewed primitives for canonical CBOR, Argon2id, and XChaCha20-Poly1305;
 - Android native libraries and a browser Wasm build produced from the same source and
   test vectors.
@@ -42,7 +43,7 @@ cryptography.
 | Two-device setup | Hybrid X25519 + ML-KEM-768 PQXDH-style establishment; no silent downgrade |
 | Two-device messaging | Signal Double Ratchet, bounded skipped-key storage |
 | Group key agreement | MLS 1.0 (RFC 9420) |
-| MLS suite | A reviewed interoperable PQ MLS ciphersuite; release is blocked until the exact suite is frozen and validated on Android/Web |
+| MLS suite | Candidate `MLS_128_MLKEM768X25519_AES256GCM_SHA384_Ed25519`; no production numeric ID until IANA assignment; see [PQ MLS profile](mls-profile.md) |
 | Application signatures | Ed25519, only for authorization/control events that require durable attribution |
 | Cross-signing | Ed25519 master, self-signing, and user-signing keys |
 | Backup AEAD | XChaCha20-Poly1305 with random 192-bit nonces |
@@ -50,9 +51,9 @@ cryptography.
 | File streaming | libsodium `secretstream_xchacha20poly1305` |
 | Media framing | RFC 9605 SFrame or the LiveKit E2EE implementation after wire-level validation |
 
-Every KDF and signature input starts with an ASCII domain label containing the product
-protocol and major version, for example `cp/v1/device-spk`. Labels are constants in the
-shared crypto core and covered by test vectors.
+Every KDF and signature input uses the exact domain label defined by its binding
+contract. Labels are constants in the shared crypto core and covered by test vectors;
+the implementation MUST NOT invent alternate labels or normalize fields.
 
 ## Account cross-signing identity
 
@@ -65,6 +66,12 @@ recovery-protected key backup. The published identity is never trusted because t
 server returned it: clients verify `master_sig` and compare the exact master-key bytes
 with the out-of-band-confirmed value.
 
+`master_sig` signs ASCII `chat:v1:cross-signing-keys`, followed by a four-byte
+big-endian length and bytes for `user_id` (16 raw UUID bytes), `self_signing_pub`, and
+`user_signing_pub`, in that order. `version` is not signed. The backend
+[golden vectors](../../backend/devices/vectors/README.md) are binding and MUST be
+reproduced before enrollment is enabled.
+
 ## Device identity
 
 Each device owns independent key material:
@@ -76,34 +83,44 @@ Each device owns independent key material:
 - pairwise Double Ratchet sessions;
 - a random local storage key protected by the platform keystore.
 
+The API `ik_pub` field is exactly 64 bytes: the Ed25519 device-signing public key in
+bytes 0–31 followed by the X25519 identity public key in bytes 32–63. The client rejects
+any other length even though the blind backend intentionally enforces only a broader
+opaque-blob range.
+
 The self-signing key signs the exact canonical device-bundle encoding defined by the
 binding backend client contract: ASCII `chat:v1:device-bundle` followed by a 4-byte
 big-endian length and bytes for `user_id`, `device_id`, `ik_pub`, `spk_id`, `spk_pub`,
 `pq_spk_id`, `pq_spk_pub`, `registration_id`, and `bundle_version`, in that order. The
-encoding embeds key bytes, never server-supplied key identifiers. Peers verify the
-device `cross_sig` through self-signing to the out-of-band-confirmed master key before
-encrypting to or accepting content from that device.
+encoding embeds key bytes, never server-supplied key identifiers. An absent optional PQ
+field is encoded as a four-byte zero length and no content; it is never omitted.
+
+The Ed25519 half of `ik_pub` signs the classical prekey as
+`chat:v1:signed-prekey` plus length-prefixed `user_id`, `spk_id`, and `spk_pub`. It signs
+the PQ prekey under the distinct `chat:v1:pq-signed-prekey` domain followed by
+length-prefixed `user_id`, `pq_spk_id`, and `pq_spk_pub`. Neither prekey signature covers
+`device_id`; `cross_sig` binds both prekeys to the assigned device. Peers verify the
+prekey signature and device `cross_sig` through self-signing to the
+out-of-band-confirmed master key before encrypting to or accepting content from that
+device.
 
 An unsigned/invalid device is withheld, a master-key change blocks the conversation, and
 a device-log fork creates a global blocking equivocation alert. There is no first-seen
 TOFU acceptance for messaging.
 
-### Enrollment contract blocker
+### Two-phase enrollment
 
-The current backend registration request requires `cross_sig` but does not accept a
-client-selected `device_id`; the server returns a newly generated ID only after the
-request. Because `device_id` is inside the signed bundle, the client cannot construct the
-required signature. A later device also cannot download the recovery backup with its
-register-scope token before registration. Frontend implementation of first and later
-device enrollment is therefore blocked until the backend contract provides a signable
-client-known device ID and a non-circular recovery/cross-signing bootstrap.
+The client first calls `POST /me/devices` without `cross_sig` or `bundle_version`. The
+successful response supplies the backend-assigned `device_id` and full-scope tokens.
+Only then does the client sign the canonical device bundle and send `cross_sig` with
+`bundle_version` through `PUT /me/devices/{device_id}/prekeys`.
 
-Two serialization details are also missing from the authoritative contract: the exact
-domain-separated canonical bytes covered by `master_sig`, and how the separately required
-Ed25519 device-signing and X25519 identity public keys are represented in the single
-`ik_pub` API field. These byte formats MUST be supplied by the backend/client protocol
-owner and frozen in golden vectors. The client MUST NOT omit fields, sign placeholder
-bytes, assume one key can silently stand for two, or invent an encoding as a workaround.
+The first device publishes the account identity before that follow-up, then uploads the
+recovery-protected key backup and appends the initial device-log record. A later device
+uses its new full-scope token to retrieve and unwrap the backup before producing its
+cross-signature, then appends the device-log change. Until the follow-up succeeds, the
+device remains unverified and sensitive messaging is withheld. A placeholder signature
+is never valid.
 
 ## Direct messages and per-device channels
 
@@ -147,10 +164,12 @@ re-verification; the backend listing alone is never cryptographic proof. A user 
 devices contributes several MLS leaves. Application group roles are validated by signed
 control events in addition to MLS membership.
 
-KeyPackages use the frozen reviewed PQ MLS suite and are padded to 4,096 or 16,384 bytes.
-Each device maintains one separately uploaded last-resort KeyPackage. It is used only
-when consumable packages are exhausted, and the UI/security status records that its reuse
-weakens forward secrecy for those initial Welcomes. No classical MLS fallback is allowed.
+After every gate in the [PQ MLS profile](mls-profile.md) passes, KeyPackages use only
+that finalized suite and are padded to 4,096 or 16,384 bytes. No production KeyPackage
+is uploaded before then. Each device maintains one separately uploaded last-resort
+KeyPackage. It is used only when consumable packages are exhausted, and the UI/security
+status records that its reuse weakens forward secrecy for those initial Welcomes. No
+classical MLS fallback is allowed.
 
 MLS `PrivateMessage` is used for application and handshake content wherever permitted.
 Welcome, Commit, Proposal, GroupInfo, and application messages follow RFC 9420 processing

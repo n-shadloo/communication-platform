@@ -37,7 +37,8 @@ is not called the production release.
 - Cross-signing master keys are verified out of band before messaging; unsigned devices,
   master-key changes, and device-log forks fail closed.
 - New direct-message sessions use hybrid X25519 + ML-KEM-768 without silent classical
-  downgrade, and groups require a reviewed PQ MLS ciphersuite.
+  downgrade, and groups require the reviewed, production-approved suite defined by the
+  [PQ MLS profile](mls-profile.md).
 - Delete-for-everyone, ephemeral room text, and recovery limitations are described
   honestly and never as guarantees.
 - Logs and diagnostics MUST exclude plaintext, identifiers, tokens, keys, ciphertext

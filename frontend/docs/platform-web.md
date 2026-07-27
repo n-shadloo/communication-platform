@@ -35,8 +35,8 @@ does not apply to browser networking APIs.
   This Browser, integrity failure, and page teardown where observable.
 - A browser storage reset is equivalent to losing/revoking the local device. Recovery can
   restore cross-signing identity material but not browser history; a fresh browser gets
-  history only from an existing online device and registers fresh device/PQ keys after
-  the enrollment contract blocker is resolved.
+  history only from an existing online device. It registers fresh device/PQ keys through
+  the two-phase enrollment flow before any history transfer or sensitive messaging.
 
 Non-extractable means browser APIs refuse export; trusted page code can still ask the key
 to decrypt. It is not a defense against malicious same-origin JavaScript.

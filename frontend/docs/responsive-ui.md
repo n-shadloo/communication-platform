@@ -44,6 +44,8 @@ preserves the selected conversation, scroll anchor, draft, and active modal inte
 - Tokens cover semantic color, typography, spacing, radius, elevation, motion, focus,
   breakpoints, and content widths.
 - English and Persian typography is bundled locally and tested for equivalent hierarchy.
+- UI icons use Forui's bundled `FLucideIcons` through the app-owned semantic `AppIcons`
+  mapping; feature screens do not select package icons or alternate icon families.
 - Directionality follows locale for chrome and Unicode bidi behavior for message content.
 - Touch targets are at least platform accessibility guidance; pointer targets have hover,
   focus, and right-click behavior.
@@ -79,9 +81,10 @@ logic.
 - **Register:** username/password confirmation, server-authoritative errors, transition to
   Pending Activation.
 - **Pending Activation:** Check Again and Back to Login; no fake activation polling.
-- **Encryption Setup:** account cross-signing plus X25519/ML-KEM/MLS device generation;
-  new-account recovery-secret display or existing-account identity restore; explicit
-  backend-enrollment-blocked state; mandatory Security Notice.
+- **Encryption Setup:** account cross-signing plus X25519/ML-KEM device generation and,
+  only after its production gates pass, MLS material; new-account recovery-secret
+  display or existing-account identity restore; explicit resumable two-phase
+  enrollment/finishing-secure-setup state; mandatory Security Notice.
 - **Security Notice:** exact protected/unprotected boundaries and mandatory acknowledgement
   during onboarding.
 
@@ -134,9 +137,9 @@ logic.
 - **Security Settings:** identity-recovery guidance, verified-contact/device-log review,
   notice.
 - **Linked Devices:** this/other devices, last-active coarseness, relabel/revoke.
-- **Add Device/Restore:** enrollment blocker, recovery-secret identity restore, wrong
-  secret, waiting for an existing online history source, partial transfer, queue-gap/group
-  re-invitation, done, and unrecoverable wording.
+- **Add Device/Restore:** two-phase registration, recovery-secret identity restore,
+  wrong secret, finishing secure setup, waiting for an existing online history source,
+  partial transfer, queue-gap/group re-invitation, done, and unrecoverable wording.
 
 ### Shared modal surfaces
 

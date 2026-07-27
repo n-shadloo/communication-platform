@@ -208,15 +208,18 @@ only**.
 ## 4. Encryption Setup (First Run on a Device)
 
 **Purpose.** The first installation creates account cross-signing keys plus independent
-X25519, ML-KEM-768, and MLS device material. A new account creates a recovery-protected
-identity backup; an existing account restores that identity material. Message history is
-a later transfer from an existing online device, not part of the backup.
+X25519 and ML-KEM-768 device material. MLS device material is created only after the
+[PQ MLS production gates](mls-profile.md#production-gates) pass. A new account creates a
+recovery-protected identity backup; an existing account restores that identity material.
+Message history is a later transfer from an existing online device, not part of the
+backup.
 
-**Backend blocker.** Registration currently requires a signature containing the
-server-generated device ID before returning that ID, and register scope cannot fetch the
-backup needed to sign a later device. Until the backend supplies a non-circular
-enrollment contract, show a blocking "Secure device enrollment unavailable" state; never
-offer an unsigned or placeholder-key bypass.
+**Enrollment order.** Register the new device without `cross_sig`/`bundle_version`, then
+use the returned device ID and full-scope tokens to finish cross-signing through the
+prekey endpoint. For an existing account, retrieve and unwrap the identity backup only
+after that response. While this second phase is pending, show "Finishing secure device
+setup", support safe retry/resume, and withhold messaging; never offer an unsigned or
+placeholder-key bypass.
 
 ### 4.1 Step — Generating identity
 - **Layout.** Centered status ("Setting up encryption on this device") + progress
@@ -696,17 +699,18 @@ and optionally transfer locally held history.
   transfer encrypted history from an existing online device.
 - **Steps.**
   1. On the **new** device, login and enter Encryption Setup (§4).
-  2. Restore cross-signing identity using the recovery secret, or authorize through an
-     existing device once the backend enrollment flow supports it.
+  2. After unsigned registration returns full-scope tokens, restore cross-signing
+     identity using the recovery secret and finish the device cross-signature through
+     the prekey endpoint.
   3. Establish fresh hybrid sessions; peers remove/re-add the device to groups for fresh
      Welcomes where required.
   4. Ask an existing online device to send its locally held history through ordinary
      encrypted envelopes. Show the source device and whether its history is partial.
-- **States.** *enrollment contract unavailable*, *awaiting secret*, *restoring identity*,
-  *wrong secret*, *identity recovered*, *waiting for existing device*, *transferring
-  history*, *no history source online*, *group re-invitation required*, *queue gap
-  recovery*, and *done*. **[PRIVACY]** The server supplies no ciphertext history and the
-  recovery secret cannot reconstruct it.
+- **States.** *registering device*, *awaiting secret*, *restoring identity*, *wrong
+  secret*, *finishing secure setup*, *identity recovered*, *waiting for existing
+  device*, *transferring history*, *no history source online*, *group re-invitation
+  required*, *queue gap recovery*, and *done*. **[PRIVACY]** The server supplies no
+  ciphertext history and the recovery secret cannot reconstruct it.
 
 ---
 

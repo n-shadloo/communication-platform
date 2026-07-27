@@ -107,7 +107,8 @@ Before every production release, isolate the environment from foreign networks a
 - application assets, fonts, Wasm, CA material, APIs, Redis/PostgreSQL, nginx, LiveKit,
   and TURN are local/self-hosted;
 - Android installation/update and web loading work;
-- non-circular enrollment, cross-signing/SAS, PQXDH/PQ-MLS, device-log gossip,
+- two-phase enrollment, cross-signing/SAS, PQXDH and the production-approved PQ MLS
+  profile, device-log gossip,
   register/login/message/attachment/voice/identity-recovery flows work;
 - seven-day queue gaps trigger fresh-Welcome recovery and history transfers succeed only
   device-to-device with no server-history dependency;
