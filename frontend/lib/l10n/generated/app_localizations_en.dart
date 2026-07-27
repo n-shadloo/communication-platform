@@ -21,6 +21,63 @@ class AppLocalizationsEn extends AppLocalizations {
   String get foundationReady => 'Flutter foundation is ready';
 
   @override
+  String get bootstrapLoadingConfiguration => 'Loading secure configurationâ€¦';
+
+  @override
+  String get bootstrapCheckingStorage => 'Checking protected storageâ€¦';
+
+  @override
+  String get bootstrapDiscoveringIdentity => 'Checking this deviceâ€¦';
+
+  @override
+  String get bootstrapValidatingTrust => 'Verifying server trustâ€¦';
+
+  @override
+  String get bootstrapCheckingServer => 'Connecting to the serverâ€¦';
+
+  @override
+  String get bootstrapReady => 'Ready';
+
+  @override
+  String get notProvisionedTitle => 'App not provisioned';
+
+  @override
+  String get notProvisionedMessage =>
+      'Install a provisioned copy of this app from a trusted source. There is no connection bypass.';
+
+  @override
+  String get protectedStorageUnavailableTitle =>
+      'Protected storage unavailable';
+
+  @override
+  String get protectedStorageUnavailableMessage =>
+      'This device cannot safely open local identity or session data. Fix protected storage, then retry.';
+
+  @override
+  String get trustFailureTitle => 'Server trust could not be verified';
+
+  @override
+  String get androidTrustFailureMessage =>
+      'The private certificate authority or server certificate pins do not match this provisioned app. Reinstall a trusted provisioned copy or contact the operator. You cannot continue past this check.';
+
+  @override
+  String get webTrustFailureMessage =>
+      'Install the operator-provided private certificate authority in this operating system or browser, verify its fingerprint through the independent provisioning channel, then retry. The web app cannot install or bypass certificate trust.';
+
+  @override
+  String get serverUnreachableTitle => 'Can\'t reach the server';
+
+  @override
+  String get serverUnreachableMessage =>
+      'Check access to the provisioned server and try again.';
+
+  @override
+  String get retryAction => 'Retry';
+
+  @override
+  String get loginDestination => 'Login';
+
+  @override
   String get chatsDestination => 'Chats';
 
   @override

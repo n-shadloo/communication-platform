@@ -43,3 +43,9 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Operator-supplied Android trust artifacts. Only templates belong in source control.
+/android/app/src/development/res/raw/provisioned_private_ca.*
+/android/app/src/development/res/xml/network_security_config.xml
+/android/app/src/production/res/raw/provisioned_private_ca.*
+/android/app/src/production/res/xml/network_security_config.xml

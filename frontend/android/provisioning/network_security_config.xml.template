@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Build input template. Do not commit substituted host, CA, or pin values. -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false" />
+    <domain-config cleartextTrafficPermitted="false">
+        <domain includeSubdomains="false">@@SERVER_HOST@@</domain>
+        <trust-anchors>
+            <certificates src="@raw/provisioned_private_ca" />
+        </trust-anchors>
+        <pin-set>
+            <pin digest="SHA-256">@@PRIMARY_SPKI_SHA256@@</pin>
+            <pin digest="SHA-256">@@BACKUP_SPKI_SHA256@@</pin>
+        </pin-set>
+    </domain-config>
+</network-security-config>

@@ -21,6 +21,63 @@ class AppLocalizationsFa extends AppLocalizations {
   String get foundationReady => 'پایهٔ فلاتر آماده است';
 
   @override
+  String get bootstrapLoadingConfiguration => 'در حال بارگذاری پیکربندی امن…';
+
+  @override
+  String get bootstrapCheckingStorage => 'در حال بررسی ذخیره‌سازی محافظت‌شده…';
+
+  @override
+  String get bootstrapDiscoveringIdentity => 'در حال بررسی این دستگاه…';
+
+  @override
+  String get bootstrapValidatingTrust => 'در حال تأیید اعتماد سرور…';
+
+  @override
+  String get bootstrapCheckingServer => 'در حال اتصال به سرور…';
+
+  @override
+  String get bootstrapReady => 'آماده';
+
+  @override
+  String get notProvisionedTitle => 'برنامه تأمین نشده است';
+
+  @override
+  String get notProvisionedMessage =>
+      'نسخه‌ای تأمین‌شده از یک منبع مطمئن نصب کنید. راهی برای دور زدن بررسی اتصال وجود ندارد.';
+
+  @override
+  String get protectedStorageUnavailableTitle =>
+      'ذخیره‌سازی محافظت‌شده در دسترس نیست';
+
+  @override
+  String get protectedStorageUnavailableMessage =>
+      'این دستگاه نمی‌تواند هویت یا نشست محلی را به‌شکل امن باز کند. مشکل ذخیره‌سازی را رفع و دوباره تلاش کنید.';
+
+  @override
+  String get trustFailureTitle => 'اعتماد سرور تأیید نشد';
+
+  @override
+  String get androidTrustFailureMessage =>
+      'مرجع گواهی خصوصی یا پین‌های گواهی سرور با این برنامه همخوانی ندارد. یک نسخه تأمین‌شده و مطمئن نصب کنید یا با مدیر تماس بگیرید. امکان ادامه وجود ندارد.';
+
+  @override
+  String get webTrustFailureMessage =>
+      'مرجع گواهی خصوصی ارائه‌شده توسط مدیر را در سیستم‌عامل یا مرورگر نصب کنید، اثر انگشت آن را از مسیر مستقل تأمین بررسی کنید و دوباره تلاش کنید. برنامه وب نمی‌تواند اعتماد گواهی را نصب یا دور بزند.';
+
+  @override
+  String get serverUnreachableTitle => 'سرور در دسترس نیست';
+
+  @override
+  String get serverUnreachableMessage =>
+      'دسترسی به سرور تأمین‌شده را بررسی کنید و دوباره تلاش کنید.';
+
+  @override
+  String get retryAction => 'تلاش مجدد';
+
+  @override
+  String get loginDestination => 'ورود';
+
+  @override
   String get chatsDestination => 'گفت‌وگوها';
 
   @override

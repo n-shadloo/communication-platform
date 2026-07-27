@@ -40,6 +40,25 @@ Plain `flutter run` uses `lib/main.dart`, which delegates to development and alw
 shows a visible non-production label. Production builds must select the production
 entry point explicitly.
 
+Both entry points load exactly one HTTPS origin from environment-specific compile-time
+defines. There is no runtime server selector, remote configuration, certificate bypass,
+public connectivity probe, telemetry, or third-party runtime resource loader. A build
+without complete provisioning stops at the blocking Connection screen.
+
+The controlled build environment supplies these public provisioning values (never
+credentials or private keys):
+
+- `<ENVIRONMENT>_SERVER_ORIGIN` (an HTTPS origin with no path/query/fragment);
+- `<ENVIRONMENT>_PRIVATE_CA_SHA256` (64 hexadecimal characters);
+- Android only: `<ENVIRONMENT>_PRIMARY_SPKI_SHA256` and
+  `<ENVIRONMENT>_BACKUP_SPKI_SHA256` (distinct base64 SHA-256 digests).
+
+`<ENVIRONMENT>` is `DEVELOPMENT` or `PRODUCTION`; one artifact reads only its own prefix.
+Android also requires the build-local resource generation described in
+`android/provisioning/README.md`. Web has no CA-install or pinning API: the operator must
+install the private CA into the OS/browser trust store out of band before the page can
+connect, and a trust failure has no bypass.
+
 ```sh
 flutter run --flavor development --target lib/main_development.dart
 flutter build apk --release --flavor production --target lib/main_production.dart

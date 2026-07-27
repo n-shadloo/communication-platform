@@ -122,6 +122,108 @@ abstract class AppLocalizations {
   /// **'Flutter foundation is ready'**
   String get foundationReady;
 
+  /// No description provided for @bootstrapLoadingConfiguration.
+  ///
+  /// In en, this message translates to:
+  /// **'Loading secure configurationâ€¦'**
+  String get bootstrapLoadingConfiguration;
+
+  /// No description provided for @bootstrapCheckingStorage.
+  ///
+  /// In en, this message translates to:
+  /// **'Checking protected storageâ€¦'**
+  String get bootstrapCheckingStorage;
+
+  /// No description provided for @bootstrapDiscoveringIdentity.
+  ///
+  /// In en, this message translates to:
+  /// **'Checking this deviceâ€¦'**
+  String get bootstrapDiscoveringIdentity;
+
+  /// No description provided for @bootstrapValidatingTrust.
+  ///
+  /// In en, this message translates to:
+  /// **'Verifying server trustâ€¦'**
+  String get bootstrapValidatingTrust;
+
+  /// No description provided for @bootstrapCheckingServer.
+  ///
+  /// In en, this message translates to:
+  /// **'Connecting to the serverâ€¦'**
+  String get bootstrapCheckingServer;
+
+  /// No description provided for @bootstrapReady.
+  ///
+  /// In en, this message translates to:
+  /// **'Ready'**
+  String get bootstrapReady;
+
+  /// No description provided for @notProvisionedTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'App not provisioned'**
+  String get notProvisionedTitle;
+
+  /// No description provided for @notProvisionedMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Install a provisioned copy of this app from a trusted source. There is no connection bypass.'**
+  String get notProvisionedMessage;
+
+  /// No description provided for @protectedStorageUnavailableTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Protected storage unavailable'**
+  String get protectedStorageUnavailableTitle;
+
+  /// No description provided for @protectedStorageUnavailableMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'This device cannot safely open local identity or session data. Fix protected storage, then retry.'**
+  String get protectedStorageUnavailableMessage;
+
+  /// No description provided for @trustFailureTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Server trust could not be verified'**
+  String get trustFailureTitle;
+
+  /// No description provided for @androidTrustFailureMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'The private certificate authority or server certificate pins do not match this provisioned app. Reinstall a trusted provisioned copy or contact the operator. You cannot continue past this check.'**
+  String get androidTrustFailureMessage;
+
+  /// No description provided for @webTrustFailureMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Install the operator-provided private certificate authority in this operating system or browser, verify its fingerprint through the independent provisioning channel, then retry. The web app cannot install or bypass certificate trust.'**
+  String get webTrustFailureMessage;
+
+  /// No description provided for @serverUnreachableTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Can\'t reach the server'**
+  String get serverUnreachableTitle;
+
+  /// No description provided for @serverUnreachableMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Check access to the provisioned server and try again.'**
+  String get serverUnreachableMessage;
+
+  /// No description provided for @retryAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Retry'**
+  String get retryAction;
+
+  /// No description provided for @loginDestination.
+  ///
+  /// In en, this message translates to:
+  /// **'Login'**
+  String get loginDestination;
+
   /// No description provided for @chatsDestination.
   ///
   /// In en, this message translates to:

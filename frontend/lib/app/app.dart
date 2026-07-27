@@ -3,6 +3,8 @@ import 'package:communication_platform/app/design_system/app_theme.dart';
 import 'package:communication_platform/app/design_system/app_tokens.dart';
 import 'package:communication_platform/app/routing/app_router.dart';
 import 'package:communication_platform/features/app_shell/presentation/app_shell.dart';
+import 'package:communication_platform/features/bootstrap/application/bootstrap_flow.dart';
+import 'package:communication_platform/features/bootstrap/domain/bootstrap_model.dart';
 import 'package:communication_platform/l10n/generated/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
@@ -15,7 +17,9 @@ class CommunicationPlatformApp extends StatefulWidget {
     this.themeMode = ThemeMode.system,
     this.routeGuard,
     this.shellStatus = const AppShellStatus(),
-    this.initialLocation = '/chats',
+    this.initialLocation,
+    this.bootstrapFlow,
+    this.bootstrapPlatform = BootstrapPlatform.android,
     super.key,
   });
 
@@ -24,7 +28,9 @@ class CommunicationPlatformApp extends StatefulWidget {
   final ThemeMode themeMode;
   final AppRouteGuard? routeGuard;
   final AppShellStatus shellStatus;
-  final String initialLocation;
+  final String? initialLocation;
+  final BootstrapFlow? bootstrapFlow;
+  final BootstrapPlatform bootstrapPlatform;
 
   @override
   State<CommunicationPlatformApp> createState() =>
@@ -41,7 +47,11 @@ class _CommunicationPlatformAppState extends State<CommunicationPlatformApp> {
       environment: widget.environment,
       guard: widget.routeGuard,
       status: widget.shellStatus,
-      initialLocation: widget.initialLocation,
+      initialLocation:
+          widget.initialLocation ??
+          (widget.bootstrapFlow == null ? '/chats' : '/connection'),
+      bootstrapFlow: widget.bootstrapFlow,
+      bootstrapPlatform: widget.bootstrapPlatform,
     );
   }
 

@@ -12,8 +12,8 @@ opaque/client-owned; **Pending** = Flutter implementation not started.
 
 | Capability | Backend | Flutter |
 |---|---|---|
-| Health/reachability | Ready: `/api/v1/health` | Pending |
-| Private CA/TLS deployment | Ready | Pending trust/pinning adapters |
+| Health/reachability | Ready: `/api/v1/health` | Piece 04 typed single-origin port/state machine complete with deterministic fakes; reviewed pinned transport adapter remains piece 06 |
+| Private CA/TLS deployment | Ready | Piece 04 Android network-security template, CA/primary+backup-pin interfaces, Web external-trust gate, and blocking failures complete; provisioned-device staging integration remains pending |
 | Android/Web project | Not applicable | Piece 01 scaffold complete; development/production Android flavors and Web entry points compile |
 | Architecture and protocol docs | Backend docs ready | Piece 02 feature-first Clean Architecture skeleton compiled with sealed typed failures, scoped Riverpod composition, and source-layout/inward-dependency tests; normative fixtures/security gates pending |
 | CI/reproducible offline builds | Backend ready | Local CI commands, SDK pin, and lockfile ready; isolated offline-cache rehearsal pending |
@@ -97,7 +97,7 @@ opaque/client-owned; **Pending** = Flutter implementation not started.
 
 | Capability | Backend | Flutter |
 |---|---|---|
-| Responsive shell | Not applicable | Piece 03 adaptive `go_router` shell complete for narrow/medium/wide layouts with stable branch identity, deep-link placeholders, guard hooks, keyboard navigation, focus restoration, reduced motion, and resize route-preservation tests |
+| Responsive shell | Not applicable | Pieces 03â€“04 adaptive `go_router` shell plus guarded Splash/Connection bootstrap routing complete; stable branch identity, deep-link placeholders, guard hooks, keyboard navigation, focus restoration, reduced motion, resize preservation, accessible Retry, and Android-only offline entry are tested |
 | Forui design system and Lucide icons | Not applicable | Piece 03 app-owned semantic tokens and Forui wrappers complete; bundled Lucide is isolated behind typed `AppIcons`, with package-boundary, semantics, target-size, disabled, focus, and RTL-mirroring tests |
 | Flyer Chat builders | Not applicable | Selected; pending technical spike |
 | 34-screen inventory | Supporting APIs/primitives ready as above | Specified; pending implementation |

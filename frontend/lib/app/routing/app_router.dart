@@ -4,6 +4,9 @@ import 'package:communication_platform/app/config/app_environment.dart';
 import 'package:communication_platform/app/design_system/app_tokens.dart';
 import 'package:communication_platform/features/app_shell/presentation/app_shell.dart';
 import 'package:communication_platform/features/app_shell/presentation/structural_placeholder_page.dart';
+import 'package:communication_platform/features/bootstrap/application/bootstrap_flow.dart';
+import 'package:communication_platform/features/bootstrap/domain/bootstrap_model.dart';
+import 'package:communication_platform/features/bootstrap/presentation/bootstrap_page.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
@@ -15,6 +18,8 @@ GoRouter createAppRouter({
   AppRouteGuard? guard,
   AppShellStatus status = const AppShellStatus(),
   String initialLocation = '/chats',
+  BootstrapFlow? bootstrapFlow,
+  BootstrapPlatform bootstrapPlatform = BootstrapPlatform.android,
 }) => GoRouter(
   initialLocation: initialLocation,
   redirect: (context, state) {
@@ -24,12 +29,49 @@ GoRouter createAppRouter({
     return guard?.call(context, state);
   },
   routes: [
-    StatefulShellRoute.indexedStack(
-      builder: (context, state, navigationShell) => AppShell(
-        environment: environment,
-        navigationShell: navigationShell,
-        status: status,
+    if (bootstrapFlow != null)
+      GoRoute(
+        path: '/connection',
+        pageBuilder: (context, state) => _page(
+          context,
+          state,
+          BootstrapPage(
+            flow: bootstrapFlow,
+            platform: bootstrapPlatform,
+            isProduction: environment.isProduction,
+            onResolved: (navigation) {
+              switch (navigation.destination) {
+                case BootstrapDestination.login:
+                  context.go('/login', extra: navigation);
+                case BootstrapDestination.application:
+                  context.go(
+                    navigation.offline ? '/chats?offline=true' : '/chats',
+                  );
+              }
+            },
+          ),
+        ),
       ),
+    if (bootstrapFlow != null)
+      GoRoute(
+        path: '/login',
+        pageBuilder: (context, state) =>
+            _page(context, state, const LoginRouteBoundaryPage()),
+      ),
+    StatefulShellRoute.indexedStack(
+      builder: (context, state, navigationShell) {
+        final bootstrapOffline = state.uri.queryParameters['offline'] == 'true';
+        return AppShell(
+          environment: environment,
+          navigationShell: navigationShell,
+          status: bootstrapOffline
+              ? AppShellStatus(
+                  connection: AppConnectionState.offline,
+                  activeVoiceRoomName: status.activeVoiceRoomName,
+                )
+              : status,
+        );
+      },
       branches: [
         StatefulShellBranch(
           routes: [
