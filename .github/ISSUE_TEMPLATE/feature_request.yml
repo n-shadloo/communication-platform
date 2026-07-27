@@ -1,0 +1,50 @@
+name: Feature request
+description: Propose a change in capability.
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: >-
+        Architectural and protocol decisions are made before implementation. Use this to
+        settle a design, not to announce a finished branch.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem being solved
+      description: >-
+        The concrete situation that is worse without this, not the feature restated as a
+        need.
+    validations:
+      required: true
+
+  - type: textarea
+    id: approach
+    attributes:
+      label: Proposed approach
+      description: >-
+        How it would work, including any new endpoint, wire format, or stored field. Name
+        the alternatives you rejected and why.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: threat_model
+    attributes:
+      label: Does this affect the threat model?
+      options:
+        - "No — no change to what the server can see, store, or enforce"
+        - "Yes — it changes what the server can see, store, or enforce"
+        - "Unsure"
+    validations:
+      required: true
+
+  - type: textarea
+    id: threat_model_detail
+    attributes:
+      label: Threat model impact
+      description: >-
+        Required if you answered Yes or Unsure. Which property in `backend/SECURITY.md`
+        changes, and in which direction.
+    validations:
+      required: false

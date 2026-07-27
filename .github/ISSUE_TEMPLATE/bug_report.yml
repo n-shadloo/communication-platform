@@ -1,0 +1,71 @@
+name: Bug report
+description: Report incorrect behaviour in the backend, frontend, ops, or documentation.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: >-
+        Do not report a security vulnerability here. Use a private security advisory —
+        see
+        [SECURITY.md](https://github.com/n-shadloo/communication-platform/blob/main/.github/SECURITY.md).
+
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      description: Which part of the repository the bug is in.
+      options:
+        - backend
+        - frontend
+        - ops
+        - docs
+    validations:
+      required: true
+
+  - type: input
+    id: commit
+    attributes:
+      label: Commit SHA
+      description: Output of `git rev-parse HEAD` on the tree where you observed this.
+      placeholder: 9b2e22d
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behaviour
+      description: What should have happened, and which document says so if one does.
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behaviour
+      description: What happened instead.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction
+      description: Numbered steps starting from a known state.
+      placeholder: |
+        1.
+        2.
+        3.
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs and output
+      description: >-
+        Relevant server logs, client output, or test failures. Redact tokens, keys, and
+        anything identifying a user before pasting.
+      render: text
+    validations:
+      required: false
