@@ -32,6 +32,7 @@ migrate_working_dir/
 .pub/
 /build/
 /coverage/
+/native/crypto_core/target/
 
 # Symbolication related
 app.*.symbols

@@ -42,6 +42,11 @@ The shared Rust crypto core owns OpenMLS integration and the cryptographic provi
 Flutter/Dart only calls its narrow FFI/Wasm API. The same source, locked dependency
 versions, serialization, and fixtures are used on Android and Web.
 
+Piece 07 stages only the primitive foundation and Android FFI/isolate adapter. It does
+not integrate OpenMLS, create MLS state, or produce KeyPackages, and its successful
+Android vectors do not satisfy the Android/Web gate below. Web crypto remains
+fail-closed until the reviewed same-source Wasm adapter and browser fixtures exist.
+
 OpenMLS is preferred, but its documented supported suites currently do not include the
 selected candidate, and its Android/Wasm targets are built rather than tested upstream.
 The implementation spike must therefore prove provider support and lifecycle behavior

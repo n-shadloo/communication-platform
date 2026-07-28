@@ -58,6 +58,19 @@ the supported-browser structured-clone/persistence matrix remains a release gate
 Non-extractable means browser APIs refuse export; trusted page code can still ask the key
 to decrypt. It is not a defense against malicious same-origin JavaScript.
 
+### Deferred piece-07 crypto boundary
+
+Piece 07 does not provide the browser Wasm crypto adapter or its dedicated worker. The
+existing Web storage, networking, and application shell may continue to compile, but
+crypto-dependent operations MUST remain unavailable and fail closed. A placeholder
+adapter, pure-Dart primitive, JavaScript substitute, classical-only fallback, or claim
+that an ordinary Web build is a Wasm crypto smoke test is forbidden.
+
+The browser boundary remains a release requirement. Its future implementation MUST use
+the same locked Rust core source, provider choices, serialization, domain constants, and
+fixtures as Android and pass the identical positive, negative, malformed-input, and
+boundary vectors before Web cryptographic behavior is enabled.
+
 ## Browser execution
 
 Crypto and large parsing work run in dedicated workers/Wasm and use transfer/bounded

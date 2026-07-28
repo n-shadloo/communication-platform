@@ -26,6 +26,15 @@
 
 ### Crypto-core tests
 
+Piece 07 is an Android-only implementation milestone. Its required target tests are the
+shared Rust primitive suite, native ABI boundary tests, Android cross-build/package
+checks, Dart wrapper and isolate tests, and a smoke call through the library packaged in
+an Android application. A host-native dynamic-library test alone is not the packaged
+Android smoke. The Web build may exercise only an explicit fail-closed unavailable
+adapter during this milestone; it is not browser-Wasm or interoperability evidence.
+The cross-target requirements below remain release gates and stay unpassed until the
+deferred Web/Wasm adapter exists.
+
 - FIPS 203 ML-KEM, hybrid PQXDH/Double Ratchet, the finalized PQ MLS/OpenMLS profile,
   Argon2id, CBOR, secretstream, and SFrame vectors applicable to the selected
   implementation. Experimental PQ MLS fixtures cannot satisfy the production gate.

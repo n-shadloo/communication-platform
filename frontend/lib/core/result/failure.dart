@@ -74,6 +74,68 @@ enum SecurityFailureKind {
   malformedServerResponse,
 }
 
+/// Stable error codes exported by the version-1 native crypto ABI.
+///
+/// The code is safe to inspect, but no native error string, input, key, or
+/// ciphertext is retained by this failure.
+enum CryptoCoreFailureCode {
+  invalidArgument(1),
+  inputTooLarge(2),
+  outputTooSmall(3),
+  malformedInput(4),
+  invalidHandle(5),
+  wrongHandleType(6),
+  authenticationFailed(7),
+  unsupportedVersion(8),
+  unsupportedOperation(9),
+  resourceExhausted(10),
+  entropyUnavailable(11),
+  stateViolation(12),
+  internalFailure(13),
+  panicContained(14);
+
+  const CryptoCoreFailureCode(this.wireValue);
+
+  final int wireValue;
+
+  static CryptoCoreFailureCode? fromWireValue(int wireValue) {
+    for (final code in values) {
+      if (code.wireValue == wireValue) {
+        return code;
+      }
+    }
+    return null;
+  }
+}
+
+final class CryptoCoreFailure extends Failure {
+  const CryptoCoreFailure(this.code);
+
+  final CryptoCoreFailureCode code;
+
+  @override
+  FailureCategory get category => switch (code) {
+    CryptoCoreFailureCode.invalidArgument ||
+    CryptoCoreFailureCode.inputTooLarge ||
+    CryptoCoreFailureCode.outputTooSmall ||
+    CryptoCoreFailureCode.malformedInput ||
+    CryptoCoreFailureCode.resourceExhausted => FailureCategory.validation,
+    CryptoCoreFailureCode.unsupportedVersion ||
+    CryptoCoreFailureCode.unsupportedOperation =>
+      FailureCategory.unsupportedProtocol,
+    CryptoCoreFailureCode.invalidHandle ||
+    CryptoCoreFailureCode.wrongHandleType ||
+    CryptoCoreFailureCode.authenticationFailed ||
+    CryptoCoreFailureCode.entropyUnavailable ||
+    CryptoCoreFailureCode.stateViolation ||
+    CryptoCoreFailureCode.internalFailure ||
+    CryptoCoreFailureCode.panicContained => FailureCategory.security,
+  };
+
+  @override
+  String toString() => 'CryptoCoreFailure(code: ${code.name})';
+}
+
 final class StorageFailure extends Failure {
   const StorageFailure(this.kind);
 

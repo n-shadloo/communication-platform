@@ -39,6 +39,50 @@ This baseline was verified on 2026-07-27 against the Android Keystore documentat
 the `sqlite3` 3.5.0 build-hook documentation. Hardware-backed behavior still requires
 the physical-device matrix; no hardware guarantee is inferred from compilation alone.
 
+### Piece-07 crypto-core delivery scope
+
+Piece 07 is intentionally limited to the shared Rust primitive core and its versioned
+Android native FFI boundary, invoked away from the Flutter UI isolate. The Android
+adapter MUST expose failures only as stable payload-free status codes and secret state
+only as opaque handles, contain Rust panics at every exported boundary, reject
+out-of-bound or malformed inputs before state mutation or unbounded allocation, and
+destroy Rust-owned secret state through an explicit lifecycle. Dart may orchestrate calls
+and carry opaque bytes or handles but does not implement primitives, export private-key
+material, select weaker parameters, or receive native error strings.
+
+The verified foundation is locked to Rust 1.97.1, Cargo's committed lockfile, Android
+NDK 28.2.13676358, API 24, and `arm64-v8a`, `armeabi-v7a`, and `x86_64`. The native
+library statically links the signed libsodium 1.0.22 source archive, compiles
+`mlkem-native` v1.2.0 at commit
+`0ba906cb14b1c241476134d7403a811b382ca498`, and pins the RustCrypto,
+`minicbor`, and binding crates in `native/crypto_core/Cargo.toml`. The build rejects an
+unexpected toolchain, archive hash/signature, dynamic libsodium dependency, ELF load
+alignment, or exported symbol.
+
+ABI version 1 exports exactly `cp_crypto_v1_abi_version`,
+`cp_crypto_v1_capabilities`, and `cp_crypto_v1_self_test`. Its public status range is
+the payload-free integer set 0 through 14 frozen in
+`native/crypto_core/include/communication_crypto.h`. The current boundary deliberately
+returns public capability metadata and self-test status only; primitive inputs and
+secret values do not cross it. Rust-owned `SecretBytes` and `SecretVec` values are
+non-`Debug`, non-`Clone`, and zeroized on drop, while the testable provider owns secure
+randomness, allocation/input bounds, and primitive implementations.
+
+Verification on 2026-07-28 passed:
+
+- `cargo fmt --manifest-path native/crypto_core/Cargo.toml -- --check`;
+- `cargo test --locked --manifest-path native/crypto_core/Cargo.toml`;
+- `cargo clippy --locked --all-targets --all-features --manifest-path
+  native/crypto_core/Cargo.toml -- -D warnings`;
+- `powershell -File tool/build_rust_android.ps1 all`;
+- debug and production-release APK builds with all three native ABIs; and
+- `flutter test integration_test/crypto_core_android_smoke_test.dart -d
+  <android-device> --flavor development` on an Android 15/API 35 x86_64 emulator.
+
+This Android scope does not implement PQXDH, Double Ratchet, MLS state,
+application-message schemas, production KeyPackages, or the deferred Web/Wasm adapter.
+It cannot close any Android/Web interoperability or browser release gate.
+
 ## Network trust
 
 Production accepts only the provisioned origin and private CA. Native network security

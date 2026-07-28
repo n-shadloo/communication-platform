@@ -14,18 +14,21 @@ may orchestrate operations but MUST NOT implement PQXDH, ML-KEM, ratchets, MLS,
 signatures, KDFs,
 AEAD, secretstream, or secret zeroization.
 
-The preferred implementation direction is Rust:
+The selected foundation implementation is Rust:
 
-- `mlkem_native` on Android, backed by the formally verified FIPS 203
-  `mlkem-native` implementation; Web requires a reviewed Wasm build of the same
-  implementation and identical vectors;
-- `cryptography` or `pinenacl` for Ed25519/X25519, composed by a reviewed hybrid PQXDH
-  implementation with Double Ratchet;
-- OpenMLS for RFC 9420 group state with the candidate and release gates frozen in
-  [Post-quantum MLS profile](mls-profile.md);
-- reviewed primitives for canonical CBOR, Argon2id, and XChaCha20-Poly1305;
-- Android native libraries and a browser Wasm build produced from the same source and
-  test vectors.
+- `mlkem-native` v1.2.0 at commit
+  `0ba906cb14b1c241476134d7403a811b382ca498` provides ML-KEM-768 through its
+  deterministic API, with seeds supplied by the Rust-owned CSPRNG;
+- pinned RustCrypto crates provide Ed25519, X25519, Argon2id,
+  XChaCha20-Poly1305, SHA-2, and HKDF; `minicbor` is used behind typed,
+  strict deterministic-CBOR encoders/decoders;
+- libsodium 1.0.22, through `libsodium-sys-stable` 1.24.0, provides
+  `secretstream_xchacha20poly1305`;
+- OpenMLS remains the preferred future owner of RFC 9420 group state, subject to
+  the candidate and release gates frozen in
+  [Post-quantum MLS profile](mls-profile.md); and
+- the future browser Wasm library must be produced from the same locked Rust
+  source, provider choices, serialization, and test vectors as Android.
 
 Signal's official `libsignal` supports Android but does not present a supported browser
 runtime contract. OpenMLS builds for Android and Wasm but PQ-suite availability and those
@@ -33,6 +36,17 @@ targets require validation. Therefore dependency selection remains a mandatory
 implementation spike; inability to produce one interoperable reviewed Android/Wasm core
 blocks release rather than causing pure-Dart ML-KEM, classical-only messaging, or ad-hoc
 cryptography.
+
+### Piece-07 implementation staging
+
+Piece 07 establishes the shared Rust source and Android native FFI/isolate boundary only.
+The Web/Wasm adapter and browser worker are deferred; this milestone does not establish
+cross-target interoperability. Crypto-dependent Web behavior remains fail-closed, with
+no Dart or JavaScript primitive fallback. The future reviewed Web adapter MUST consume
+the same locked core source, provider choices, serialization, domain constants, and
+fixtures and MUST satisfy every Android/Web release gate in this document. Android-only
+completion is not a protocol downgrade, an alternate suite, or production-release
+evidence for Web.
 
 ## Protocol suite
 

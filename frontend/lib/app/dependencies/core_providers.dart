@@ -1,4 +1,8 @@
+import 'dart:async';
+
+import 'package:communication_platform/core/application/ports/crypto_core_port.dart';
 import 'package:communication_platform/core/application/ports/time_source.dart';
+import 'package:communication_platform/shared/infrastructure/crypto/platform_crypto_core.dart';
 import 'package:communication_platform/shared/infrastructure/time/system_time_source.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -7,3 +11,17 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 final timeSourceProvider = Provider<TimeSource>(
   (ref) => const SystemTimeSource(),
 );
+
+typedef CryptoCoreFactory = CryptoCorePort Function();
+
+final cryptoCoreFactoryProvider = Provider<CryptoCoreFactory>(
+  (ref) => createPlatformCryptoCore,
+);
+
+final cryptoCoreProvider = Provider<CryptoCorePort>((ref) {
+  final cryptoCore = ref.watch(cryptoCoreFactoryProvider)();
+  ref.onDispose(() {
+    unawaited(cryptoCore.close());
+  });
+  return cryptoCore;
+});

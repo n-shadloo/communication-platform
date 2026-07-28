@@ -5,7 +5,9 @@ is documented, not that the Flutter integration exists. Flutter documentation is
 specified; pieces 01–06 now provide the Android/Web foundation, architecture skeleton,
 app-owned design system, responsive routed shell, guarded bootstrap, secure local
 storage, and the typed REST/authentication/WebSocket transport foundation. Later
-capabilities remain pending.
+capabilities remain pending. Piece 07 now provides the shared Rust primitive foundation
+and Android FFI/isolate adapter; Web/Wasm crypto is explicitly deferred and remains
+fail-closed. Completion and test evidence are recorded below only after verification.
 
 Legend: **Ready** = implemented backend contract; **Client protocol** = intentionally
 opaque/client-owned; **Pending** = Flutter implementation not started.
@@ -20,6 +22,7 @@ opaque/client-owned; **Pending** = Flutter implementation not started.
 | Architecture and protocol docs | Backend docs ready | Piece 02 feature-first Clean Architecture skeleton compiled with sealed typed failures, scoped Riverpod composition, and source-layout/inward-dependency tests; normative fixtures/security gates pending |
 | CI/reproducible offline builds | Backend ready | Local CI commands, SDK pin, and lockfile ready; isolated offline-cache rehearsal pending |
 | Redacted diagnostics | Backend ready | Piece 06 typed payload-free network diagnostic events and redaction tests complete; user-initiated local export remains piece 21 |
+| Shared Rust crypto core | Client protocol | Piece 07 Android foundation complete: pinned primitive providers, zeroizing secret types, bounded deterministic CBOR, stable ABI/status codes, panic containment, dedicated isolate, three-ABI packaging, and packaged Android smoke pass; Web/Wasm and later protocols remain pending |
 
 ## Accounts and devices
 
@@ -116,12 +119,16 @@ opaque/client-owned; **Pending** = Flutter implementation not started.
 | Android local notifications | No foreign push by design | Pending |
 | Web persistent encrypted device | Device API supports it | Piece 05 ciphertext-only Drift persistence, non-extractable WebCrypto wrapping key in IndexedDB, authenticated wrapped storage key, unsafe-storage rejection, memory clearing hooks, and key-loss/tamper wipe complete; supported-browser persistence matrix remains a release gate |
 | Web open-tab realtime | WebSocket auth supports it | Piece 06 origin-derived `wss` gateway and first-frame browser authentication complete; page lifecycle/drain integration remains pending |
+| Web shared crypto Wasm/worker | Client protocol | Deferred after the Android-only piece-07 scope; crypto-dependent Web behavior remains fail-closed with no Dart/JavaScript fallback, and same-source Android/Web vectors remain pending |
 | Closed-browser notification | Not supported without push by design | Explicitly out of scope |
 | Direct signed APK distribution | Self-hosted operation supports it | Pending release pipeline |
 | Self-hosted hardened web bundle | nginx deployment base exists | Pending build/header config |
 
 ## Required spikes before broad implementation
 
+- [x] Piece 07 shared Rust primitive core, stable native ABI, Android packaging,
+  isolate lifecycle, redaction, malformed-input, boundary, and packaged-device smoke
+  checks pass. This Android-only item does not satisfy the cross-target item below.
 - [ ] Deterministic-CBOR CDDL, `EnvelopeV1` encoders, and Android/Web golden byte/error
   fixtures are generated from one versioned protocol package.
 - [ ] Shared crypto core builds and passes identical vectors on Android and browser Wasm.

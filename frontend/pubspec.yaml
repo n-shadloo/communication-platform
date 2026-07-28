@@ -11,6 +11,7 @@ dependencies:
   dio: ^5.11.0
   drift: ^2.34.2
   drift_flutter: ^0.3.1
+  ffi: 2.2.0
   flutter:
     sdk: flutter
   flutter_chat_core: ^2.9.0
@@ -35,6 +36,8 @@ dev_dependencies:
   drift_dev: 2.34.0
   flutter_lints: ^6.0.0
   flutter_test:
+    sdk: flutter
+  integration_test:
     sdk: flutter
   # 4.0.6 is not solver-compatible with its analyzer utility as published.
   riverpod_generator: 4.0.4

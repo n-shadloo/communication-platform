@@ -69,6 +69,11 @@ Dependencies are pinned, checksummed, cached for offline builds, license-reviewe
 scanned. Crypto debug features and sensitive logging features are forbidden in release
 builds.
 
+Piece 07 implements only the shared Rust primitive foundation and Android
+FFI/isolate adapter. The Web/Wasm boundary is deferred and crypto-dependent Web
+behavior remains fail-closed; Android completion is not evidence for the Web trust
+boundary or the required cross-target vectors.
+
 ## Required controls
 
 - TLS 1.3, provisioned private CA, native SPKI pins with a backup pin, and strict web
