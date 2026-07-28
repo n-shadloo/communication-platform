@@ -11,7 +11,7 @@ void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
   test(
-    'Android loads the versioned Rust core in its isolate and self-tests',
+    'Android loads the versioned Rust core in its isolate and verifies backend protocol vectors',
     () async {
       final container = ProviderContainer();
       addTearDown(container.dispose);

@@ -132,7 +132,10 @@ opaque/client-owned; **Pending** = Flutter implementation not started.
   checks pass for the Android-only version-1 target.
 - [ ] Deterministic-CBOR CDDL, `EnvelopeV1` encoders, and Android golden byte/error
   fixtures are generated from one versioned protocol package.
-- [ ] Shared crypto core builds and passes all required vectors on Android.
+- [x] Piece 08 canonical device-signature encoders/verifiers reproduce every
+  backend `cross_sig`, `master_sig`, `spk_sig`, and `pq_spk_sig` vector byte-for-byte,
+  reject required mutations, and pass through the packaged Android FFI/isolate smoke
+  test. No Dart encoder or Web/Wasm implementation was added.
 - [ ] Android `mlkem_native` passes identical FIPS/PQXDH vectors; no educational or
   pure-Dart ML-KEM is present.
 - [ ] Hybrid PQXDH/Double Ratchet composition is independently reviewed.
@@ -142,8 +145,10 @@ opaque/client-owned; **Pending** = Flutter implementation not started.
   post-v1.
 - [ ] First/later-device two-phase enrollment is crash-safe and resumable; unsigned
   intermediate devices remain withheld until the prekey cross-signature follow-up.
-- [ ] Android reproduces the backend `cross_sig`, `master_sig`, `spk_sig`, and
-  `pq_spk_sig` golden vectors, including optional fields and the 64-byte `ik_pub` layout.
+- [x] Android reproduces the backend `cross_sig`, `master_sig`, `spk_sig`, and
+  `pq_spk_sig` golden vectors, including optional fields and the 64-byte `ik_pub` layout
+  (Piece 08: Rust vectors, strict Clippy, Flutter tests, three-ABI native package build,
+  and Android FFI/isolate smoke test verified on 2026-07-28).
 - [ ] Device-log chain verification, ETag refresh, encrypted head gossip, and fork alarms
   pass malicious-server tests.
 - [ ] Android LiveKit Flutter E2EE meets the SFrame/media threat-model requirement.

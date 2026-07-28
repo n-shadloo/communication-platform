@@ -2,6 +2,7 @@
 
 mod bounds;
 mod cbor;
+pub mod device_signatures;
 mod error;
 mod provider;
 mod random;
@@ -177,6 +178,7 @@ fn run_self_test() -> CryptoResult<()> {
         return Err(CryptoError::InternalFailure);
     }
     let _ = SecretVec::input(&[0x66; 32])?;
+    device_signatures::verify_backend_vectors(&provider)?;
     Ok(())
 }
 

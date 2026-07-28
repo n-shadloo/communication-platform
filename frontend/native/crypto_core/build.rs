@@ -23,6 +23,31 @@ fn main() {
         .verify(&archive, &signature, false)
         .expect("pinned libsodium archive signature verification failed");
 
+    let vectors_path = crate_root
+        .join("..")
+        .join("..")
+        .join("..")
+        .join("backend")
+        .join("devices")
+        .join("vectors")
+        .join("vectors.json");
+    println!("cargo:rerun-if-changed={}", vectors_path.display());
+    let mut vectors: serde_json::Value = serde_json::from_slice(
+        &fs::read(&vectors_path).expect("backend device vectors must be readable"),
+    )
+    .expect("backend device vectors must be valid JSON");
+    vectors
+        .as_object_mut()
+        .expect("backend device vectors must be an object")
+        .remove("seeds");
+    let sanitized_vectors =
+        serde_json::to_vec(&vectors).expect("sanitized backend device vectors must serialize");
+    let output_vectors =
+        PathBuf::from(std::env::var_os("OUT_DIR").expect("OUT_DIR is set by Cargo"))
+            .join("backend_device_vectors.json");
+    fs::write(output_vectors, sanitized_vectors)
+        .expect("sanitized backend device vectors must be written");
+
     let mlkem_root = crate_root.join("vendor").join("mlkem-native").join("mlkem");
     let source = mlkem_root.join("mlkem_native.c");
 
