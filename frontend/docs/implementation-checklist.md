@@ -29,8 +29,8 @@ opaque/client-owned; **Pending** = Flutter implementation not started.
 
 | Capability | Backend | Flutter |
 |---|---|---|
-| Register/manual activation | Ready | Pending screens/use cases |
-| Login/refresh/logout | Ready | Piece 06 proactive single-flight rotating-token coordinator, one safe authenticated retry, revocation, and local-first logout foundation complete; feature use cases/screens remain piece 09 |
+| Register/manual activation | Ready | Piece 09 account registration, pending-activation state, localized validation/errors, and responsive screens complete; activation remains owner-driven with no polling |
+| Login/refresh/logout | Ready | Piece 09 Dio account repository, register/full session boundary, secure refresh persistence, memory-only access tokens, deterministic restoration/guards, logout wipe, offline, expiry, revocation, and localized screens complete; device enrollment remains piece 10 |
 | User directory | Ready | Pending local repository/UI |
 | Encrypted profile blob | Ready opaque storage | Bootstrap fallback specified; implementation pending |
 | Cross-signing identity publish/fetch | Ready opaque transport | Pending master/self/user-signing implementation |

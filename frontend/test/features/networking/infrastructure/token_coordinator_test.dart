@@ -105,6 +105,35 @@ void main() {
     expect(termination.reasons, [SessionTerminationReason.logout]);
   });
 
+  test(
+    'a refresh completing after logout cannot resurrect the session',
+    () async {
+      final store = MemoryTokenStore(
+        session('old-access', 'old-refresh', DateTime.utc(2026, 7, 27, 11)),
+      );
+      final exchange = ControlledRefreshExchange();
+      final coordinator = TokenCoordinator(
+        store: store,
+        refreshExchange: exchange,
+        terminationHandler: RecordingTerminationHandler(),
+        timeSource: FixedTimeSource(DateTime.utc(2026, 7, 27, 12)),
+      );
+
+      final refresh = coordinator.accessToken();
+      await Future<void>.delayed(Duration.zero);
+      await coordinator.logout();
+      exchange.completer.complete(
+        Result.success(
+          session('late-access', 'late-refresh', DateTime.utc(2026, 7, 27, 13)),
+        ),
+      );
+
+      expect(await refresh, isA<FailureResult<AccessToken>>());
+      expect(store.current, isNull);
+      expect(store.replacements, 0);
+    },
+  );
+
   test('register-scope token cannot refresh and expires closed', () async {
     final store = MemoryTokenStore(
       SessionTokens(

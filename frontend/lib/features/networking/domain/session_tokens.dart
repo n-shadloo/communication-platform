@@ -16,10 +16,21 @@ final class AccessToken {
 
 /// A rotating device session. Register-scope login tokens have no refresh token.
 final class SessionTokens {
-  const SessionTokens({required this.accessToken, this.refreshToken});
+  const SessionTokens({
+    required this.accessToken,
+    this.refreshToken,
+    this.refreshExpiresAt,
+    this.userId,
+    this.deviceId,
+    this.username,
+  });
 
   final AccessToken accessToken;
   final String? refreshToken;
+  final DateTime? refreshExpiresAt;
+  final String? userId;
+  final String? deviceId;
+  final String? username;
 
   bool get canRefresh =>
       accessToken.scope == SessionScope.full && refreshToken != null;

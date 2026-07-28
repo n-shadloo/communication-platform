@@ -4,6 +4,8 @@ import 'package:communication_platform/app/config/app_environment.dart';
 import 'package:communication_platform/app/design_system/app_tokens.dart';
 import 'package:communication_platform/features/app_shell/presentation/app_shell.dart';
 import 'package:communication_platform/features/app_shell/presentation/structural_placeholder_page.dart';
+import 'package:communication_platform/features/authentication/presentation/authentication_pages.dart';
+import 'package:communication_platform/features/authentication/presentation/authentication_route_state.dart';
 import 'package:communication_platform/features/bootstrap/application/bootstrap_flow.dart';
 import 'package:communication_platform/features/bootstrap/domain/bootstrap_model.dart';
 import 'package:communication_platform/features/bootstrap/presentation/bootstrap_page.dart';
@@ -20,11 +22,20 @@ GoRouter createAppRouter({
   String initialLocation = '/chats',
   BootstrapFlow? bootstrapFlow,
   BootstrapPlatform bootstrapPlatform = BootstrapPlatform.android,
+  AuthenticationRouteState? authenticationRouteState,
 }) => GoRouter(
   initialLocation: initialLocation,
+  refreshListenable: authenticationRouteState,
   redirect: (context, state) {
     if (state.uri.path == '/') {
       return '/chats';
+    }
+    final authenticationRedirect = authenticationRouteState?.redirect(
+      state.uri.path,
+      state.uri.toString(),
+    );
+    if (authenticationRedirect != null) {
+      return authenticationRedirect;
     }
     return guard?.call(context, state);
   },
@@ -52,12 +63,53 @@ GoRouter createAppRouter({
           ),
         ),
       ),
-    if (bootstrapFlow != null)
+    GoRoute(
+      path: '/login',
+      pageBuilder: (context, state) {
+        final username = switch (state.extra) {
+          BootstrapNavigation(:final rememberedUsername) => rememberedUsername,
+          final String username => username,
+          _ => null,
+        };
+        return _page(
+          context,
+          state,
+          authenticationRouteState == null
+              ? const LoginRouteBoundaryPage()
+              : LoginPage(initialUsername: username),
+        );
+      },
+    ),
+    if (authenticationRouteState != null) ...[
       GoRoute(
-        path: '/login',
+        path: '/session-restoring',
         pageBuilder: (context, state) =>
-            _page(context, state, const LoginRouteBoundaryPage()),
+            _page(context, state, const SessionRestorationPage()),
       ),
+      GoRoute(
+        path: '/register',
+        pageBuilder: (context, state) =>
+            _page(context, state, const RegisterPage()),
+      ),
+      GoRoute(
+        path: '/pending-activation',
+        pageBuilder: (context, state) => _page(
+          context,
+          state,
+          PendingActivationPage(username: state.extra as String?),
+        ),
+      ),
+      GoRoute(
+        path: '/security-notice',
+        pageBuilder: (context, state) =>
+            _page(context, state, const PreAuthSecurityNoticePage()),
+      ),
+      GoRoute(
+        path: '/encryption-setup',
+        pageBuilder: (context, state) =>
+            _page(context, state, const EncryptionSetupRouteBoundaryPage()),
+      ),
+    ],
     StatefulShellRoute.indexedStack(
       builder: (context, state, navigationShell) {
         final bootstrapOffline = state.uri.queryParameters['offline'] == 'true';

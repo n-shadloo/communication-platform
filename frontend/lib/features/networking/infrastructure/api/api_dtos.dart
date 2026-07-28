@@ -39,6 +39,7 @@ final class TokenPairResponseDto {
     required this.access,
     required this.refresh,
     required this.accessExpiresAt,
+    required this.refreshExpiresAt,
   });
 
   factory TokenPairResponseDto.fromJson(Object? value) {
@@ -54,13 +55,15 @@ final class TokenPairResponseDto {
     return TokenPairResponseDto._(
       access: access,
       refresh: refresh,
-      accessExpiresAt: _readJwtExpiry(access),
+      accessExpiresAt: readJwtExpiry(access),
+      refreshExpiresAt: readJwtExpiry(refresh),
     );
   }
 
   final String access;
   final String refresh;
   final DateTime accessExpiresAt;
+  final DateTime refreshExpiresAt;
 
   SessionTokens toDomain() => SessionTokens(
     accessToken: AccessToken(
@@ -69,6 +72,7 @@ final class TokenPairResponseDto {
       scope: SessionScope.full,
     ),
     refreshToken: refresh,
+    refreshExpiresAt: refreshExpiresAt,
   );
 }
 
@@ -172,7 +176,7 @@ final class DrainEnvelopesResponseDto {
   final int prunedThrough;
 }
 
-DateTime _readJwtExpiry(String token) {
+DateTime readJwtExpiry(String token) {
   final parts = token.split('.');
   if (parts.length != 3 || parts[1].length > 16384) {
     throw const MalformedApiBody();

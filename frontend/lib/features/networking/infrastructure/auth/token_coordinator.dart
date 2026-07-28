@@ -26,6 +26,7 @@ final class TokenCoordinator implements AccessTokenCoordinator {
   final Duration clockSkewAllowance;
 
   Future<Result<AccessToken>>? _refreshInFlight;
+  int _sessionGeneration = 0;
 
   @override
   Future<Result<AccessToken>> accessToken({bool forceRefresh = false}) async {
@@ -76,7 +77,7 @@ final class TokenCoordinator implements AccessTokenCoordinator {
     if (existing != null) {
       return existing;
     }
-    final refresh = _performRefresh(refreshToken);
+    final refresh = _performRefresh(refreshToken, _sessionGeneration);
     _refreshInFlight = refresh;
     return refresh.whenComplete(() {
       if (identical(_refreshInFlight, refresh)) {
@@ -85,10 +86,27 @@ final class TokenCoordinator implements AccessTokenCoordinator {
     });
   }
 
-  Future<Result<AccessToken>> _performRefresh(String refreshToken) async {
+  Future<Result<AccessToken>> _performRefresh(
+    String refreshToken,
+    int generation,
+  ) async {
     final result = await refreshExchange.rotate(refreshToken);
     switch (result) {
       case Success(value: final tokens):
+        final current = await store.read();
+        if (generation != _sessionGeneration) {
+          return const Result.failure(
+            AuthenticationFailure(AuthenticationFailureKind.sessionExpired),
+          );
+        }
+        if (current?.refreshToken != refreshToken) {
+          if (current != null && current.accessToken.value.isNotEmpty) {
+            return Result.success(current.accessToken);
+          }
+          return const Result.failure(
+            AuthenticationFailure(AuthenticationFailureKind.sessionExpired),
+          );
+        }
         await store.replace(tokens);
         return Result.success(tokens.accessToken);
       case FailureResult(failure: final failure):
@@ -118,6 +136,7 @@ final class TokenCoordinator implements AccessTokenCoordinator {
 
   @override
   Future<void> logout() async {
+    _sessionGeneration += 1;
     final tokens = await store.read();
     try {
       if (tokens?.refreshToken case final String refreshToken) {
@@ -134,10 +153,16 @@ final class TokenCoordinator implements AccessTokenCoordinator {
   }
 
   @override
-  Future<void> handleRevocation() =>
-      _terminate(SessionTerminationReason.revoked);
+  Future<void> handleRevocation() {
+    _sessionGeneration += 1;
+    return _terminate(SessionTerminationReason.revoked);
+  }
 
   Future<void> _terminate(SessionTerminationReason reason) async {
+    if (reason != SessionTerminationReason.logout &&
+        reason != SessionTerminationReason.revoked) {
+      _sessionGeneration += 1;
+    }
     await store.clear();
     await terminationHandler.terminate(reason);
   }

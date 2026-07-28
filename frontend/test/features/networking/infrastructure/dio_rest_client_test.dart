@@ -347,9 +347,10 @@ void main() {
   group('DTO contract boundaries', () {
     test('refresh DTO requires rotating pair and maps JWT expiry', () {
       final token = jwt(expirySeconds: 2000000000);
+      final refresh = jwt(expirySeconds: 2000000100);
       final dto = TokenPairResponseDto.fromJson({
         'access': token,
-        'refresh': 'rotated-refresh',
+        'refresh': refresh,
       });
       final domain = dto.toDomain();
       expect(domain.accessToken.scope, SessionScope.full);
@@ -357,7 +358,11 @@ void main() {
         domain.accessToken.expiresAt,
         DateTime.fromMillisecondsSinceEpoch(2000000000 * 1000, isUtc: true),
       );
-      expect(domain.refreshToken, 'rotated-refresh');
+      expect(domain.refreshToken, refresh);
+      expect(
+        domain.refreshExpiresAt,
+        DateTime.fromMillisecondsSinceEpoch(2000000100 * 1000, isUtc: true),
+      );
       expect(
         () => TokenPairResponseDto.fromJson({'access': token}),
         throwsA(isA<MalformedApiBody>()),

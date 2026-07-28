@@ -1,4 +1,12 @@
-enum NetworkOperation { health, authRefresh, authLogout, api, websocket }
+enum NetworkOperation {
+  health,
+  authRegister,
+  authLogin,
+  authRefresh,
+  authLogout,
+  api,
+  websocket,
+}
 
 enum NetworkOutcome {
   succeeded,

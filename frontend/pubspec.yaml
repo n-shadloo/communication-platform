@@ -43,6 +43,7 @@ dev_dependencies:
   riverpod_generator: 4.0.4
 
 flutter:
+  default-flavor: development
   generate: true
   uses-material-design: true
   assets:

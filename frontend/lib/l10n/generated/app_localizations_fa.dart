@@ -160,4 +160,141 @@ class AppLocalizationsFa extends AppLocalizations {
   String routeLabel(String route) {
     return 'مسیر: $route';
   }
+
+  @override
+  String get authLoginTitle => 'ورود';
+
+  @override
+  String get authLoginSubtitle => 'به حساب خود در سرور تأمین‌شده وارد شوید.';
+
+  @override
+  String get authRegisterTitle => 'ساخت حساب';
+
+  @override
+  String get authRegisterSubtitle =>
+      'نام کاربری و رمز عبوری انتخاب کنید. پیش از استفاده، مالک باید حساب را فعال کند.';
+
+  @override
+  String get authUsernameLabel => 'نام کاربری';
+
+  @override
+  String get authPasswordLabel => 'رمز عبور';
+
+  @override
+  String get authConfirmPasswordLabel => 'تکرار رمز عبور';
+
+  @override
+  String get authUsernameHint => '۳ تا ۳۲ حرف کوچک انگلیسی، رقم یا زیرخط';
+
+  @override
+  String get authPasswordHint => '۱۰ تا ۲۵۶ نویسه';
+
+  @override
+  String get authPasswordPurpose =>
+      'رمز عبور فقط برای ورود است و نمی‌تواند هویت رمزنگاری یا تاریخچه پیام‌ها را بازیابی کند.';
+
+  @override
+  String get authLoginAction => 'ورود';
+
+  @override
+  String get authLoggingInAction => 'در حال ورود…';
+
+  @override
+  String get authCreateAccountAction => 'ساخت حساب';
+
+  @override
+  String get authCreatingAccountAction => 'در حال ساخت حساب…';
+
+  @override
+  String get authSecurityNoticeAction => 'امنیت و روش محافظت این برنامه';
+
+  @override
+  String get authBackToLoginAction => 'بازگشت به ورود';
+
+  @override
+  String get authBackAction => 'بازگشت';
+
+  @override
+  String get authUsernameFormatError =>
+      'از ۳ تا ۳۲ حرف، رقم یا زیرخط استفاده کنید.';
+
+  @override
+  String get authPasswordLengthError =>
+      'رمز عبور باید بین ۱۰ تا ۲۵۶ نویسه باشد.';
+
+  @override
+  String get authPasswordsMismatchError => 'رمزهای عبور یکسان نیستند.';
+
+  @override
+  String get authInvalidCredentialsMessage =>
+      'نام کاربری یا رمز عبور نادرست است.';
+
+  @override
+  String get authInactiveAccountMessage =>
+      'این حساب در انتظار فعال‌سازی توسط مالک است.';
+
+  @override
+  String get authUsernameTakenMessage => 'این نام کاربری قبلاً انتخاب شده است.';
+
+  @override
+  String get authRateLimitedMessage =>
+      'تلاش‌های بیش از حد. کمی صبر کنید و دوباره تلاش کنید.';
+
+  @override
+  String get authOfflineMessage =>
+      'سرور تأمین‌شده در دسترس نیست. اتصال را بررسی و دوباره تلاش کنید.';
+
+  @override
+  String get authMalformedResponseMessage =>
+      'پاسخ سرور نامعتبر بود. دوباره تلاش کنید یا با مدیر تماس بگیرید.';
+
+  @override
+  String get authInvalidInputMessage =>
+      'اطلاعات مشخص‌شده را بررسی و دوباره تلاش کنید.';
+
+  @override
+  String get authSessionExpiredMessage =>
+      'نشست شما منقضی شده است. دوباره وارد شوید.';
+
+  @override
+  String get authRevokedMessage =>
+      'این نشست دیگر معتبر نیست. داده‌های محلی این نصب حذف شد.';
+
+  @override
+  String get authStorageUnavailableMessage =>
+      'ذخیره‌سازی محافظت‌شده در دسترس نیست. مشکل ذخیره‌سازی را رفع و دواره تلاش کنید.';
+
+  @override
+  String get authGenericErrorMessage => 'مشکلی پیش آمد. دوباره تلاش کنید.';
+
+  @override
+  String get authPendingTitle => 'در انتظار فعال‌سازی';
+
+  @override
+  String get authPendingMessage =>
+      'حساب شما در انتظار فعال‌سازی توسط مالک است.';
+
+  @override
+  String get authPendingNoPollingMessage =>
+      'بررسی خودکاری برای فعال‌سازی وجود ندارد. پس از فعال‌سازی توسط مالک، به ورود بازگردید و رمز عبور را دوباره وارد کنید.';
+
+  @override
+  String get authCheckAgainAction => 'بررسی دوباره';
+
+  @override
+  String get authRestoringSession => 'در حال بازیابی نشست امن…';
+
+  @override
+  String get authSecureSetupBoundaryTitle => 'راه‌اندازی امن دستگاه لازم است';
+
+  @override
+  String get authSecureSetupBoundaryMessage =>
+      'شما با دسترسی محدود ثبت‌نام وارد شده‌اید. ثبت دستگاه در مرحله بعدی کامل می‌شود.';
+
+  @override
+  String get authSecurityNoticeTitle => 'مرز امنیتی';
+
+  @override
+  String get authSecurityNoticeMessage =>
+      'رمز عبور، حساب شما را احراز می‌کند. یک راز بازیابی جداگانه از مواد هویت رمزنگاری محافظت می‌کند. هیچ‌یک تاریخچه پیام‌ها را از سرور بازیابی نمی‌کند.';
 }

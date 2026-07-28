@@ -373,6 +373,246 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Route: {route}'**
   String routeLabel(String route);
+
+  /// No description provided for @authLoginTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Log in'**
+  String get authLoginTitle;
+
+  /// No description provided for @authLoginSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Sign in to your account on the provisioned server.'**
+  String get authLoginSubtitle;
+
+  /// No description provided for @authRegisterTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Create account'**
+  String get authRegisterTitle;
+
+  /// No description provided for @authRegisterSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose a username and password. The owner must activate the account before you can use it.'**
+  String get authRegisterSubtitle;
+
+  /// No description provided for @authUsernameLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Username'**
+  String get authUsernameLabel;
+
+  /// No description provided for @authPasswordLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Password'**
+  String get authPasswordLabel;
+
+  /// No description provided for @authConfirmPasswordLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Confirm password'**
+  String get authConfirmPasswordLabel;
+
+  /// No description provided for @authUsernameHint.
+  ///
+  /// In en, this message translates to:
+  /// **'3–32 lowercase letters, numbers, or underscores'**
+  String get authUsernameHint;
+
+  /// No description provided for @authPasswordHint.
+  ///
+  /// In en, this message translates to:
+  /// **'10–256 characters'**
+  String get authPasswordHint;
+
+  /// No description provided for @authPasswordPurpose.
+  ///
+  /// In en, this message translates to:
+  /// **'Your password signs you in. It cannot recover your cryptographic identity or message history.'**
+  String get authPasswordPurpose;
+
+  /// No description provided for @authLoginAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Log in'**
+  String get authLoginAction;
+
+  /// No description provided for @authLoggingInAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Logging in…'**
+  String get authLoggingInAction;
+
+  /// No description provided for @authCreateAccountAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Create account'**
+  String get authCreateAccountAction;
+
+  /// No description provided for @authCreatingAccountAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Creating account…'**
+  String get authCreatingAccountAction;
+
+  /// No description provided for @authSecurityNoticeAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Security & how this app protects you'**
+  String get authSecurityNoticeAction;
+
+  /// No description provided for @authBackToLoginAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Back to login'**
+  String get authBackToLoginAction;
+
+  /// No description provided for @authBackAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Back'**
+  String get authBackAction;
+
+  /// No description provided for @authUsernameFormatError.
+  ///
+  /// In en, this message translates to:
+  /// **'Use 3–32 letters, numbers, or underscores.'**
+  String get authUsernameFormatError;
+
+  /// No description provided for @authPasswordLengthError.
+  ///
+  /// In en, this message translates to:
+  /// **'Password must be between 10 and 256 characters.'**
+  String get authPasswordLengthError;
+
+  /// No description provided for @authPasswordsMismatchError.
+  ///
+  /// In en, this message translates to:
+  /// **'Passwords do not match.'**
+  String get authPasswordsMismatchError;
+
+  /// No description provided for @authInvalidCredentialsMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Username or password is incorrect.'**
+  String get authInvalidCredentialsMessage;
+
+  /// No description provided for @authInactiveAccountMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'This account is waiting for the owner to activate it.'**
+  String get authInactiveAccountMessage;
+
+  /// No description provided for @authUsernameTakenMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'That username is already taken.'**
+  String get authUsernameTakenMessage;
+
+  /// No description provided for @authRateLimitedMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Too many attempts. Please wait and try again.'**
+  String get authRateLimitedMessage;
+
+  /// No description provided for @authOfflineMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'The provisioned server cannot be reached. Check your connection and try again.'**
+  String get authOfflineMessage;
+
+  /// No description provided for @authMalformedResponseMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'The server returned an invalid response. Try again or contact the operator.'**
+  String get authMalformedResponseMessage;
+
+  /// No description provided for @authInvalidInputMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Check the highlighted information and try again.'**
+  String get authInvalidInputMessage;
+
+  /// No description provided for @authSessionExpiredMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Your session has expired. Log in again.'**
+  String get authSessionExpiredMessage;
+
+  /// No description provided for @authRevokedMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'This session is no longer valid. Local data from this installation was removed.'**
+  String get authRevokedMessage;
+
+  /// No description provided for @authStorageUnavailableMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Protected storage is unavailable. Fix device storage and try again.'**
+  String get authStorageUnavailableMessage;
+
+  /// No description provided for @authGenericErrorMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Something went wrong. Please try again.'**
+  String get authGenericErrorMessage;
+
+  /// No description provided for @authPendingTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Waiting for activation'**
+  String get authPendingTitle;
+
+  /// No description provided for @authPendingMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Your account is waiting for the owner to activate it.'**
+  String get authPendingMessage;
+
+  /// No description provided for @authPendingNoPollingMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'There is no automatic activation check. When the owner has activated your account, return to login and enter your password again.'**
+  String get authPendingNoPollingMessage;
+
+  /// No description provided for @authCheckAgainAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Check again'**
+  String get authCheckAgainAction;
+
+  /// No description provided for @authRestoringSession.
+  ///
+  /// In en, this message translates to:
+  /// **'Restoring your secure session…'**
+  String get authRestoringSession;
+
+  /// No description provided for @authSecureSetupBoundaryTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Secure device setup required'**
+  String get authSecureSetupBoundaryTitle;
+
+  /// No description provided for @authSecureSetupBoundaryMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'You are signed in with registration-only access. Device registration is completed in the next setup step.'**
+  String get authSecureSetupBoundaryMessage;
+
+  /// No description provided for @authSecurityNoticeTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Security boundary'**
+  String get authSecurityNoticeTitle;
+
+  /// No description provided for @authSecurityNoticeMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Your login password authenticates your account. A separate recovery secret protects cryptographic identity material. Neither secret restores message history from the server.'**
+  String get authSecurityNoticeMessage;
 }
 
 class _AppLocalizationsDelegate

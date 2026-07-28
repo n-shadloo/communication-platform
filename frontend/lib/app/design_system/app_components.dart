@@ -106,6 +106,9 @@ class AppField extends StatelessWidget {
     this.onSubmitted,
     this.focusNode,
     this.textInputAction,
+    this.keyboardType,
+    this.autofillHints,
+    this.maxLength,
     super.key,
   });
 
@@ -120,24 +123,49 @@ class AppField extends StatelessWidget {
   final ValueChanged<String>? onSubmitted;
   final FocusNode? focusNode;
   final TextInputAction? textInputAction;
+  final TextInputType? keyboardType;
+  final Iterable<String>? autofillHints;
+  final int? maxLength;
 
   @override
-  Widget build(BuildContext context) => FTextField(
-    control: FTextFieldControl.managed(
+  Widget build(BuildContext context) {
+    final control = FTextFieldControl.managed(
       controller: controller,
       onChange: onChanged == null ? null : (value) => onChanged!(value.text),
-    ),
-    size: FTextFieldSizeVariant.lg,
-    label: Text(label),
-    hint: hint,
-    description: description == null ? null : Text(description!),
-    error: error == null ? null : Text(error!),
-    enabled: enabled,
-    obscureText: obscureText,
-    focusNode: focusNode,
-    textInputAction: textInputAction,
-    onSubmit: onSubmitted,
-  );
+    );
+    if (obscureText) {
+      return FTextField.password(
+        control: control,
+        size: FTextFieldSizeVariant.lg,
+        label: Text(label),
+        hint: hint,
+        description: description == null ? null : Text(description!),
+        error: error == null ? null : Text(error!),
+        enabled: enabled,
+        focusNode: focusNode,
+        textInputAction: textInputAction ?? TextInputAction.next,
+        keyboardType: keyboardType,
+        onSubmit: onSubmitted,
+        maxLength: maxLength,
+        autofillHints: autofillHints ?? const [AutofillHints.password],
+      );
+    }
+    return FTextField(
+      control: control,
+      size: FTextFieldSizeVariant.lg,
+      label: Text(label),
+      hint: hint,
+      description: description == null ? null : Text(description!),
+      error: error == null ? null : Text(error!),
+      enabled: enabled,
+      focusNode: focusNode,
+      textInputAction: textInputAction,
+      keyboardType: keyboardType,
+      onSubmit: onSubmitted,
+      maxLength: maxLength,
+      autofillHints: autofillHints,
+    );
+  }
 }
 
 enum AppStatusKind { neutral, information, success, warning, danger }
