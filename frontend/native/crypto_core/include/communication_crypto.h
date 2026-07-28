@@ -44,6 +44,71 @@ int32_t cp_crypto_v1_capabilities(
     uintptr_t output_len);
 int32_t cp_crypto_v1_self_test(void);
 
+int32_t cp_crypto_v1_prepare_device(
+    const uint8_t* user_id,
+    uintptr_t user_id_len,
+    uint8_t* output,
+    uintptr_t output_len,
+    uintptr_t* written);
+int32_t cp_crypto_v1_prepare_first_identity(
+    const uint8_t* user_id,
+    uintptr_t user_id_len,
+    uint8_t* output,
+    uintptr_t output_len,
+    uintptr_t* written);
+int32_t cp_crypto_v1_restore_identity(
+    const uint8_t* user_id,
+    uintptr_t user_id_len,
+    const uint8_t* recovery_secret,
+    uintptr_t recovery_secret_len,
+    const uint8_t* backup,
+    uintptr_t backup_len,
+    uint8_t* output,
+    uintptr_t output_len,
+    uintptr_t* written);
+int32_t cp_crypto_v1_sanitize_identity(
+    const uint8_t* identity_package,
+    uintptr_t identity_package_len,
+    uint8_t* output,
+    uintptr_t output_len,
+    uintptr_t* written);
+int32_t cp_crypto_v1_cross_sign_device(
+    const uint8_t* device_package,
+    uintptr_t device_package_len,
+    const uint8_t* identity_package,
+    uintptr_t identity_package_len,
+    const uint8_t* device_id,
+    uintptr_t device_id_len,
+    uint32_t bundle_version,
+    uint8_t* output,
+    uintptr_t output_len,
+    uintptr_t* written);
+int32_t cp_crypto_v1_create_device_log_record(
+    const uint8_t* identity_package,
+    uintptr_t identity_package_len,
+    const uint8_t* user_id,
+    uintptr_t user_id_len,
+    uint64_t sequence,
+    const uint8_t* previous_hash,
+    uintptr_t previous_hash_len,
+    const uint8_t* canonical_live_set,
+    uintptr_t canonical_live_set_len,
+    uint32_t identity_version,
+    uint32_t coarse_unix_day,
+    uint8_t* output,
+    uintptr_t output_len,
+    uintptr_t* written);
+int32_t cp_crypto_v1_inspect_device_log_record(
+    const uint8_t* identity_package,
+    uintptr_t identity_package_len,
+    const uint8_t* user_id,
+    uintptr_t user_id_len,
+    const uint8_t* record,
+    uintptr_t record_len,
+    uint8_t* output,
+    uintptr_t output_len,
+    uintptr_t* written);
+
 #ifdef __cplusplus
 }
 #endif

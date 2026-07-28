@@ -1,5 +1,9 @@
+import 'dart:typed_data';
+
 import 'package:communication_platform/core/application/ports/crypto_core_port.dart';
+import 'package:communication_platform/core/application/ports/enrollment_crypto_port.dart';
 import 'package:communication_platform/core/protocol/crypto_core_model.dart';
+import 'package:communication_platform/core/protocol/enrollment_crypto_model.dart';
 import 'package:communication_platform/core/result/failure.dart';
 import 'package:communication_platform/core/result/result.dart';
 
@@ -13,10 +17,11 @@ abstract interface class CryptoCoreWorker {
 }
 
 /// Scope-owned lifecycle wrapper around the platform crypto worker.
-final class CryptoCoreRuntime implements CryptoCorePort {
-  CryptoCoreRuntime({required this.worker});
+final class CryptoCoreRuntime implements CryptoCorePort, EnrollmentCryptoPort {
+  CryptoCoreRuntime({required this.worker, this.enrollmentWorker});
 
   final CryptoCoreWorker worker;
+  final EnrollmentCryptoWorker? enrollmentWorker;
   bool _closed = false;
 
   @override
@@ -53,11 +58,93 @@ final class CryptoCoreRuntime implements CryptoCorePort {
   }
 
   @override
+  Future<Result<DeviceKeyPackage>> prepareDevice({required Uint8List userId}) =>
+      enrollmentWorker?.prepareDevice(userId: userId) ?? _unsupported();
+
+  @override
+  Future<Result<IdentityKeyPackage>> prepareFirstIdentity({
+    required Uint8List userId,
+  }) =>
+      enrollmentWorker?.prepareFirstIdentity(userId: userId) ?? _unsupported();
+
+  @override
+  Future<Result<IdentityKeyPackage>> restoreIdentity({
+    required Uint8List userId,
+    required Uint8List recoverySecret,
+    required Uint8List backup,
+  }) =>
+      enrollmentWorker?.restoreIdentity(
+        userId: userId,
+        recoverySecret: recoverySecret,
+        backup: backup,
+      ) ??
+      _unsupported();
+
+  @override
+  Future<Result<IdentityKeyPackage>> sanitizeIdentity({
+    required IdentityKeyPackage package,
+  }) => enrollmentWorker?.sanitizeIdentity(package: package) ?? _unsupported();
+
+  @override
+  Future<Result<Uint8List>> crossSignDevice({
+    required DeviceKeyPackage device,
+    required IdentityKeyPackage identity,
+    required Uint8List deviceId,
+    required int bundleVersion,
+  }) =>
+      enrollmentWorker?.crossSignDevice(
+        device: device,
+        identity: identity,
+        deviceId: deviceId,
+        bundleVersion: bundleVersion,
+      ) ??
+      _unsupported();
+
+  @override
+  Future<Result<Uint8List>> createDeviceLogRecord({
+    required IdentityKeyPackage identity,
+    required Uint8List userId,
+    required int sequence,
+    required Uint8List previousHash,
+    required Uint8List canonicalLiveSet,
+    required int identityVersion,
+    required int coarseUnixDay,
+  }) =>
+      enrollmentWorker?.createDeviceLogRecord(
+        identity: identity,
+        userId: userId,
+        sequence: sequence,
+        previousHash: previousHash,
+        canonicalLiveSet: canonicalLiveSet,
+        identityVersion: identityVersion,
+        coarseUnixDay: coarseUnixDay,
+      ) ??
+      _unsupported();
+
+  @override
+  Future<Result<DeviceLogInspection>> inspectDeviceLogRecord({
+    required IdentityKeyPackage identity,
+    required Uint8List userId,
+    required Uint8List record,
+  }) =>
+      enrollmentWorker?.inspectDeviceLogRecord(
+        identity: identity,
+        userId: userId,
+        record: record,
+      ) ??
+      _unsupported();
+
+  Future<Result<T>> _unsupported<T>() async => const Result.failure(
+    UnsupportedProtocolFailure(UnsupportedProtocolFailureKind.capability),
+  );
+
+  @override
   String toString() => 'CryptoCoreRuntime(<redacted>)';
 }
 
 /// Fail-closed implementation used when the reviewed native boundary is absent.
-final class UnsupportedCryptoCore implements CryptoCorePort {
+final class UnsupportedCryptoCore
+    implements CryptoCorePort, EnrollmentCryptoPort {
   const UnsupportedCryptoCore();
 
   @override
@@ -76,6 +163,68 @@ final class UnsupportedCryptoCore implements CryptoCorePort {
       UnsupportedProtocolFailure(UnsupportedProtocolFailureKind.capability),
     );
   }
+
+  @override
+  Future<Result<Uint8List>> createDeviceLogRecord({
+    required IdentityKeyPackage identity,
+    required Uint8List userId,
+    required int sequence,
+    required Uint8List previousHash,
+    required Uint8List canonicalLiveSet,
+    required int identityVersion,
+    required int coarseUnixDay,
+  }) async => const Result.failure(
+    UnsupportedProtocolFailure(UnsupportedProtocolFailureKind.capability),
+  );
+
+  @override
+  Future<Result<Uint8List>> crossSignDevice({
+    required DeviceKeyPackage device,
+    required IdentityKeyPackage identity,
+    required Uint8List deviceId,
+    required int bundleVersion,
+  }) async => const Result.failure(
+    UnsupportedProtocolFailure(UnsupportedProtocolFailureKind.capability),
+  );
+
+  @override
+  Future<Result<DeviceKeyPackage>> prepareDevice({
+    required Uint8List userId,
+  }) async => const Result.failure(
+    UnsupportedProtocolFailure(UnsupportedProtocolFailureKind.capability),
+  );
+
+  @override
+  Future<Result<IdentityKeyPackage>> prepareFirstIdentity({
+    required Uint8List userId,
+  }) async => const Result.failure(
+    UnsupportedProtocolFailure(UnsupportedProtocolFailureKind.capability),
+  );
+
+  @override
+  Future<Result<IdentityKeyPackage>> restoreIdentity({
+    required Uint8List userId,
+    required Uint8List recoverySecret,
+    required Uint8List backup,
+  }) async => const Result.failure(
+    UnsupportedProtocolFailure(UnsupportedProtocolFailureKind.capability),
+  );
+
+  @override
+  Future<Result<IdentityKeyPackage>> sanitizeIdentity({
+    required IdentityKeyPackage package,
+  }) async => const Result.failure(
+    UnsupportedProtocolFailure(UnsupportedProtocolFailureKind.capability),
+  );
+
+  @override
+  Future<Result<DeviceLogInspection>> inspectDeviceLogRecord({
+    required IdentityKeyPackage identity,
+    required Uint8List userId,
+    required Uint8List record,
+  }) async => const Result.failure(
+    UnsupportedProtocolFailure(UnsupportedProtocolFailureKind.capability),
+  );
 
   @override
   String toString() => 'UnsupportedCryptoCore(<redacted>)';

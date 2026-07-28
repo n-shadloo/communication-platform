@@ -1,7 +1,9 @@
 import 'dart:async';
 
 import 'package:communication_platform/core/application/ports/crypto_core_port.dart';
+import 'package:communication_platform/core/application/ports/enrollment_crypto_port.dart';
 import 'package:communication_platform/core/application/ports/time_source.dart';
+import 'package:communication_platform/shared/infrastructure/crypto/native/enrollment_crypto_native_session.dart';
 import 'package:communication_platform/shared/infrastructure/crypto/platform_crypto_core.dart';
 import 'package:communication_platform/shared/infrastructure/time/system_time_source.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -24,4 +26,11 @@ final cryptoCoreProvider = Provider<CryptoCorePort>((ref) {
     unawaited(cryptoCore.close());
   });
   return cryptoCore;
+});
+
+final enrollmentCryptoProvider = Provider<EnrollmentCryptoPort>((ref) {
+  final cryptoCore = ref.watch(cryptoCoreProvider);
+  return cryptoCore is EnrollmentCryptoPort
+      ? cryptoCore as EnrollmentCryptoPort
+      : const UnsupportedEnrollmentCrypto();
 });

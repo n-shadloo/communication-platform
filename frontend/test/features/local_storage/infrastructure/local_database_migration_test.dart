@@ -50,6 +50,55 @@ void main() {
   );
 
   test(
+    'version-one upgrade preserves data and adds the enrollment journal',
+    () async {
+      final current = LocalDatabase(NativeDatabase(databaseFile));
+      await current.customSelect('SELECT 1').getSingle();
+      await current.customStatement(
+        "INSERT INTO local_preferences "
+        "(preference_key, value_ciphertext, value_version) "
+        "VALUES ('preserved', X'010203', 1)",
+      );
+      await current.close();
+
+      final versionOne = sqlite3.open(databaseFile.path)
+        ..execute('DROP TABLE enrollment_intent')
+        ..execute('PRAGMA user_version = 1');
+      versionOne.close();
+
+      final upgraded = LocalDatabase(NativeDatabase(databaseFile));
+      await upgraded.customSelect('SELECT 1').getSingle();
+
+      expect(
+        await upgraded
+            .customSelect(
+              "SELECT preference_key FROM local_preferences "
+              "WHERE preference_key = 'preserved'",
+            )
+            .getSingle(),
+        isNotNull,
+      );
+      expect(
+        await upgraded
+            .customSelect(
+              "SELECT name FROM sqlite_master "
+              "WHERE type = 'table' AND name = 'enrollment_intent'",
+            )
+            .getSingle(),
+        isNotNull,
+      );
+      expect(
+        await upgraded
+            .customSelect('PRAGMA user_version')
+            .map((row) => row.read<int>('user_version'))
+            .getSingle(),
+        LocalDatabase.currentSchemaVersion,
+      );
+      await upgraded.close();
+    },
+  );
+
+  test(
     'failed migration rolls back and leaves the old database recoverable',
     () async {
       final database = LocalDatabase(

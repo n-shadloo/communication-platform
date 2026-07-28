@@ -47,6 +47,7 @@ final class AuthenticationRouteState extends ChangeNotifier {
           return '/pending-activation';
         }
       case AuthenticationRouteAccess.registerScope:
+      case AuthenticationRouteAccess.secureSetup:
         if (!isConnection && !isSecurity && !isEnrollment) {
           return '/encryption-setup';
         }

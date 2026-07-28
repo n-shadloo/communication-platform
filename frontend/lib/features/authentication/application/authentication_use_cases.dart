@@ -36,9 +36,10 @@ final class LoginAccountInput {
 
 final class RegisterAccount
     implements UseCase<AccountRegistration, RegisterAccountInput> {
-  const RegisterAccount(this.repository);
+  const RegisterAccount(this.repository, {this.enrollmentMarker});
 
   final AccountAuthenticationRepository repository;
+  final NewAccountEnrollmentMarkerPort? enrollmentMarker;
 
   Future<Result<AccountRegistration>> call({
     required String username,
@@ -46,19 +47,32 @@ final class RegisterAccount
   }) => execute(RegisterAccountInput(username: username, password: password));
 
   @override
-  Future<Result<AccountRegistration>> execute(RegisterAccountInput input) {
+  Future<Result<AccountRegistration>> execute(
+    RegisterAccountInput input,
+  ) async {
     final username = input.username;
     final password = input.password;
     final normalized = AuthenticationInputPolicy.normalizeUsername(username);
     if (!AuthenticationInputPolicy.isUsernameValid(normalized) ||
         !AuthenticationInputPolicy.isPasswordValid(password)) {
-      return Future.value(
-        const Result.failure(
-          ValidationFailure(ValidationFailureKind.invalidInput),
-        ),
+      return const Result.failure(
+        ValidationFailure(ValidationFailureKind.invalidInput),
       );
     }
-    return repository.register(username: normalized, password: password);
+    final result = await repository.register(
+      username: normalized,
+      password: password,
+    );
+    if (result case Success(value: final registration)) {
+      final marker = enrollmentMarker;
+      if (marker != null) {
+        final marked = await marker.markNewAccount(userId: registration.userId);
+        if (marked case FailureResult(failure: final failure)) {
+          return Result.failure(failure);
+        }
+      }
+    }
+    return result;
   }
 }
 

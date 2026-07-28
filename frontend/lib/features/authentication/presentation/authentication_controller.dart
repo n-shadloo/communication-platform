@@ -12,6 +12,7 @@ enum AuthenticationRouteAccess {
   signedOut,
   pendingActivation,
   registerScope,
+  secureSetup,
   fullScope,
   offlineFullScope,
 }
@@ -37,6 +38,7 @@ final class AuthenticationViewState {
     required this.access,
     required this.operation,
     this.username,
+    this.userId,
     this.message,
   });
 
@@ -44,11 +46,13 @@ final class AuthenticationViewState {
     : access = AuthenticationRouteAccess.dormant,
       operation = AuthenticationOperation.idle,
       username = null,
+      userId = null,
       message = null;
 
   final AuthenticationRouteAccess access;
   final AuthenticationOperation operation;
   final String? username;
+  final String? userId;
   final AuthenticationMessage? message;
 
   bool get isBusy => operation != AuthenticationOperation.idle;
@@ -58,12 +62,15 @@ final class AuthenticationViewState {
     AuthenticationOperation? operation,
     String? username,
     bool clearUsername = false,
+    String? userId,
+    bool clearUserId = false,
     AuthenticationMessage? message,
     bool clearMessage = false,
   }) => AuthenticationViewState(
     access: access ?? this.access,
     operation: operation ?? this.operation,
     username: clearUsername ? null : username ?? this.username,
+    userId: clearUserId ? null : userId ?? this.userId,
     message: clearMessage ? null : message ?? this.message,
   );
 }
@@ -228,16 +235,31 @@ final class AuthenticationController extends Notifier<AuthenticationViewState> {
     );
   }
 
+  void secureSetupCompleted() {
+    if (state.access != AuthenticationRouteAccess.registerScope &&
+        state.access != AuthenticationRouteAccess.secureSetup) {
+      return;
+    }
+    state = state.copyWith(
+      access: AuthenticationRouteAccess.fullScope,
+      operation: AuthenticationOperation.idle,
+      clearMessage: true,
+    );
+  }
+
   void _applyBoundary(AccountSessionBoundary boundary) {
     state = AuthenticationViewState(
       access: switch (boundary.scope) {
         AccountSessionScope.register => AuthenticationRouteAccess.registerScope,
+        AccountSessionScope.full when !boundary.securitySetupComplete =>
+          AuthenticationRouteAccess.secureSetup,
         AccountSessionScope.full when boundary.offline =>
           AuthenticationRouteAccess.offlineFullScope,
         AccountSessionScope.full => AuthenticationRouteAccess.fullScope,
       },
       operation: AuthenticationOperation.idle,
       username: state.username,
+      userId: boundary.userId,
     );
   }
 
@@ -248,6 +270,7 @@ final class AuthenticationController extends Notifier<AuthenticationViewState> {
       username: termination == AuthenticationTermination.logout
           ? null
           : state.username,
+      userId: null,
       message: switch (termination) {
         AuthenticationTermination.logout => null,
         AuthenticationTermination.revoked => AuthenticationMessage.revoked,

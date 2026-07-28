@@ -10,6 +10,10 @@ void main() {
     final bindings = File(
       'lib/shared/infrastructure/crypto/native/crypto_core_ffi.dart',
     ).readAsStringSync();
+    final enrollmentBindings = File(
+      'lib/shared/infrastructure/crypto/native/enrollment_crypto_ffi.dart',
+    ).readAsStringSync();
+    final androidBuild = File('tool/build_rust_android.sh').readAsStringSync();
 
     expect(port, contains('capabilities()'));
     expect(port, contains('selfTest()'));
@@ -32,6 +36,18 @@ void main() {
       'cp_crypto_v1_self_test',
     ]) {
       expect(bindings, contains("'$symbol'"));
+    }
+    for (final symbol in const [
+      'cp_crypto_v1_prepare_device',
+      'cp_crypto_v1_prepare_first_identity',
+      'cp_crypto_v1_restore_identity',
+      'cp_crypto_v1_sanitize_identity',
+      'cp_crypto_v1_cross_sign_device',
+      'cp_crypto_v1_create_device_log_record',
+      'cp_crypto_v1_inspect_device_log_record',
+    ]) {
+      expect(enrollmentBindings, contains("'$symbol'"));
+      expect(androidBuild, contains(symbol));
     }
     expect(bindings, isNot(contains('last_error')));
     expect(bindings, isNot(contains('error_message')));

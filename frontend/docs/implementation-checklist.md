@@ -30,16 +30,16 @@ opaque/client-owned; **Pending** = Flutter implementation not started.
 | Capability | Backend | Flutter |
 |---|---|---|
 | Register/manual activation | Ready | Piece 09 account registration, pending-activation state, localized validation/errors, and responsive screens complete; activation remains owner-driven with no polling |
-| Login/refresh/logout | Ready | Piece 09 Dio account repository, register/full session boundary, secure refresh persistence, memory-only access tokens, deterministic restoration/guards, logout wipe, offline, expiry, revocation, and localized screens complete; device enrollment remains piece 10 |
+| Login/refresh/logout | Ready | Piece 09 authentication plus piece 10 full-scope enrollment handoff, incomplete-secure-setup restoration/guards, and final messaging release complete |
 | User directory | Ready | Pending local repository/UI |
 | Encrypted profile blob | Ready opaque storage | Bootstrap fallback specified; implementation pending |
-| Cross-signing identity publish/fetch | Ready opaque transport | Pending master/self/user-signing implementation |
-| Register/list/label/revoke devices | Ready; two-phase enrollment contract | Pending register → full scope → cross-sign follow-up and resumable UI |
-| Peer device lists, ETags, signed device log | Ready opaque transport | Pending verification, head gossip, fork alert |
+| Cross-signing identity publish/fetch | Ready opaque transport | Piece 10 Rust master/self/user-signing generation, self-signature, first publish, later exact fetch/pin, and recovery restore complete; peer verification UI remains piece 11 |
+| Register/list/label/revoke devices | Ready; two-phase enrollment contract | Piece 10 first/later two-phase registration, unsigned withholding, prekey cross-sign follow-up, orphan reconciliation/revocation, and resumable UI complete; linked-device management remains later work |
+| Peer device lists, ETags, signed device log | Ready opaque transport | Piece 10 bounded own-device list canonicalization plus full signed-chain validation and exact append reconciliation complete; peer ETag persistence, gossip, and fork alert remain pending |
 | Hybrid X25519 + ML-KEM prekeys | Ready public distribution | Pending reviewed PQXDH core; no classical fallback |
 | PQ MLS key packages | 4096/16384 buckets + last-resort ready | Candidate selected; blocked on IANA ID, maintained OpenMLS/provider support, vectors, and review |
 | SAS/QR master-key verification | Client protocol | Pending; messaging withheld until verified |
-| Recovery onboarding | Identity backup API ready | Pending identity restore; no server-history restore |
+| Recovery onboarding | Identity backup API ready | Piece 10 one-time checksummed secret, Rust Argon2id/XChaCha backup, first upload, later restore, wrong-secret handling, and honest no-history notice complete |
 
 ## Messaging
 
@@ -81,9 +81,9 @@ opaque/client-owned; **Pending** = Flutter implementation not started.
 | Quota and TTL | Ready | Pending UI/error handling |
 | Encrypted attachment metadata/key | Client protocol | Pending |
 | Bounded secure cache | Not applicable | Pending |
-| Key backup blob | Ready for cross-signing identity material | Pending Argon2id/wrapping |
+| Key backup blob | Ready for cross-signing identity material | Piece 10 4,096-byte Rust Argon2id/XChaCha20-Poly1305 format, parameter/bucket validation, stale-version reconciliation, and cleanup complete |
 | Server history | Deliberately absent | Device-to-device transfer specified; implementation pending |
-| New-device restore | Two-phase enrollment and identity backup APIs ready | Pending restore/cross-sign follow-up; history remains device-to-device |
+| New-device restore | Two-phase enrollment and identity backup APIs ready | Piece 10 identity-only restore/cross-sign/log follow-up complete; history remains intentionally deferred to device-to-device transfer |
 
 ## Voice rooms and realtime
 
@@ -143,8 +143,12 @@ opaque/client-owned; **Pending** = Flutter implementation not started.
   OpenMLS/provider support; 4096/16384 wrappers, last-resort behavior, Android
   persistence, and fork handling then pass interoperability tests. Web persistence is
   post-v1.
-- [ ] First/later-device two-phase enrollment is crash-safe and resumable; unsigned
-  intermediate devices remain withheld until the prekey cross-signature follow-up.
+- [x] Piece 10 first/later-device two-phase enrollment is crash-safe and resumable;
+  registration response loss never causes a blind duplicate; recoverable unsigned
+  orphans are adopted or revoked; every intermediate state remains withheld through the
+  signed device-log append and mandatory notice. Rust backup/recovery vectors, Android
+  encrypted persistence/process-death tests, contract fixtures, UI tests, Clippy,
+  analyze, and the Android build were verified on 2026-07-28.
 - [x] Android reproduces the backend `cross_sig`, `master_sig`, `spk_sig`, and
   `pq_spk_sig` golden vectors, including optional fields and the 64-byte `ik_pub` layout
   (Piece 08: Rust vectors, strict Clippy, Flutter tests, three-ABI native package build,

@@ -3,6 +3,7 @@
 mod bounds;
 mod cbor;
 pub mod device_signatures;
+pub mod enrollment;
 mod error;
 mod provider;
 mod random;
@@ -11,7 +12,7 @@ mod secret;
 use std::{
     mem,
     panic::{AssertUnwindSafe, catch_unwind},
-    ptr,
+    ptr, slice,
 };
 
 use cbor::{decode_foundation_record, encode_foundation_record};
@@ -120,6 +121,260 @@ pub unsafe extern "C" fn cp_crypto_v1_capabilities(
 #[unsafe(no_mangle)]
 pub extern "C" fn cp_crypto_v1_self_test() -> i32 {
     guard(run_self_test)
+}
+
+unsafe fn ffi_input<'a>(input: *const u8, input_len: usize) -> CryptoResult<&'a [u8]> {
+    if input_len == 0 {
+        return Ok(&[]);
+    }
+    if input.is_null() || input_len > bounds::MAX_INPUT_BYTES {
+        return Err(if input_len > bounds::MAX_INPUT_BYTES {
+            CryptoError::InputTooLarge
+        } else {
+            CryptoError::InvalidArgument
+        });
+    }
+    // SAFETY: the caller promises a readable buffer of `input_len` bytes and
+    // null plus protocol bounds were checked above.
+    Ok(unsafe { slice::from_raw_parts(input, input_len) })
+}
+
+unsafe fn ffi_output(
+    value: &[u8],
+    output: *mut u8,
+    output_len: usize,
+    written: *mut usize,
+) -> CryptoResult<()> {
+    if written.is_null() {
+        return Err(CryptoError::InvalidArgument);
+    }
+    // SAFETY: `written` is non-null and the caller promises writable storage
+    // for one uintptr_t.
+    unsafe {
+        ptr::write(written, value.len());
+    }
+    if output.is_null() || output_len < value.len() {
+        return Err(CryptoError::OutputTooSmall);
+    }
+    // SAFETY: the caller promises `output_len` writable bytes; the length was
+    // checked above. `ptr::copy` also permits defensive overlap.
+    unsafe {
+        ptr::copy(value.as_ptr(), output, value.len());
+    }
+    Ok(())
+}
+
+#[unsafe(no_mangle)]
+/// Creates an opaque device-key package and its public registration material.
+///
+/// # Safety
+///
+/// Input pointers must be readable for their supplied lengths. `written` must
+/// point to writable `uintptr_t` storage. A non-null output must be writable for
+/// `output_len` bytes.
+pub unsafe extern "C" fn cp_crypto_v1_prepare_device(
+    user_id: *const u8,
+    user_id_len: usize,
+    output: *mut u8,
+    output_len: usize,
+    written: *mut usize,
+) -> i32 {
+    guard(|| {
+        // SAFETY: upheld by this function's caller contract.
+        let user_id = unsafe { ffi_input(user_id, user_id_len)? };
+        let package = enrollment::prepare_device()(user_id)?;
+        // SAFETY: upheld by this function's caller contract.
+        unsafe { ffi_output(&package, output, output_len, written) }
+    })
+}
+
+#[unsafe(no_mangle)]
+/// Creates account cross-signing keys, a recovery secret, and its backup.
+///
+/// # Safety
+///
+/// Pointer requirements are identical to [`cp_crypto_v1_prepare_device`].
+pub unsafe extern "C" fn cp_crypto_v1_prepare_first_identity(
+    user_id: *const u8,
+    user_id_len: usize,
+    output: *mut u8,
+    output_len: usize,
+    written: *mut usize,
+) -> i32 {
+    guard(|| {
+        // SAFETY: upheld by this function's caller contract.
+        let user_id = unsafe { ffi_input(user_id, user_id_len)? };
+        let package = enrollment::prepare_first_identity(user_id)?;
+        // SAFETY: upheld by this function's caller contract.
+        unsafe { ffi_output(&package, output, output_len, written) }
+    })
+}
+
+#[unsafe(no_mangle)]
+/// Restores account cross-signing keys from a recovery-protected backup.
+///
+/// # Safety
+///
+/// Every input must be readable for its supplied length. `written` and output
+/// follow [`cp_crypto_v1_prepare_device`].
+pub unsafe extern "C" fn cp_crypto_v1_restore_identity(
+    user_id: *const u8,
+    user_id_len: usize,
+    recovery_secret: *const u8,
+    recovery_secret_len: usize,
+    backup: *const u8,
+    backup_len: usize,
+    output: *mut u8,
+    output_len: usize,
+    written: *mut usize,
+) -> i32 {
+    guard(|| {
+        // SAFETY: upheld by this function's caller contract.
+        let user_id = unsafe { ffi_input(user_id, user_id_len)? };
+        // SAFETY: upheld by this function's caller contract.
+        let recovery_secret = unsafe { ffi_input(recovery_secret, recovery_secret_len)? };
+        // SAFETY: upheld by this function's caller contract.
+        let backup = unsafe { ffi_input(backup, backup_len)? };
+        let package = enrollment::restore_identity(user_id, recovery_secret, backup)?;
+        // SAFETY: upheld by this function's caller contract.
+        unsafe { ffi_output(&package, output, output_len, written) }
+    })
+}
+
+#[unsafe(no_mangle)]
+/// Removes one-time recovery display material from an identity package.
+///
+/// # Safety
+///
+/// Pointer requirements are identical to [`cp_crypto_v1_restore_identity`].
+pub unsafe extern "C" fn cp_crypto_v1_sanitize_identity(
+    identity_package: *const u8,
+    identity_package_len: usize,
+    output: *mut u8,
+    output_len: usize,
+    written: *mut usize,
+) -> i32 {
+    guard(|| {
+        // SAFETY: upheld by this function's caller contract.
+        let identity_package = unsafe { ffi_input(identity_package, identity_package_len)? };
+        let package = enrollment::sanitize_identity_package(identity_package)?;
+        // SAFETY: upheld by this function's caller contract.
+        unsafe { ffi_output(&package, output, output_len, written) }
+    })
+}
+
+#[unsafe(no_mangle)]
+/// Signs the canonical piece-08 bundle for a backend-assigned device UUID.
+///
+/// # Safety
+///
+/// Pointer requirements are identical to [`cp_crypto_v1_restore_identity`].
+pub unsafe extern "C" fn cp_crypto_v1_cross_sign_device(
+    device_package: *const u8,
+    device_package_len: usize,
+    identity_package: *const u8,
+    identity_package_len: usize,
+    device_id: *const u8,
+    device_id_len: usize,
+    bundle_version: u32,
+    output: *mut u8,
+    output_len: usize,
+    written: *mut usize,
+) -> i32 {
+    guard(|| {
+        // SAFETY: upheld by this function's caller contract.
+        let device_package = unsafe { ffi_input(device_package, device_package_len)? };
+        // SAFETY: upheld by this function's caller contract.
+        let identity_package = unsafe { ffi_input(identity_package, identity_package_len)? };
+        // SAFETY: upheld by this function's caller contract.
+        let device_id = unsafe { ffi_input(device_id, device_id_len)? };
+        let signature = enrollment::cross_sign_device(
+            device_package,
+            identity_package,
+            device_id,
+            bundle_version,
+        )?;
+        // SAFETY: upheld by this function's caller contract.
+        unsafe { ffi_output(&signature, output, output_len, written) }
+    })
+}
+
+#[unsafe(no_mangle)]
+/// Creates one padded, signed device-set log record.
+///
+/// # Safety
+///
+/// Every input must be readable for its supplied length. `written` and output
+/// follow [`cp_crypto_v1_prepare_device`].
+#[allow(clippy::too_many_arguments)]
+pub unsafe extern "C" fn cp_crypto_v1_create_device_log_record(
+    identity_package: *const u8,
+    identity_package_len: usize,
+    user_id: *const u8,
+    user_id_len: usize,
+    sequence: u64,
+    previous_hash: *const u8,
+    previous_hash_len: usize,
+    canonical_live_set: *const u8,
+    canonical_live_set_len: usize,
+    identity_version: u32,
+    coarse_unix_day: u32,
+    output: *mut u8,
+    output_len: usize,
+    written: *mut usize,
+) -> i32 {
+    guard(|| {
+        // SAFETY: upheld by this function's caller contract.
+        let identity_package = unsafe { ffi_input(identity_package, identity_package_len)? };
+        // SAFETY: upheld by this function's caller contract.
+        let user_id = unsafe { ffi_input(user_id, user_id_len)? };
+        // SAFETY: upheld by this function's caller contract.
+        let previous_hash = unsafe { ffi_input(previous_hash, previous_hash_len)? };
+        // SAFETY: upheld by this function's caller contract.
+        let canonical_live_set = unsafe { ffi_input(canonical_live_set, canonical_live_set_len)? };
+        let record = enrollment::create_device_log_record(
+            identity_package,
+            user_id,
+            sequence,
+            previous_hash,
+            canonical_live_set,
+            identity_version,
+            coarse_unix_day,
+        )?;
+        // SAFETY: upheld by this function's caller contract.
+        unsafe { ffi_output(&record, output, output_len, written) }
+    })
+}
+
+#[unsafe(no_mangle)]
+/// Verifies a padded device-log record and returns sequence, predecessor, and hash.
+///
+/// # Safety
+///
+/// Every input must be readable for its supplied length. `written` and output
+/// follow [`cp_crypto_v1_prepare_device`].
+pub unsafe extern "C" fn cp_crypto_v1_inspect_device_log_record(
+    identity_package: *const u8,
+    identity_package_len: usize,
+    user_id: *const u8,
+    user_id_len: usize,
+    record: *const u8,
+    record_len: usize,
+    output: *mut u8,
+    output_len: usize,
+    written: *mut usize,
+) -> i32 {
+    guard(|| {
+        // SAFETY: upheld by this function's caller contract.
+        let identity_package = unsafe { ffi_input(identity_package, identity_package_len)? };
+        // SAFETY: upheld by this function's caller contract.
+        let user_id = unsafe { ffi_input(user_id, user_id_len)? };
+        // SAFETY: upheld by this function's caller contract.
+        let record = unsafe { ffi_input(record, record_len)? };
+        let inspection = enrollment::inspect_device_log_record(identity_package, user_id, record)?;
+        // SAFETY: upheld by this function's caller contract.
+        unsafe { ffi_output(&inspection, output, output_len, written) }
+    })
 }
 
 fn run_self_test() -> CryptoResult<()> {

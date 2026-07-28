@@ -34,3 +34,7 @@ enum AuthenticationTermination { logout, revoked, expired }
 abstract interface class AuthenticationLifecyclePort implements Port {
   Stream<AuthenticationTermination> get terminations;
 }
+
+abstract interface class NewAccountEnrollmentMarkerPort implements Port {
+  Future<Result<void>> markNewAccount({required String userId});
+}

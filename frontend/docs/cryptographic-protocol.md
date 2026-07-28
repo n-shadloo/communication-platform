@@ -135,6 +135,61 @@ cross-signature, then appends the device-log change. Until the follow-up succeed
 device remains unverified and sensitive messaging is withheld. A placeholder signature
 is never valid.
 
+### Version-1 enrollment bindings
+
+The Android Rust core owns all enrollment private state. `CPDVV001` and `CPIDV001` are
+opaque native state-package versions used at the FFI/storage boundary; Dart may project
+only the bounded public registration fields and one-time recovery-display material. It
+must not interpret, construct, sign with, or log the private tail. Version 1 creates
+eight classical and four ML-KEM one-time prekeys before persisting the registration
+intent.
+
+The recovery secret contains 32 random bytes followed by the first two bytes of
+`SHA-256(entropy)`. It is Crockford Base32 encoded in uppercase groups of five
+characters separated by hyphens. Restore ignores ASCII whitespace and hyphens,
+uppercases input, accepts Crockford's `O`/`I`/`L` aliases, validates the checksum, and
+then uses the canonical grouped encoding as the Argon2id password. Checksum, decode,
+and AEAD failures all produce the same local wrong-secret result.
+
+`CPKBV001` is the 4,096-byte version-1 identity-backup bucket:
+
+```text
+"CPKBV001"
+|| u32be(memory_kib = 65536)
+|| u32be(iterations = 3)
+|| u32be(parallelism = 4)
+|| salt[16]
+|| xchacha_nonce[24]
+|| u32be(ciphertext_length = 136)
+|| ciphertext[136]
+|| random_padding_to_4096
+```
+
+The 120-byte plaintext is `"CPIPV001" || user_uuid[16] || master_sk[32] ||
+self_signing_sk[32] || user_signing_sk[32]`. XChaCha20-Poly1305 authenticates it with
+AAD `"chat:v1:identity-backup" || exact_header[64] || user_uuid[16]`. Restore rejects
+unknown parameters and non-bucket input before running Argon2id; it never silently
+lowers the KDF cost. The recovery secret and backup copy embedded for initial display
+are removed from the native identity package immediately after explicit confirmation.
+
+The canonical live-device set used by the device log is
+`"chat:v1:device-set" || u32be(device_count)` followed by devices sorted by lowercase
+UUID text. Each device contributes `uuid_raw[16]`, a 4-byte-length-framed 64-byte
+`ik_pub`, `u32be(registration_id)`, a framed `cross_sig` (zero length only while
+unsigned), and `u32be(bundle_version)` (zero only while unsigned). Invalid lengths or a
+half-present cross-signature/version pair fail closed.
+
+`CPDLV001` device-log records use the 256-byte bucket. The signed fields are the raw
+user UUID, predicted `u64be` sequence, previous 32-byte record hash (zero for the first
+record), `SHA-256(canonical_live_device_set)`, identity version, and coarse UTC Unix day.
+Each field is 4-byte-length framed after the
+`"chat:v1:device-log-record"` domain. The stored record is the magic, format byte 1,
+sequence, day, identity version, raw user UUID, previous hash, live-set hash, 64-byte
+self-signing Ed25519 signature, and random padding. Its chain hash is SHA-256 over the
+entire 256-byte record. Clients persist the exact predicted record before append and
+accept a lost response only by finding that exact record at the predicted outer
+sequence.
+
 ## Direct messages and per-device channels
 
 Hybrid PQXDH combines X25519 and ML-KEM-768 claimed prekey material and feeds the reviewed

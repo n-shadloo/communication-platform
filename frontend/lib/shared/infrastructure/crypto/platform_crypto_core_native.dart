@@ -8,5 +8,6 @@ CryptoCorePort createPlatformCryptoCore() {
   if (!Platform.isAndroid) {
     return const UnsupportedCryptoCore();
   }
-  return CryptoCoreRuntime(worker: IsolateCryptoCoreWorker());
+  final worker = IsolateCryptoCoreWorker();
+  return CryptoCoreRuntime(worker: worker, enrollmentWorker: worker);
 }

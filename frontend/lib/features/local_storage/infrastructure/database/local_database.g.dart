@@ -1282,6 +1282,1035 @@ class AccountIdentitiesCompanion extends UpdateCompanion<AccountIdentity> {
   }
 }
 
+class $EnrollmentIntentsTable extends EnrollmentIntents
+    with TableInfo<$EnrollmentIntentsTable, EnrollmentIntent> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $EnrollmentIntentsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _userIdMeta = const VerificationMeta('userId');
+  @override
+  late final GeneratedColumn<String> userId = GeneratedColumn<String>(
+    'user_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _flowMeta = const VerificationMeta('flow');
+  @override
+  late final GeneratedColumn<int> flow = GeneratedColumn<int>(
+    'flow',
+    aliasedName,
+    false,
+    check: () => ComparableExpr(flow).isBetweenValues(0, 1),
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _phaseMeta = const VerificationMeta('phase');
+  @override
+  late final GeneratedColumn<int> phase = GeneratedColumn<int>(
+    'phase',
+    aliasedName,
+    false,
+    check: () => ComparableExpr(phase).isBetweenValues(0, 17),
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _fingerprintMeta = const VerificationMeta(
+    'fingerprint',
+  );
+  @override
+  late final GeneratedColumn<Uint8List> fingerprint =
+      GeneratedColumn<Uint8List>(
+        'fingerprint',
+        aliasedName,
+        false,
+        type: DriftSqlType.blob,
+        requiredDuringInsert: true,
+      );
+  static const VerificationMeta _deviceStateMeta = const VerificationMeta(
+    'deviceState',
+  );
+  @override
+  late final GeneratedColumn<Uint8List> deviceState =
+      GeneratedColumn<Uint8List>(
+        'device_state',
+        aliasedName,
+        false,
+        type: DriftSqlType.blob,
+        requiredDuringInsert: true,
+      );
+  static const VerificationMeta _deviceIdMeta = const VerificationMeta(
+    'deviceId',
+  );
+  @override
+  late final GeneratedColumn<String> deviceId = GeneratedColumn<String>(
+    'device_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _identityStateMeta = const VerificationMeta(
+    'identityState',
+  );
+  @override
+  late final GeneratedColumn<Uint8List> identityState =
+      GeneratedColumn<Uint8List>(
+        'identity_state',
+        aliasedName,
+        true,
+        type: DriftSqlType.blob,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _backupMeta = const VerificationMeta('backup');
+  @override
+  late final GeneratedColumn<Uint8List> backup = GeneratedColumn<Uint8List>(
+    'backup',
+    aliasedName,
+    true,
+    type: DriftSqlType.blob,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _backupVersionMeta = const VerificationMeta(
+    'backupVersion',
+  );
+  @override
+  late final GeneratedColumn<int> backupVersion = GeneratedColumn<int>(
+    'backup_version',
+    aliasedName,
+    false,
+    check: () => ComparableExpr(backupVersion).isBiggerThanValue(0),
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(1),
+  );
+  static const VerificationMeta _identityVersionMeta = const VerificationMeta(
+    'identityVersion',
+  );
+  @override
+  late final GeneratedColumn<int> identityVersion = GeneratedColumn<int>(
+    'identity_version',
+    aliasedName,
+    false,
+    check: () => ComparableExpr(identityVersion).isBiggerThanValue(0),
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(1),
+  );
+  static const VerificationMeta _expectedSequenceMeta = const VerificationMeta(
+    'expectedSequence',
+  );
+  @override
+  late final GeneratedColumn<int> expectedSequence = GeneratedColumn<int>(
+    'expected_sequence',
+    aliasedName,
+    true,
+    check: () =>
+        expectedSequence.isNull() |
+        ComparableExpr(expectedSequence).isBiggerOrEqualValue(0),
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _previousHashMeta = const VerificationMeta(
+    'previousHash',
+  );
+  @override
+  late final GeneratedColumn<Uint8List> previousHash =
+      GeneratedColumn<Uint8List>(
+        'previous_hash',
+        aliasedName,
+        true,
+        type: DriftSqlType.blob,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _pendingLogRecordMeta = const VerificationMeta(
+    'pendingLogRecord',
+  );
+  @override
+  late final GeneratedColumn<Uint8List> pendingLogRecord =
+      GeneratedColumn<Uint8List>(
+        'pending_log_record',
+        aliasedName,
+        true,
+        type: DriftSqlType.blob,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _messageMeta = const VerificationMeta(
+    'message',
+  );
+  @override
+  late final GeneratedColumn<int> message = GeneratedColumn<int>(
+    'message',
+    aliasedName,
+    true,
+    check: () =>
+        message.isNull() | ComparableExpr(message).isBetweenValues(0, 14),
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _recoverySecretDisplayedMeta =
+      const VerificationMeta('recoverySecretDisplayed');
+  @override
+  late final GeneratedColumn<bool> recoverySecretDisplayed =
+      GeneratedColumn<bool>(
+        'recovery_secret_displayed',
+        aliasedName,
+        false,
+        type: DriftSqlType.bool,
+        requiredDuringInsert: false,
+        defaultConstraints: GeneratedColumn.constraintIsAlways(
+          'CHECK ("recovery_secret_displayed" IN (0, 1))',
+        ),
+        defaultValue: const Constant(false),
+      );
+  static const VerificationMeta _recoveryConfirmedMeta = const VerificationMeta(
+    'recoveryConfirmed',
+  );
+  @override
+  late final GeneratedColumn<bool> recoveryConfirmed = GeneratedColumn<bool>(
+    'recovery_confirmed',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("recovery_confirmed" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    userId,
+    flow,
+    phase,
+    fingerprint,
+    deviceState,
+    deviceId,
+    identityState,
+    backup,
+    backupVersion,
+    identityVersion,
+    expectedSequence,
+    previousHash,
+    pendingLogRecord,
+    message,
+    recoverySecretDisplayed,
+    recoveryConfirmed,
+    updatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'enrollment_intent';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<EnrollmentIntent> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('user_id')) {
+      context.handle(
+        _userIdMeta,
+        userId.isAcceptableOrUnknown(data['user_id']!, _userIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_userIdMeta);
+    }
+    if (data.containsKey('flow')) {
+      context.handle(
+        _flowMeta,
+        flow.isAcceptableOrUnknown(data['flow']!, _flowMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_flowMeta);
+    }
+    if (data.containsKey('phase')) {
+      context.handle(
+        _phaseMeta,
+        phase.isAcceptableOrUnknown(data['phase']!, _phaseMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_phaseMeta);
+    }
+    if (data.containsKey('fingerprint')) {
+      context.handle(
+        _fingerprintMeta,
+        fingerprint.isAcceptableOrUnknown(
+          data['fingerprint']!,
+          _fingerprintMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_fingerprintMeta);
+    }
+    if (data.containsKey('device_state')) {
+      context.handle(
+        _deviceStateMeta,
+        deviceState.isAcceptableOrUnknown(
+          data['device_state']!,
+          _deviceStateMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_deviceStateMeta);
+    }
+    if (data.containsKey('device_id')) {
+      context.handle(
+        _deviceIdMeta,
+        deviceId.isAcceptableOrUnknown(data['device_id']!, _deviceIdMeta),
+      );
+    }
+    if (data.containsKey('identity_state')) {
+      context.handle(
+        _identityStateMeta,
+        identityState.isAcceptableOrUnknown(
+          data['identity_state']!,
+          _identityStateMeta,
+        ),
+      );
+    }
+    if (data.containsKey('backup')) {
+      context.handle(
+        _backupMeta,
+        backup.isAcceptableOrUnknown(data['backup']!, _backupMeta),
+      );
+    }
+    if (data.containsKey('backup_version')) {
+      context.handle(
+        _backupVersionMeta,
+        backupVersion.isAcceptableOrUnknown(
+          data['backup_version']!,
+          _backupVersionMeta,
+        ),
+      );
+    }
+    if (data.containsKey('identity_version')) {
+      context.handle(
+        _identityVersionMeta,
+        identityVersion.isAcceptableOrUnknown(
+          data['identity_version']!,
+          _identityVersionMeta,
+        ),
+      );
+    }
+    if (data.containsKey('expected_sequence')) {
+      context.handle(
+        _expectedSequenceMeta,
+        expectedSequence.isAcceptableOrUnknown(
+          data['expected_sequence']!,
+          _expectedSequenceMeta,
+        ),
+      );
+    }
+    if (data.containsKey('previous_hash')) {
+      context.handle(
+        _previousHashMeta,
+        previousHash.isAcceptableOrUnknown(
+          data['previous_hash']!,
+          _previousHashMeta,
+        ),
+      );
+    }
+    if (data.containsKey('pending_log_record')) {
+      context.handle(
+        _pendingLogRecordMeta,
+        pendingLogRecord.isAcceptableOrUnknown(
+          data['pending_log_record']!,
+          _pendingLogRecordMeta,
+        ),
+      );
+    }
+    if (data.containsKey('message')) {
+      context.handle(
+        _messageMeta,
+        message.isAcceptableOrUnknown(data['message']!, _messageMeta),
+      );
+    }
+    if (data.containsKey('recovery_secret_displayed')) {
+      context.handle(
+        _recoverySecretDisplayedMeta,
+        recoverySecretDisplayed.isAcceptableOrUnknown(
+          data['recovery_secret_displayed']!,
+          _recoverySecretDisplayedMeta,
+        ),
+      );
+    }
+    if (data.containsKey('recovery_confirmed')) {
+      context.handle(
+        _recoveryConfirmedMeta,
+        recoveryConfirmed.isAcceptableOrUnknown(
+          data['recovery_confirmed']!,
+          _recoveryConfirmedMeta,
+        ),
+      );
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {userId};
+  @override
+  EnrollmentIntent map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return EnrollmentIntent(
+      userId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}user_id'],
+      )!,
+      flow: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}flow'],
+      )!,
+      phase: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}phase'],
+      )!,
+      fingerprint: attachedDatabase.typeMapping.read(
+        DriftSqlType.blob,
+        data['${effectivePrefix}fingerprint'],
+      )!,
+      deviceState: attachedDatabase.typeMapping.read(
+        DriftSqlType.blob,
+        data['${effectivePrefix}device_state'],
+      )!,
+      deviceId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}device_id'],
+      ),
+      identityState: attachedDatabase.typeMapping.read(
+        DriftSqlType.blob,
+        data['${effectivePrefix}identity_state'],
+      ),
+      backup: attachedDatabase.typeMapping.read(
+        DriftSqlType.blob,
+        data['${effectivePrefix}backup'],
+      ),
+      backupVersion: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}backup_version'],
+      )!,
+      identityVersion: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}identity_version'],
+      )!,
+      expectedSequence: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}expected_sequence'],
+      ),
+      previousHash: attachedDatabase.typeMapping.read(
+        DriftSqlType.blob,
+        data['${effectivePrefix}previous_hash'],
+      ),
+      pendingLogRecord: attachedDatabase.typeMapping.read(
+        DriftSqlType.blob,
+        data['${effectivePrefix}pending_log_record'],
+      ),
+      message: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}message'],
+      ),
+      recoverySecretDisplayed: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}recovery_secret_displayed'],
+      )!,
+      recoveryConfirmed: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}recovery_confirmed'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+    );
+  }
+
+  @override
+  $EnrollmentIntentsTable createAlias(String alias) {
+    return $EnrollmentIntentsTable(attachedDatabase, alias);
+  }
+}
+
+class EnrollmentIntent extends DataClass
+    implements Insertable<EnrollmentIntent> {
+  final String userId;
+  final int flow;
+  final int phase;
+  final Uint8List fingerprint;
+  final Uint8List deviceState;
+  final String? deviceId;
+  final Uint8List? identityState;
+  final Uint8List? backup;
+  final int backupVersion;
+  final int identityVersion;
+  final int? expectedSequence;
+  final Uint8List? previousHash;
+  final Uint8List? pendingLogRecord;
+  final int? message;
+  final bool recoverySecretDisplayed;
+  final bool recoveryConfirmed;
+  final DateTime updatedAt;
+  const EnrollmentIntent({
+    required this.userId,
+    required this.flow,
+    required this.phase,
+    required this.fingerprint,
+    required this.deviceState,
+    this.deviceId,
+    this.identityState,
+    this.backup,
+    required this.backupVersion,
+    required this.identityVersion,
+    this.expectedSequence,
+    this.previousHash,
+    this.pendingLogRecord,
+    this.message,
+    required this.recoverySecretDisplayed,
+    required this.recoveryConfirmed,
+    required this.updatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['user_id'] = Variable<String>(userId);
+    map['flow'] = Variable<int>(flow);
+    map['phase'] = Variable<int>(phase);
+    map['fingerprint'] = Variable<Uint8List>(fingerprint);
+    map['device_state'] = Variable<Uint8List>(deviceState);
+    if (!nullToAbsent || deviceId != null) {
+      map['device_id'] = Variable<String>(deviceId);
+    }
+    if (!nullToAbsent || identityState != null) {
+      map['identity_state'] = Variable<Uint8List>(identityState);
+    }
+    if (!nullToAbsent || backup != null) {
+      map['backup'] = Variable<Uint8List>(backup);
+    }
+    map['backup_version'] = Variable<int>(backupVersion);
+    map['identity_version'] = Variable<int>(identityVersion);
+    if (!nullToAbsent || expectedSequence != null) {
+      map['expected_sequence'] = Variable<int>(expectedSequence);
+    }
+    if (!nullToAbsent || previousHash != null) {
+      map['previous_hash'] = Variable<Uint8List>(previousHash);
+    }
+    if (!nullToAbsent || pendingLogRecord != null) {
+      map['pending_log_record'] = Variable<Uint8List>(pendingLogRecord);
+    }
+    if (!nullToAbsent || message != null) {
+      map['message'] = Variable<int>(message);
+    }
+    map['recovery_secret_displayed'] = Variable<bool>(recoverySecretDisplayed);
+    map['recovery_confirmed'] = Variable<bool>(recoveryConfirmed);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    return map;
+  }
+
+  EnrollmentIntentsCompanion toCompanion(bool nullToAbsent) {
+    return EnrollmentIntentsCompanion(
+      userId: Value(userId),
+      flow: Value(flow),
+      phase: Value(phase),
+      fingerprint: Value(fingerprint),
+      deviceState: Value(deviceState),
+      deviceId: deviceId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(deviceId),
+      identityState: identityState == null && nullToAbsent
+          ? const Value.absent()
+          : Value(identityState),
+      backup: backup == null && nullToAbsent
+          ? const Value.absent()
+          : Value(backup),
+      backupVersion: Value(backupVersion),
+      identityVersion: Value(identityVersion),
+      expectedSequence: expectedSequence == null && nullToAbsent
+          ? const Value.absent()
+          : Value(expectedSequence),
+      previousHash: previousHash == null && nullToAbsent
+          ? const Value.absent()
+          : Value(previousHash),
+      pendingLogRecord: pendingLogRecord == null && nullToAbsent
+          ? const Value.absent()
+          : Value(pendingLogRecord),
+      message: message == null && nullToAbsent
+          ? const Value.absent()
+          : Value(message),
+      recoverySecretDisplayed: Value(recoverySecretDisplayed),
+      recoveryConfirmed: Value(recoveryConfirmed),
+      updatedAt: Value(updatedAt),
+    );
+  }
+
+  factory EnrollmentIntent.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return EnrollmentIntent(
+      userId: serializer.fromJson<String>(json['userId']),
+      flow: serializer.fromJson<int>(json['flow']),
+      phase: serializer.fromJson<int>(json['phase']),
+      fingerprint: serializer.fromJson<Uint8List>(json['fingerprint']),
+      deviceState: serializer.fromJson<Uint8List>(json['deviceState']),
+      deviceId: serializer.fromJson<String?>(json['deviceId']),
+      identityState: serializer.fromJson<Uint8List?>(json['identityState']),
+      backup: serializer.fromJson<Uint8List?>(json['backup']),
+      backupVersion: serializer.fromJson<int>(json['backupVersion']),
+      identityVersion: serializer.fromJson<int>(json['identityVersion']),
+      expectedSequence: serializer.fromJson<int?>(json['expectedSequence']),
+      previousHash: serializer.fromJson<Uint8List?>(json['previousHash']),
+      pendingLogRecord: serializer.fromJson<Uint8List?>(
+        json['pendingLogRecord'],
+      ),
+      message: serializer.fromJson<int?>(json['message']),
+      recoverySecretDisplayed: serializer.fromJson<bool>(
+        json['recoverySecretDisplayed'],
+      ),
+      recoveryConfirmed: serializer.fromJson<bool>(json['recoveryConfirmed']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'userId': serializer.toJson<String>(userId),
+      'flow': serializer.toJson<int>(flow),
+      'phase': serializer.toJson<int>(phase),
+      'fingerprint': serializer.toJson<Uint8List>(fingerprint),
+      'deviceState': serializer.toJson<Uint8List>(deviceState),
+      'deviceId': serializer.toJson<String?>(deviceId),
+      'identityState': serializer.toJson<Uint8List?>(identityState),
+      'backup': serializer.toJson<Uint8List?>(backup),
+      'backupVersion': serializer.toJson<int>(backupVersion),
+      'identityVersion': serializer.toJson<int>(identityVersion),
+      'expectedSequence': serializer.toJson<int?>(expectedSequence),
+      'previousHash': serializer.toJson<Uint8List?>(previousHash),
+      'pendingLogRecord': serializer.toJson<Uint8List?>(pendingLogRecord),
+      'message': serializer.toJson<int?>(message),
+      'recoverySecretDisplayed': serializer.toJson<bool>(
+        recoverySecretDisplayed,
+      ),
+      'recoveryConfirmed': serializer.toJson<bool>(recoveryConfirmed),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+    };
+  }
+
+  EnrollmentIntent copyWith({
+    String? userId,
+    int? flow,
+    int? phase,
+    Uint8List? fingerprint,
+    Uint8List? deviceState,
+    Value<String?> deviceId = const Value.absent(),
+    Value<Uint8List?> identityState = const Value.absent(),
+    Value<Uint8List?> backup = const Value.absent(),
+    int? backupVersion,
+    int? identityVersion,
+    Value<int?> expectedSequence = const Value.absent(),
+    Value<Uint8List?> previousHash = const Value.absent(),
+    Value<Uint8List?> pendingLogRecord = const Value.absent(),
+    Value<int?> message = const Value.absent(),
+    bool? recoverySecretDisplayed,
+    bool? recoveryConfirmed,
+    DateTime? updatedAt,
+  }) => EnrollmentIntent(
+    userId: userId ?? this.userId,
+    flow: flow ?? this.flow,
+    phase: phase ?? this.phase,
+    fingerprint: fingerprint ?? this.fingerprint,
+    deviceState: deviceState ?? this.deviceState,
+    deviceId: deviceId.present ? deviceId.value : this.deviceId,
+    identityState: identityState.present
+        ? identityState.value
+        : this.identityState,
+    backup: backup.present ? backup.value : this.backup,
+    backupVersion: backupVersion ?? this.backupVersion,
+    identityVersion: identityVersion ?? this.identityVersion,
+    expectedSequence: expectedSequence.present
+        ? expectedSequence.value
+        : this.expectedSequence,
+    previousHash: previousHash.present ? previousHash.value : this.previousHash,
+    pendingLogRecord: pendingLogRecord.present
+        ? pendingLogRecord.value
+        : this.pendingLogRecord,
+    message: message.present ? message.value : this.message,
+    recoverySecretDisplayed:
+        recoverySecretDisplayed ?? this.recoverySecretDisplayed,
+    recoveryConfirmed: recoveryConfirmed ?? this.recoveryConfirmed,
+    updatedAt: updatedAt ?? this.updatedAt,
+  );
+  EnrollmentIntent copyWithCompanion(EnrollmentIntentsCompanion data) {
+    return EnrollmentIntent(
+      userId: data.userId.present ? data.userId.value : this.userId,
+      flow: data.flow.present ? data.flow.value : this.flow,
+      phase: data.phase.present ? data.phase.value : this.phase,
+      fingerprint: data.fingerprint.present
+          ? data.fingerprint.value
+          : this.fingerprint,
+      deviceState: data.deviceState.present
+          ? data.deviceState.value
+          : this.deviceState,
+      deviceId: data.deviceId.present ? data.deviceId.value : this.deviceId,
+      identityState: data.identityState.present
+          ? data.identityState.value
+          : this.identityState,
+      backup: data.backup.present ? data.backup.value : this.backup,
+      backupVersion: data.backupVersion.present
+          ? data.backupVersion.value
+          : this.backupVersion,
+      identityVersion: data.identityVersion.present
+          ? data.identityVersion.value
+          : this.identityVersion,
+      expectedSequence: data.expectedSequence.present
+          ? data.expectedSequence.value
+          : this.expectedSequence,
+      previousHash: data.previousHash.present
+          ? data.previousHash.value
+          : this.previousHash,
+      pendingLogRecord: data.pendingLogRecord.present
+          ? data.pendingLogRecord.value
+          : this.pendingLogRecord,
+      message: data.message.present ? data.message.value : this.message,
+      recoverySecretDisplayed: data.recoverySecretDisplayed.present
+          ? data.recoverySecretDisplayed.value
+          : this.recoverySecretDisplayed,
+      recoveryConfirmed: data.recoveryConfirmed.present
+          ? data.recoveryConfirmed.value
+          : this.recoveryConfirmed,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('EnrollmentIntent(')
+          ..write('userId: $userId, ')
+          ..write('flow: $flow, ')
+          ..write('phase: $phase, ')
+          ..write('fingerprint: $fingerprint, ')
+          ..write('deviceState: $deviceState, ')
+          ..write('deviceId: $deviceId, ')
+          ..write('identityState: $identityState, ')
+          ..write('backup: $backup, ')
+          ..write('backupVersion: $backupVersion, ')
+          ..write('identityVersion: $identityVersion, ')
+          ..write('expectedSequence: $expectedSequence, ')
+          ..write('previousHash: $previousHash, ')
+          ..write('pendingLogRecord: $pendingLogRecord, ')
+          ..write('message: $message, ')
+          ..write('recoverySecretDisplayed: $recoverySecretDisplayed, ')
+          ..write('recoveryConfirmed: $recoveryConfirmed, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    userId,
+    flow,
+    phase,
+    $driftBlobEquality.hash(fingerprint),
+    $driftBlobEquality.hash(deviceState),
+    deviceId,
+    $driftBlobEquality.hash(identityState),
+    $driftBlobEquality.hash(backup),
+    backupVersion,
+    identityVersion,
+    expectedSequence,
+    $driftBlobEquality.hash(previousHash),
+    $driftBlobEquality.hash(pendingLogRecord),
+    message,
+    recoverySecretDisplayed,
+    recoveryConfirmed,
+    updatedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is EnrollmentIntent &&
+          other.userId == this.userId &&
+          other.flow == this.flow &&
+          other.phase == this.phase &&
+          $driftBlobEquality.equals(other.fingerprint, this.fingerprint) &&
+          $driftBlobEquality.equals(other.deviceState, this.deviceState) &&
+          other.deviceId == this.deviceId &&
+          $driftBlobEquality.equals(other.identityState, this.identityState) &&
+          $driftBlobEquality.equals(other.backup, this.backup) &&
+          other.backupVersion == this.backupVersion &&
+          other.identityVersion == this.identityVersion &&
+          other.expectedSequence == this.expectedSequence &&
+          $driftBlobEquality.equals(other.previousHash, this.previousHash) &&
+          $driftBlobEquality.equals(
+            other.pendingLogRecord,
+            this.pendingLogRecord,
+          ) &&
+          other.message == this.message &&
+          other.recoverySecretDisplayed == this.recoverySecretDisplayed &&
+          other.recoveryConfirmed == this.recoveryConfirmed &&
+          other.updatedAt == this.updatedAt);
+}
+
+class EnrollmentIntentsCompanion extends UpdateCompanion<EnrollmentIntent> {
+  final Value<String> userId;
+  final Value<int> flow;
+  final Value<int> phase;
+  final Value<Uint8List> fingerprint;
+  final Value<Uint8List> deviceState;
+  final Value<String?> deviceId;
+  final Value<Uint8List?> identityState;
+  final Value<Uint8List?> backup;
+  final Value<int> backupVersion;
+  final Value<int> identityVersion;
+  final Value<int?> expectedSequence;
+  final Value<Uint8List?> previousHash;
+  final Value<Uint8List?> pendingLogRecord;
+  final Value<int?> message;
+  final Value<bool> recoverySecretDisplayed;
+  final Value<bool> recoveryConfirmed;
+  final Value<DateTime> updatedAt;
+  final Value<int> rowid;
+  const EnrollmentIntentsCompanion({
+    this.userId = const Value.absent(),
+    this.flow = const Value.absent(),
+    this.phase = const Value.absent(),
+    this.fingerprint = const Value.absent(),
+    this.deviceState = const Value.absent(),
+    this.deviceId = const Value.absent(),
+    this.identityState = const Value.absent(),
+    this.backup = const Value.absent(),
+    this.backupVersion = const Value.absent(),
+    this.identityVersion = const Value.absent(),
+    this.expectedSequence = const Value.absent(),
+    this.previousHash = const Value.absent(),
+    this.pendingLogRecord = const Value.absent(),
+    this.message = const Value.absent(),
+    this.recoverySecretDisplayed = const Value.absent(),
+    this.recoveryConfirmed = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  EnrollmentIntentsCompanion.insert({
+    required String userId,
+    required int flow,
+    required int phase,
+    required Uint8List fingerprint,
+    required Uint8List deviceState,
+    this.deviceId = const Value.absent(),
+    this.identityState = const Value.absent(),
+    this.backup = const Value.absent(),
+    this.backupVersion = const Value.absent(),
+    this.identityVersion = const Value.absent(),
+    this.expectedSequence = const Value.absent(),
+    this.previousHash = const Value.absent(),
+    this.pendingLogRecord = const Value.absent(),
+    this.message = const Value.absent(),
+    this.recoverySecretDisplayed = const Value.absent(),
+    this.recoveryConfirmed = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : userId = Value(userId),
+       flow = Value(flow),
+       phase = Value(phase),
+       fingerprint = Value(fingerprint),
+       deviceState = Value(deviceState);
+  static Insertable<EnrollmentIntent> custom({
+    Expression<String>? userId,
+    Expression<int>? flow,
+    Expression<int>? phase,
+    Expression<Uint8List>? fingerprint,
+    Expression<Uint8List>? deviceState,
+    Expression<String>? deviceId,
+    Expression<Uint8List>? identityState,
+    Expression<Uint8List>? backup,
+    Expression<int>? backupVersion,
+    Expression<int>? identityVersion,
+    Expression<int>? expectedSequence,
+    Expression<Uint8List>? previousHash,
+    Expression<Uint8List>? pendingLogRecord,
+    Expression<int>? message,
+    Expression<bool>? recoverySecretDisplayed,
+    Expression<bool>? recoveryConfirmed,
+    Expression<DateTime>? updatedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (userId != null) 'user_id': userId,
+      if (flow != null) 'flow': flow,
+      if (phase != null) 'phase': phase,
+      if (fingerprint != null) 'fingerprint': fingerprint,
+      if (deviceState != null) 'device_state': deviceState,
+      if (deviceId != null) 'device_id': deviceId,
+      if (identityState != null) 'identity_state': identityState,
+      if (backup != null) 'backup': backup,
+      if (backupVersion != null) 'backup_version': backupVersion,
+      if (identityVersion != null) 'identity_version': identityVersion,
+      if (expectedSequence != null) 'expected_sequence': expectedSequence,
+      if (previousHash != null) 'previous_hash': previousHash,
+      if (pendingLogRecord != null) 'pending_log_record': pendingLogRecord,
+      if (message != null) 'message': message,
+      if (recoverySecretDisplayed != null)
+        'recovery_secret_displayed': recoverySecretDisplayed,
+      if (recoveryConfirmed != null) 'recovery_confirmed': recoveryConfirmed,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  EnrollmentIntentsCompanion copyWith({
+    Value<String>? userId,
+    Value<int>? flow,
+    Value<int>? phase,
+    Value<Uint8List>? fingerprint,
+    Value<Uint8List>? deviceState,
+    Value<String?>? deviceId,
+    Value<Uint8List?>? identityState,
+    Value<Uint8List?>? backup,
+    Value<int>? backupVersion,
+    Value<int>? identityVersion,
+    Value<int?>? expectedSequence,
+    Value<Uint8List?>? previousHash,
+    Value<Uint8List?>? pendingLogRecord,
+    Value<int?>? message,
+    Value<bool>? recoverySecretDisplayed,
+    Value<bool>? recoveryConfirmed,
+    Value<DateTime>? updatedAt,
+    Value<int>? rowid,
+  }) {
+    return EnrollmentIntentsCompanion(
+      userId: userId ?? this.userId,
+      flow: flow ?? this.flow,
+      phase: phase ?? this.phase,
+      fingerprint: fingerprint ?? this.fingerprint,
+      deviceState: deviceState ?? this.deviceState,
+      deviceId: deviceId ?? this.deviceId,
+      identityState: identityState ?? this.identityState,
+      backup: backup ?? this.backup,
+      backupVersion: backupVersion ?? this.backupVersion,
+      identityVersion: identityVersion ?? this.identityVersion,
+      expectedSequence: expectedSequence ?? this.expectedSequence,
+      previousHash: previousHash ?? this.previousHash,
+      pendingLogRecord: pendingLogRecord ?? this.pendingLogRecord,
+      message: message ?? this.message,
+      recoverySecretDisplayed:
+          recoverySecretDisplayed ?? this.recoverySecretDisplayed,
+      recoveryConfirmed: recoveryConfirmed ?? this.recoveryConfirmed,
+      updatedAt: updatedAt ?? this.updatedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (userId.present) {
+      map['user_id'] = Variable<String>(userId.value);
+    }
+    if (flow.present) {
+      map['flow'] = Variable<int>(flow.value);
+    }
+    if (phase.present) {
+      map['phase'] = Variable<int>(phase.value);
+    }
+    if (fingerprint.present) {
+      map['fingerprint'] = Variable<Uint8List>(fingerprint.value);
+    }
+    if (deviceState.present) {
+      map['device_state'] = Variable<Uint8List>(deviceState.value);
+    }
+    if (deviceId.present) {
+      map['device_id'] = Variable<String>(deviceId.value);
+    }
+    if (identityState.present) {
+      map['identity_state'] = Variable<Uint8List>(identityState.value);
+    }
+    if (backup.present) {
+      map['backup'] = Variable<Uint8List>(backup.value);
+    }
+    if (backupVersion.present) {
+      map['backup_version'] = Variable<int>(backupVersion.value);
+    }
+    if (identityVersion.present) {
+      map['identity_version'] = Variable<int>(identityVersion.value);
+    }
+    if (expectedSequence.present) {
+      map['expected_sequence'] = Variable<int>(expectedSequence.value);
+    }
+    if (previousHash.present) {
+      map['previous_hash'] = Variable<Uint8List>(previousHash.value);
+    }
+    if (pendingLogRecord.present) {
+      map['pending_log_record'] = Variable<Uint8List>(pendingLogRecord.value);
+    }
+    if (message.present) {
+      map['message'] = Variable<int>(message.value);
+    }
+    if (recoverySecretDisplayed.present) {
+      map['recovery_secret_displayed'] = Variable<bool>(
+        recoverySecretDisplayed.value,
+      );
+    }
+    if (recoveryConfirmed.present) {
+      map['recovery_confirmed'] = Variable<bool>(recoveryConfirmed.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('EnrollmentIntentsCompanion(')
+          ..write('userId: $userId, ')
+          ..write('flow: $flow, ')
+          ..write('phase: $phase, ')
+          ..write('fingerprint: $fingerprint, ')
+          ..write('deviceState: $deviceState, ')
+          ..write('deviceId: $deviceId, ')
+          ..write('identityState: $identityState, ')
+          ..write('backup: $backup, ')
+          ..write('backupVersion: $backupVersion, ')
+          ..write('identityVersion: $identityVersion, ')
+          ..write('expectedSequence: $expectedSequence, ')
+          ..write('previousHash: $previousHash, ')
+          ..write('pendingLogRecord: $pendingLogRecord, ')
+          ..write('message: $message, ')
+          ..write('recoverySecretDisplayed: $recoverySecretDisplayed, ')
+          ..write('recoveryConfirmed: $recoveryConfirmed, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 class $UsersTable extends Users with TableInfo<$UsersTable, User> {
   @override
   final GeneratedDatabase attachedDatabase;
@@ -9274,6 +10303,8 @@ abstract class _$LocalDatabase extends GeneratedDatabase {
   late final $SecureSecretsTable secureSecrets = $SecureSecretsTable(this);
   late final $AccountIdentitiesTable accountIdentities =
       $AccountIdentitiesTable(this);
+  late final $EnrollmentIntentsTable enrollmentIntents =
+      $EnrollmentIntentsTable(this);
   late final $UsersTable users = $UsersTable(this);
   late final $ProfilesTable profiles = $ProfilesTable(this);
   late final $DevicesTable devices = $DevicesTable(this);
@@ -9315,6 +10346,7 @@ abstract class _$LocalDatabase extends GeneratedDatabase {
     accountSessions,
     secureSecrets,
     accountIdentities,
+    enrollmentIntents,
     users,
     profiles,
     devices,
@@ -10062,6 +11094,467 @@ typedef $$AccountIdentitiesTableProcessedTableManager =
         >,
       ),
       AccountIdentity,
+      PrefetchHooks Function()
+    >;
+typedef $$EnrollmentIntentsTableCreateCompanionBuilder =
+    EnrollmentIntentsCompanion Function({
+      required String userId,
+      required int flow,
+      required int phase,
+      required Uint8List fingerprint,
+      required Uint8List deviceState,
+      Value<String?> deviceId,
+      Value<Uint8List?> identityState,
+      Value<Uint8List?> backup,
+      Value<int> backupVersion,
+      Value<int> identityVersion,
+      Value<int?> expectedSequence,
+      Value<Uint8List?> previousHash,
+      Value<Uint8List?> pendingLogRecord,
+      Value<int?> message,
+      Value<bool> recoverySecretDisplayed,
+      Value<bool> recoveryConfirmed,
+      Value<DateTime> updatedAt,
+      Value<int> rowid,
+    });
+typedef $$EnrollmentIntentsTableUpdateCompanionBuilder =
+    EnrollmentIntentsCompanion Function({
+      Value<String> userId,
+      Value<int> flow,
+      Value<int> phase,
+      Value<Uint8List> fingerprint,
+      Value<Uint8List> deviceState,
+      Value<String?> deviceId,
+      Value<Uint8List?> identityState,
+      Value<Uint8List?> backup,
+      Value<int> backupVersion,
+      Value<int> identityVersion,
+      Value<int?> expectedSequence,
+      Value<Uint8List?> previousHash,
+      Value<Uint8List?> pendingLogRecord,
+      Value<int?> message,
+      Value<bool> recoverySecretDisplayed,
+      Value<bool> recoveryConfirmed,
+      Value<DateTime> updatedAt,
+      Value<int> rowid,
+    });
+
+class $$EnrollmentIntentsTableFilterComposer
+    extends Composer<_$LocalDatabase, $EnrollmentIntentsTable> {
+  $$EnrollmentIntentsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get userId => $composableBuilder(
+    column: $table.userId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get flow => $composableBuilder(
+    column: $table.flow,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get phase => $composableBuilder(
+    column: $table.phase,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<Uint8List> get fingerprint => $composableBuilder(
+    column: $table.fingerprint,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<Uint8List> get deviceState => $composableBuilder(
+    column: $table.deviceState,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get deviceId => $composableBuilder(
+    column: $table.deviceId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<Uint8List> get identityState => $composableBuilder(
+    column: $table.identityState,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<Uint8List> get backup => $composableBuilder(
+    column: $table.backup,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get backupVersion => $composableBuilder(
+    column: $table.backupVersion,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get identityVersion => $composableBuilder(
+    column: $table.identityVersion,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get expectedSequence => $composableBuilder(
+    column: $table.expectedSequence,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<Uint8List> get previousHash => $composableBuilder(
+    column: $table.previousHash,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<Uint8List> get pendingLogRecord => $composableBuilder(
+    column: $table.pendingLogRecord,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get message => $composableBuilder(
+    column: $table.message,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get recoverySecretDisplayed => $composableBuilder(
+    column: $table.recoverySecretDisplayed,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get recoveryConfirmed => $composableBuilder(
+    column: $table.recoveryConfirmed,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$EnrollmentIntentsTableOrderingComposer
+    extends Composer<_$LocalDatabase, $EnrollmentIntentsTable> {
+  $$EnrollmentIntentsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get userId => $composableBuilder(
+    column: $table.userId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get flow => $composableBuilder(
+    column: $table.flow,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get phase => $composableBuilder(
+    column: $table.phase,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<Uint8List> get fingerprint => $composableBuilder(
+    column: $table.fingerprint,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<Uint8List> get deviceState => $composableBuilder(
+    column: $table.deviceState,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get deviceId => $composableBuilder(
+    column: $table.deviceId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<Uint8List> get identityState => $composableBuilder(
+    column: $table.identityState,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<Uint8List> get backup => $composableBuilder(
+    column: $table.backup,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get backupVersion => $composableBuilder(
+    column: $table.backupVersion,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get identityVersion => $composableBuilder(
+    column: $table.identityVersion,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get expectedSequence => $composableBuilder(
+    column: $table.expectedSequence,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<Uint8List> get previousHash => $composableBuilder(
+    column: $table.previousHash,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<Uint8List> get pendingLogRecord => $composableBuilder(
+    column: $table.pendingLogRecord,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get message => $composableBuilder(
+    column: $table.message,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get recoverySecretDisplayed => $composableBuilder(
+    column: $table.recoverySecretDisplayed,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get recoveryConfirmed => $composableBuilder(
+    column: $table.recoveryConfirmed,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$EnrollmentIntentsTableAnnotationComposer
+    extends Composer<_$LocalDatabase, $EnrollmentIntentsTable> {
+  $$EnrollmentIntentsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get userId =>
+      $composableBuilder(column: $table.userId, builder: (column) => column);
+
+  GeneratedColumn<int> get flow =>
+      $composableBuilder(column: $table.flow, builder: (column) => column);
+
+  GeneratedColumn<int> get phase =>
+      $composableBuilder(column: $table.phase, builder: (column) => column);
+
+  GeneratedColumn<Uint8List> get fingerprint => $composableBuilder(
+    column: $table.fingerprint,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<Uint8List> get deviceState => $composableBuilder(
+    column: $table.deviceState,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get deviceId =>
+      $composableBuilder(column: $table.deviceId, builder: (column) => column);
+
+  GeneratedColumn<Uint8List> get identityState => $composableBuilder(
+    column: $table.identityState,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<Uint8List> get backup =>
+      $composableBuilder(column: $table.backup, builder: (column) => column);
+
+  GeneratedColumn<int> get backupVersion => $composableBuilder(
+    column: $table.backupVersion,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get identityVersion => $composableBuilder(
+    column: $table.identityVersion,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get expectedSequence => $composableBuilder(
+    column: $table.expectedSequence,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<Uint8List> get previousHash => $composableBuilder(
+    column: $table.previousHash,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<Uint8List> get pendingLogRecord => $composableBuilder(
+    column: $table.pendingLogRecord,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get message =>
+      $composableBuilder(column: $table.message, builder: (column) => column);
+
+  GeneratedColumn<bool> get recoverySecretDisplayed => $composableBuilder(
+    column: $table.recoverySecretDisplayed,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get recoveryConfirmed => $composableBuilder(
+    column: $table.recoveryConfirmed,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+}
+
+class $$EnrollmentIntentsTableTableManager
+    extends
+        RootTableManager<
+          _$LocalDatabase,
+          $EnrollmentIntentsTable,
+          EnrollmentIntent,
+          $$EnrollmentIntentsTableFilterComposer,
+          $$EnrollmentIntentsTableOrderingComposer,
+          $$EnrollmentIntentsTableAnnotationComposer,
+          $$EnrollmentIntentsTableCreateCompanionBuilder,
+          $$EnrollmentIntentsTableUpdateCompanionBuilder,
+          (
+            EnrollmentIntent,
+            BaseReferences<
+              _$LocalDatabase,
+              $EnrollmentIntentsTable,
+              EnrollmentIntent
+            >,
+          ),
+          EnrollmentIntent,
+          PrefetchHooks Function()
+        > {
+  $$EnrollmentIntentsTableTableManager(
+    _$LocalDatabase db,
+    $EnrollmentIntentsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$EnrollmentIntentsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$EnrollmentIntentsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$EnrollmentIntentsTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> userId = const Value.absent(),
+                Value<int> flow = const Value.absent(),
+                Value<int> phase = const Value.absent(),
+                Value<Uint8List> fingerprint = const Value.absent(),
+                Value<Uint8List> deviceState = const Value.absent(),
+                Value<String?> deviceId = const Value.absent(),
+                Value<Uint8List?> identityState = const Value.absent(),
+                Value<Uint8List?> backup = const Value.absent(),
+                Value<int> backupVersion = const Value.absent(),
+                Value<int> identityVersion = const Value.absent(),
+                Value<int?> expectedSequence = const Value.absent(),
+                Value<Uint8List?> previousHash = const Value.absent(),
+                Value<Uint8List?> pendingLogRecord = const Value.absent(),
+                Value<int?> message = const Value.absent(),
+                Value<bool> recoverySecretDisplayed = const Value.absent(),
+                Value<bool> recoveryConfirmed = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => EnrollmentIntentsCompanion(
+                userId: userId,
+                flow: flow,
+                phase: phase,
+                fingerprint: fingerprint,
+                deviceState: deviceState,
+                deviceId: deviceId,
+                identityState: identityState,
+                backup: backup,
+                backupVersion: backupVersion,
+                identityVersion: identityVersion,
+                expectedSequence: expectedSequence,
+                previousHash: previousHash,
+                pendingLogRecord: pendingLogRecord,
+                message: message,
+                recoverySecretDisplayed: recoverySecretDisplayed,
+                recoveryConfirmed: recoveryConfirmed,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String userId,
+                required int flow,
+                required int phase,
+                required Uint8List fingerprint,
+                required Uint8List deviceState,
+                Value<String?> deviceId = const Value.absent(),
+                Value<Uint8List?> identityState = const Value.absent(),
+                Value<Uint8List?> backup = const Value.absent(),
+                Value<int> backupVersion = const Value.absent(),
+                Value<int> identityVersion = const Value.absent(),
+                Value<int?> expectedSequence = const Value.absent(),
+                Value<Uint8List?> previousHash = const Value.absent(),
+                Value<Uint8List?> pendingLogRecord = const Value.absent(),
+                Value<int?> message = const Value.absent(),
+                Value<bool> recoverySecretDisplayed = const Value.absent(),
+                Value<bool> recoveryConfirmed = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => EnrollmentIntentsCompanion.insert(
+                userId: userId,
+                flow: flow,
+                phase: phase,
+                fingerprint: fingerprint,
+                deviceState: deviceState,
+                deviceId: deviceId,
+                identityState: identityState,
+                backup: backup,
+                backupVersion: backupVersion,
+                identityVersion: identityVersion,
+                expectedSequence: expectedSequence,
+                previousHash: previousHash,
+                pendingLogRecord: pendingLogRecord,
+                message: message,
+                recoverySecretDisplayed: recoverySecretDisplayed,
+                recoveryConfirmed: recoveryConfirmed,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$EnrollmentIntentsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$LocalDatabase,
+      $EnrollmentIntentsTable,
+      EnrollmentIntent,
+      $$EnrollmentIntentsTableFilterComposer,
+      $$EnrollmentIntentsTableOrderingComposer,
+      $$EnrollmentIntentsTableAnnotationComposer,
+      $$EnrollmentIntentsTableCreateCompanionBuilder,
+      $$EnrollmentIntentsTableUpdateCompanionBuilder,
+      (
+        EnrollmentIntent,
+        BaseReferences<
+          _$LocalDatabase,
+          $EnrollmentIntentsTable,
+          EnrollmentIntent
+        >,
+      ),
+      EnrollmentIntent,
       PrefetchHooks Function()
     >;
 typedef $$UsersTableCreateCompanionBuilder =
@@ -16173,6 +17666,8 @@ class $LocalDatabaseManager {
       $$SecureSecretsTableTableManager(_db, _db.secureSecrets);
   $$AccountIdentitiesTableTableManager get accountIdentities =>
       $$AccountIdentitiesTableTableManager(_db, _db.accountIdentities);
+  $$EnrollmentIntentsTableTableManager get enrollmentIntents =>
+      $$EnrollmentIntentsTableTableManager(_db, _db.enrollmentIntents);
   $$UsersTableTableManager get users =>
       $$UsersTableTableManager(_db, _db.users);
   $$ProfilesTableTableManager get profiles =>

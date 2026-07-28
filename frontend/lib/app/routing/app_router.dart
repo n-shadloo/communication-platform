@@ -9,6 +9,7 @@ import 'package:communication_platform/features/authentication/presentation/auth
 import 'package:communication_platform/features/bootstrap/application/bootstrap_flow.dart';
 import 'package:communication_platform/features/bootstrap/domain/bootstrap_model.dart';
 import 'package:communication_platform/features/bootstrap/presentation/bootstrap_page.dart';
+import 'package:communication_platform/features/devices/presentation/device_enrollment_page.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
@@ -107,7 +108,7 @@ GoRouter createAppRouter({
       GoRoute(
         path: '/encryption-setup',
         pageBuilder: (context, state) =>
-            _page(context, state, const EncryptionSetupRouteBoundaryPage()),
+            _page(context, state, const DeviceEnrollmentPage()),
       ),
     ],
     StatefulShellRoute.indexedStack(

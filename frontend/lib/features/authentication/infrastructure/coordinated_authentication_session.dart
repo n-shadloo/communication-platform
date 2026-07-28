@@ -100,6 +100,9 @@ final class CoordinatedAuthenticationSession
           deviceId: grant.deviceId,
           scope: grant.scope,
           offline: false,
+          securitySetupComplete:
+              grant.scope == AccountSessionScope.full &&
+              await tokens.hasCompletedSecureSetup(),
         ),
       );
     } on Object {
@@ -135,6 +138,7 @@ final class CoordinatedAuthenticationSession
             deviceId: current.deviceId,
             scope: AccountSessionScope.full,
             offline: false,
+            securitySetupComplete: await tokens.hasCompletedSecureSetup(),
           ),
         );
       case FailureResult(failure: final failure):
@@ -145,6 +149,7 @@ final class CoordinatedAuthenticationSession
               deviceId: before.deviceId,
               scope: AccountSessionScope.full,
               offline: true,
+              securitySetupComplete: await tokens.hasCompletedSecureSetup(),
             ),
           );
         }

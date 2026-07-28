@@ -46,6 +46,15 @@ void main() {
 
       route.update(
         const AuthenticationViewState(
+          access: AuthenticationRouteAccess.secureSetup,
+          operation: AuthenticationOperation.idle,
+        ),
+      );
+      expect(route.redirect('/chats', '/chats'), '/encryption-setup');
+      expect(route.redirect('/encryption-setup', '/encryption-setup'), isNull);
+
+      route.update(
+        const AuthenticationViewState(
           access: AuthenticationRouteAccess.offlineFullScope,
           operation: AuthenticationOperation.idle,
         ),

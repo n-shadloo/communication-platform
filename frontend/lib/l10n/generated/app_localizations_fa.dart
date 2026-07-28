@@ -297,4 +297,139 @@ class AppLocalizationsFa extends AppLocalizations {
   @override
   String get authSecurityNoticeMessage =>
       'رمز عبور، حساب شما را احراز می‌کند. یک راز بازیابی جداگانه از مواد هویت رمزنگاری محافظت می‌کند. هیچ‌یک تاریخچه پیام‌ها را از سرور بازیابی نمی‌کند.';
+
+  @override
+  String get enrollmentSetupTitle =>
+      'در حال راه‌اندازی رمزنگاری روی این دستگاه';
+
+  @override
+  String get enrollmentWithheldMessage =>
+      'راه‌اندازی امن دستگاه در حال تکمیل است. پیام‌رسانی تا پایان همهٔ مراحل امنیتی در دسترس نیست.';
+
+  @override
+  String get enrollmentRecoveryTitle => 'راز بازیابی شما';
+
+  @override
+  String get enrollmentRecoveryExplanation =>
+      'این راز را در جای امن نگه دارید. اگر دستگاه‌هایتان را از دست بدهید، هویت رمزنگاری حساب را بازیابی می‌کند. پیام‌ها را بازیابی نمی‌کند؛ سرور نسخه‌ای از تاریخچهٔ پیام‌ها ندارد.';
+
+  @override
+  String get enrollmentRecoverySeparate =>
+      'راز بازیابی با رمز عبور ورود جداست و سرور هرگز آن را نمی‌بیند.';
+
+  @override
+  String get enrollmentCopyAction => 'کپی';
+
+  @override
+  String get enrollmentCopiedMessage =>
+      'راز بازیابی کپی شد. حافظهٔ موقت به‌زودی پاک می‌شود.';
+
+  @override
+  String get enrollmentSavedCheck => 'راز بازیابی را در جای امن ذخیره کرده‌ام.';
+
+  @override
+  String get enrollmentContinueAction => 'ادامه';
+
+  @override
+  String get enrollmentConfirmTitle => 'ایمن‌بودن راز بازیابی را تأیید کنید';
+
+  @override
+  String get enrollmentConfirmCheck =>
+      'بله، راز بازیابی را در جای امن نگه داشته‌ام.';
+
+  @override
+  String get enrollmentConfirmAction => 'تأیید و تکمیل راه‌اندازی';
+
+  @override
+  String get enrollmentBackToSecretAction => 'بازگشت به راز بازیابی';
+
+  @override
+  String get enrollmentRestoreTitle => 'بازیابی هویت رمزنگاری';
+
+  @override
+  String get enrollmentRestoreExplanation =>
+      'برای بازکردن نسخهٔ پشتیبان رمزگذاری‌شدهٔ هویت روی این دستگاه، راز بازیابی را وارد کنید. تاریخچهٔ پیام در این نسخه نیست.';
+
+  @override
+  String get enrollmentRecoverySecretLabel => 'راز بازیابی';
+
+  @override
+  String get enrollmentRestoreAction => 'بازیابی هویت';
+
+  @override
+  String get enrollmentRestoringAction => 'در حال بازیابی هویت…';
+
+  @override
+  String get enrollmentWrongSecretMessage =>
+      'این راز بازیابی نتوانست نسخهٔ پشتیبان هویت را باز کند. آن را بررسی و دوباره تلاش کنید.';
+
+  @override
+  String get enrollmentAmbiguousTitle => 'ثبت دستگاه نیاز به تطبیق دارد';
+
+  @override
+  String get enrollmentAmbiguousMessage =>
+      'ممکن است سرور پیش از گم‌شدن پاسخ، دستگاه را ثبت کرده باشد. برنامه تا تطبیق امن دستگاه بدون امضا، دستگاه دیگری ثبت نمی‌کند.';
+
+  @override
+  String get enrollmentReconcileAction => 'تطبیق ثبت دستگاه';
+
+  @override
+  String get enrollmentDeviceLimitMessage =>
+      'حساب به سقف تعداد دستگاه رسیده است. یک دستگاه قدیمی را از نصب موجود حذف و دوباره تلاش کنید.';
+
+  @override
+  String get enrollmentIdentityRequiredMessage =>
+      'پیش از افزودن دستگاه دیگر، هویت حساب باید از یک دستگاه موجود ترمیم شود.';
+
+  @override
+  String get enrollmentBackupMissingMessage =>
+      'نسخهٔ پشتیبان هویت موجود نیست. این دستگاه با راز بازیابی قابل امضای متقابل نیست.';
+
+  @override
+  String get enrollmentStaleVersionMessage =>
+      'نسخهٔ جدیدتری از هویت یا پشتیبان وجود دارد. برای جلوگیری از بازنویسی، راه‌اندازی امن متوقف شد.';
+
+  @override
+  String get enrollmentInvalidVectorMessage =>
+      'اعتبارسنجی امنیتی ناموفق بود. دستگاه تأییدنشده می‌ماند و پیام‌رسانی در دسترس نیست.';
+
+  @override
+  String get enrollmentLogConflictMessage =>
+      'دفتر امضاشدهٔ دستگاه‌ها هم‌زمان تغییر کرد یا تطبیق نداشت. راه‌اندازی امن متوقف شد.';
+
+  @override
+  String get enrollmentUnsupportedMessage =>
+      'این نصب از پروتکل لازم برای ثبت امن پشتیبانی نمی‌کند.';
+
+  @override
+  String get enrollmentGenericMessage =>
+      'راه‌اندازی امن ادامه پیدا نکرد. دوباره تلاش کنید.';
+
+  @override
+  String get enrollmentSecurityTitle =>
+      'این برنامه از چه چیزهایی محافظت می‌کند — و از چه چیزهایی نه';
+
+  @override
+  String get enrollmentIdentityRecoveredTitle => 'هویت بازیابی شد';
+
+  @override
+  String get enrollmentNoHistoryMessage =>
+      'هویت رمزنگاری شما آماده است. هیچ تاریخچهٔ پیامی بازیابی نشد؛ تاریخچه فقط بعداً از یک دستگاه آنلاین موجود می‌آید و انتقال آن بخشی از این راه‌اندازی نیست.';
+
+  @override
+  String get enrollmentProtectsHeading => 'از چه چیزهایی محافظت می‌کند';
+
+  @override
+  String get enrollmentProtectsBody =>
+      'محتوای پیام‌ها، فایل‌ها و صدای تماس برای سرور، ناظر شبکه و فردی که سرور را توقیف کند ناخواناست.';
+
+  @override
+  String get enrollmentDoesNotProtectHeading => 'از چه چیزهایی محافظت نمی‌کند';
+
+  @override
+  String get enrollmentDoesNotProtectBody =>
+      'زمان اتصال، نشانی IP، الگوهای ترافیک یا گراف اجتماعی را از گردانندهٔ زنده و مخرب سرور پنهان نمی‌کند. تماس نخست تا مقایسهٔ برون‌خط اثرانگشت‌ها محافظت‌شده نیست. رمزنگاری همچنین از محتوای بازشده روی دستگاه تسخیرشده یا توقیف‌شده محافظت نمی‌کند.';
+
+  @override
+  String get enrollmentUnderstandAction => 'متوجه شدم';
 }

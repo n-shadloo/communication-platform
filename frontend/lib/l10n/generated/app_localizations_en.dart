@@ -301,4 +301,139 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get authSecurityNoticeMessage =>
       'Your login password authenticates your account. A separate recovery secret protects cryptographic identity material. Neither secret restores message history from the server.';
+
+  @override
+  String get enrollmentSetupTitle => 'Setting up encryption on this device';
+
+  @override
+  String get enrollmentWithheldMessage =>
+      'Finishing secure device setup. Messaging stays unavailable until every security step completes.';
+
+  @override
+  String get enrollmentRecoveryTitle => 'Your recovery secret';
+
+  @override
+  String get enrollmentRecoveryExplanation =>
+      'Save this secret somewhere safe. It restores your account\'s cryptographic identity if your devices are lost. It does not restore messages; the server has no message-history copy.';
+
+  @override
+  String get enrollmentRecoverySeparate =>
+      'This recovery secret is separate from your login password. The server never sees it.';
+
+  @override
+  String get enrollmentCopyAction => 'Copy';
+
+  @override
+  String get enrollmentCopiedMessage =>
+      'Recovery secret copied. The clipboard will be cleared shortly.';
+
+  @override
+  String get enrollmentSavedCheck =>
+      'I\'ve saved the recovery secret somewhere safe.';
+
+  @override
+  String get enrollmentContinueAction => 'Continue';
+
+  @override
+  String get enrollmentConfirmTitle => 'Confirm your recovery secret is safe';
+
+  @override
+  String get enrollmentConfirmCheck =>
+      'Yes, I\'ve stored my recovery secret somewhere safe.';
+
+  @override
+  String get enrollmentConfirmAction => 'Confirm and finish setup';
+
+  @override
+  String get enrollmentBackToSecretAction => 'Back to recovery secret';
+
+  @override
+  String get enrollmentRestoreTitle => 'Restore cryptographic identity';
+
+  @override
+  String get enrollmentRestoreExplanation =>
+      'Enter your recovery secret to unlock the encrypted identity backup on this device. Message history is not in this backup.';
+
+  @override
+  String get enrollmentRecoverySecretLabel => 'Recovery secret';
+
+  @override
+  String get enrollmentRestoreAction => 'Restore identity';
+
+  @override
+  String get enrollmentRestoringAction => 'Restoring identity…';
+
+  @override
+  String get enrollmentWrongSecretMessage =>
+      'The recovery secret could not unlock this identity backup. Check it and try again.';
+
+  @override
+  String get enrollmentAmbiguousTitle => 'Registration needs reconciliation';
+
+  @override
+  String get enrollmentAmbiguousMessage =>
+      'The server may have registered this device before the response was lost. The app will not register another device until it can safely reconcile the unsigned device.';
+
+  @override
+  String get enrollmentReconcileAction => 'Reconcile registration';
+
+  @override
+  String get enrollmentDeviceLimitMessage =>
+      'This account has reached its device limit. Remove an old device from an existing installation, then retry.';
+
+  @override
+  String get enrollmentIdentityRequiredMessage =>
+      'The account identity must be repaired from an existing device before another device can be added.';
+
+  @override
+  String get enrollmentBackupMissingMessage =>
+      'No identity backup is available. This device cannot be cross-signed with a recovery secret.';
+
+  @override
+  String get enrollmentStaleVersionMessage =>
+      'A newer identity or backup version exists. Secure setup is blocked to avoid overwriting it.';
+
+  @override
+  String get enrollmentInvalidVectorMessage =>
+      'Security verification failed. This device remains unverified and messaging is unavailable.';
+
+  @override
+  String get enrollmentLogConflictMessage =>
+      'The signed device log changed concurrently or did not match. Secure setup is blocked.';
+
+  @override
+  String get enrollmentUnsupportedMessage =>
+      'This installation does not support the required secure enrollment protocol.';
+
+  @override
+  String get enrollmentGenericMessage =>
+      'Secure setup could not continue. Try again.';
+
+  @override
+  String get enrollmentSecurityTitle =>
+      'What this app protects — and what it doesn\'t';
+
+  @override
+  String get enrollmentIdentityRecoveredTitle => 'Identity recovered';
+
+  @override
+  String get enrollmentNoHistoryMessage =>
+      'Your cryptographic identity is ready. No message history was restored: history can only come later from an existing online device, and history transfer is not part of this setup.';
+
+  @override
+  String get enrollmentProtectsHeading => 'What it DOES protect';
+
+  @override
+  String get enrollmentProtectsBody =>
+      'The content of messages, files, and voice audio is unreadable to the server, network observers, and anyone who seizes the server.';
+
+  @override
+  String get enrollmentDoesNotProtectHeading => 'What it does NOT protect';
+
+  @override
+  String get enrollmentDoesNotProtectBody =>
+      'It does not hide connection timing, IP addresses, traffic patterns, or the social graph from a live hostile server operator. First contact is not protected until users compare fingerprints out of band. Encryption also cannot protect content already decrypted on a compromised or seized device.';
+
+  @override
+  String get enrollmentUnderstandAction => 'I understand';
 }

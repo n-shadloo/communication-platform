@@ -170,6 +170,37 @@ class AppField extends StatelessWidget {
 
 enum AppStatusKind { neutral, information, success, warning, danger }
 
+class AppCheckboxRow extends StatelessWidget {
+  const AppCheckboxRow({
+    required this.value,
+    required this.label,
+    required this.onChanged,
+    super.key,
+  });
+
+  final bool value;
+  final String label;
+  final ValueChanged<bool>? onChanged;
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    checked: value,
+    enabled: onChanged != null,
+    child: Material(
+      type: MaterialType.transparency,
+      child: CheckboxListTile(
+        value: value,
+        onChanged: onChanged == null
+            ? null
+            : (next) => onChanged!(next ?? false),
+        title: Text(label, style: context.tokens.typography.body),
+        contentPadding: EdgeInsets.zero,
+        controlAffinity: ListTileControlAffinity.leading,
+      ),
+    ),
+  );
+}
+
 class AppStatusBadge extends StatelessWidget {
   const AppStatusBadge({required this.kind, required this.label, super.key});
 

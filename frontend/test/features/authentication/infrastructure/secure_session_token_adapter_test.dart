@@ -120,6 +120,7 @@ void main() {
           (result as Success<AccountSessionBoundary>).value.offline,
           isTrue,
         );
+        expect(result.value.securitySetupComplete, isFalse);
         expect(harness.cleanup.erased, isFalse);
         await lifecycle.close();
       },

@@ -63,6 +63,7 @@ final class AccountSessionBoundary {
     required this.userId,
     required this.scope,
     required this.offline,
+    this.securitySetupComplete = true,
     this.deviceId,
   });
 
@@ -70,4 +71,5 @@ final class AccountSessionBoundary {
   final String? deviceId;
   final AccountSessionScope scope;
   final bool offline;
+  final bool securitySetupComplete;
 }

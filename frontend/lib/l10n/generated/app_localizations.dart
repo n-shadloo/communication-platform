@@ -613,6 +613,234 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Your login password authenticates your account. A separate recovery secret protects cryptographic identity material. Neither secret restores message history from the server.'**
   String get authSecurityNoticeMessage;
+
+  /// No description provided for @enrollmentSetupTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Setting up encryption on this device'**
+  String get enrollmentSetupTitle;
+
+  /// No description provided for @enrollmentWithheldMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Finishing secure device setup. Messaging stays unavailable until every security step completes.'**
+  String get enrollmentWithheldMessage;
+
+  /// No description provided for @enrollmentRecoveryTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Your recovery secret'**
+  String get enrollmentRecoveryTitle;
+
+  /// No description provided for @enrollmentRecoveryExplanation.
+  ///
+  /// In en, this message translates to:
+  /// **'Save this secret somewhere safe. It restores your account\'s cryptographic identity if your devices are lost. It does not restore messages; the server has no message-history copy.'**
+  String get enrollmentRecoveryExplanation;
+
+  /// No description provided for @enrollmentRecoverySeparate.
+  ///
+  /// In en, this message translates to:
+  /// **'This recovery secret is separate from your login password. The server never sees it.'**
+  String get enrollmentRecoverySeparate;
+
+  /// No description provided for @enrollmentCopyAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy'**
+  String get enrollmentCopyAction;
+
+  /// No description provided for @enrollmentCopiedMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Recovery secret copied. The clipboard will be cleared shortly.'**
+  String get enrollmentCopiedMessage;
+
+  /// No description provided for @enrollmentSavedCheck.
+  ///
+  /// In en, this message translates to:
+  /// **'I\'ve saved the recovery secret somewhere safe.'**
+  String get enrollmentSavedCheck;
+
+  /// No description provided for @enrollmentContinueAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Continue'**
+  String get enrollmentContinueAction;
+
+  /// No description provided for @enrollmentConfirmTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Confirm your recovery secret is safe'**
+  String get enrollmentConfirmTitle;
+
+  /// No description provided for @enrollmentConfirmCheck.
+  ///
+  /// In en, this message translates to:
+  /// **'Yes, I\'ve stored my recovery secret somewhere safe.'**
+  String get enrollmentConfirmCheck;
+
+  /// No description provided for @enrollmentConfirmAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Confirm and finish setup'**
+  String get enrollmentConfirmAction;
+
+  /// No description provided for @enrollmentBackToSecretAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Back to recovery secret'**
+  String get enrollmentBackToSecretAction;
+
+  /// No description provided for @enrollmentRestoreTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Restore cryptographic identity'**
+  String get enrollmentRestoreTitle;
+
+  /// No description provided for @enrollmentRestoreExplanation.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter your recovery secret to unlock the encrypted identity backup on this device. Message history is not in this backup.'**
+  String get enrollmentRestoreExplanation;
+
+  /// No description provided for @enrollmentRecoverySecretLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Recovery secret'**
+  String get enrollmentRecoverySecretLabel;
+
+  /// No description provided for @enrollmentRestoreAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Restore identity'**
+  String get enrollmentRestoreAction;
+
+  /// No description provided for @enrollmentRestoringAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Restoring identity…'**
+  String get enrollmentRestoringAction;
+
+  /// No description provided for @enrollmentWrongSecretMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'The recovery secret could not unlock this identity backup. Check it and try again.'**
+  String get enrollmentWrongSecretMessage;
+
+  /// No description provided for @enrollmentAmbiguousTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Registration needs reconciliation'**
+  String get enrollmentAmbiguousTitle;
+
+  /// No description provided for @enrollmentAmbiguousMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'The server may have registered this device before the response was lost. The app will not register another device until it can safely reconcile the unsigned device.'**
+  String get enrollmentAmbiguousMessage;
+
+  /// No description provided for @enrollmentReconcileAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Reconcile registration'**
+  String get enrollmentReconcileAction;
+
+  /// No description provided for @enrollmentDeviceLimitMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'This account has reached its device limit. Remove an old device from an existing installation, then retry.'**
+  String get enrollmentDeviceLimitMessage;
+
+  /// No description provided for @enrollmentIdentityRequiredMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'The account identity must be repaired from an existing device before another device can be added.'**
+  String get enrollmentIdentityRequiredMessage;
+
+  /// No description provided for @enrollmentBackupMissingMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'No identity backup is available. This device cannot be cross-signed with a recovery secret.'**
+  String get enrollmentBackupMissingMessage;
+
+  /// No description provided for @enrollmentStaleVersionMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'A newer identity or backup version exists. Secure setup is blocked to avoid overwriting it.'**
+  String get enrollmentStaleVersionMessage;
+
+  /// No description provided for @enrollmentInvalidVectorMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Security verification failed. This device remains unverified and messaging is unavailable.'**
+  String get enrollmentInvalidVectorMessage;
+
+  /// No description provided for @enrollmentLogConflictMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'The signed device log changed concurrently or did not match. Secure setup is blocked.'**
+  String get enrollmentLogConflictMessage;
+
+  /// No description provided for @enrollmentUnsupportedMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'This installation does not support the required secure enrollment protocol.'**
+  String get enrollmentUnsupportedMessage;
+
+  /// No description provided for @enrollmentGenericMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Secure setup could not continue. Try again.'**
+  String get enrollmentGenericMessage;
+
+  /// No description provided for @enrollmentSecurityTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'What this app protects — and what it doesn\'t'**
+  String get enrollmentSecurityTitle;
+
+  /// No description provided for @enrollmentIdentityRecoveredTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Identity recovered'**
+  String get enrollmentIdentityRecoveredTitle;
+
+  /// No description provided for @enrollmentNoHistoryMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Your cryptographic identity is ready. No message history was restored: history can only come later from an existing online device, and history transfer is not part of this setup.'**
+  String get enrollmentNoHistoryMessage;
+
+  /// No description provided for @enrollmentProtectsHeading.
+  ///
+  /// In en, this message translates to:
+  /// **'What it DOES protect'**
+  String get enrollmentProtectsHeading;
+
+  /// No description provided for @enrollmentProtectsBody.
+  ///
+  /// In en, this message translates to:
+  /// **'The content of messages, files, and voice audio is unreadable to the server, network observers, and anyone who seizes the server.'**
+  String get enrollmentProtectsBody;
+
+  /// No description provided for @enrollmentDoesNotProtectHeading.
+  ///
+  /// In en, this message translates to:
+  /// **'What it does NOT protect'**
+  String get enrollmentDoesNotProtectHeading;
+
+  /// No description provided for @enrollmentDoesNotProtectBody.
+  ///
+  /// In en, this message translates to:
+  /// **'It does not hide connection timing, IP addresses, traffic patterns, or the social graph from a live hostile server operator. First contact is not protected until users compare fingerprints out of band. Encryption also cannot protect content already decrypted on a compromised or seized device.'**
+  String get enrollmentDoesNotProtectBody;
+
+  /// No description provided for @enrollmentUnderstandAction.
+  ///
+  /// In en, this message translates to:
+  /// **'I understand'**
+  String get enrollmentUnderstandAction;
 }
 
 class _AppLocalizationsDelegate

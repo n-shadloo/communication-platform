@@ -114,18 +114,17 @@ final registerGrant = AccountSessionGrant(
 
 final class RecordingAuthenticationRepository
     implements AccountAuthenticationRepository {
-  RecordingAuthenticationRepository({
-    Result<AccountSessionGrant>? loginResult,
-  }) : loginResult =
-           loginResult ??
-           Result.success(
-             AccountSessionGrant(
-               accessToken: 'register-access',
-               accessExpiresAt: DateTime.utc(2026, 7, 28, 12),
-               userId: userId,
-               scope: AccountSessionScope.register,
-             ),
-           );
+  RecordingAuthenticationRepository({Result<AccountSessionGrant>? loginResult})
+    : loginResult =
+          loginResult ??
+          Result.success(
+            AccountSessionGrant(
+              accessToken: 'register-access',
+              accessExpiresAt: DateTime.utc(2026, 7, 28, 12),
+              userId: userId,
+              scope: AccountSessionScope.register,
+            ),
+          );
 
   final Result<AccountSessionGrant> loginResult;
   int registerCalls = 0;

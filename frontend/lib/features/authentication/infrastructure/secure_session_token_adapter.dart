@@ -77,8 +77,42 @@ final class SecureSessionTokenAdapter implements SessionTokenStore {
 
   @override
   Future<void> replace(SessionTokens tokens) async {
+    final database = await _database();
+    if (database == null) {
+      throw StateError('Protected session storage is unavailable.');
+    }
+    final merged = await _merge(tokens);
+    if (merged.accessToken.scope == SessionScope.register) {
+      _memoryTokens = merged;
+      await _deleteSession(database);
+      return;
+    }
+    await _writeFullSession(database, merged);
+    _memoryTokens = merged;
+  }
+
+  Future<void> replaceWithAtomicMutation(
+    SessionTokens tokens,
+    Future<void> Function(LocalDatabase database) mutation,
+  ) async {
+    final database = await _database();
+    if (database == null) {
+      throw StateError('Protected session storage is unavailable.');
+    }
+    final merged = await _merge(tokens);
+    if (merged.accessToken.scope != SessionScope.full) {
+      throw StateError('Atomic enrollment commit requires full scope.');
+    }
+    await database.writeTransaction<void>(() async {
+      await _writeFullSession(database, merged);
+      await mutation(database);
+    });
+    _memoryTokens = merged;
+  }
+
+  Future<SessionTokens> _merge(SessionTokens tokens) async {
     final previous = _memoryTokens ?? await read();
-    final merged = SessionTokens(
+    return SessionTokens(
       accessToken: tokens.accessToken,
       refreshToken: tokens.refreshToken,
       refreshExpiresAt: tokens.refreshExpiresAt ?? previous?.refreshExpiresAt,
@@ -86,16 +120,12 @@ final class SecureSessionTokenAdapter implements SessionTokenStore {
       deviceId: tokens.deviceId ?? previous?.deviceId,
       username: tokens.username ?? previous?.username,
     );
-    _memoryTokens = merged;
+  }
 
-    final database = await _database();
-    if (database == null) {
-      throw StateError('Protected session storage is unavailable.');
-    }
-    if (merged.accessToken.scope == SessionScope.register) {
-      await _deleteSession(database);
-      return;
-    }
+  Future<void> _writeFullSession(
+    LocalDatabase database,
+    SessionTokens merged,
+  ) async {
     final refresh = merged.refreshToken;
     final userId = merged.userId;
     final deviceId = merged.deviceId;
@@ -108,7 +138,6 @@ final class SecureSessionTokenAdapter implements SessionTokenStore {
         !_uuid.hasMatch(deviceId) ||
         username == null ||
         !AuthenticationInputPolicy.isUsernameValid(username)) {
-      _memoryTokens = null;
       throw StateError('Incomplete full-scope session.');
     }
 
@@ -214,6 +243,20 @@ final class SecureSessionTokenAdapter implements SessionTokenStore {
             .select(database.accountIdentities)
             .getSingleOrNull() !=
         null;
+  }
+
+  Future<bool> hasCompletedSecureSetup() async {
+    final database = await _database();
+    if (database == null) {
+      return false;
+    }
+    final identity = await database
+        .select(database.accountIdentities)
+        .getSingleOrNull();
+    final enrollment = await database
+        .select(database.enrollmentIntents)
+        .getSingleOrNull();
+    return identity?.recoveryStatus == 4 && enrollment == null;
   }
 
   void clearMemory() => _memoryTokens = null;
