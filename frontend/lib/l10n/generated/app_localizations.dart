@@ -841,6 +841,276 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'I understand'**
   String get enrollmentUnderstandAction;
+
+  /// No description provided for @contactsNewTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'New'**
+  String get contactsNewTitle;
+
+  /// No description provided for @contactsNewGroup.
+  ///
+  /// In en, this message translates to:
+  /// **'New Group'**
+  String get contactsNewGroup;
+
+  /// No description provided for @contactsNewVoiceRoom.
+  ///
+  /// In en, this message translates to:
+  /// **'New Voice Room'**
+  String get contactsNewVoiceRoom;
+
+  /// No description provided for @contactsSearchLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Search contacts'**
+  String get contactsSearchLabel;
+
+  /// No description provided for @contactsLoadingTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Loading contacts'**
+  String get contactsLoadingTitle;
+
+  /// No description provided for @contactsEmptyTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'No contacts yet'**
+  String get contactsEmptyTitle;
+
+  /// No description provided for @contactsEmptyMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Activated users will appear here after the directory refreshes.'**
+  String get contactsEmptyMessage;
+
+  /// No description provided for @contactsOfflineMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Offline — showing cached contacts'**
+  String get contactsOfflineMessage;
+
+  /// No description provided for @contactsLoadMore.
+  ///
+  /// In en, this message translates to:
+  /// **'Load more contacts'**
+  String get contactsLoadMore;
+
+  /// No description provided for @contactsVerified.
+  ///
+  /// In en, this message translates to:
+  /// **'Identity verified'**
+  String get contactsVerified;
+
+  /// No description provided for @contactsUnverified.
+  ///
+  /// In en, this message translates to:
+  /// **'Identity not verified'**
+  String get contactsUnverified;
+
+  /// No description provided for @contactsUsernameFallback.
+  ///
+  /// In en, this message translates to:
+  /// **'Backend username shown until the encrypted profile and identity are authenticated.'**
+  String get contactsUsernameFallback;
+
+  /// No description provided for @contactProfileTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Contact profile'**
+  String get contactProfileTitle;
+
+  /// No description provided for @contactMessageAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Message'**
+  String get contactMessageAction;
+
+  /// No description provided for @contactMuteAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Mute'**
+  String get contactMuteAction;
+
+  /// No description provided for @contactVerifyAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Verify safety number'**
+  String get contactVerifyAction;
+
+  /// No description provided for @contactSharedMediaAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Shared media and files'**
+  String get contactSharedMediaAction;
+
+  /// No description provided for @contactClearHistoryAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear history'**
+  String get contactClearHistoryAction;
+
+  /// No description provided for @contactBlockAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Block'**
+  String get contactBlockAction;
+
+  /// No description provided for @contactSensitiveBlocked.
+  ///
+  /// In en, this message translates to:
+  /// **'Messaging is withheld until this identity and every device pass verification.'**
+  String get contactSensitiveBlocked;
+
+  /// No description provided for @profileEditTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit profile'**
+  String get profileEditTitle;
+
+  /// No description provided for @profileDisplayNameLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Display name'**
+  String get profileDisplayNameLabel;
+
+  /// No description provided for @profileVisibilityNote.
+  ///
+  /// In en, this message translates to:
+  /// **'This encrypted profile is visible only to contacts who receive an authenticated profile key. Keep personal information minimal.'**
+  String get profileVisibilityNote;
+
+  /// No description provided for @profileAvatarStyleLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Avatar style'**
+  String get profileAvatarStyleLabel;
+
+  /// No description provided for @profileSaveAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Save encrypted profile'**
+  String get profileSaveAction;
+
+  /// No description provided for @profileSavingAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Saving…'**
+  String get profileSavingAction;
+
+  /// No description provided for @profileTemporaryTransport.
+  ///
+  /// In en, this message translates to:
+  /// **'Profile encryption and key delivery are using development-only fake transport until pairwise messaging is available. Production remains blocked.'**
+  String get profileTemporaryTransport;
+
+  /// No description provided for @profileSavedMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Encrypted profile published.'**
+  String get profileSavedMessage;
+
+  /// No description provided for @profileInvalidName.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a display name of 1 to 64 characters.'**
+  String get profileInvalidName;
+
+  /// No description provided for @safetyTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Safety number'**
+  String get safetyTitle;
+
+  /// No description provided for @safetyInstructions.
+  ///
+  /// In en, this message translates to:
+  /// **'Compare these values in person or over another trusted channel. The server cannot confirm them for you.'**
+  String get safetyInstructions;
+
+  /// No description provided for @safetyEmojiLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Emoji comparison'**
+  String get safetyEmojiLabel;
+
+  /// No description provided for @safetyNumberLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Number comparison'**
+  String get safetyNumberLabel;
+
+  /// No description provided for @safetyQrLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'QR safety value'**
+  String get safetyQrLabel;
+
+  /// No description provided for @safetyOutOfBandCheck.
+  ///
+  /// In en, this message translates to:
+  /// **'I compared the values out of band with this contact.'**
+  String get safetyOutOfBandCheck;
+
+  /// No description provided for @safetyConfirmAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Confirm verified'**
+  String get safetyConfirmAction;
+
+  /// No description provided for @safetyVerifiedState.
+  ///
+  /// In en, this message translates to:
+  /// **'Verified — the exact master key is attested by your user-signing key.'**
+  String get safetyVerifiedState;
+
+  /// No description provided for @safetyUnverifiedState.
+  ///
+  /// In en, this message translates to:
+  /// **'Unverified — messaging withheld'**
+  String get safetyUnverifiedState;
+
+  /// No description provided for @safetyMasterChangedState.
+  ///
+  /// In en, this message translates to:
+  /// **'Master key changed — sensitive actions are blocked until you verify the new values out of band.'**
+  String get safetyMasterChangedState;
+
+  /// No description provided for @safetyInvalidDeviceState.
+  ///
+  /// In en, this message translates to:
+  /// **'Unsigned or invalid device — messages are withheld.'**
+  String get safetyInvalidDeviceState;
+
+  /// No description provided for @safetyForkState.
+  ///
+  /// In en, this message translates to:
+  /// **'Device-log fork detected — all sensitive actions are blocked.'**
+  String get safetyForkState;
+
+  /// No description provided for @safetyIdentityUnavailableState.
+  ///
+  /// In en, this message translates to:
+  /// **'A valid signed identity is unavailable.'**
+  String get safetyIdentityUnavailableState;
+
+  /// No description provided for @safetyRefreshing.
+  ///
+  /// In en, this message translates to:
+  /// **'Verifying identity, devices, prekeys, and device log…'**
+  String get safetyRefreshing;
+
+  /// No description provided for @safetyRetryAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Retry verification'**
+  String get safetyRetryAction;
+
+  /// No description provided for @safetyConfirmationRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Out-of-band comparison is required before confirmation.'**
+  String get safetyConfirmationRequired;
 }
 
 class _AppLocalizationsDelegate

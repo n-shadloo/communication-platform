@@ -9,6 +9,7 @@ import 'package:communication_platform/features/authentication/presentation/auth
 import 'package:communication_platform/features/bootstrap/application/bootstrap_flow.dart';
 import 'package:communication_platform/features/bootstrap/domain/bootstrap_model.dart';
 import 'package:communication_platform/features/bootstrap/presentation/bootstrap_page.dart';
+import 'package:communication_platform/features/contacts/presentation/contact_pages.dart';
 import 'package:communication_platform/features/devices/presentation/device_enrollment_page.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
@@ -111,6 +112,24 @@ GoRouter createAppRouter({
             _page(context, state, const DeviceEnrollmentPage()),
       ),
     ],
+    GoRoute(
+      path: '/contacts/:userId',
+      pageBuilder: (context, state) => _page(
+        context,
+        state,
+        ContactProfilePage(userId: state.pathParameters['userId']!),
+      ),
+      routes: [
+        GoRoute(
+          path: 'safety',
+          pageBuilder: (context, state) => _page(
+            context,
+            state,
+            SafetyNumberPage(userId: state.pathParameters['userId']!),
+          ),
+        ),
+      ],
+    ),
     StatefulShellRoute.indexedStack(
       builder: (context, state, navigationShell) {
         final bootstrapOffline = state.uri.queryParameters['offline'] == 'true';
@@ -140,13 +159,8 @@ GoRouter createAppRouter({
               routes: [
                 GoRoute(
                   path: 'new',
-                  pageBuilder: (context, state) => _page(
-                    context,
-                    state,
-                    const StructuralPlaceholderPage(
-                      kind: StructuralPlaceholderKind.newChat,
-                    ),
-                  ),
+                  pageBuilder: (context, state) =>
+                      _page(context, state, const ContactsNewPage()),
                 ),
                 GoRoute(
                   path: 'sample-thread',
@@ -219,6 +233,11 @@ GoRouter createAppRouter({
                       kind: StructuralPlaceholderKind.appearance,
                     ),
                   ),
+                ),
+                GoRoute(
+                  path: 'profile',
+                  pageBuilder: (context, state) =>
+                      _page(context, state, const EditProfilePage()),
                 ),
               ],
             ),

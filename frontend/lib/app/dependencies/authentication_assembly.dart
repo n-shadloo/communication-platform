@@ -17,6 +17,7 @@ final class AuthenticationAssembly {
     required this.useCases,
     required this.lifecycle,
     required this.enrollment,
+    required this.restClient,
   });
 
   factory AuthenticationAssembly.create({
@@ -58,6 +59,7 @@ final class AuthenticationAssembly {
     return AuthenticationAssembly._(
       lifecycle: lifecycle,
       enrollment: enrollment,
+      restClient: restClient,
       useCases: AuthenticationUseCases(
         register: RegisterAccount(
           repository,
@@ -74,6 +76,7 @@ final class AuthenticationAssembly {
   final AuthenticationUseCases useCases;
   final AuthenticationLifecycleBus lifecycle;
   final DeviceEnrollmentCoordinator enrollment;
+  final DioRestClient restClient;
 
   Future<void> close() => lifecycle.close();
 }

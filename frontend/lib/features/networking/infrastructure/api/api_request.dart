@@ -83,6 +83,7 @@ final class ApiRequest<T> {
     this.operation = NetworkOperation.api,
     this.replaySafety = ReplaySafety.never,
     this.queryParameters = const {},
+    this.headers = const {},
     this.body,
     this.timeouts = const NetworkTimeouts(),
   }) {
@@ -93,6 +94,13 @@ final class ApiRequest<T> {
         method != RestMethod.get &&
         method != RestMethod.head) {
       throw ArgumentError('readOnly replay safety requires GET or HEAD');
+    }
+    if (headers.keys.any((name) => name.toLowerCase() != 'if-none-match')) {
+      throw ArgumentError.value(
+        headers,
+        'headers',
+        'contains an unsafe header',
+      );
     }
   }
 
@@ -105,6 +113,7 @@ final class ApiRequest<T> {
   final NetworkOperation operation;
   final ReplaySafety replaySafety;
   final Map<String, Object?> queryParameters;
+  final Map<String, String> headers;
   final Object? body;
   final NetworkTimeouts timeouts;
 

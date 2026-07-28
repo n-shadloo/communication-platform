@@ -432,4 +432,153 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get enrollmentUnderstandAction => 'متوجه شدم';
+
+  @override
+  String get contactsNewTitle => 'جدید';
+
+  @override
+  String get contactsNewGroup => 'گروه جدید';
+
+  @override
+  String get contactsNewVoiceRoom => 'اتاق صوتی جدید';
+
+  @override
+  String get contactsSearchLabel => 'جست‌وجوی مخاطبان';
+
+  @override
+  String get contactsLoadingTitle => 'در حال بارگیری مخاطبان';
+
+  @override
+  String get contactsEmptyTitle => 'هنوز مخاطبی نیست';
+
+  @override
+  String get contactsEmptyMessage =>
+      'کاربران فعال پس از به‌روزرسانی فهرست اینجا نمایش داده می‌شوند.';
+
+  @override
+  String get contactsOfflineMessage => 'آفلاین — نمایش مخاطبان ذخیره‌شده';
+
+  @override
+  String get contactsLoadMore => 'نمایش مخاطبان بیشتر';
+
+  @override
+  String get contactsVerified => 'هویت تأیید شده';
+
+  @override
+  String get contactsUnverified => 'هویت تأیید نشده';
+
+  @override
+  String get contactsUsernameFallback =>
+      'تا احراز هویت و پروفایل رمزنگاری‌شده، نام کاربری سرور نمایش داده می‌شود.';
+
+  @override
+  String get contactProfileTitle => 'پروفایل مخاطب';
+
+  @override
+  String get contactMessageAction => 'پیام';
+
+  @override
+  String get contactMuteAction => 'بی‌صدا';
+
+  @override
+  String get contactVerifyAction => 'تأیید شماره امنیتی';
+
+  @override
+  String get contactSharedMediaAction => 'رسانه‌ها و فایل‌های مشترک';
+
+  @override
+  String get contactClearHistoryAction => 'پاک‌کردن تاریخچه';
+
+  @override
+  String get contactBlockAction => 'مسدودکردن';
+
+  @override
+  String get contactSensitiveBlocked =>
+      'پیام‌رسانی تا تأیید هویت و همه دستگاه‌ها متوقف است.';
+
+  @override
+  String get profileEditTitle => 'ویرایش پروفایل';
+
+  @override
+  String get profileDisplayNameLabel => 'نام نمایشی';
+
+  @override
+  String get profileVisibilityNote =>
+      'این پروفایل رمزنگاری‌شده فقط برای مخاطبانی که کلید احرازشده دریافت کنند قابل مشاهده است. اطلاعات شخصی را حداقل نگه دارید.';
+
+  @override
+  String get profileAvatarStyleLabel => 'سبک آواتار';
+
+  @override
+  String get profileSaveAction => 'ذخیره پروفایل رمزنگاری‌شده';
+
+  @override
+  String get profileSavingAction => 'در حال ذخیره…';
+
+  @override
+  String get profileTemporaryTransport =>
+      'تا آماده‌شدن پیام‌رسانی دونفره، رمزنگاری و توزیع کلید پروفایل فقط شبیه‌ساز توسعه است. نسخه تولید مسدود می‌ماند.';
+
+  @override
+  String get profileSavedMessage => 'پروفایل رمزنگاری‌شده منتشر شد.';
+
+  @override
+  String get profileInvalidName => 'نام نمایشی باید بین ۱ تا ۶۴ نویسه باشد.';
+
+  @override
+  String get safetyTitle => 'شماره امنیتی';
+
+  @override
+  String get safetyInstructions =>
+      'این مقادیر را حضوری یا از یک راه مورد اعتماد دیگر مقایسه کنید. سرور نمی‌تواند آن‌ها را تأیید کند.';
+
+  @override
+  String get safetyEmojiLabel => 'مقایسه ایموجی';
+
+  @override
+  String get safetyNumberLabel => 'مقایسه عددی';
+
+  @override
+  String get safetyQrLabel => 'مقدار QR امنیتی';
+
+  @override
+  String get safetyOutOfBandCheck =>
+      'مقادیر را خارج از این برنامه با این مخاطب مقایسه کردم.';
+
+  @override
+  String get safetyConfirmAction => 'تأیید هویت';
+
+  @override
+  String get safetyVerifiedState =>
+      'تأییدشده — کلید اصلی دقیق با کلید امضای کاربر شما گواهی شده است.';
+
+  @override
+  String get safetyUnverifiedState => 'تأییدنشده — پیام‌رسانی متوقف است';
+
+  @override
+  String get safetyMasterChangedState =>
+      'کلید اصلی تغییر کرده است — تا تأیید خارج از برنامه، کنش‌های حساس مسدودند.';
+
+  @override
+  String get safetyInvalidDeviceState =>
+      'دستگاه بدون امضا یا نامعتبر — پیام‌ها متوقفند.';
+
+  @override
+  String get safetyForkState =>
+      'انشعاب دفتر دستگاه شناسایی شد — همه کنش‌های حساس مسدودند.';
+
+  @override
+  String get safetyIdentityUnavailableState =>
+      'هویت امضاشده معتبر در دسترس نیست.';
+
+  @override
+  String get safetyRefreshing =>
+      'در حال بررسی هویت، دستگاه‌ها، پیش‌کلیدها و دفتر دستگاه…';
+
+  @override
+  String get safetyRetryAction => 'تلاش دوباره';
+
+  @override
+  String get safetyConfirmationRequired =>
+      'پیش از تأیید، مقایسه خارج از برنامه الزامی است.';
 }

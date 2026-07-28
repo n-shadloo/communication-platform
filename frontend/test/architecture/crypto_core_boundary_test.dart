@@ -88,14 +88,15 @@ void main() {
         continue;
       }
       final source = entry.readAsStringSync();
-      for (final forbidden in const [
-        'print(',
-        'developer.log',
-        'exception.toString()',
-        'error.toString()',
-      ]) {
-        if (source.contains(forbidden)) {
-          violations.add('${entry.path}: $forbidden');
+      final forbiddenPatterns = <(String, RegExp)>[
+        ('print(', RegExp(r'(^|[^A-Za-z])print\(')),
+        ('developer.log', RegExp(r'\bdeveloper\.log\b')),
+        ('exception.toString()', RegExp(r'\bexception\.toString\(\)')),
+        ('error.toString()', RegExp(r'\berror\.toString\(\)')),
+      ];
+      for (final (label, pattern) in forbiddenPatterns) {
+        if (pattern.hasMatch(source)) {
+          violations.add('${entry.path}: $label');
         }
       }
     }

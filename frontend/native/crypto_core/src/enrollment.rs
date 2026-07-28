@@ -17,7 +17,8 @@ use crate::{
     device_signatures::{
         CrossSigningIdentity, DeviceBundle, Ed25519Signature, IkPublic, PublicPrekey, RawUuid,
         SignedPrekey, encode_cross_signature, encode_master_signature, encode_pq_signed_prekey,
-        encode_signed_prekey,
+        encode_signed_prekey, verify_cross_signature, verify_master_signature,
+        verify_pq_signed_prekey, verify_signed_prekey,
     },
     error::{CryptoError, CryptoResult},
     provider::{
@@ -34,6 +35,8 @@ pub const BACKUP_BUCKET_BYTES: usize = 4096;
 pub const DEVICE_FINGERPRINT_BYTES: usize = 32;
 pub const DEVICE_LOG_BUCKET_BYTES: usize = 256;
 pub const DEVICE_LOG_INSPECTION_BYTES: usize = 72;
+pub const PEER_DEVICE_LOG_INSPECTION_BYTES: usize = 108;
+pub const SAFETY_FINGERPRINT_BYTES: usize = 32;
 
 const DEVICE_PACKAGE_MAGIC: &[u8; 8] = b"CPDVV001";
 const IDENTITY_PACKAGE_MAGIC: &[u8; 8] = b"CPIDV001";
@@ -42,6 +45,13 @@ const IDENTITY_PLAINTEXT_MAGIC: &[u8; 8] = b"CPIPV001";
 const DEVICE_LOG_MAGIC: &[u8; 8] = b"CPDLV001";
 const BACKUP_DOMAIN: &[u8] = b"chat:v1:identity-backup";
 const DEVICE_LOG_DOMAIN: &[u8] = b"chat:v1:device-log-record";
+const SAFETY_FINGERPRINT_DOMAIN: &[u8] = b"chat:v1:safety-fingerprint";
+const USER_ATTESTATION_DOMAIN: &[u8] = b"chat:v1:user-signing-attestation";
+const VERIFY_IDENTITY_MAGIC: &[u8; 8] = b"CPIRV001";
+const VERIFY_BUNDLE_MAGIC: &[u8; 8] = b"CPBRV001";
+const VERIFY_LOG_MAGIC: &[u8; 8] = b"CPDLR001";
+const SAFETY_MAGIC: &[u8; 8] = b"CPSFV001";
+const VERIFY_ATTESTATION_MAGIC: &[u8; 8] = b"CPUAV001";
 const BACKUP_MEMORY_KIB: u32 = 65_536;
 const BACKUP_ITERATIONS: u32 = 3;
 const BACKUP_PARALLELISM: u32 = 4;
@@ -443,6 +453,307 @@ pub fn inspect_device_log_record(
     inspection.extend_from_slice(&previous_hash);
     inspection.extend_from_slice(&hash);
     Ok(inspection)
+}
+
+/// Verifies one public peer-identity response over the exact served key bytes.
+pub fn verify_published_identity(input: &[u8]) -> CryptoResult<()> {
+    let mut reader = Reader::new(input);
+    if reader.take(8)? != VERIFY_IDENTITY_MAGIC {
+        return Err(CryptoError::MalformedInput);
+    }
+    let user_id = RawUuid::new(reader.array()?);
+    let master_public: [u8; ED25519_PUBLIC_BYTES] = reader.array()?;
+    let self_signing_public: [u8; ED25519_PUBLIC_BYTES] = reader.array()?;
+    let user_signing_public: [u8; ED25519_PUBLIC_BYTES] = reader.array()?;
+    let master_signature = Ed25519Signature::new(reader.array()?);
+    if !reader.is_finished() {
+        return Err(CryptoError::MalformedInput);
+    }
+    verify_master_signature(
+        &RustCryptoProvider::default(),
+        &CrossSigningIdentity {
+            user_id,
+            self_signing_public: &self_signing_public,
+            user_signing_public: &user_signing_public,
+        },
+        &master_public,
+        &master_signature,
+    )
+}
+
+/// Verifies the complete claimed device bundle, including both signed prekeys.
+pub fn verify_claimed_device_bundle(input: &[u8]) -> CryptoResult<()> {
+    let mut reader = Reader::new(input);
+    if reader.take(8)? != VERIFY_BUNDLE_MAGIC {
+        return Err(CryptoError::MalformedInput);
+    }
+    let user_id = RawUuid::new(reader.array()?);
+    let device_id = RawUuid::new(reader.array()?);
+    let self_signing_public: [u8; ED25519_PUBLIC_BYTES] = reader.array()?;
+    let ik_public = IkPublic::try_from_bytes(reader.take(64)?)?;
+    let spk_id = reader.u32()?;
+    let spk_public = reader.sized_bytes()?;
+    let spk_signature = Ed25519Signature::new(reader.array()?);
+    let pq_present = reader.u8()?;
+    let pq = match pq_present {
+        0 => None,
+        1 => Some((
+            reader.u32()?,
+            reader.sized_bytes()?,
+            Ed25519Signature::new(reader.array()?),
+        )),
+        _ => return Err(CryptoError::MalformedInput),
+    };
+    let registration_id = reader.u32()?;
+    let bundle_version = reader.u32()?;
+    let cross_signature = Ed25519Signature::new(reader.array()?);
+    if !reader.is_finished()
+        || spk_public.len() != X25519_PUBLIC_BYTES
+        || pq
+            .as_ref()
+            .is_some_and(|(_, public, _)| public.len() != MLKEM768_PUBLIC_BYTES)
+        || bundle_version == 0
+    {
+        return Err(CryptoError::MalformedInput);
+    }
+    let signed_prekey = SignedPrekey {
+        user_id,
+        prekey: PublicPrekey {
+            id: spk_id,
+            public: spk_public,
+        },
+    };
+    verify_signed_prekey(
+        &RustCryptoProvider::default(),
+        &signed_prekey,
+        &ik_public,
+        &spk_signature,
+    )?;
+    if let Some((id, public, signature)) = pq.as_ref() {
+        verify_pq_signed_prekey(
+            &RustCryptoProvider::default(),
+            &SignedPrekey {
+                user_id,
+                prekey: PublicPrekey { id: *id, public },
+            },
+            &ik_public,
+            signature,
+        )?;
+    }
+    verify_cross_signature(
+        &RustCryptoProvider::default(),
+        &DeviceBundle {
+            user_id,
+            device_id,
+            ik_public,
+            spk_id,
+            spk_public,
+            pq_signed_prekey: pq
+                .as_ref()
+                .map(|(id, public, _)| PublicPrekey { id: *id, public }),
+            registration_id,
+            bundle_version,
+        },
+        &self_signing_public,
+        &cross_signature,
+    )
+}
+
+/// Verifies a peer log record with only the peer's authenticated public subkey.
+pub fn inspect_peer_device_log_record(input: &[u8]) -> CryptoResult<Vec<u8>> {
+    let mut reader = Reader::new(input);
+    if reader.take(8)? != VERIFY_LOG_MAGIC {
+        return Err(CryptoError::MalformedInput);
+    }
+    let expected_user = RawUuid::new(reader.array()?);
+    let self_signing_public: [u8; ED25519_PUBLIC_BYTES] = reader.array()?;
+    let verify_live_set = match reader.u8()? {
+        0 => false,
+        1 => true,
+        _ => return Err(CryptoError::MalformedInput),
+    };
+    let device_count = usize::try_from(reader.u32()?)?;
+    if device_count > 100 {
+        return Err(CryptoError::ResourceExhausted);
+    }
+    let mut devices = Vec::with_capacity(device_count);
+    for _ in 0..device_count {
+        let device_id: [u8; 16] = reader.array()?;
+        let ik_public: [u8; 64] = reader.array()?;
+        let registration_id = reader.u32()?;
+        let signature_present = reader.u8()?;
+        let cross_signature = match signature_present {
+            0 => None,
+            1 => Some(reader.array()?),
+            _ => return Err(CryptoError::MalformedInput),
+        };
+        let bundle_version = reader.u32()?;
+        if (cross_signature.is_none() && bundle_version != 0)
+            || (cross_signature.is_some() && bundle_version == 0)
+        {
+            return Err(CryptoError::MalformedInput);
+        }
+        devices.push((
+            device_id,
+            ik_public,
+            registration_id,
+            cross_signature,
+            bundle_version,
+        ));
+    }
+    let record = reader.remaining_bytes();
+    if record.len() != DEVICE_LOG_BUCKET_BYTES {
+        return Err(CryptoError::MalformedInput);
+    }
+    let expected_live_set_hash = if verify_live_set {
+        Some(hash_canonical_live_set(&mut devices)?)
+    } else {
+        None
+    };
+    inspect_log_with_public(
+        expected_user,
+        &self_signing_public,
+        expected_live_set_hash.as_ref(),
+        record,
+    )
+}
+
+/// Returns a symmetric SHA-256 commitment to both exact user/master-key pairs.
+pub fn safety_fingerprint(input: &[u8]) -> CryptoResult<Vec<u8>> {
+    let mut reader = Reader::new(input);
+    if reader.take(8)? != SAFETY_MAGIC {
+        return Err(CryptoError::MalformedInput);
+    }
+    let first_user: [u8; 16] = reader.array()?;
+    let first_master: [u8; 32] = reader.array()?;
+    let second_user: [u8; 16] = reader.array()?;
+    let second_master: [u8; 32] = reader.array()?;
+    if !reader.is_finished() {
+        return Err(CryptoError::MalformedInput);
+    }
+    let (left_user, left_master, right_user, right_master) = if first_user <= second_user {
+        (first_user, first_master, second_user, second_master)
+    } else {
+        (second_user, second_master, first_user, first_master)
+    };
+    let mut committed = Vec::with_capacity(SAFETY_FINGERPRINT_DOMAIN.len() + 112);
+    committed.extend_from_slice(SAFETY_FINGERPRINT_DOMAIN);
+    framed(&mut committed, &left_user)?;
+    framed(&mut committed, &left_master)?;
+    framed(&mut committed, &right_user)?;
+    framed(&mut committed, &right_master)?;
+    Ok(RustCryptoProvider::default().sha256(&committed)?.to_vec())
+}
+
+/// Signs a peer's exact master key after explicit out-of-band confirmation.
+pub fn attest_peer_master(
+    identity_package: &[u8],
+    peer_user_id: &[u8],
+    peer_master_public: &[u8],
+) -> CryptoResult<Vec<u8>> {
+    let identity = parse_identity_package(identity_package)?;
+    let peer_user = raw_uuid(peer_user_id)?;
+    let peer_master: [u8; ED25519_PUBLIC_BYTES] = fixed(peer_master_public)?;
+    let signed = encode_user_attestation(&identity.user_id, &peer_user, &peer_master)?;
+    let secret = SecretBytes::new(identity.secrets.user_signing);
+    Ok(RustCryptoProvider::default()
+        .ed25519_sign(&secret, &signed)?
+        .to_vec())
+}
+
+/// Verifies a stored user-signing attestation before restoring verified state.
+pub fn verify_user_attestation(input: &[u8]) -> CryptoResult<()> {
+    let mut reader = Reader::new(input);
+    if reader.take(8)? != VERIFY_ATTESTATION_MAGIC {
+        return Err(CryptoError::MalformedInput);
+    }
+    let signer_user = RawUuid::new(reader.array()?);
+    let signer_public: [u8; ED25519_PUBLIC_BYTES] = reader.array()?;
+    let peer_user = RawUuid::new(reader.array()?);
+    let peer_master: [u8; ED25519_PUBLIC_BYTES] = reader.array()?;
+    let signature: [u8; ED25519_SIGNATURE_BYTES] = reader.array()?;
+    if !reader.is_finished() {
+        return Err(CryptoError::MalformedInput);
+    }
+    let signed = encode_user_attestation(&signer_user, &peer_user, &peer_master)?;
+    RustCryptoProvider::default().ed25519_verify(&signer_public, &signed, &signature)
+}
+
+fn inspect_log_with_public(
+    expected_user: RawUuid,
+    self_signing_public: &[u8; ED25519_PUBLIC_BYTES],
+    expected_live_set_hash: Option<&[u8; 32]>,
+    record: &[u8],
+) -> CryptoResult<Vec<u8>> {
+    let mut reader = Reader::new(record);
+    if reader.take(8)? != DEVICE_LOG_MAGIC || reader.u8()? != 1 {
+        return Err(CryptoError::MalformedInput);
+    }
+    let sequence = reader.u64()?;
+    let coarse_unix_day = reader.u32()?;
+    let identity_version = reader.u32()?;
+    let record_user = RawUuid::new(reader.array()?);
+    let previous_hash: [u8; 32] = reader.array()?;
+    let live_set_hash: [u8; 32] = reader.array()?;
+    let signature: [u8; ED25519_SIGNATURE_BYTES] = reader.array()?;
+    if record_user != expected_user
+        || expected_live_set_hash.is_some_and(|expected| live_set_hash.ct_ne(expected).into())
+    {
+        return Err(CryptoError::AuthenticationFailed);
+    }
+    let signed = encode_device_log_signature(
+        &record_user,
+        sequence,
+        &previous_hash,
+        &live_set_hash,
+        identity_version,
+        coarse_unix_day,
+    )?;
+    let provider = RustCryptoProvider::default();
+    provider.ed25519_verify(self_signing_public, &signed, &signature)?;
+    let hash = provider.sha256(record)?;
+    let mut inspection = Vec::with_capacity(PEER_DEVICE_LOG_INSPECTION_BYTES);
+    push_u64(&mut inspection, sequence);
+    inspection.extend_from_slice(&previous_hash);
+    inspection.extend_from_slice(&hash);
+    inspection.extend_from_slice(&live_set_hash);
+    push_u32(&mut inspection, identity_version);
+    Ok(inspection)
+}
+
+type PublicLogDevice = ([u8; 16], [u8; 64], u32, Option<[u8; 64]>, u32);
+
+fn hash_canonical_live_set(devices: &mut [PublicLogDevice]) -> CryptoResult<[u8; 32]> {
+    devices.sort_by_key(|device| device.0);
+    let mut encoded = Vec::with_capacity(24 + devices.len() * 172);
+    encoded.extend_from_slice(b"chat:v1:device-set");
+    push_u32(&mut encoded, u32::try_from(devices.len())?);
+    for (device_id, ik_public, registration_id, cross_signature, bundle_version) in devices {
+        encoded.extend_from_slice(device_id);
+        framed(&mut encoded, ik_public)?;
+        push_u32(&mut encoded, *registration_id);
+        framed(
+            &mut encoded,
+            cross_signature
+                .as_ref()
+                .map_or(&[][..], |signature| &signature[..]),
+        )?;
+        push_u32(&mut encoded, *bundle_version);
+    }
+    RustCryptoProvider::default().sha256(&encoded)
+}
+
+fn encode_user_attestation(
+    signer_user: &RawUuid,
+    peer_user: &RawUuid,
+    peer_master: &[u8; ED25519_PUBLIC_BYTES],
+) -> CryptoResult<Vec<u8>> {
+    let mut encoded = Vec::with_capacity(USER_ATTESTATION_DOMAIN.len() + 76);
+    encoded.extend_from_slice(USER_ATTESTATION_DOMAIN);
+    framed(&mut encoded, signer_user.as_bytes())?;
+    framed(&mut encoded, peer_user.as_bytes())?;
+    framed(&mut encoded, peer_master)?;
+    Ok(encoded)
 }
 
 fn encode_identity_package<P: CryptoProvider>(
@@ -938,6 +1249,17 @@ impl<'a> Reader<'a> {
         Ok(u32::from_be_bytes(self.array()?))
     }
 
+    fn sized_bytes(&mut self) -> CryptoResult<&'a [u8]> {
+        let length = usize::try_from(self.u32()?)?;
+        self.take(length)
+    }
+
+    fn remaining_bytes(&mut self) -> &'a [u8] {
+        let value = &self.input[self.position..];
+        self.position = self.input.len();
+        value
+    }
+
     fn u64(&mut self) -> CryptoResult<u64> {
         Ok(u64::from_be_bytes(self.array()?))
     }
@@ -958,11 +1280,14 @@ mod tests {
     use super::{
         BACKUP_BUCKET_BYTES, BACKUP_HEADER_BYTES, BACKUP_ITERATIONS, BACKUP_MEMORY_KIB,
         BACKUP_PARALLELISM, DEVICE_LOG_BUCKET_BYTES, DEVICE_LOG_INSPECTION_BYTES,
-        INITIAL_CLASSICAL_ONE_TIME_PREKEYS, INITIAL_PQ_ONE_TIME_PREKEYS,
+        INITIAL_CLASSICAL_ONE_TIME_PREKEYS, INITIAL_PQ_ONE_TIME_PREKEYS, SAFETY_FINGERPRINT_BYTES,
+        SAFETY_MAGIC, USER_ATTESTATION_DOMAIN, VERIFY_ATTESTATION_MAGIC, VERIFY_BUNDLE_MAGIC,
+        VERIFY_IDENTITY_MAGIC, VERIFY_LOG_MAGIC, attest_peer_master,
         create_device_log_record_with_provider, cross_sign_device, inspect_device_log_record,
-        parse_device_package, parse_identity_package, prepare_device_with_provider,
-        prepare_first_identity_with_provider, restore_identity_with_provider,
-        sanitize_identity_package,
+        inspect_peer_device_log_record, parse_device_package, parse_identity_package,
+        prepare_device_with_provider, prepare_first_identity_with_provider,
+        restore_identity_with_provider, safety_fingerprint, sanitize_identity_package,
+        verify_claimed_device_bundle, verify_published_identity, verify_user_attestation,
     };
     use crate::{
         device_signatures::{
@@ -972,6 +1297,7 @@ mod tests {
         provider::RustCryptoProvider,
         random::FixedRandomProvider,
     };
+    use ed25519_dalek::SigningKey;
 
     const USER_ID: [u8; 16] = [
         0x6f, 0x0c, 0x2f, 0x5e, 0x8a, 0x41, 0x4c, 0x9e, 0x9a, 0x34, 0x1f, 0x3d, 0x8f, 0x2b, 0x7c,
@@ -1118,6 +1444,163 @@ mod tests {
         mutated[80] ^= 1;
         assert_eq!(
             inspect_device_log_record(&identity, &USER_ID, &mutated).unwrap_err(),
+            CryptoError::AuthenticationFailed
+        );
+    }
+
+    #[test]
+    fn peer_identity_and_attestation_bind_the_exact_master_key() {
+        let provider = deterministic_provider(16_000);
+        let identity = prepare_first_identity_with_provider(&provider, &USER_ID).unwrap();
+        let parsed = parse_identity_package(&identity).unwrap();
+        let user_signing_public = SigningKey::from_bytes(&parsed.secrets.user_signing)
+            .verifying_key()
+            .to_bytes();
+        let mut published = Vec::new();
+        published.extend_from_slice(VERIFY_IDENTITY_MAGIC);
+        published.extend_from_slice(&USER_ID);
+        published.extend_from_slice(&parsed.master_public);
+        published.extend_from_slice(&parsed.self_signing_public);
+        published.extend_from_slice(&user_signing_public);
+        published.extend_from_slice(&parsed.master_signature);
+        verify_published_identity(&published).unwrap();
+
+        let mut substituted = published.clone();
+        substituted[8 + 16 + 32] ^= 1;
+        assert_eq!(
+            verify_published_identity(&substituted).unwrap_err(),
+            CryptoError::AuthenticationFailed
+        );
+
+        let peer_user = DEVICE_ID;
+        let peer_master = [91; 32];
+        let signature = attest_peer_master(&identity, &peer_user, &peer_master).unwrap();
+        let mut attestation = Vec::new();
+        attestation.extend_from_slice(VERIFY_ATTESTATION_MAGIC);
+        attestation.extend_from_slice(&USER_ID);
+        attestation.extend_from_slice(&user_signing_public);
+        attestation.extend_from_slice(&peer_user);
+        attestation.extend_from_slice(&peer_master);
+        attestation.extend_from_slice(&signature);
+        verify_user_attestation(&attestation).unwrap();
+        attestation[8 + 16 + 32 + 16] ^= 1;
+        assert_eq!(
+            verify_user_attestation(&attestation).unwrap_err(),
+            CryptoError::AuthenticationFailed
+        );
+        assert_eq!(USER_ATTESTATION_DOMAIN, b"chat:v1:user-signing-attestation");
+    }
+
+    #[test]
+    fn safety_fingerprint_is_symmetric_and_changes_with_either_master_key() {
+        fn request(
+            first_user: &[u8; 16],
+            first_master: &[u8; 32],
+            second_user: &[u8; 16],
+            second_master: &[u8; 32],
+        ) -> Vec<u8> {
+            let mut value = Vec::new();
+            value.extend_from_slice(SAFETY_MAGIC);
+            value.extend_from_slice(first_user);
+            value.extend_from_slice(first_master);
+            value.extend_from_slice(second_user);
+            value.extend_from_slice(second_master);
+            value
+        }
+
+        let local_master = [31; 32];
+        let peer_master = [47; 32];
+        let forward =
+            safety_fingerprint(&request(&USER_ID, &local_master, &DEVICE_ID, &peer_master))
+                .unwrap();
+        let reverse =
+            safety_fingerprint(&request(&DEVICE_ID, &peer_master, &USER_ID, &local_master))
+                .unwrap();
+        assert_eq!(forward.len(), SAFETY_FINGERPRINT_BYTES);
+        assert_eq!(forward, reverse);
+        let changed =
+            safety_fingerprint(&request(&USER_ID, &[32; 32], &DEVICE_ID, &peer_master)).unwrap();
+        assert_ne!(forward, changed);
+    }
+
+    #[test]
+    fn claimed_bundle_and_public_log_reject_server_substitution() {
+        let device_provider = deterministic_provider(80_000);
+        let device = prepare_device_with_provider(&device_provider, &USER_ID).unwrap();
+        let parsed_device = parse_device_package(&device).unwrap();
+        let identity_provider = deterministic_provider(16_000);
+        let identity = prepare_first_identity_with_provider(&identity_provider, &USER_ID).unwrap();
+        let parsed_identity = parse_identity_package(&identity).unwrap();
+        let cross_signature = cross_sign_device(&device, &identity, &DEVICE_ID, 1).unwrap();
+
+        let mut device_reader = super::Reader::new(&device);
+        device_reader.take(8).unwrap();
+        device_reader.take(16 + 4 + 4 + 4 + 2 + 2).unwrap();
+        let ik_public = device_reader.take(64).unwrap();
+        let spk_public = device_reader.take(32).unwrap();
+        let spk_signature = device_reader.take(64).unwrap();
+        let pq_public = device_reader.take(1184).unwrap();
+        let pq_signature = device_reader.take(64).unwrap();
+
+        let mut bundle = Vec::new();
+        bundle.extend_from_slice(VERIFY_BUNDLE_MAGIC);
+        bundle.extend_from_slice(&USER_ID);
+        bundle.extend_from_slice(&DEVICE_ID);
+        bundle.extend_from_slice(&parsed_identity.self_signing_public);
+        bundle.extend_from_slice(ik_public);
+        super::push_u32(&mut bundle, parsed_device.spk_id);
+        super::push_u32(&mut bundle, u32::try_from(spk_public.len()).unwrap());
+        bundle.extend_from_slice(spk_public);
+        bundle.extend_from_slice(spk_signature);
+        bundle.push(1);
+        super::push_u32(&mut bundle, parsed_device.pq_spk_id);
+        super::push_u32(&mut bundle, u32::try_from(pq_public.len()).unwrap());
+        bundle.extend_from_slice(pq_public);
+        bundle.extend_from_slice(pq_signature);
+        super::push_u32(&mut bundle, parsed_device.registration_id);
+        super::push_u32(&mut bundle, 1);
+        bundle.extend_from_slice(&cross_signature);
+        verify_claimed_device_bundle(&bundle).unwrap();
+        let mut substituted = bundle.clone();
+        substituted[8 + 16 + 16 + 32 + 10] ^= 1;
+        assert!(verify_claimed_device_bundle(&substituted).is_err());
+
+        let mut canonical_live_set = Vec::new();
+        canonical_live_set.extend_from_slice(b"chat:v1:device-set");
+        super::push_u32(&mut canonical_live_set, 1);
+        canonical_live_set.extend_from_slice(&DEVICE_ID);
+        super::framed(&mut canonical_live_set, ik_public).unwrap();
+        super::push_u32(&mut canonical_live_set, parsed_device.registration_id);
+        super::framed(&mut canonical_live_set, &cross_signature).unwrap();
+        super::push_u32(&mut canonical_live_set, 1);
+        let log = create_device_log_record_with_provider(
+            &deterministic_provider(512),
+            &identity,
+            &USER_ID,
+            0,
+            &[],
+            &canonical_live_set,
+            1,
+            20_302,
+        )
+        .unwrap();
+        let mut log_request = Vec::new();
+        log_request.extend_from_slice(VERIFY_LOG_MAGIC);
+        log_request.extend_from_slice(&USER_ID);
+        log_request.extend_from_slice(&parsed_identity.self_signing_public);
+        log_request.push(1);
+        super::push_u32(&mut log_request, 1);
+        log_request.extend_from_slice(&DEVICE_ID);
+        log_request.extend_from_slice(ik_public);
+        super::push_u32(&mut log_request, parsed_device.registration_id);
+        log_request.push(1);
+        log_request.extend_from_slice(&cross_signature);
+        super::push_u32(&mut log_request, 1);
+        log_request.extend_from_slice(&log);
+        inspect_peer_device_log_record(&log_request).unwrap();
+        log_request[8 + 16 + 32 + 1 + 4 + 16 + 5] ^= 1;
+        assert_eq!(
+            inspect_peer_device_log_record(&log_request).unwrap_err(),
             CryptoError::AuthenticationFailed
         );
     }

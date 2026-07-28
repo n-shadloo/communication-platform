@@ -3,8 +3,10 @@ import 'dart:isolate';
 import 'dart:typed_data';
 
 import 'package:communication_platform/core/application/ports/enrollment_crypto_port.dart';
+import 'package:communication_platform/core/application/ports/identity_crypto_port.dart';
 import 'package:communication_platform/core/protocol/crypto_core_model.dart';
 import 'package:communication_platform/core/protocol/enrollment_crypto_model.dart';
+import 'package:communication_platform/core/protocol/identity_protocol_model.dart';
 import 'package:communication_platform/core/result/failure.dart';
 import 'package:communication_platform/core/result/result.dart';
 import 'package:communication_platform/shared/infrastructure/crypto/crypto_core_runtime.dart';
@@ -12,6 +14,8 @@ import 'package:communication_platform/shared/infrastructure/crypto/native/crypt
 import 'package:communication_platform/shared/infrastructure/crypto/native/crypto_core_native_session.dart';
 import 'package:communication_platform/shared/infrastructure/crypto/native/enrollment_crypto_ffi.dart';
 import 'package:communication_platform/shared/infrastructure/crypto/native/enrollment_crypto_native_session.dart';
+import 'package:communication_platform/shared/infrastructure/crypto/native/identity_crypto_ffi.dart';
+import 'package:communication_platform/shared/infrastructure/crypto/native/identity_crypto_native_session.dart';
 
 const int _handshakeReady = 0;
 const int _handshakeFailed = 1;
@@ -25,6 +29,12 @@ const int _operationSanitizeIdentity = 7;
 const int _operationCrossSignDevice = 8;
 const int _operationCreateDeviceLog = 9;
 const int _operationInspectDeviceLog = 10;
+const int _operationVerifyIdentity = 11;
+const int _operationVerifyClaimedBundle = 12;
+const int _operationInspectPeerDeviceLog = 13;
+const int _operationSafetyFingerprint = 14;
+const int _operationAttestPeerMaster = 15;
+const int _operationVerifyUserAttestation = 16;
 const int _replySuccess = 0;
 const int _replyFailure = 1;
 const int _failureCryptoCore = 1;
@@ -33,7 +43,7 @@ const int _failureSecurity = 3;
 
 /// Owns the native library and all native calls in one dedicated isolate.
 final class IsolateCryptoCoreWorker
-    implements CryptoCoreWorker, EnrollmentCryptoWorker {
+    implements CryptoCoreWorker, EnrollmentCryptoWorker, IdentityCryptoWorker {
   bool _closed = false;
   Future<_CryptoWorkerState?>? _stateFuture;
   Future<void>? _closeFuture;
@@ -187,6 +197,160 @@ final class IsolateCryptoCoreWorker
     );
   });
 
+  @override
+  Future<Result<void>> verifyIdentity({
+    required Uint8List userId,
+    required PeerIdentityPublic identity,
+  }) => _guarded(() async {
+    final reply = await _request(_operationVerifyIdentity, <Object?>[
+      userId,
+      identity.masterPublic,
+      identity.selfSigningPublic,
+      identity.userSigningPublic,
+      identity.masterSignature,
+      identity.version,
+    ]);
+    return _decodeVoidReply(reply);
+  });
+
+  @override
+  Future<Result<void>> verifyClaimedBundle({
+    required Uint8List userId,
+    required Uint8List deviceId,
+    required Uint8List selfSigningPublic,
+    required ClaimedPrekeyBundle bundle,
+  }) => _guarded(() async {
+    final reply = await _request(_operationVerifyClaimedBundle, <Object?>[
+      userId,
+      deviceId,
+      selfSigningPublic,
+      bundle.deviceId,
+      bundle.registrationId,
+      bundle.identityPublic,
+      bundle.signedPrekeyId,
+      bundle.signedPrekeyPublic,
+      bundle.signedPrekeySignature,
+      bundle.crossSignature,
+      bundle.bundleVersion,
+      bundle.pqSignedPrekeyId,
+      bundle.pqSignedPrekeyPublic,
+      bundle.pqSignedPrekeySignature,
+      bundle.oneTimePrekeyId,
+      bundle.oneTimePrekeyPublic,
+      bundle.pqOneTimePrekeyId,
+      bundle.pqOneTimePrekeyPublic,
+    ]);
+    return _decodeVoidReply(reply);
+  });
+
+  @override
+  Future<Result<PeerDeviceLogInspection>> inspectPeerDeviceLog({
+    required Uint8List userId,
+    required Uint8List selfSigningPublic,
+    required List<PeerPublicDevice> liveDevices,
+    required bool requireCurrentLiveSet,
+    required Uint8List record,
+  }) => _guarded(() async {
+    final reply = await _request(_operationInspectPeerDeviceLog, <Object?>[
+      userId,
+      selfSigningPublic,
+      requireCurrentLiveSet,
+      <Object?>[
+        for (final device in liveDevices)
+          <Object?>[
+            device.deviceId,
+            device.identityPublic,
+            device.registrationId,
+            device.crossSignature,
+            device.bundleVersion,
+          ],
+      ],
+      record,
+    ]);
+    return _decodeBytesReply(reply).fold(
+      onSuccess: (bytes) {
+        try {
+          return Result.success(PeerDeviceLogInspection.fromNative(bytes));
+        } on Object {
+          return const Result.failure(
+            SecurityFailure(SecurityFailureKind.malformedServerResponse),
+          );
+        }
+      },
+      onFailure: Result.failure,
+    );
+  });
+
+  @override
+  Future<Result<SafetyFingerprint>> safetyFingerprint({
+    required Uint8List localUserId,
+    required Uint8List localMasterPublic,
+    required Uint8List peerUserId,
+    required Uint8List peerMasterPublic,
+  }) => _guarded(() async {
+    final reply = await _request(_operationSafetyFingerprint, <Object?>[
+      localUserId,
+      localMasterPublic,
+      peerUserId,
+      peerMasterPublic,
+    ]);
+    return _decodeBytesReply(reply).fold(
+      onSuccess: (bytes) {
+        try {
+          return Result.success(SafetyFingerprint(bytes));
+        } on Object {
+          return const Result.failure(
+            SecurityFailure(SecurityFailureKind.malformedServerResponse),
+          );
+        }
+      },
+      onFailure: Result.failure,
+    );
+  });
+
+  @override
+  Future<Result<UserSigningAttestation>> attestPeerMaster({
+    required IdentityKeyPackage localIdentity,
+    required Uint8List peerUserId,
+    required Uint8List peerMasterPublic,
+  }) => _guarded(() async {
+    final reply = await _request(_operationAttestPeerMaster, <Object?>[
+      localIdentity.opaqueBytes,
+      peerUserId,
+      peerMasterPublic,
+    ]);
+    return _decodeBytesReply(reply).fold(
+      onSuccess: (bytes) {
+        try {
+          return Result.success(UserSigningAttestation(bytes));
+        } on Object {
+          return const Result.failure(
+            SecurityFailure(SecurityFailureKind.malformedServerResponse),
+          );
+        }
+      },
+      onFailure: Result.failure,
+    );
+  });
+
+  @override
+  Future<Result<void>> verifyUserAttestation({
+    required Uint8List signerUserId,
+    required Uint8List signerUserSigningPublic,
+    required Uint8List peerUserId,
+    required Uint8List peerMasterPublic,
+    required UserSigningAttestation attestation,
+  }) => _guarded(() async {
+    final reply = await _request(_operationVerifyUserAttestation, <Object?>[
+      signerUserId,
+      signerUserSigningPublic,
+      peerUserId,
+      peerMasterPublic,
+      attestation.signature,
+    ]);
+    return _decodeVoidReply(reply);
+  });
+
   Future<Result<T>> _guarded<T>(Future<Result<T>> Function() operation) {
     if (_closed) {
       return Future<Result<T>>.value(
@@ -325,12 +489,16 @@ Future<void> _runCryptoCoreWorker(SendPort bootstrapPort) async {
   final commandPort = ReceivePort();
   late final CryptoCoreNativeSession session;
   late final EnrollmentCryptoNativeSession enrollmentSession;
+  late final IdentityCryptoNativeSession identitySession;
   try {
     session = CryptoCoreNativeSession(
       api: DynamicCryptoCoreNativeApi.openAndroid(),
     );
     enrollmentSession = EnrollmentCryptoNativeSession(
       api: DynamicEnrollmentCryptoNativeApi.openAndroid(),
+    );
+    identitySession = IdentityCryptoNativeSession(
+      api: DynamicIdentityCryptoNativeApi.openAndroid(),
     );
   } on Object {
     bootstrapPort.send(const <Object?>[_handshakeFailed]);
@@ -418,6 +586,44 @@ Future<void> _runCryptoCoreWorker(SendPort bootstrapPort) async {
             replyPort.send(
               _encodeInspectionReply(
                 _inspectLogInWorker(enrollmentSession, message),
+              ),
+            );
+            continue;
+          case _operationVerifyIdentity:
+            replyPort.send(
+              _encodeVoidReply(
+                _verifyIdentityInWorker(identitySession, message),
+              ),
+            );
+            continue;
+          case _operationVerifyClaimedBundle:
+            replyPort.send(
+              _encodeVoidReply(_verifyBundleInWorker(identitySession, message)),
+            );
+            continue;
+          case _operationInspectPeerDeviceLog:
+            replyPort.send(
+              _encodePeerInspectionReply(
+                _inspectPeerLogInWorker(identitySession, message),
+              ),
+            );
+            continue;
+          case _operationSafetyFingerprint:
+            replyPort.send(
+              _encodeSafetyReply(_safetyInWorker(identitySession, message)),
+            );
+            continue;
+          case _operationAttestPeerMaster:
+            replyPort.send(
+              _encodeAttestationReply(
+                _attestInWorker(identitySession, message),
+              ),
+            );
+            continue;
+          case _operationVerifyUserAttestation:
+            replyPort.send(
+              _encodeVoidReply(
+                _verifyAttestationInWorker(identitySession, message),
               ),
             );
             continue;
@@ -536,6 +742,148 @@ Result<DeviceLogInspection> _inspectLogInWorker(
   );
 }
 
+Result<void> _verifyIdentityInWorker(
+  IdentityCryptoNativeSession session,
+  List<Object?> message,
+) {
+  final version = message.length > 7 ? message[7] : null;
+  if (version is! int) {
+    return const Result.failure(
+      SecurityFailure(SecurityFailureKind.malformedServerResponse),
+    );
+  }
+  try {
+    return session.verifyIdentity(
+      _bytesArgument(message, 2),
+      PeerIdentityPublic(
+        masterPublic: _bytesArgument(message, 3),
+        selfSigningPublic: _bytesArgument(message, 4),
+        userSigningPublic: _bytesArgument(message, 5),
+        masterSignature: _bytesArgument(message, 6),
+        version: version,
+      ),
+    );
+  } on Object {
+    return const Result.failure(
+      SecurityFailure(SecurityFailureKind.malformedServerResponse),
+    );
+  }
+}
+
+Result<void> _verifyBundleInWorker(
+  IdentityCryptoNativeSession session,
+  List<Object?> message,
+) {
+  try {
+    return session.verifyClaimedBundle(
+      userId: _bytesArgument(message, 2),
+      deviceId: _bytesArgument(message, 3),
+      selfSigningPublic: _bytesArgument(message, 4),
+      bundle: ClaimedPrekeyBundle(
+        deviceId: message[5]! as String,
+        registrationId: message[6]! as int,
+        identityPublic: _bytesArgument(message, 7),
+        signedPrekeyId: message[8]! as int,
+        signedPrekeyPublic: _bytesArgument(message, 9),
+        signedPrekeySignature: _bytesArgument(message, 10),
+        crossSignature: _bytesArgument(message, 11),
+        bundleVersion: message[12]! as int,
+        pqSignedPrekeyId: message[13] as int?,
+        pqSignedPrekeyPublic: message[14] as Uint8List?,
+        pqSignedPrekeySignature: message[15] as Uint8List?,
+        oneTimePrekeyId: message[16] as int?,
+        oneTimePrekeyPublic: message[17] as Uint8List?,
+        pqOneTimePrekeyId: message[18] as int?,
+        pqOneTimePrekeyPublic: message[19] as Uint8List?,
+      ),
+    );
+  } on Object {
+    return const Result.failure(
+      SecurityFailure(SecurityFailureKind.malformedServerResponse),
+    );
+  }
+}
+
+Result<PeerDeviceLogInspection> _inspectPeerLogInWorker(
+  IdentityCryptoNativeSession session,
+  List<Object?> message,
+) {
+  try {
+    final requireCurrentLiveSet = message[4]! as bool;
+    final encoded = message[5]! as List<Object?>;
+    final devices = <PeerPublicDevice>[];
+    for (final value in encoded) {
+      final fields = value! as List<Object?>;
+      devices.add(
+        PeerPublicDevice(
+          deviceId: fields[0]! as String,
+          identityPublic: fields[1]! as Uint8List,
+          registrationId: fields[2]! as int,
+          crossSignature: fields[3] as Uint8List?,
+          bundleVersion: fields[4] as int?,
+        ),
+      );
+    }
+    return session.inspectPeerDeviceLog(
+      userId: _bytesArgument(message, 2),
+      selfSigningPublic: _bytesArgument(message, 3),
+      liveDevices: devices,
+      requireCurrentLiveSet: requireCurrentLiveSet,
+      record: _bytesArgument(message, 6),
+    );
+  } on Object {
+    return const Result.failure(
+      SecurityFailure(SecurityFailureKind.malformedServerResponse),
+    );
+  }
+}
+
+Result<SafetyFingerprint> _safetyInWorker(
+  IdentityCryptoNativeSession session,
+  List<Object?> message,
+) => session.safetyFingerprint(
+  localUserId: _bytesArgument(message, 2),
+  localMasterPublic: _bytesArgument(message, 3),
+  peerUserId: _bytesArgument(message, 4),
+  peerMasterPublic: _bytesArgument(message, 5),
+);
+
+Result<UserSigningAttestation> _attestInWorker(
+  IdentityCryptoNativeSession session,
+  List<Object?> message,
+) {
+  try {
+    return session.attestPeerMaster(
+      localIdentity: IdentityKeyPackage.fromNative(_bytesArgument(message, 2)),
+      peerUserId: _bytesArgument(message, 3),
+      peerMasterPublic: _bytesArgument(message, 4),
+    );
+  } on Object {
+    return const Result.failure(
+      SecurityFailure(SecurityFailureKind.malformedServerResponse),
+    );
+  }
+}
+
+Result<void> _verifyAttestationInWorker(
+  IdentityCryptoNativeSession session,
+  List<Object?> message,
+) {
+  try {
+    return session.verifyUserAttestation(
+      signerUserId: _bytesArgument(message, 2),
+      signerUserSigningPublic: _bytesArgument(message, 3),
+      peerUserId: _bytesArgument(message, 4),
+      peerMasterPublic: _bytesArgument(message, 5),
+      attestation: UserSigningAttestation(_bytesArgument(message, 6)),
+    );
+  } on Object {
+    return const Result.failure(
+      SecurityFailure(SecurityFailureKind.malformedServerResponse),
+    );
+  }
+}
+
 List<Object?> _encodeCapabilitiesReply(Result<CryptoCoreCapabilities> result) {
   return result.fold(
     onSuccess: (capabilities) => <Object?>[
@@ -582,6 +930,56 @@ List<Object?> _encodeInspectionReply(Result<DeviceLogInspection> result) =>
       ],
       onFailure: _encodeFailureReply,
     );
+
+List<Object?> _encodeVoidReply(Result<void> result) => result.fold(
+  onSuccess: (_) => const <Object?>[_replySuccess],
+  onFailure: _encodeFailureReply,
+);
+
+List<Object?> _encodePeerInspectionReply(
+  Result<PeerDeviceLogInspection> result,
+) => result.fold(
+  onSuccess: (value) {
+    final bytes = Uint8List(108);
+    ByteData.sublistView(bytes)
+      ..setUint64(0, value.sequence)
+      ..setUint32(104, value.identityVersion);
+    bytes
+      ..setRange(8, 40, value.previousHash)
+      ..setRange(40, 72, value.recordHash)
+      ..setRange(72, 104, value.liveDeviceSetHash);
+    return <Object?>[_replySuccess, bytes];
+  },
+  onFailure: _encodeFailureReply,
+);
+
+List<Object?> _encodeSafetyReply(Result<SafetyFingerprint> result) =>
+    result.fold(
+      onSuccess: (value) => <Object?>[_replySuccess, value.digest],
+      onFailure: _encodeFailureReply,
+    );
+
+List<Object?> _encodeAttestationReply(Result<UserSigningAttestation> result) =>
+    result.fold(
+      onSuccess: (value) => <Object?>[_replySuccess, value.signature],
+      onFailure: _encodeFailureReply,
+    );
+
+Result<void> _decodeVoidReply(Object? reply) {
+  if (reply is! List<Object?> || reply.isEmpty) {
+    return const Result.failure(
+      SecurityFailure(SecurityFailureKind.policyBlocked),
+    );
+  }
+  if (reply[0] == _replyFailure) {
+    return Result.failure(_decodeFailureReply(reply));
+  }
+  return reply.length == 1 && reply[0] == _replySuccess
+      ? const Result.success(null)
+      : const Result.failure(
+          SecurityFailure(SecurityFailureKind.malformedServerResponse),
+        );
+}
 
 Result<T> _decodePackageReply<T>(Object? reply, T Function(Uint8List) decoder) {
   final bytesResult = _decodeBytesReply(reply);

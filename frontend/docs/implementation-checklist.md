@@ -31,14 +31,14 @@ opaque/client-owned; **Pending** = Flutter implementation not started.
 |---|---|---|
 | Register/manual activation | Ready | Piece 09 account registration, pending-activation state, localized validation/errors, and responsive screens complete; activation remains owner-driven with no polling |
 | Login/refresh/logout | Ready | Piece 09 authentication plus piece 10 full-scope enrollment handoff, incomplete-secure-setup restoration/guards, and final messaging release complete |
-| User directory | Ready | Pending local repository/UI |
-| Encrypted profile blob | Ready opaque storage | Bootstrap fallback specified; implementation pending |
-| Cross-signing identity publish/fetch | Ready opaque transport | Piece 10 Rust master/self/user-signing generation, self-signature, first publish, later exact fetch/pin, and recovery restore complete; peer verification UI remains piece 11 |
+| User directory | Ready | Piece 11 activated-user fetch, atomic Drift cache, offline presentation, bounded local paging/search, and Contacts/New UI complete |
+| Encrypted profile blob | Ready opaque storage | Piece 11 authenticated fetch/publish, version retry, cached fallback gating, and profile-key distribution ports complete; development fake transport is explicitly non-production and production remains fail-closed pending pairwise transport |
+| Cross-signing identity publish/fetch | Ready opaque transport | Pieces 10/11 complete local identity lifecycle plus exact peer `master_sig` verification, persisted user-signing attestation, key-change blocking, and profile/Safety Number UI |
 | Register/list/label/revoke devices | Ready; two-phase enrollment contract | Piece 10 first/later two-phase registration, unsigned withholding, prekey cross-sign follow-up, orphan reconciliation/revocation, and resumable UI complete; linked-device management remains later work |
-| Peer device lists, ETags, signed device log | Ready opaque transport | Piece 10 bounded own-device list canonicalization plus full signed-chain validation and exact append reconciliation complete; peer ETag persistence, gossip, and fork alert remain pending |
+| Peer device lists, ETags, signed device log | Ready opaque transport | Pieces 10/11 complete own-device append plus peer ETag cache, signed extension/live-set verification, prekey-bundle authentication, and persistent global fork blocking; encrypted head gossip remains a later messaging task |
 | Hybrid X25519 + ML-KEM prekeys | Ready public distribution | Pending reviewed PQXDH core; no classical fallback |
 | PQ MLS key packages | 4096/16384 buckets + last-resort ready | Candidate selected; blocked on IANA ID, maintained OpenMLS/provider support, vectors, and review |
-| SAS/QR master-key verification | Client protocol | Pending; messaging withheld until verified |
+| SAS/QR master-key verification | Client protocol | Piece 11 exact-two-master-key SAS/QR, explicit out-of-band confirmation, user-signing attestation, and persistent verified/change states complete; messaging remains withheld on every non-verified state |
 | Recovery onboarding | Identity backup API ready | Piece 10 one-time checksummed secret, Rust Argon2id/XChaCha backup, first upload, later restore, wrong-secret handling, and honest no-history notice complete |
 
 ## Messaging
@@ -106,8 +106,8 @@ opaque/client-owned; **Pending** = Flutter implementation not started.
 | Responsive shell | Not applicable | Pieces 03â€“04 adaptive `go_router` shell plus guarded Splash/Connection bootstrap routing complete; stable branch identity, deep-link placeholders, guard hooks, keyboard navigation, focus restoration, reduced motion, resize preservation, accessible Retry, and Android-only offline entry are tested |
 | Forui design system and Lucide icons | Not applicable | Piece 03 app-owned semantic tokens and Forui wrappers complete; bundled Lucide is isolated behind typed `AppIcons`, with package-boundary, semantics, target-size, disabled, focus, and RTL-mirroring tests |
 | Flyer Chat builders | Not applicable | Selected; pending technical spike |
-| 34-screen inventory | Supporting APIs/primitives ready as above | Specified; pending implementation |
-| English/Persian RTL | Not applicable | Piece 03 LTR/RTL foundations complete with pinned local Vazirmatn, localized shell chrome, directional-icon policy, and narrow/medium golden coverage; feature-screen verification remains pending |
+| 34-screen inventory | Supporting APIs/primitives ready as above | Pieces 09â€“11 implement authentication/enrollment plus Contacts/New, Contact Profile, Edit Profile, and Safety Number; later screens remain pending |
+| English/Persian RTL | Not applicable | Piece 03 foundations plus piece 11 localized contact/profile/safety screens and RTL widget coverage complete; later feature-screen verification remains pending |
 | Accessibility/high contrast | Not applicable | Piece 03 shell/component semantics, keyboard focus, 48 px icon targets, 200% text-scale layout, reduced motion, dark mode, and authored high-contrast token mapping verified; full feature-flow audit remains pending |
 
 ## Platform delivery
@@ -149,6 +149,13 @@ opaque/client-owned; **Pending** = Flutter implementation not started.
   signed device-log append and mandatory notice. Rust backup/recovery vectors, Android
   encrypted persistence/process-death tests, contract fixtures, UI tests, Clippy,
   analyze, and the Android build were verified on 2026-07-28.
+- [x] Piece 11 activated directory/cache, authenticated-profile presentation gate,
+  peer identity/device/prekey/log verification, exact-master SAS/QR, explicit
+  user-signing attestation, persistent key-change/fork blocking, and localized
+  contact/profile/safety screens pass malicious-server, pagination, cache,
+  profile-authentication, accessibility, RTL, locked Rust/Clippy, analyze, widget,
+  and three-ABI Android APK build gates. The profile transport fake is
+  development-only and encrypted device-log gossip remains a later messaging task.
 - [x] Android reproduces the backend `cross_sig`, `master_sig`, `spk_sig`, and
   `pq_spk_sig` golden vectors, including optional fields and the 64-byte `ik_pub` layout
   (Piece 08: Rust vectors, strict Clippy, Flutter tests, three-ABI native package build,

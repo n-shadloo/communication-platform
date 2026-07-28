@@ -252,6 +252,7 @@ final class DioRestClient {
             if (accessToken != null) 'Authorization': 'Bearer $accessToken',
             if (request.body != null) 'Content-Type': 'application/json',
             'Accept': 'application/json',
+            ...request.headers,
           },
           responseType: ResponseType.stream,
           followRedirects: false,

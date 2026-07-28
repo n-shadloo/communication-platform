@@ -2,6 +2,7 @@ import 'package:communication_platform/app/app.dart';
 import 'package:communication_platform/app/config/app_configuration.dart';
 import 'package:communication_platform/app/config/app_environment.dart';
 import 'package:communication_platform/app/dependencies/authentication_assembly.dart';
+import 'package:communication_platform/app/dependencies/contact_providers.dart';
 import 'package:communication_platform/app/dependencies/core_providers.dart';
 import 'package:communication_platform/app/dependencies/local_storage_providers.dart';
 import 'package:communication_platform/core/application/ports/enrollment_crypto_port.dart';
@@ -61,6 +62,11 @@ Future<void> bootstrap(AppEnvironment environment) async {
           deviceEnrollmentCoordinatorProvider.overrideWithValue(
             authentication.enrollment,
           ),
+        if (authentication != null)
+          authenticatedRestClientProvider.overrideWithValue(
+            authentication.restClient,
+          ),
+        appEnvironmentProvider.overrideWithValue(environment),
         cryptoCoreProvider.overrideWithValue(cryptoCore),
         enrollmentCryptoProvider.overrideWithValue(enrollmentCrypto),
         localStorageRuntimeProvider.overrideWith((ref) {

@@ -59,12 +59,17 @@ library statically links the signed libsodium 1.0.22 source archive, compiles
 unexpected toolchain, archive hash/signature, dynamic libsodium dependency, ELF load
 alignment, or exported symbol.
 
-ABI version 1 exports exactly `cp_crypto_v1_abi_version`,
-`cp_crypto_v1_capabilities`, and `cp_crypto_v1_self_test`. Its public status range is
-the payload-free integer set 0 through 14 frozen in
-`native/crypto_core/include/communication_crypto.h`. The current boundary deliberately
-returns public capability metadata and self-test status only; primitive inputs and
-secret values do not cross it. Rust-owned `SecretBytes` and `SecretVec` values are
+ABI version 1's exact export allowlist is `cp_crypto_v1_abi_version`,
+`cp_crypto_v1_attest_peer_master`, `cp_crypto_v1_capabilities`,
+`cp_crypto_v1_create_device_log_record`, `cp_crypto_v1_cross_sign_device`,
+`cp_crypto_v1_identity_operation`, `cp_crypto_v1_inspect_device_log_record`,
+`cp_crypto_v1_prepare_device`, `cp_crypto_v1_prepare_first_identity`,
+`cp_crypto_v1_restore_identity`, `cp_crypto_v1_sanitize_identity`, and
+`cp_crypto_v1_self_test`. Its public status range is the payload-free integer set 0
+through 14 frozen in `native/crypto_core/include/communication_crypto.h`. Enrollment,
+peer identity/device/prekey/log verification, safety fingerprints, and user-signing
+attestation cross only through these bounded typed operations; private key material
+remains inside opaque Rust identity packages. Rust-owned `SecretBytes` and `SecretVec` values are
 non-`Debug`, non-`Clone`, and zeroized on drop, while the testable provider owns secure
 randomness, allocation/input bounds, and primitive implementations.
 

@@ -261,6 +261,16 @@ bundle chains to the already verified master key and extends the device log. A m
 change, invalid device cross-signature, or device-log fork blocks sending and requires
 explicit out-of-band resolution.
 
+Version 1 computes the 32-byte safety fingerprint as SHA-256 over
+`"chat:v1:safety-fingerprint"` followed by 4-byte-length-framed
+`(user_uuid_raw[16], master_pub[32])` pairs, ordered by raw user UUID. The QR payload is
+`CP-SAFETY-V1:` followed by unpadded base64url of those exact 32 bytes; the numeric and
+emoji forms are alternative presentations of that same digest. Confirmation signs
+`"chat:v1:user-signing-attestation" || frame(local_user_uuid_raw) ||
+frame(peer_user_uuid_raw) || frame(peer_master_pub)` with the local user-signing key.
+The stored attestation is reverified before a persisted contact can return to verified
+state; first-seen keys never authorize messaging.
+
 ## Device-list log
 
 Every device-set change and account-identity rotation produces a padded 256/1,024-byte
@@ -317,11 +327,18 @@ bucket is intentionally small. Keys for different metadata classes are domain-se
 
 The backend directory username is the only presentation identity available before an
 authenticated profile key arrives. During that bootstrap state the UI shows the username
-and a local deterministic placeholder avatar derived from a domain-separated hash of the
-user ID. It does not show unverified cached display names. A pairwise session distributes
+and a local deterministic placeholder avatar derived from
+`"chat:v1:placeholder-avatar:" || lowercase(username)`. It does not show unverified
+cached display names. A pairwise session distributes
 `profile.publish` to a DM peer; an MLS-authenticated profile announcement distributes it
 to group peers. Only a successfully authenticated profile with a live-device signer may
 replace the fallback.
+
+Until pairwise transport is implemented, development builds may use the explicitly
+non-production `ProfileProtectionPort` and `ProfileKeyDistributionPort` fake adapters.
+Production composition remains fail-closed. The fake envelope exists only to exercise
+profile versioning, cache authentication, presentation gating, and distribution hooks;
+it is not cryptographic acceptance evidence.
 
 Fixed-bucket metadata uses `MetadataBlobV1`:
 

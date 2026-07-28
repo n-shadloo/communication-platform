@@ -436,4 +436,154 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get enrollmentUnderstandAction => 'I understand';
+
+  @override
+  String get contactsNewTitle => 'New';
+
+  @override
+  String get contactsNewGroup => 'New Group';
+
+  @override
+  String get contactsNewVoiceRoom => 'New Voice Room';
+
+  @override
+  String get contactsSearchLabel => 'Search contacts';
+
+  @override
+  String get contactsLoadingTitle => 'Loading contacts';
+
+  @override
+  String get contactsEmptyTitle => 'No contacts yet';
+
+  @override
+  String get contactsEmptyMessage =>
+      'Activated users will appear here after the directory refreshes.';
+
+  @override
+  String get contactsOfflineMessage => 'Offline — showing cached contacts';
+
+  @override
+  String get contactsLoadMore => 'Load more contacts';
+
+  @override
+  String get contactsVerified => 'Identity verified';
+
+  @override
+  String get contactsUnverified => 'Identity not verified';
+
+  @override
+  String get contactsUsernameFallback =>
+      'Backend username shown until the encrypted profile and identity are authenticated.';
+
+  @override
+  String get contactProfileTitle => 'Contact profile';
+
+  @override
+  String get contactMessageAction => 'Message';
+
+  @override
+  String get contactMuteAction => 'Mute';
+
+  @override
+  String get contactVerifyAction => 'Verify safety number';
+
+  @override
+  String get contactSharedMediaAction => 'Shared media and files';
+
+  @override
+  String get contactClearHistoryAction => 'Clear history';
+
+  @override
+  String get contactBlockAction => 'Block';
+
+  @override
+  String get contactSensitiveBlocked =>
+      'Messaging is withheld until this identity and every device pass verification.';
+
+  @override
+  String get profileEditTitle => 'Edit profile';
+
+  @override
+  String get profileDisplayNameLabel => 'Display name';
+
+  @override
+  String get profileVisibilityNote =>
+      'This encrypted profile is visible only to contacts who receive an authenticated profile key. Keep personal information minimal.';
+
+  @override
+  String get profileAvatarStyleLabel => 'Avatar style';
+
+  @override
+  String get profileSaveAction => 'Save encrypted profile';
+
+  @override
+  String get profileSavingAction => 'Saving…';
+
+  @override
+  String get profileTemporaryTransport =>
+      'Profile encryption and key delivery are using development-only fake transport until pairwise messaging is available. Production remains blocked.';
+
+  @override
+  String get profileSavedMessage => 'Encrypted profile published.';
+
+  @override
+  String get profileInvalidName =>
+      'Enter a display name of 1 to 64 characters.';
+
+  @override
+  String get safetyTitle => 'Safety number';
+
+  @override
+  String get safetyInstructions =>
+      'Compare these values in person or over another trusted channel. The server cannot confirm them for you.';
+
+  @override
+  String get safetyEmojiLabel => 'Emoji comparison';
+
+  @override
+  String get safetyNumberLabel => 'Number comparison';
+
+  @override
+  String get safetyQrLabel => 'QR safety value';
+
+  @override
+  String get safetyOutOfBandCheck =>
+      'I compared the values out of band with this contact.';
+
+  @override
+  String get safetyConfirmAction => 'Confirm verified';
+
+  @override
+  String get safetyVerifiedState =>
+      'Verified — the exact master key is attested by your user-signing key.';
+
+  @override
+  String get safetyUnverifiedState => 'Unverified — messaging withheld';
+
+  @override
+  String get safetyMasterChangedState =>
+      'Master key changed — sensitive actions are blocked until you verify the new values out of band.';
+
+  @override
+  String get safetyInvalidDeviceState =>
+      'Unsigned or invalid device — messages are withheld.';
+
+  @override
+  String get safetyForkState =>
+      'Device-log fork detected — all sensitive actions are blocked.';
+
+  @override
+  String get safetyIdentityUnavailableState =>
+      'A valid signed identity is unavailable.';
+
+  @override
+  String get safetyRefreshing =>
+      'Verifying identity, devices, prekeys, and device log…';
+
+  @override
+  String get safetyRetryAction => 'Retry verification';
+
+  @override
+  String get safetyConfirmationRequired =>
+      'Out-of-band comparison is required before confirmation.';
 }

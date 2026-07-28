@@ -108,6 +108,23 @@ int32_t cp_crypto_v1_inspect_device_log_record(
     uint8_t* output,
     uintptr_t output_len,
     uintptr_t* written);
+int32_t cp_crypto_v1_identity_operation(
+    uint32_t operation,
+    const uint8_t* input,
+    uintptr_t input_len,
+    uint8_t* output,
+    uintptr_t output_len,
+    uintptr_t* written);
+int32_t cp_crypto_v1_attest_peer_master(
+    const uint8_t* identity_package,
+    uintptr_t identity_package_len,
+    const uint8_t* peer_user_id,
+    uintptr_t peer_user_id_len,
+    const uint8_t* peer_master_public,
+    uintptr_t peer_master_public_len,
+    uint8_t* output,
+    uintptr_t output_len,
+    uintptr_t* written);
 
 #ifdef __cplusplus
 }

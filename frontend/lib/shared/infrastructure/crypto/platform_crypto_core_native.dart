@@ -9,5 +9,9 @@ CryptoCorePort createPlatformCryptoCore() {
     return const UnsupportedCryptoCore();
   }
   final worker = IsolateCryptoCoreWorker();
-  return CryptoCoreRuntime(worker: worker, enrollmentWorker: worker);
+  return CryptoCoreRuntime(
+    worker: worker,
+    enrollmentWorker: worker,
+    identityWorker: worker,
+  );
 }

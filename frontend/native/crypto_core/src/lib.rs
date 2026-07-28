@@ -377,6 +377,80 @@ pub unsafe extern "C" fn cp_crypto_v1_inspect_device_log_record(
     })
 }
 
+#[unsafe(no_mangle)]
+/// Runs a bounded public identity-verification operation.
+///
+/// Operations 1 and 2 verify identity/device signatures and write no output;
+/// operations 3 and 4 return peer-log inspection and safety fingerprint bytes;
+/// operation 5 verifies a user-signing attestation and writes no output.
+///
+/// # Safety
+///
+/// Pointer requirements are identical to [`cp_crypto_v1_prepare_device`].
+pub unsafe extern "C" fn cp_crypto_v1_identity_operation(
+    operation: u32,
+    input: *const u8,
+    input_len: usize,
+    output: *mut u8,
+    output_len: usize,
+    written: *mut usize,
+) -> i32 {
+    guard(|| {
+        // SAFETY: upheld by this function's caller contract.
+        let input = unsafe { ffi_input(input, input_len)? };
+        let value = match operation {
+            1 => {
+                enrollment::verify_published_identity(input)?;
+                Vec::new()
+            }
+            2 => {
+                enrollment::verify_claimed_device_bundle(input)?;
+                Vec::new()
+            }
+            3 => enrollment::inspect_peer_device_log_record(input)?,
+            4 => enrollment::safety_fingerprint(input)?,
+            5 => {
+                enrollment::verify_user_attestation(input)?;
+                Vec::new()
+            }
+            _ => return Err(CryptoError::UnsupportedOperation),
+        };
+        // SAFETY: upheld by this function's caller contract.
+        unsafe { ffi_output(&value, output, output_len, written) }
+    })
+}
+
+#[unsafe(no_mangle)]
+/// Signs the exact peer master-key attestation with the local user-signing key.
+///
+/// # Safety
+///
+/// Pointer requirements are identical to [`cp_crypto_v1_restore_identity`].
+pub unsafe extern "C" fn cp_crypto_v1_attest_peer_master(
+    identity_package: *const u8,
+    identity_package_len: usize,
+    peer_user_id: *const u8,
+    peer_user_id_len: usize,
+    peer_master_public: *const u8,
+    peer_master_public_len: usize,
+    output: *mut u8,
+    output_len: usize,
+    written: *mut usize,
+) -> i32 {
+    guard(|| {
+        // SAFETY: upheld by this function's caller contract.
+        let identity_package = unsafe { ffi_input(identity_package, identity_package_len)? };
+        // SAFETY: upheld by this function's caller contract.
+        let peer_user_id = unsafe { ffi_input(peer_user_id, peer_user_id_len)? };
+        // SAFETY: upheld by this function's caller contract.
+        let peer_master_public = unsafe { ffi_input(peer_master_public, peer_master_public_len)? };
+        let signature =
+            enrollment::attest_peer_master(identity_package, peer_user_id, peer_master_public)?;
+        // SAFETY: upheld by this function's caller contract.
+        unsafe { ffi_output(&signature, output, output_len, written) }
+    })
+}
+
 fn run_self_test() -> CryptoResult<()> {
     let provider = RustCryptoProvider::default();
     let empty_hash = provider.sha256(b"")?;
