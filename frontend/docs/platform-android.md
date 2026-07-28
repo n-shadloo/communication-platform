@@ -80,8 +80,9 @@ Verification on 2026-07-28 passed:
   <android-device> --flavor development` on an Android 15/API 35 x86_64 emulator.
 
 This Android scope does not implement PQXDH, Double Ratchet, MLS state,
-application-message schemas, production KeyPackages, or the deferred Web/Wasm adapter.
-It cannot close any Android/Web interoperability or browser release gate.
+application-message schemas, production KeyPackages, or the post-v1 Web/Wasm adapter.
+It is sufficient for the Android-only version-1 foundation; browser interoperability
+remains a post-v1 release gate.
 
 ## Network trust
 

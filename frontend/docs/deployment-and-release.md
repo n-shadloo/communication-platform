@@ -20,7 +20,7 @@ Track independently:
 
 - human application version;
 - monotonically increasing Android version code;
-- web artifact/build ID;
+- future Web artifact/build ID (post-v1);
 - local database schema version;
 - application-message protocol major/minor;
 - crypto-state format version;
@@ -35,7 +35,8 @@ by contract tests and conservative client behavior, not runtime version guessing
 - Commit Flutter/Dart/Rust lockfiles and checksum external artifacts.
 - Mirror/cache all build dependencies so a clean release can build without international
   internet.
-- Produce an SBOM covering Dart, Android/Gradle, Rust/Wasm, fonts, and native libraries.
+- Produce a version-1 SBOM covering Dart, Android/Gradle, Rust, fonts, and native
+  libraries. Add Rust/Wasm and browser-worker artifacts only when Web is reopened.
 - Review licenses, especially crypto libraries, before acceptance.
 - Disable crypto debug/log features and remove unused architectures/resources only after
   verifying packaging rules.
@@ -57,7 +58,10 @@ by contract tests and conservative client behavior, not runtime version guessing
 Updates are explicit user/admin actions. The app may check only the self-hosted signed
 metadata endpoint. It never fetches executable code or dependencies dynamically.
 
-## Web release
+## Post-v1 Web release
+
+Web is not shipped in version 1. The following is a future release procedure and is not
+part of the Android release gate:
 
 1. Build and test the Flutter web bundle, shared crypto Wasm, and LiveKit E2EE worker from
    the same reviewed tag.
@@ -89,8 +93,8 @@ self-hosted configuration or compile-time decisions and cannot weaken cryptograp
 
 ## Rollback
 
-- A web rollback is permitted only if the older bundle can read the migrated local DB and
-  crypto formats.
+- A future Web rollback is permitted only if the older bundle can read the migrated local
+  DB and crypto formats.
 - Android downgrades are not assumed safe. Roll forward with a fixed build unless a tested
   compatibility path exists.
 - Never restore old ratchet/MLS state over newer state.
@@ -104,9 +108,9 @@ self-hosted configuration or compile-time decisions and cannot weaken cryptograp
 Before every production release, isolate the environment from foreign networks and prove:
 
 - build succeeds from approved mirrors/caches;
-- application assets, fonts, Wasm, CA material, APIs, Redis/PostgreSQL, nginx, LiveKit,
-  and TURN are local/self-hosted;
-- Android installation/update and web loading work;
+- version-1 application assets, fonts, CA material, APIs, Redis/PostgreSQL, nginx,
+  LiveKit, and TURN are local/self-hosted;
+- Android installation/update works. Web loading is post-v1.
 - two-phase enrollment, cross-signing/SAS, PQXDH and the production-approved PQ MLS
   profile, device-log gossip,
   register/login/message/attachment/voice/identity-recovery flows work;
@@ -127,8 +131,9 @@ downgrade.
 - [ ] Final application name, icon, Android ID, and production origin approved.
 - [ ] Documentation and ADR register match implementation.
 - [ ] Security review findings closed or explicitly release-blocking.
-- [ ] Crypto/interoperability vectors pass on Android and supported browsers.
-- [ ] Database and crypto-state migrations pass from all supported versions.
+- [ ] Crypto/interoperability vectors pass on Android. Supported-browser vectors are
+  post-v1.
+- [ ] Database and crypto-state migrations pass from all supported Android versions.
 - [ ] Backend contract and multi-device E2E suites pass.
 - [ ] Accessibility, RTL, performance, battery, and voice gates pass.
 - [ ] No forbidden network calls or sensitive logs/artifacts detected.

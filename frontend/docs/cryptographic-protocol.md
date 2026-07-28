@@ -9,9 +9,9 @@ declared. Independent review is a production release gate.
 
 ## Implementation boundary
 
-A shared memory-safe crypto core MUST expose a narrow FFI/Wasm API to Flutter. Dart code
-may orchestrate operations but MUST NOT implement PQXDH, ML-KEM, ratchets, MLS,
-signatures, KDFs,
+A shared memory-safe crypto core MUST expose a narrow native FFI API to the version-1
+Android Flutter client. Dart code may orchestrate operations but MUST NOT implement
+PQXDH, ML-KEM, ratchets, MLS, signatures, KDFs,
 AEAD, secretstream, or secret zeroization.
 
 The selected foundation implementation is Rust:
@@ -27,26 +27,25 @@ The selected foundation implementation is Rust:
 - OpenMLS remains the preferred future owner of RFC 9420 group state, subject to
   the candidate and release gates frozen in
   [Post-quantum MLS profile](mls-profile.md); and
-- the future browser Wasm library must be produced from the same locked Rust
-  source, provider choices, serialization, and test vectors as Android.
+- a future browser Wasm library must be produced from the same locked Rust source,
+  provider choices, serialization, and test vectors as Android.
 
 Signal's official `libsignal` supports Android but does not present a supported browser
-runtime contract. OpenMLS builds for Android and Wasm but PQ-suite availability and those
-targets require validation. Therefore dependency selection remains a mandatory
-implementation spike; inability to produce one interoperable reviewed Android/Wasm core
-blocks release rather than causing pure-Dart ML-KEM, classical-only messaging, or ad-hoc
-cryptography.
+runtime contract. OpenMLS and the selected providers require separate Web validation.
+Therefore dependency selection remains a mandatory implementation spike for any future
+Web release; inability to produce one interoperable reviewed Android/Wasm core blocks
+that Web release rather than causing pure-Dart ML-KEM, classical-only messaging, or
+ad-hoc cryptography. It does not block the Android-only version-1 release.
 
 ### Piece-07 implementation staging
 
 Piece 07 establishes the shared Rust source and Android native FFI/isolate boundary only.
-The Web/Wasm adapter and browser worker are deferred; this milestone does not establish
-cross-target interoperability. Crypto-dependent Web behavior remains fail-closed, with
-no Dart or JavaScript primitive fallback. The future reviewed Web adapter MUST consume
-the same locked core source, provider choices, serialization, domain constants, and
-fixtures and MUST satisfy every Android/Web release gate in this document. Android-only
-completion is not a protocol downgrade, an alternate suite, or production-release
-evidence for Web.
+The version-1 release is Android-only. The Web/Wasm adapter and browser worker are
+post-v1 work; crypto-dependent Web behavior remains fail-closed, with no Dart or
+JavaScript primitive fallback. A future reviewed Web adapter MUST consume the same
+locked core source, provider choices, serialization, domain constants, and fixtures and
+must satisfy the Web release gates before Web cryptographic behavior is enabled.
+Android-only completion is not a protocol downgrade or an alternate suite.
 
 ## Protocol suite
 
@@ -234,9 +233,8 @@ history.
 
 Argon2id derives a wrapping key from the recovery secret and a random salt. Version 1 uses
 a 16-byte salt and 32-byte output, with a floor of 64 MiB memory, three iterations, and
-parallelism four on both targets. Implementations without parallel Wasm execution still
-process the four lanes correctly rather than changing the stored parameter. Version 1
-writers use those exact portable parameters so a backup created on one supported platform
+parallelism four on Android. A future Web implementation must process the same four lanes
+without changing the stored parameter so a backup created on one supported platform
 cannot become unrestorable on the other. Stronger parameters require a later protocol
 revision plus compatibility measurements across the supported device floor. The backup
 blob stores its format version, KDF parameters, salt, nonce, and cross-signing identity

@@ -1,9 +1,9 @@
 # UI specification — Page-by-Page
 
 > **Repository scope note.** The original specification refers to web, mobile, and
-> desktop layout modes. The approved build targets are Android and Web only. In this
-> document, “desktop” means the wide browser layout; it does not add Windows, macOS, or
-> Linux application targets.
+> desktop layout modes. Version 1 ships Android only. The responsive web layout remains
+> a post-v1 design direction; “desktop” below means a future wide-browser layout and
+> does not add Windows, macOS, or Linux application targets.
 >
 > **Backend authority note.** Backend `API.md` contracts take precedence wherever this
 > UI specification implies an unavailable endpoint, stronger server guarantee, or
@@ -11,7 +11,7 @@
 > opaque transport model.
 
 > **Purpose.** This is a **layout and screen-flow specification** for the Flutter client
-> (Android + responsive web). It describes **every screen, sub-screen, sheet, dialog, and
+> (Android, with a post-v1 responsive Web direction). It describes **every screen, sub-screen, sheet, dialog, and
 > menu**: what each contains, where each element sits, what every button/action does,
 > where each action leads, and what states each screen can be in. It is **self-contained**
 > — you do not need any other document to lay out and build these screens.
@@ -81,7 +81,7 @@ One adaptive shell that changes structure by viewport width.
 - **Mobile (narrow):** a **bottom tab bar** with three tabs: **Chats**, **Voice Rooms**,
   **Settings**. Each tab is a full-screen stack; tapping a list item pushes a detail
   screen; back gesture/button pops it.
-- **Desktop / web (wide):** a **two-pane layout**. A **left rail** holds the same three
+- **Post-v1 desktop / web (wide):** a **two-pane layout**. A **left rail** holds the same three
   destinations plus the list for the selected one; the **right pane** shows the open
   conversation/room/detail. Selecting a list item swaps the right pane in place.
 - **Tablet / medium:** two panes when wide enough, otherwise mobile behavior.
@@ -122,8 +122,8 @@ setup the app was provisioned with.
 - No stored identity → **Login** (§2) with a Register path.
 - Server unreachable with no usable local identity → stay here in the unreachable state.
 - Server unreachable with a usable Android identity → open cached Chats in offline mode;
-  queued sends wait for reconnection. The online-session-first Web client stays on the
-  unreachable state until its configured server returns.
+  queued sends wait for reconnection. A future online-session-first Web client stays on
+  the unreachable state until its configured server returns.
 
 **States.**
 - *Loading* — "Starting…" while local keys/trust load.
@@ -683,9 +683,9 @@ appear pinned in the Chats list.
 
 ## 16. Linked Devices
 
-**Purpose.** Manage the user's Android device and browser profiles. Devices are
-independently keyed but cross-signed by the account identity. Add a device, authorize it,
-and optionally transfer locally held history.
+**Purpose.** Manage the user's Android device. A future Web profile will be independently
+keyed and cross-signed by the account identity. Add a device, authorize it, and optionally
+transfer locally held history.
 
 **Layout (top → bottom).**
 1. **Top bar:** back; title "Linked Devices".

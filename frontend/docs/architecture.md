@@ -139,13 +139,16 @@ only the timeline adapter is replaced with a custom sliver implementation.
 
 ## Platform boundary
 
-Android and web implement the same ports but may provide different guarantees:
+Version 1 implements the application ports on Android. The preserved Web adapter is
+post-v1 and may later implement the same ports with different guarantees:
 
 - Android uses encrypted SQLite and Android Keystore wrapping.
-- Web stores only ciphertext records persistently and keeps decrypted content in memory.
+- A future Web client stores only ciphertext records persistently and keeps decrypted
+  content in memory.
 - Android uses active-page/socket delivery plus best-effort background polling for
   messaging; only an active voice session owns a foreground service.
-- Web synchronizes while a page is alive and drains the durable queue after resume.
+- A future Web client synchronizes while a page is alive and drains the durable queue
+  after resume.
 
 No platform-specific conditional is allowed inside domain or protocol logic.
 

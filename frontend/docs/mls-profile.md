@@ -39,18 +39,19 @@ that precise claim.
 ## Implementation ownership
 
 The shared Rust crypto core owns OpenMLS integration and the cryptographic provider;
-Flutter/Dart only calls its narrow FFI/Wasm API. The same source, locked dependency
-versions, serialization, and fixtures are used on Android and Web.
+Flutter/Dart only calls its narrow Android FFI API in version 1. The same source, locked
+dependency versions, serialization, and fixtures must be used by a future Web/Wasm
+adapter.
 
 Piece 07 stages only the primitive foundation and Android FFI/isolate adapter. It does
-not integrate OpenMLS, create MLS state, or produce KeyPackages, and its successful
-Android vectors do not satisfy the Android/Web gate below. Web crypto remains
-fail-closed until the reviewed same-source Wasm adapter and browser fixtures exist.
+not integrate OpenMLS, create MLS state, or produce KeyPackages. Web crypto remains
+fail-closed until the reviewed same-source Wasm adapter and browser fixtures exist in a
+post-v1 milestone.
 
 OpenMLS is preferred, but its documented supported suites currently do not include the
-selected candidate, and its Android/Wasm targets are built rather than tested upstream.
-The implementation spike must therefore prove provider support and lifecycle behavior
-on both application targets. If maintained support cannot be produced, groups remain
+selected candidate. The Android implementation spike must prove provider support and
+lifecycle behavior for version 1; a later Web spike must prove the Wasm/browser path.
+If maintained support cannot be produced for the target being released, groups remain
 disabled; the team does not replace the suite with classical MLS or ship newly invented
 cryptography.
 
@@ -61,8 +62,9 @@ All of these are mandatory:
 1. The suite has a stable specification and an IANA-assigned identifier.
 2. A maintained OpenMLS/provider combination implements the final KEM, KDF, AEAD, hash,
    and signature mappings without a project-local cryptographic fork.
-3. KeyPackage, Welcome, Commit, Proposal, epoch, exporter, serialization, persistence,
-   malformed-input, and downgrade fixtures pass byte-identically on Android and Web.
+3. For version 1, KeyPackage, Welcome, Commit, Proposal, epoch, exporter, serialization,
+   persistence, malformed-input, and downgrade fixtures pass on Android. A future Web
+   release additionally requires byte-identical Android/Web fixtures.
 4. The padded KeyPackage representation fits the backend's 4,096/16,384-byte buckets,
    including the last-resort behavior.
 5. Crash-safe state persistence, queue-gap removal/re-add, and concurrent-commit/fork

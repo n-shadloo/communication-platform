@@ -15,7 +15,7 @@ AES key, preferring hardware-backed storage when available. Exclude the database
 wrapping material, attachments, and key files from Android backup. Plaintext may exist
 inside the unlocked encrypted database and process memory, never in ordinary files.
 
-### Web
+### Web (post-v1)
 
 Persist device state and content only as encrypted records. Store a non-extractable
 WebCrypto wrapping key in IndexedDB when supported and wrap the local storage key. Drift
@@ -106,6 +106,6 @@ state was not persisted.
 
 ## Search
 
-Android maintains a local index inside the encrypted database. Web builds an in-memory
-index from decrypted session content. Search input/results never leave the device. The UI
-states that results cover only history available on this device.
+Android maintains a local index inside the encrypted database. A future Web build uses an
+in-memory index from decrypted session content. Search input/results never leave the
+device. The UI states that results cover only history available on this device.

@@ -48,8 +48,8 @@ privacy mode requires obscuring it.
   `17e355067c8284f47743a1ee3b1ef7ff684ff0601eda357f9353b10b3016ab31`). The artifact,
   Latin/Persian coverage, and license were verified from the
   [official repository](https://github.com/rastikerdar/vazirmatn/tree/v33.003) on
-  2026-07-27. It is bundled into Android/Web artifacts; the app makes no font request at
-  runtime.
+  2026-07-27. It is bundled into Android version-1 artifacts; a future Web artifact
+  must also bundle it and make no font request at runtime.
 - Type scale: display 32/40, title 24/32, section 20/28, body 16/24, compact 14/20,
   label 12/16. Values are font size/line height in logical pixels at scale 1.0.
 - Body and message content use regular weight; actions use medium; unread/title emphasis
@@ -61,7 +61,8 @@ privacy mode requires obscuring it.
 ## Geometry and density
 
 - Base spacing unit is 4. Tokens are `4, 8, 12, 16, 24, 32, 48`.
-- Control height is 48 on touch layouts and at least 40 for pointer-dense web layouts;
+- Control height is 48 on Android touch layouts. A future pointer-dense Web layout may
+  use a 40 px visual control while keeping touch hit regions at least 48 px;
   touch hit regions remain at least 48 even when the visible icon is smaller.
 - Radii are 8 for compact controls, 14 for cards/dialog internals, 18 for primary
   controls, and 20 for message bubbles. Pills use half the control height.
@@ -117,13 +118,15 @@ privacy mode requires obscuring it.
   Receipt/reaction changes use local cross-fades only.
 - Reduced-motion mode removes spatial travel and repeated/pulsing animation while
   retaining immediate opacity/state feedback.
-- Web exposes visible keyboard focus, hover only as enhancement, platform-consistent
-  selection, and right-click menus without disabling browser accessibility shortcuts.
+- A future Web client exposes visible keyboard focus, hover only as enhancement,
+  platform-consistent selection, and right-click menus without disabling browser
+  accessibility shortcuts.
 
 ## Brand assets still expected
 
 The product name, wordmark, app icon, and final logo geometry remain inputs from the
 future brand/design phase. Until then, development uses a neutral non-shipping
 placeholder. Missing brand artwork does not block architecture, protocol, or component
-implementation, but release builds MUST replace the placeholder and pass Android/web
-asset, contrast, small-size, and dark-surface review.
+implementation, but the version-1 Android release build MUST replace the placeholder
+and pass Android asset, contrast, small-size, and dark-surface review. Web asset review
+is post-v1.

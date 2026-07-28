@@ -4,8 +4,8 @@
 
 One application-owned gateway wraps `/ws`. It validates frame type and bounds before
 routing typed events. Widgets never send raw JSON. Android authenticates the upgrade
-with its bearer header; browsers send the required auth frame first and send nothing else
-until authentication succeeds.
+with its bearer header. A future Web client sends the required auth frame first and sends
+nothing else until authentication succeeds.
 
 Durable `envelope` frames enter the inbox pipeline and are deduplicated against REST.
 `signal`, presence, room signal, and room presence are volatile and expire locally.
@@ -64,9 +64,11 @@ SFU, or TURN server.
 ## Media encryption gate
 
 RFC 9605 SFrame is the target framing contract. LiveKit documents E2EE support in its
-Flutter SDK on native and web, with additional worker build steps for web. Before release,
-a wire-level spike MUST prove the selected SDK version and cipher/key-provider behavior
-meet the project's SFrame/E2EE requirements on Android and supported browsers. If not,
+Flutter SDK on native and web, with additional worker build steps for web. Before the
+Android version-1 release, a wire-level spike MUST prove the selected SDK version and
+cipher/key-provider behavior meets the project's SFrame/E2EE requirements on Android.
+Before a future Web release, the corresponding browser worker behavior must also pass.
+If not,
 an audited compatible integration is required; ordinary SRTP to the SFU is not accepted
 as end-to-end encryption.
 
@@ -97,7 +99,8 @@ indicators come from local/LiveKit media state and reveal no readable audio to t
 
 - Android uses microphone permission only on explicit join and a microphone/connected
   foreground-service notification while active.
-- Web requires secure context and a user gesture for microphone permission/audio start.
+- A future Web client requires secure context and a user gesture for microphone
+  permission/audio start.
 - Network change enters reconnecting state, stops misleading speaking indicators, and
   never connects to a foreign fallback.
 - Minimizing the room keeps audio only when the platform can truthfully maintain it and

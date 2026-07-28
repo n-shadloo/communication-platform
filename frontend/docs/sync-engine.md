@@ -33,8 +33,8 @@ boolean combination such as `isLoading && !hasToken` defines authentication beha
 2. Validate local schema and key handles.
 3. Call anonymous health only against the configured server.
 4. Load/refresh the device-bound session through a single-flight token coordinator.
-5. Open WebSocket; native sends the bearer header and web sends the required first auth
-   frame within the backend deadline.
+5. Open WebSocket; Android sends the bearer header. A future Web client sends the
+   required first auth frame within the backend deadline.
 6. Drain `GET /api/v1/me/envelopes`; before processing a page, compare its
    `pruned_through` with the durable highest contiguous acked sequence.
 7. If `last_acked_seq < pruned_through`, enter queue-gap recovery before accepting
@@ -179,17 +179,17 @@ Typing, presence, and ephemeral room signals do not enter the durable inbox. The
 strict expiry, bounded maps, and are cleared on disconnect. UI never converts absence of
 a signal into durable message or membership state.
 
-## Android and web lifecycle
+## Android lifecycle and post-v1 Web direction
 
 - Android keeps the WebSocket only while the application lifecycle permits. WorkManager
   performs best-effort background polling/drain; it is not instant, exact-periodic, or
   reliable after force-stop. Messaging never starts a persistent foreground service.
 - An active voice session alone uses the required microphone/communication foreground
   service.
-- Web listens while the page is active. Visibility resume and network recovery refresh
-  auth, reconnect, and drain.
-- Browser service-worker background sync is optional enhancement only; limited cross-
-  browser availability means correctness never depends on it.
+- A future Web client listens while the page is active. Visibility resume and network
+  recovery refresh auth, reconnect, and drain.
+- A future browser service-worker background sync is optional enhancement only; limited
+  cross-browser availability means correctness never depends on it.
 
 ## Observability
 

@@ -1,5 +1,10 @@
 # Web platform contract
 
+> Version 1 ships Android only. This document describes the preserved post-v1 Web
+> direction and is not a version-1 implementation or release gate. Until a later ADR
+> reopens Web delivery, the Web application remains compile-only where needed and all
+> crypto-dependent behavior fails closed.
+
 ## Scope
 
 The web client is an online-session-first companion for current common browsers. It
@@ -53,7 +58,7 @@ than loaded at runtime. Their SHA-256 values are respectively
 `167e8b95fdfa54041cc2d061bea283677b7f66d5669493bc9af4c9ea33440e5d` and
 `41cf968998241465d8b1dfffb1eb60dd10c35de5022a3647e14174ea3af84143`.
 This baseline was verified on 2026-07-27 against WebCrypto and Drift 2.34.2 documentation;
-the supported-browser structured-clone/persistence matrix remains a release gate.
+the supported-browser structured-clone/persistence matrix is a post-v1 Web release gate.
 
 Non-extractable means browser APIs refuse export; trusted page code can still ask the key
 to decrypt. It is not a defense against malicious same-origin JavaScript.
@@ -66,9 +71,9 @@ crypto-dependent operations MUST remain unavailable and fail closed. A placehold
 adapter, pure-Dart primitive, JavaScript substitute, classical-only fallback, or claim
 that an ordinary Web build is a Wasm crypto smoke test is forbidden.
 
-The browser boundary remains a release requirement. Its future implementation MUST use
-the same locked Rust core source, provider choices, serialization, domain constants, and
-fixtures as Android and pass the identical positive, negative, malformed-input, and
+The browser boundary is a post-v1 release requirement. Its future implementation MUST
+use the same locked Rust core source, provider choices, serialization, domain constants,
+and fixtures as Android and pass the identical positive, negative, malformed-input, and
 boundary vectors before Web cryptographic behavior is enabled.
 
 ## Browser execution
@@ -117,7 +122,7 @@ Security Notice communicates it without claiming Android-equivalent trust.
 
 ## Browser test matrix
 
-For every supported release baseline test:
+For any future supported Web release baseline test:
 
 - Wasm/worker startup and cryptographic test vectors;
 - IndexedDB persistence and non-extractable key structured cloning;

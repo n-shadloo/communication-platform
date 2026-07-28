@@ -9,9 +9,9 @@ placeholders and do not block engineering.
 
 ## Supported platforms
 
-- Android is a first-class native target.
-- The web client supports current common versions of Chrome, Firefox, Edge, and other
-  standards-compliant browsers.
+- Android is the only version-1 production target.
+- A Web client remains a post-v1 product direction; its existing design and foundation
+  are retained for later work but are not shipped, tested, or release-gated in version 1.
 - iOS, Windows, macOS, and Linux applications are out of scope.
 - The interface supports English and Persian from the first release, including RTL,
   mixed-direction message text, and localized dates.
@@ -48,7 +48,7 @@ is not called the production release.
 
 - The local database is the UI source of truth.
 - Cached Android conversations remain readable offline; sends enter a durable outbox.
-- The web client is primarily an online session. A suspended or closed tab is not
+- A future Web client is primarily an online session. A suspended or closed tab is not
   presented as capable of reliable message delivery.
 - A message received from REST and WebSocket is displayed once.
 - Multi-device delivery includes every live peer device and the sender's other devices.
@@ -65,7 +65,7 @@ is not called the production release.
 ## Non-functional requirements
 
 - Smooth scrolling and stable anchoring with long histories.
-- Responsive phone, tablet, and wide-web layouts.
+- Responsive phone and tablet layouts for Android.
 - Keyboard, pointer, touch, screen-reader, large-text, RTL, dark-mode, and high-contrast
   support.
 - Deterministic recovery after process death at every send/receive transaction boundary.
@@ -79,8 +79,8 @@ is not called the production release.
   always-on messaging socket or foreign push; delayed delivery is expected under Doze,
   force-stop, or OEM restrictions. A foreground service is used only while voice audio
   is actively connected.
-- A closed browser cannot maintain the application WebSocket. Messages remain in the
-  backend's durable device queue until the user returns.
-- A server able to replace the web bundle can attack future browser sessions. CSP and
-  reproducible artifacts reduce risk but cannot give the web client the same trust
+- A future closed browser cannot maintain the application WebSocket. Messages remain in
+  the backend's durable device queue until the user returns.
+- A server able to replace a future web bundle can attack browser sessions. CSP and
+  reproducible artifacts reduce risk but cannot give a future Web client the same trust
   boundary as a pinned native binary.

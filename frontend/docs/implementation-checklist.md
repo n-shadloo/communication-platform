@@ -2,12 +2,13 @@
 
 This is the live delivery checklist. Backend checkmarks mean an API/capability exists and
 is documented, not that the Flutter integration exists. Flutter documentation is now
-specified; pieces 01–06 now provide the Android/Web foundation, architecture skeleton,
-app-owned design system, responsive routed shell, guarded bootstrap, secure local
-storage, and the typed REST/authentication/WebSocket transport foundation. Later
-capabilities remain pending. Piece 07 now provides the shared Rust primitive foundation
-and Android FFI/isolate adapter; Web/Wasm crypto is explicitly deferred and remains
-fail-closed. Completion and test evidence are recorded below only after verification.
+specified; pieces 01–06 provide the Android foundation and a preserved post-v1 Web
+scaffold, architecture skeleton, app-owned design system, responsive routed shell,
+guarded bootstrap, secure local storage, and typed REST/authentication/WebSocket
+transport foundation. Later capabilities remain pending. Piece 07 now provides the
+shared Rust primitive foundation and Android FFI/isolate adapter; Web/Wasm crypto is
+post-v1, explicitly deferred, and remains fail-closed. Completion and test evidence are
+recorded below only after verification.
 
 Legend: **Ready** = implemented backend contract; **Client protocol** = intentionally
 opaque/client-owned; **Pending** = Flutter implementation not started.
@@ -17,8 +18,8 @@ opaque/client-owned; **Pending** = Flutter implementation not started.
 | Capability | Backend | Flutter |
 |---|---|---|
 | Health/reachability | Ready: `/api/v1/health` | Pieces 04/06 typed single-origin state machine and bounded Dio health adapter complete; provisioned staging trust integration remains a release gate |
-| Private CA/TLS deployment | Ready | Piece 04 Android network-security template, CA/primary+backup-pin interfaces, Web external-trust gate, and blocking failures complete; provisioned-device staging integration remains pending |
-| Android/Web project | Not applicable | Piece 01 scaffold complete; development/production Android flavors and Web entry points compile |
+| Private CA/TLS deployment | Ready | Piece 04 Android network-security template, CA/primary+backup-pin interfaces, and blocking failures complete; the preserved Web external-trust model is post-v1; provisioned-device staging integration remains pending |
+| Android project | Not applicable | Piece 01 scaffold complete; development/production Android flavors compile; the preserved Web entry point is post-v1 |
 | Architecture and protocol docs | Backend docs ready | Piece 02 feature-first Clean Architecture skeleton compiled with sealed typed failures, scoped Riverpod composition, and source-layout/inward-dependency tests; normative fixtures/security gates pending |
 | CI/reproducible offline builds | Backend ready | Local CI commands, SDK pin, and lockfile ready; isolated offline-cache rehearsal pending |
 | Redacted diagnostics | Backend ready | Piece 06 typed payload-free network diagnostic events and redaction tests complete; user-initiated local export remains piece 21 |
@@ -48,7 +49,7 @@ opaque/client-owned; **Pending** = Flutter implementation not started.
 | Batched fan-out/stale devices | Ready | <=256 deterministic batching specified; implementation pending |
 | Drain/ack | Ready | Pending crash-safe pipeline |
 | Seven-day TTL / `pruned_through` gaps | Ready signal | Pending blocking detection and fresh-Welcome recovery |
-| WebSocket live delivery | Ready | Piece 06 authenticated native/Web gateway, bounded frame parsing, close-code mapping, and reconnect hooks complete; durable inbox/business-state integration remains pending |
+| WebSocket live delivery | Ready | Piece 06 authenticated Android gateway, bounded frame parsing, close-code mapping, and reconnect hooks complete; the preserved Web gateway is post-v1; durable inbox/business-state integration remains pending |
 | DM identity/session | Client protocol | Pending hybrid PQXDH/Double Ratchet |
 | Text messages | Client protocol | Pending |
 | Replies/edits/deletes | Client protocol | Pending |
@@ -57,7 +58,7 @@ opaque/client-owned; **Pending** = Flutter implementation not started.
 | Private contact blocking | No server ACL by design | Protocol specified; implementation pending |
 | Multi-device self-sync/history | Envelope primitives ready; no history API | Pending authorized device-to-device transfer |
 | Saved Messages | Client protocol | Pending |
-| Local search | No plaintext server search by design | Pending Android/web indexes |
+| Local search | No plaintext server search by design | Pending Android encrypted index |
 
 ## Groups
 
@@ -96,7 +97,7 @@ opaque/client-owned; **Pending** = Flutter implementation not started.
 | Audio E2EE/key distribution | Server deliberately excluded | Pending MLS exporter/E2EE gate |
 | Ephemeral room text | Volatile relay ready | Pending encrypted memory-only UI |
 | Android active-call service | Not applicable | Pending |
-| Web E2EE worker | Not applicable | Pending build/compatibility spike |
+| Web E2EE worker | Not applicable | Post-v1 backlog; not part of the Android release |
 
 ## UI
 
@@ -117,56 +118,67 @@ opaque/client-owned; **Pending** = Flutter implementation not started.
 | Android normal resume/drain | Durable queue supports it | Pending |
 | Android background polling | Seven-day durable queue supports it | Pending WorkManager polling/gap handling |
 | Android local notifications | No foreign push by design | Pending |
-| Web persistent encrypted device | Device API supports it | Piece 05 ciphertext-only Drift persistence, non-extractable WebCrypto wrapping key in IndexedDB, authenticated wrapped storage key, unsafe-storage rejection, memory clearing hooks, and key-loss/tamper wipe complete; supported-browser persistence matrix remains a release gate |
-| Web open-tab realtime | WebSocket auth supports it | Piece 06 origin-derived `wss` gateway and first-frame browser authentication complete; page lifecycle/drain integration remains pending |
-| Web shared crypto Wasm/worker | Client protocol | Deferred after the Android-only piece-07 scope; crypto-dependent Web behavior remains fail-closed with no Dart/JavaScript fallback, and same-source Android/Web vectors remain pending |
+| Web persistent encrypted device | Device API supports it | Preserved piece-05 ciphertext-only Drift/WebCrypto foundation; post-v1 only, with supported-browser persistence matrix deferred |
+| Web open-tab realtime | WebSocket auth supports it | Preserved piece-06 origin-derived `wss` gateway; post-v1 only, with page lifecycle/drain integration deferred |
+| Web shared crypto Wasm/worker | Client protocol | Post-v1 backlog; crypto-dependent Web behavior remains fail-closed with no Dart/JavaScript fallback |
 | Closed-browser notification | Not supported without push by design | Explicitly out of scope |
 | Direct signed APK distribution | Self-hosted operation supports it | Pending release pipeline |
-| Self-hosted hardened web bundle | nginx deployment base exists | Pending build/header config |
+| Self-hosted hardened web bundle | nginx deployment base exists | Post-v1 backlog; not part of the Android release |
 
 ## Required spikes before broad implementation
 
 - [x] Piece 07 shared Rust primitive core, stable native ABI, Android packaging,
   isolate lifecycle, redaction, malformed-input, boundary, and packaged-device smoke
-  checks pass. This Android-only item does not satisfy the cross-target item below.
-- [ ] Deterministic-CBOR CDDL, `EnvelopeV1` encoders, and Android/Web golden byte/error
+  checks pass for the Android-only version-1 target.
+- [ ] Deterministic-CBOR CDDL, `EnvelopeV1` encoders, and Android golden byte/error
   fixtures are generated from one versioned protocol package.
-- [ ] Shared crypto core builds and passes identical vectors on Android and browser Wasm.
-- [ ] Android `mlkem_native` and reviewed Web Wasm ML-KEM pass identical FIPS/PQXDH
-  vectors; no educational/pure-Dart ML-KEM is present.
+- [ ] Shared crypto core builds and passes all required vectors on Android.
+- [ ] Android `mlkem_native` passes identical FIPS/PQXDH vectors; no educational or
+  pure-Dart ML-KEM is present.
 - [ ] Hybrid PQXDH/Double Ratchet composition is independently reviewed.
 - [ ] The selected PQ MLS candidate receives an IANA ID and maintained
-  OpenMLS/provider support; 4096/16384 wrappers, last-resort behavior, Android/Wasm
-  persistence, and fork handling then pass interoperability tests.
+  OpenMLS/provider support; 4096/16384 wrappers, last-resort behavior, Android
+  persistence, and fork handling then pass interoperability tests. Web persistence is
+  post-v1.
 - [ ] First/later-device two-phase enrollment is crash-safe and resumable; unsigned
   intermediate devices remain withheld until the prekey cross-signature follow-up.
-- [ ] Android and Web reproduce the backend `cross_sig`, `master_sig`, `spk_sig`, and
+- [ ] Android reproduces the backend `cross_sig`, `master_sig`, `spk_sig`, and
   `pq_spk_sig` golden vectors, including optional fields and the 64-byte `ik_pub` layout.
 - [ ] Device-log chain verification, ETag refresh, encrypted head gossip, and fork alarms
   pass malicious-server tests.
-- [ ] LiveKit Flutter E2EE meets the SFrame/media threat-model requirement on both targets.
-- [x] Piece 05 Drift foundation: SQLCipher Android plus ciphertext-only Web schema,
+- [ ] Android LiveKit Flutter E2EE meets the SFrame/media threat-model requirement.
+- [x] Piece 05 Drift foundation: SQLCipher Android plus a preserved ciphertext-only Web
+  schema,
   transactional migrations/repositories, constraints, reactive Riverpod projections,
-  restart/privacy checks, and key-loss/tamper/logout/revocation wipe tests pass. The
-  physical-device and supported-browser release matrix remains tracked below.
+  restart/privacy checks, and key-loss/tamper/logout/revocation wipe tests pass for the
+  Android foundation. The Web persistence matrix is post-v1.
 - [x] Piece 06 networking foundation: one bounded typed Dio client, contract DTO
   boundaries, safe replay/cancellation/timeout policy, payload-free diagnostics,
-  proactive single-flight token rotation, and authenticated native/Web WebSocket
+  proactive single-flight token rotation, and authenticated native Android WebSocket
   gateway pass mock-adapter, race, size, redaction, and close-code tests.
 - [ ] Flyer builders pass long-history, scroll, RTL, accessibility, and media tests.
 - [ ] Android WorkManager polling is tested under Doze/standby/force-stop; only active
   voice uses a foreground service.
-- [ ] Private CA/SPKI and strict WebSocket origin behavior work in staging.
+- [ ] Private CA/SPKI behavior works in Android staging. Strict WebSocket origin behavior
+  is post-v1 Web work.
 - [ ] Final product name/logo/app icon replace the neutral placeholder and pass light,
-  dark, small-size, contrast, and Android/web asset review before release.
+  dark, small-size, contrast, and Android asset review before release.
 
 ## Production completion gates
 
 - [ ] Every pending row above is implemented or explicitly removed by an approved ADR.
 - [ ] Backend contract suite passes against production-equivalent infrastructure.
-- [ ] Full multi-device Android/Web E2E matrix passes.
+- [ ] Full multi-device Android E2E matrix passes.
 - [ ] Offline/international-disconnection rehearsal passes with zero foreign requests.
 - [ ] Accessibility, RTL, performance, migration, battery, and voice gates pass.
 - [ ] Independent security review is complete and blocking findings are closed.
 - [ ] Reproducible artifacts, SBOM, signatures, hashes, update, and rollback runbooks are
   archived.
+
+## Post-v1 Web backlog
+
+The following remain intentionally outside the version-1 release: browser encrypted
+storage compatibility, WebSocket lifecycle, shared Rust Wasm/worker packaging, browser
+crypto vectors, Web E2EE media, browser E2E, CSP/SRI/headers, and self-hosted Web
+distribution. They remain fail-closed and must be reopened by an explicit ADR before
+being treated as release work.
