@@ -26,6 +26,7 @@ void main() {
       'account_session',
       'secure_secrets',
       'account_identity',
+      'enrollment_intent',
       'users',
       'profiles',
       'devices',

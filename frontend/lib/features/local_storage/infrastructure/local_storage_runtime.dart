@@ -26,6 +26,7 @@ final class SecureLocalStorageRuntime {
   final LocalArtifactCleanupPort _cleanup;
   final LocalDatabaseExecutorFactory _executorFactory;
   LocalDatabase? _database;
+  Future<Result<LocalDatabase>>? _openInFlight;
 
   LocalDatabase? get openedDatabase => _database;
 
@@ -34,7 +35,20 @@ final class SecureLocalStorageRuntime {
     if (existing != null) {
       return Result.success(existing);
     }
+    final inFlight = _openInFlight;
+    if (inFlight != null) {
+      return inFlight;
+    }
+    final opening = _open();
+    _openInFlight = opening;
+    return opening.whenComplete(() {
+      if (identical(_openInFlight, opening)) {
+        _openInFlight = null;
+      }
+    });
+  }
 
+  Future<Result<LocalDatabase>> _open() async {
     final unlock = await _protectedStorage.loadOrCreateStorageKey();
     switch (unlock.status) {
       case PlatformStorageKeyStatus.ready:

@@ -32,6 +32,7 @@ migrate_working_dir/
 .pub/
 /build/
 /coverage/
+/native/crypto_core/target/
 
 # Symbolication related
 app.*.symbols
@@ -49,3 +50,6 @@ app.*.map.json
 /android/app/src/development/res/xml/network_security_config.xml
 /android/app/src/production/res/raw/provisioned_private_ca.*
 /android/app/src/production/res/xml/network_security_config.xml
+
+/.agents
+/docs/implementation-prompts.md

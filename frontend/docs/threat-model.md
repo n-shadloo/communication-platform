@@ -69,10 +69,15 @@ Dependencies are pinned, checksummed, cached for offline builds, license-reviewe
 scanned. Crypto debug features and sensitive logging features are forbidden in release
 builds.
 
+Version 1 implements only the shared Rust primitive foundation and Android FFI/isolate
+adapter. The Web/Wasm boundary is deferred to post-v1 and crypto-dependent Web behavior
+remains fail-closed; Android completion is sufficient for the Android release but is not
+evidence for a future Web trust boundary or its browser vectors.
+
 ## Required controls
 
-- TLS 1.3, provisioned private CA, native SPKI pins with a backup pin, and strict web
-  origin controls.
+- TLS 1.3, provisioned private CA, native SPKI pins with a backup pin, and strict
+  Android origin/network controls. Strict Web origin controls are post-v1.
 - Authenticated end-to-end encryption with domain-separated associated data.
 - Safety-number verification and prominent identity-change state.
 - Cross-signing of the exact canonical device-bundle key bytes against an out-of-band
@@ -84,7 +89,7 @@ builds.
 - Explicit `pruned_through` mailbox-gap detection and fresh-Welcome group recovery.
 - Limits on message size, nesting, skipped ratchet keys, pending epochs, attachments,
   retries, and decompression.
-- Encrypted local Android database; no persistent web plaintext.
+- Encrypted local Android database; a future Web client must not persist plaintext.
 - Redacted local diagnostics and hidden notification previews by default.
 - Clipboard warnings/expiry where supported for recovery secrets.
 - Screenshots blocked on Android screens that expose recovery secrets or raw keys.
@@ -105,11 +110,12 @@ client MUST not claim otherwise.
 
 - No handwritten cryptographic primitive.
 - No shipping an unreviewed cross-platform protocol implementation.
-- All official and project test vectors pass on Android and every supported browser.
+- All official and project test vectors pass on Android for the version-1 release.
 - Fuzzing covers binary decoders and state-machine transitions.
 - Dependency audit and SBOM are clean or formally accepted.
-- An independent reviewer signs off the protocol, implementation boundary, key storage,
-  web limitations, and release configuration.
+- An independent reviewer signs off the protocol, implementation boundary, Android key
+  storage, and release configuration. Web limitations and browser configuration are
+  reviewed only when the post-v1 Web release is reopened.
 
 ## Primary references
 

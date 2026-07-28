@@ -35,12 +35,15 @@ after registration gives it full scope. Until the follow-up succeeds, peers see
 
 The Devices API and its [golden vectors](../../backend/devices/vectors/README.md) now
 freeze the four canonical signature encodings and the 64-byte `ik_pub` layout (Ed25519
-followed by X25519). Android and Web implementations MUST reproduce those vectors
-byte-for-byte.
+followed by X25519). The Android version-1 implementation MUST reproduce those vectors
+byte-for-byte; a future Web implementation must reproduce the same bytes before Web
+release.
 
 One client-side security gate remains: the backend requires a reviewed PQ MLS
 ciphersuite for groups. The frontend-owned [PQ MLS profile](mls-profile.md) selects the
 IETF hybrid ML-KEM-768/X25519 candidate, but its ciphersuite identifier is still
-unassigned and maintained Android/Web library support and interoperability evidence are
-not yet available. Group production release remains blocked by that profile's gates;
+unassigned and maintained Android library support and interoperability evidence are not
+yet available. Android group production release remains blocked by that profile's
+Android gates; Web gates are post-v1. The client MUST NOT invent an identifier or
+silently use a classical MLS suite.
 the client MUST NOT invent an identifier or silently use a classical MLS suite.

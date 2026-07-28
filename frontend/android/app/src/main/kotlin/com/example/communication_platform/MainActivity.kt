@@ -1,11 +1,17 @@
 package com.example.communication_platform
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyInfo
 import android.security.keystore.KeyProperties
-import io.flutter.embedding.engine.FlutterEngine
+import android.view.WindowManager
 import io.flutter.embedding.android.FlutterActivity
+import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 import java.io.File
 import java.io.FileOutputStream
@@ -44,9 +50,45 @@ class MainActivity : FlutterActivity() {
                         erasePersistentArtifacts()
                         result.success(null)
                     }
+                    "setSensitiveScreen" -> {
+                        val enabled = call.argument<Boolean>("enabled") ?: true
+                        if (enabled) {
+                            window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+                        } else {
+                            window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+                        }
+                        result.success(null)
+                    }
+                    "copySensitiveText" -> {
+                        val text = call.argument<String>("text")
+                        if (text == null) {
+                            result.error("invalid_argument", null, null)
+                        } else {
+                            copySensitiveText(
+                                text,
+                                call.argument<Int>("clearAfterSeconds") ?: 60,
+                            )
+                            result.success(null)
+                        }
+                    }
                     else -> result.notImplemented()
                 }
             }
+    }
+
+    private fun copySensitiveText(text: String, clearAfterSeconds: Int) {
+        val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        val label = "communication-platform-recovery"
+        clipboard.setPrimaryClip(ClipData.newPlainText(label, text))
+        Handler(Looper.getMainLooper()).postDelayed({
+            if (clipboard.primaryClipDescription?.label?.toString() == label) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                    clipboard.clearPrimaryClip()
+                } else {
+                    clipboard.setPrimaryClip(ClipData.newPlainText("", ""))
+                }
+            }
+        }, clearAfterSeconds.coerceIn(1, 300) * 1000L)
     }
 
     private fun loadOrCreateStorageKey(): Map<String, Any> {

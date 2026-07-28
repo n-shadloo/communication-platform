@@ -4,7 +4,10 @@
 
 These instructions apply to everything under `frontend/`.
 
-- Implement the Flutter client for Android and Web only.
+- Implement version 1 of the Flutter client for Android only. The existing Web
+  scaffold and non-crypto foundation may remain for post-v1 work, but Web is not a
+  version-1 release target or acceptance gate. Crypto-dependent Web behavior remains
+  fail-closed until a later approved Web/Wasm milestone.
 - Treat every file under `backend/` as read-only. Backend code and documentation may be
   inspected, but MUST NOT be edited from a frontend implementation task.
 - Work on one numbered piece from `docs/implementation-prompts.md` at a time. Do not
@@ -78,7 +81,9 @@ endpoint, wire format, or weaker security behavior.
   signature, identity, device-log, version, replay, and authenticated-encryption check
   in the client.
 - Dart may orchestrate cryptographic operations but MUST NOT implement cryptographic
-  primitives or secret zeroization. Use the reviewed shared Rust core through FFI/Wasm.
+  primitives or secret zeroization. Version 1 uses the reviewed shared Rust core
+  through Android FFI; a future Web release must use the same core through a reviewed
+  Wasm boundary.
 - Never add classical-only fallback for PQXDH or PQ MLS, placeholder signatures,
   private-use production ciphersuite identifiers, TOFU messaging, TLS bypasses, or
   arbitrary server selection.
@@ -86,8 +91,9 @@ endpoint, wire format, or weaker security behavior.
   is evidenced. Do not generate or upload production MLS KeyPackages before then.
 - Never log plaintext, credentials, stable identifiers, keys, recovery secrets,
   ciphertext, attachment capabilities, or decoded tokens. Test redaction.
-- Android and Web protection are different threat boundaries. Do not claim browser
-  storage offers Android-equivalent secrecy.
+- Android and future Web protection are different threat boundaries. Do not claim
+  browser storage offers Android-equivalent secrecy or imply that Web is part of the
+  version-1 release.
 - Preserve operation without international internet: no Google/Firebase dependency,
   CDN, remote font, telemetry, public connectivity probe, or other foreign runtime call.
 
@@ -114,8 +120,9 @@ available frontend-wide gates:
 1. format changed Dart/Rust files;
 2. `flutter analyze`;
 3. Flutter unit/widget tests;
-4. relevant Rust tests and Android/Web interoperability fixtures;
-5. Web build/tests and Android build/tests when the piece affects those targets; and
+4. relevant Rust tests and Android fixtures;
+5. Android build/tests when the piece affects the version-1 target. Web build/tests
+   are post-v1 work unless a later approved Web milestone explicitly reopens them; and
 6. `git diff --check` and a final scope review.
 
 If a required tool or dependency is unavailable, report the exact unrun command and

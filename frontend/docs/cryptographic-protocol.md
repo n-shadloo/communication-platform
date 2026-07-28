@@ -9,30 +9,43 @@ declared. Independent review is a production release gate.
 
 ## Implementation boundary
 
-A shared memory-safe crypto core MUST expose a narrow FFI/Wasm API to Flutter. Dart code
-may orchestrate operations but MUST NOT implement PQXDH, ML-KEM, ratchets, MLS,
-signatures, KDFs,
+A shared memory-safe crypto core MUST expose a narrow native FFI API to the version-1
+Android Flutter client. Dart code may orchestrate operations but MUST NOT implement
+PQXDH, ML-KEM, ratchets, MLS, signatures, KDFs,
 AEAD, secretstream, or secret zeroization.
 
-The preferred implementation direction is Rust:
+The selected foundation implementation is Rust:
 
-- `mlkem_native` on Android, backed by the formally verified FIPS 203
-  `mlkem-native` implementation; Web requires a reviewed Wasm build of the same
-  implementation and identical vectors;
-- `cryptography` or `pinenacl` for Ed25519/X25519, composed by a reviewed hybrid PQXDH
-  implementation with Double Ratchet;
-- OpenMLS for RFC 9420 group state with the candidate and release gates frozen in
-  [Post-quantum MLS profile](mls-profile.md);
-- reviewed primitives for canonical CBOR, Argon2id, and XChaCha20-Poly1305;
-- Android native libraries and a browser Wasm build produced from the same source and
-  test vectors.
+- `mlkem-native` v1.2.0 at commit
+  `0ba906cb14b1c241476134d7403a811b382ca498` provides ML-KEM-768 through its
+  deterministic API, with seeds supplied by the Rust-owned CSPRNG;
+- pinned RustCrypto crates provide Ed25519, X25519, Argon2id,
+  XChaCha20-Poly1305, SHA-2, and HKDF; `minicbor` is used behind typed,
+  strict deterministic-CBOR encoders/decoders;
+- libsodium 1.0.22, through `libsodium-sys-stable` 1.24.0, provides
+  `secretstream_xchacha20poly1305`;
+- OpenMLS remains the preferred future owner of RFC 9420 group state, subject to
+  the candidate and release gates frozen in
+  [Post-quantum MLS profile](mls-profile.md); and
+- a future browser Wasm library must be produced from the same locked Rust source,
+  provider choices, serialization, and test vectors as Android.
 
 Signal's official `libsignal` supports Android but does not present a supported browser
-runtime contract. OpenMLS builds for Android and Wasm but PQ-suite availability and those
-targets require validation. Therefore dependency selection remains a mandatory
-implementation spike; inability to produce one interoperable reviewed Android/Wasm core
-blocks release rather than causing pure-Dart ML-KEM, classical-only messaging, or ad-hoc
-cryptography.
+runtime contract. OpenMLS and the selected providers require separate Web validation.
+Therefore dependency selection remains a mandatory implementation spike for any future
+Web release; inability to produce one interoperable reviewed Android/Wasm core blocks
+that Web release rather than causing pure-Dart ML-KEM, classical-only messaging, or
+ad-hoc cryptography. It does not block the Android-only version-1 release.
+
+### Piece-07 implementation staging
+
+Piece 07 establishes the shared Rust source and Android native FFI/isolate boundary only.
+The version-1 release is Android-only. The Web/Wasm adapter and browser worker are
+post-v1 work; crypto-dependent Web behavior remains fail-closed, with no Dart or
+JavaScript primitive fallback. A future reviewed Web adapter MUST consume the same
+locked core source, provider choices, serialization, domain constants, and fixtures and
+must satisfy the Web release gates before Web cryptographic behavior is enabled.
+Android-only completion is not a protocol downgrade or an alternate suite.
 
 ## Protocol suite
 
@@ -122,6 +135,61 @@ cross-signature, then appends the device-log change. Until the follow-up succeed
 device remains unverified and sensitive messaging is withheld. A placeholder signature
 is never valid.
 
+### Version-1 enrollment bindings
+
+The Android Rust core owns all enrollment private state. `CPDVV001` and `CPIDV001` are
+opaque native state-package versions used at the FFI/storage boundary; Dart may project
+only the bounded public registration fields and one-time recovery-display material. It
+must not interpret, construct, sign with, or log the private tail. Version 1 creates
+eight classical and four ML-KEM one-time prekeys before persisting the registration
+intent.
+
+The recovery secret contains 32 random bytes followed by the first two bytes of
+`SHA-256(entropy)`. It is Crockford Base32 encoded in uppercase groups of five
+characters separated by hyphens. Restore ignores ASCII whitespace and hyphens,
+uppercases input, accepts Crockford's `O`/`I`/`L` aliases, validates the checksum, and
+then uses the canonical grouped encoding as the Argon2id password. Checksum, decode,
+and AEAD failures all produce the same local wrong-secret result.
+
+`CPKBV001` is the 4,096-byte version-1 identity-backup bucket:
+
+```text
+"CPKBV001"
+|| u32be(memory_kib = 65536)
+|| u32be(iterations = 3)
+|| u32be(parallelism = 4)
+|| salt[16]
+|| xchacha_nonce[24]
+|| u32be(ciphertext_length = 136)
+|| ciphertext[136]
+|| random_padding_to_4096
+```
+
+The 120-byte plaintext is `"CPIPV001" || user_uuid[16] || master_sk[32] ||
+self_signing_sk[32] || user_signing_sk[32]`. XChaCha20-Poly1305 authenticates it with
+AAD `"chat:v1:identity-backup" || exact_header[64] || user_uuid[16]`. Restore rejects
+unknown parameters and non-bucket input before running Argon2id; it never silently
+lowers the KDF cost. The recovery secret and backup copy embedded for initial display
+are removed from the native identity package immediately after explicit confirmation.
+
+The canonical live-device set used by the device log is
+`"chat:v1:device-set" || u32be(device_count)` followed by devices sorted by lowercase
+UUID text. Each device contributes `uuid_raw[16]`, a 4-byte-length-framed 64-byte
+`ik_pub`, `u32be(registration_id)`, a framed `cross_sig` (zero length only while
+unsigned), and `u32be(bundle_version)` (zero only while unsigned). Invalid lengths or a
+half-present cross-signature/version pair fail closed.
+
+`CPDLV001` device-log records use the 256-byte bucket. The signed fields are the raw
+user UUID, predicted `u64be` sequence, previous 32-byte record hash (zero for the first
+record), `SHA-256(canonical_live_device_set)`, identity version, and coarse UTC Unix day.
+Each field is 4-byte-length framed after the
+`"chat:v1:device-log-record"` domain. The stored record is the magic, format byte 1,
+sequence, day, identity version, raw user UUID, previous hash, live-set hash, 64-byte
+self-signing Ed25519 signature, and random padding. Its chain hash is SHA-256 over the
+entire 256-byte record. Clients persist the exact predicted record before append and
+accept a lost response only by finding that exact record at the predicted outer
+sequence.
+
 ## Direct messages and per-device channels
 
 Hybrid PQXDH combines X25519 and ML-KEM-768 claimed prekey material and feeds the reviewed
@@ -193,6 +261,16 @@ bundle chains to the already verified master key and extends the device log. A m
 change, invalid device cross-signature, or device-log fork blocks sending and requires
 explicit out-of-band resolution.
 
+Version 1 computes the 32-byte safety fingerprint as SHA-256 over
+`"chat:v1:safety-fingerprint"` followed by 4-byte-length-framed
+`(user_uuid_raw[16], master_pub[32])` pairs, ordered by raw user UUID. The QR payload is
+`CP-SAFETY-V1:` followed by unpadded base64url of those exact 32 bytes; the numeric and
+emoji forms are alternative presentations of that same digest. Confirmation signs
+`"chat:v1:user-signing-attestation" || frame(local_user_uuid_raw) ||
+frame(peer_user_uuid_raw) || frame(peer_master_pub)` with the local user-signing key.
+The stored attestation is reverified before a persisted contact can return to verified
+state; first-seen keys never authorize messaging.
+
 ## Device-list log
 
 Every device-set change and account-identity rotation produces a padded 256/1,024-byte
@@ -220,9 +298,8 @@ history.
 
 Argon2id derives a wrapping key from the recovery secret and a random salt. Version 1 uses
 a 16-byte salt and 32-byte output, with a floor of 64 MiB memory, three iterations, and
-parallelism four on both targets. Implementations without parallel Wasm execution still
-process the four lanes correctly rather than changing the stored parameter. Version 1
-writers use those exact portable parameters so a backup created on one supported platform
+parallelism four on Android. A future Web implementation must process the same four lanes
+without changing the stored parameter so a backup created on one supported platform
 cannot become unrestorable on the other. Stronger parameters require a later protocol
 revision plus compatibility measurements across the supported device floor. The backup
 blob stores its format version, KDF parameters, salt, nonce, and cross-signing identity
@@ -250,11 +327,18 @@ bucket is intentionally small. Keys for different metadata classes are domain-se
 
 The backend directory username is the only presentation identity available before an
 authenticated profile key arrives. During that bootstrap state the UI shows the username
-and a local deterministic placeholder avatar derived from a domain-separated hash of the
-user ID. It does not show unverified cached display names. A pairwise session distributes
+and a local deterministic placeholder avatar derived from
+`"chat:v1:placeholder-avatar:" || lowercase(username)`. It does not show unverified
+cached display names. A pairwise session distributes
 `profile.publish` to a DM peer; an MLS-authenticated profile announcement distributes it
 to group peers. Only a successfully authenticated profile with a live-device signer may
 replace the fallback.
+
+Until pairwise transport is implemented, development builds may use the explicitly
+non-production `ProfileProtectionPort` and `ProfileKeyDistributionPort` fake adapters.
+Production composition remains fail-closed. The fake envelope exists only to exercise
+profile versioning, cache authentication, presentation gating, and distribution hooks;
+it is not cryptographic acceptance evidence.
 
 Fixed-bucket metadata uses `MetadataBlobV1`:
 

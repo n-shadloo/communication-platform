@@ -172,8 +172,9 @@ Concurrent MLS commits can fork. The application serializes its own membership m
 per group and never emits dependent application data until the resulting MLS state and
 control event commit atomically. A received sibling commit is quarantined rather than
 resolved in Dart or UI code. The reviewed shared crypto core MUST supply the canonical
-fork/re-proposal algorithm and prove convergence with Android/Web interoperability and
-delayed-delivery tests before group membership mutation is release-enabled. Until that
+fork/re-proposal algorithm and prove convergence with Android interoperability and
+delayed-delivery tests before Android group membership mutation is release-enabled. A
+future Web release additionally requires cross-target convergence evidence. Until that
 gate passes, the safe behavior is to block the mutation with "membership updating"; the
 client never guesses, silently chooses arrival order, or combines incompatible rosters.
 

@@ -1,0 +1,49 @@
+[package]
+name = "communication-crypto-core"
+version = "0.1.0"
+edition = "2024"
+publish = false
+license = "Proprietary"
+rust-version = "1.97.1"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+argon2 = { version = "=0.5.3", default-features = false, features = ["alloc", "zeroize"] }
+chacha20poly1305 = { version = "=0.11.0", default-features = false, features = ["alloc", "zeroize"] }
+ed25519-dalek = { version = "=3.0.0", default-features = false, features = ["fast", "zeroize"] }
+getrandom = "=0.4.3"
+hkdf = "=0.13.0"
+# `hkdf` uses HMAC transitively; this direct pin deliberately enables
+# zeroization for its keyed state through Cargo feature unification.
+hmac = { version = "=0.13.0", default-features = false, features = ["zeroize"] }
+libsodium-sys = { package = "libsodium-sys-stable", version = "=1.24.0", default-features = false }
+minicbor = { version = "=2.3.0", default-features = false, features = ["alloc", "derive"] }
+sha2 = { version = "=0.11.0", default-features = false, features = ["zeroize"] }
+serde_json = "=1.0.149"
+subtle = "=2.6.1"
+x25519-dalek = { version = "=3.0.0", default-features = false, features = ["precomputed-tables", "static_secrets", "zeroize"] }
+zeroize = { version = "=1.9.0", features = ["derive"] }
+
+[build-dependencies]
+cc = "=1.2.59"
+minisign-verify = "=0.2.5"
+serde_json = "=1.0.149"
+
+[dev-dependencies]
+hex-literal = "=1.1.0"
+
+[profile.release]
+codegen-units = 1
+lto = "thin"
+overflow-checks = true
+panic = "unwind"
+strip = "symbols"
+
+[lints.rust]
+unsafe_op_in_unsafe_fn = "deny"
+
+[lints.clippy]
+all = "deny"
+pedantic = "deny"

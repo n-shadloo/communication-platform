@@ -15,7 +15,7 @@ AES key, preferring hardware-backed storage when available. Exclude the database
 wrapping material, attachments, and key files from Android backup. Plaintext may exist
 inside the unlocked encrypted database and process memory, never in ordinary files.
 
-### Web
+### Web (post-v1)
 
 Persist device state and content only as encrypted records. Store a non-extractable
 WebCrypto wrapping key in IndexedDB when supported and wrap the local storage key. Drift
@@ -30,6 +30,7 @@ Names are conceptual; migrations may refine physical layout without changing own
 | Table | Purpose |
 |---|---|
 | `account_session` | Current user/device IDs, scope, token metadata, server profile |
+| `enrollment_intents` | Resumable first/later-device phase, generated opaque device/identity state, assigned device ID, backup, and exact pending device-log append |
 | `secure_secrets` | Wrapped cross-signing/device/PQ/storage key handles; never raw loggable bytes |
 | `account_identity` | Verified master/self/user-signing public state, backup version, recovery status |
 | `users` | Activated directory entries and local presentation state |
@@ -79,6 +80,24 @@ creates receipts, advances the contiguous sequence checkpoint when allowed, and 
 the envelope ready to acknowledge. The ack is
 sent only after commit. A crash before ack causes a safe duplicate.
 
+### Device enrollment
+
+Before the registration POST, one encrypted-database transaction persists the flow,
+phase, public-key fingerprint, and complete Rust-owned device key package. The POST is
+never automatically replayed after an in-flight process death or transport response
+loss. Its assigned device ID, full-scope refresh material, and `registeredUnsigned`
+journal phase commit in one transaction; an in-flight row observed after restart is
+converted to the explicit ambiguous-outcome reconciliation phase.
+
+Every later phase is persisted before its network side effect can be retried. In
+particular, the exact device-log record and predicted sequence are durable before
+append. Completion atomically moves the opaque device and cross-signing identity
+packages to `secure_secrets`, writes the verified local public projections, deletes the
+enrollment row and new-account marker, and only then releases the route-level messaging
+withhold. The entered recovery secret is never a column. The first-device display
+secret exists only inside the encrypted, resumable identity package until explicit
+confirmation, after which display material is sanitized and overwritten.
+
 ### MLS state
 
 New MLS state, control event, membership projection, and processed-event marker commit
@@ -106,6 +125,6 @@ state was not persisted.
 
 ## Search
 
-Android maintains a local index inside the encrypted database. Web builds an in-memory
-index from decrypted session content. Search input/results never leave the device. The UI
-states that results cover only history available on this device.
+Android maintains a local index inside the encrypted database. A future Web build uses an
+in-memory index from decrypted session content. Search input/results never leave the
+device. The UI states that results cover only history available on this device.

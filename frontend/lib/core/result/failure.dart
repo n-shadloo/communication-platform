@@ -28,7 +28,13 @@ final class TransportFailure extends Failure {
   FailureCategory get category => FailureCategory.transport;
 }
 
-enum TransportFailureKind { offline, timeout, connectionRejected }
+enum TransportFailureKind {
+  offline,
+  timeout,
+  connectionRejected,
+  responseTooLarge,
+  requestTooLarge,
+}
 
 final class AuthenticationFailure extends Failure {
   const AuthenticationFailure(this.kind);
@@ -65,6 +71,69 @@ enum SecurityFailureKind {
   unauthenticatedInput,
   integrityCheckFailed,
   policyBlocked,
+  malformedServerResponse,
+}
+
+/// Stable error codes exported by the version-1 native crypto ABI.
+///
+/// The code is safe to inspect, but no native error string, input, key, or
+/// ciphertext is retained by this failure.
+enum CryptoCoreFailureCode {
+  invalidArgument(1),
+  inputTooLarge(2),
+  outputTooSmall(3),
+  malformedInput(4),
+  invalidHandle(5),
+  wrongHandleType(6),
+  authenticationFailed(7),
+  unsupportedVersion(8),
+  unsupportedOperation(9),
+  resourceExhausted(10),
+  entropyUnavailable(11),
+  stateViolation(12),
+  internalFailure(13),
+  panicContained(14);
+
+  const CryptoCoreFailureCode(this.wireValue);
+
+  final int wireValue;
+
+  static CryptoCoreFailureCode? fromWireValue(int wireValue) {
+    for (final code in values) {
+      if (code.wireValue == wireValue) {
+        return code;
+      }
+    }
+    return null;
+  }
+}
+
+final class CryptoCoreFailure extends Failure {
+  const CryptoCoreFailure(this.code);
+
+  final CryptoCoreFailureCode code;
+
+  @override
+  FailureCategory get category => switch (code) {
+    CryptoCoreFailureCode.invalidArgument ||
+    CryptoCoreFailureCode.inputTooLarge ||
+    CryptoCoreFailureCode.outputTooSmall ||
+    CryptoCoreFailureCode.malformedInput ||
+    CryptoCoreFailureCode.resourceExhausted => FailureCategory.validation,
+    CryptoCoreFailureCode.unsupportedVersion ||
+    CryptoCoreFailureCode.unsupportedOperation =>
+      FailureCategory.unsupportedProtocol,
+    CryptoCoreFailureCode.invalidHandle ||
+    CryptoCoreFailureCode.wrongHandleType ||
+    CryptoCoreFailureCode.authenticationFailed ||
+    CryptoCoreFailureCode.entropyUnavailable ||
+    CryptoCoreFailureCode.stateViolation ||
+    CryptoCoreFailureCode.internalFailure ||
+    CryptoCoreFailureCode.panicContained => FailureCategory.security,
+  };
+
+  @override
+  String toString() => 'CryptoCoreFailure(code: ${code.name})';
 }
 
 final class StorageFailure extends Failure {
@@ -99,3 +168,63 @@ final class CancellationFailure extends Failure {
 }
 
 enum CancellationFailureKind { requestedByUser, lifecycleInterrupted }
+
+/// Stable backend reasons. Arbitrary backend `detail` values never cross this type.
+enum BackendFailureCode {
+  invalidRequest,
+  badRequest,
+  usernameTaken,
+  invalidCredentials,
+  accountInactive,
+  invalidToken,
+  tokenNotValid,
+  tokenRevoked,
+  scopeForbidden,
+  deviceScopeRequired,
+  forbidden,
+  notFound,
+  badBucket,
+  staleVersion,
+  identityRequired,
+  deviceLimit,
+  prekeyLimit,
+  keypackageLimit,
+  quotaExceeded,
+  voiceUnconfigured,
+  rateLimited,
+  unknown,
+}
+
+/// A documented backend error mapped to a safe, exhaustive client value.
+final class BackendFailure extends Failure {
+  const BackendFailure(this.code, {this.retryAfter});
+
+  final BackendFailureCode code;
+  final Duration? retryAfter;
+
+  @override
+  FailureCategory get category => switch (code) {
+    BackendFailureCode.invalidCredentials ||
+    BackendFailureCode.accountInactive ||
+    BackendFailureCode.invalidToken ||
+    BackendFailureCode.tokenNotValid ||
+    BackendFailureCode.tokenRevoked ||
+    BackendFailureCode.scopeForbidden ||
+    BackendFailureCode.deviceScopeRequired ||
+    BackendFailureCode.forbidden => FailureCategory.authentication,
+    BackendFailureCode.quotaExceeded => FailureCategory.storage,
+    BackendFailureCode.voiceUnconfigured => FailureCategory.unsupportedProtocol,
+    BackendFailureCode.rateLimited => FailureCategory.transport,
+    BackendFailureCode.invalidRequest ||
+    BackendFailureCode.badRequest ||
+    BackendFailureCode.usernameTaken ||
+    BackendFailureCode.notFound ||
+    BackendFailureCode.badBucket ||
+    BackendFailureCode.staleVersion ||
+    BackendFailureCode.identityRequired ||
+    BackendFailureCode.deviceLimit ||
+    BackendFailureCode.prekeyLimit ||
+    BackendFailureCode.keypackageLimit ||
+    BackendFailureCode.unknown => FailureCategory.validation,
+  };
+}

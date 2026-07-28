@@ -24,7 +24,8 @@ try {
         '--output=none',
         '--set-exit-if-changed',
         'lib',
-        'test'
+        'test',
+        'integration_test'
     )
     Invoke-CheckedCommand 'flutter' @(
         'analyze',

@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:communication_platform/core/result/result.dart';
 import 'package:communication_platform/features/bootstrap/application/ports/bootstrap_ports.dart';
 import 'package:communication_platform/features/bootstrap/domain/bootstrap_model.dart';
@@ -27,6 +29,12 @@ final class ProtectedStorageBootstrapAdapter
       final session = await database
           .select(database.accountSessions)
           .getSingleOrNull();
+      final hint =
+          await (database.select(database.localPreferences)..where(
+                (row) =>
+                    row.preferenceKey.equals('authentication.login_hint.v1'),
+              ))
+              .getSingleOrNull();
       return LocalStateDiscovered(
         LocalBootstrapState(
           identity: identity == null
@@ -37,9 +45,23 @@ final class ProtectedStorageBootstrapAdapter
               : session.expiresAt?.isAfter(DateTime.now()) ?? true
               ? LocalSessionState.valid
               : LocalSessionState.expired,
+          rememberedUsername: _readRememberedUsername(hint?.valueCiphertext),
         ),
       );
     }
     return const LocalStateDiscoveryUnavailable();
+  }
+
+  String? _readRememberedUsername(List<int>? bytes) {
+    if (bytes == null) {
+      return null;
+    }
+    try {
+      final value = jsonDecode(utf8.decode(bytes));
+      final username = value is Map<String, Object?> ? value['username'] : null;
+      return username is String ? username : null;
+    } on Object {
+      return null;
+    }
   }
 }

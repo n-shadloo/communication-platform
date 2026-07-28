@@ -26,6 +26,13 @@
 
 ### Crypto-core tests
 
+Version 1 is Android-only. Piece 07's required target tests are the shared Rust primitive
+suite, native ABI boundary tests, Android cross-build/package checks, Dart wrapper and
+isolate tests, and a smoke call through the library packaged in an Android application.
+A host-native dynamic-library test alone is not the packaged Android smoke. The
+preserved Web build may exercise only an explicit fail-closed unavailable adapter; it is
+not a version-1 target or release gate.
+
 - FIPS 203 ML-KEM, hybrid PQXDH/Double Ratchet, the finalized PQ MLS/OpenMLS profile,
   Argon2id, CBOR, secretstream, and SFrame vectors applicable to the selected
   implementation. Experimental PQ MLS fixtures cannot satisfy the production gate.
@@ -33,8 +40,8 @@
   `pq_spk_sig`, optional-field encoding, and the Ed25519/X25519 `ik_pub` layout, plus
   project vectors for SAS/QR values, device-log records/gossip, every event,
   history-transfer batches, attachment headers, and protocol upgrades.
-- Cross-target byte equality between Android `mlkem_native`/shared native code and the
-  reviewed browser Wasm implementation.
+- Future Web release: byte equality between Android `mlkem_native`/shared native code
+  and the reviewed browser Wasm implementation.
 - Interoperability between independent devices/versions and, where available, independent
   MLS implementations.
 - Property tests for encode/decode, encrypt/decrypt, state serialization, replay, skipped
@@ -89,7 +96,7 @@ Contract fixtures MUST fail when backend documentation and behavior diverge.
 
 ### End-to-end tests
 
-Use at least two accounts and multiple Android/browser devices:
+Use at least two accounts and multiple Android devices for version 1:
 
 - register, activate, complete first-device identity publication/two-phase
   cross-signing/backup, and handle the recovery secret;
@@ -105,8 +112,8 @@ Use at least two accounts and multiple Android/browser devices:
 - voice create/invite/join/reconnect/remove with encrypted media validation;
 - logout, remote revocation, local wipe, deep links, and hidden notifications.
 
-Patrol may drive Android native flows. Browser E2E uses a standards-based browser runner
-against each supported engine; one browser is not a sufficient web test.
+Patrol may drive Android native flows. Browser E2E is post-v1 and is not required for the
+Android release.
 
 ## Adverse-environment matrix
 
@@ -115,14 +122,14 @@ against each supported engine; one browser is not a sufficient web test.
 - Expired access during REST/WS, refresh response loss, revoked refresh, clock skew.
 - Android Doze/standby/force-stop/reboot/permission changes/background-poll delay and
   active-voice foreground-service stop.
-- Web tab sleep/reload/multiple tabs/storage eviction/private mode/browser upgrade.
+- Future Web release: tab sleep/reload/multiple tabs/storage eviction/private mode/browser
+  upgrade.
 - Low disk, database full/corrupt, attachment cancellation, OOM pressure.
 - Malicious peer sending maximum valid and malformed payloads.
 
 ## Performance gates
 
-Release budgets are measured on a representative low/mid Android device and supported
-browsers:
+Version-1 release budgets are measured on representative low/mid Android devices:
 
 - startup and database unlock;
 - 50,000-message conversation open/search/pagination;
@@ -143,6 +150,7 @@ browsers:
 ## Merge and release gates
 
 Pull requests require formatting, analysis, affected unit/widget tests, and documentation
-updates. Release additionally requires all target builds, crypto vectors, migrations,
-backend contracts, E2E matrix, accessibility, performance, offline rehearsal, and
-security review to pass. Coverage percentage alone cannot waive an invariant test.
+updates. Version-1 release additionally requires the Android build, crypto vectors,
+migrations, backend contracts, Android E2E matrix, accessibility, performance, offline
+rehearsal, and security review to pass. Web target gates are post-v1. Coverage percentage
+alone cannot waive an invariant test.

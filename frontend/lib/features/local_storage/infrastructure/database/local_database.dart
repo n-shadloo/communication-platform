@@ -56,6 +56,42 @@ class AccountIdentities extends Table {
   Set<Column<Object>> get primaryKey => {singletonId};
 }
 
+class EnrollmentIntents extends Table {
+  @override
+  String get tableName => 'enrollment_intent';
+
+  TextColumn get userId => text()();
+  IntColumn get flow => integer().check(flow.isBetweenValues(0, 1))();
+  IntColumn get phase => integer().check(phase.isBetweenValues(0, 17))();
+  BlobColumn get fingerprint => blob()();
+  BlobColumn get deviceState => blob()();
+  TextColumn get deviceId => text().nullable()();
+  BlobColumn get identityState => blob().nullable()();
+  BlobColumn get backup => blob().nullable()();
+  IntColumn get backupVersion => integer()
+      .withDefault(const Constant(1))
+      .check(backupVersion.isBiggerThanValue(0))();
+  IntColumn get identityVersion => integer()
+      .withDefault(const Constant(1))
+      .check(identityVersion.isBiggerThanValue(0))();
+  IntColumn get expectedSequence => integer().nullable().check(
+    expectedSequence.isNull() | expectedSequence.isBiggerOrEqualValue(0),
+  )();
+  BlobColumn get previousHash => blob().nullable()();
+  BlobColumn get pendingLogRecord => blob().nullable()();
+  IntColumn get message => integer().nullable().check(
+    message.isNull() | message.isBetweenValues(0, 14),
+  )();
+  BoolColumn get recoverySecretDisplayed =>
+      boolean().withDefault(const Constant(false))();
+  BoolColumn get recoveryConfirmed =>
+      boolean().withDefault(const Constant(false))();
+  DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
+
+  @override
+  Set<Column<Object>> get primaryKey => {userId};
+}
+
 class Users extends Table {
   @override
   String get tableName => 'users';
@@ -395,6 +431,7 @@ class StorageMigrationHooks {
     AccountSessions,
     SecureSecrets,
     AccountIdentities,
+    EnrollmentIntents,
     Users,
     Profiles,
     Devices,
@@ -421,7 +458,7 @@ final class LocalDatabase extends _$LocalDatabase {
   LocalDatabase(super.executor, {StorageMigrationHooks? migrationHooks})
     : _migrationHooks = migrationHooks ?? const StorageMigrationHooks();
 
-  static const currentSchemaVersion = 1;
+  static const currentSchemaVersion = 2;
   final StorageMigrationHooks _migrationHooks;
 
   @override
@@ -441,6 +478,8 @@ final class LocalDatabase extends _$LocalDatabase {
         await _migrationHooks.beforeUpgrade(from, to);
         if (from < 1) {
           await migrator.createAll();
+        } else if (from < 2) {
+          await migrator.createTable(enrollmentIntents);
         }
         await _migrationHooks.afterUpgrade(from, to);
       });
