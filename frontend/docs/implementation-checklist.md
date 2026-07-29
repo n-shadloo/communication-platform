@@ -8,7 +8,9 @@ guarded bootstrap, secure local storage, and typed REST/authentication/WebSocket
 transport foundation. Later capabilities remain pending. Piece 07 now provides the
 shared Rust primitive foundation and Android FFI/isolate adapter; Web/Wasm crypto is
 post-v1, explicitly deferred, and remains fail-closed. Completion and test evidence are
-recorded below only after verification.
+recorded below only after verification. Piece 12 now provides the crash-safe opaque
+inbox/outbox synchronization engine and lifecycle foundation without implementing
+message encryption or domain-event application.
 
 Legend: **Ready** = implemented backend contract; **Client protocol** = intentionally
 opaque/client-owned; **Pending** = Flutter implementation not started.
@@ -45,11 +47,11 @@ opaque/client-owned; **Pending** = Flutter implementation not started.
 
 | Capability | Backend | Flutter |
 |---|---|---|
-| Per-device durable envelope queue | Ready | Pending inbox/outbox |
-| Batched fan-out/stale devices | Ready | <=256 deterministic batching specified; implementation pending |
-| Drain/ack | Ready | Pending crash-safe pipeline |
-| Seven-day TTL / `pruned_through` gaps | Ready signal | Pending blocking detection and fresh-Welcome recovery |
-| WebSocket live delivery | Ready | Piece 06 authenticated Android gateway, bounded frame parsing, close-code mapping, and reconnect hooks complete; the preserved Web gateway is post-v1; durable inbox/business-state integration remains pending |
+| Per-device durable envelope queue | Ready | Piece 12 durable Drift inbox/outbox journals, opaque event deduplication, bounded queues, and process-death recovery complete; crypto/domain application remains later work |
+| Batched fan-out/stale devices | Ready | Piece 12 UUID-byte-sorted <=256 target batches, exact-ciphertext retry, partial progress, stale terminal state/session invalidation, and durable refresh requests complete |
+| Drain/ack | Ready | Piece 12 authoritative REST paging, duplicate/reorder handling, post-commit idempotent ack, and durable contiguous checkpoint complete |
+| Seven-day TTL / `pruned_through` gaps | Ready signal | Piece 12 pre-processing comparison, blocking queue-gap/group recovery state, retained MLS-dependent opaque envelopes, and recovered loss-baseline transition complete; fresh Welcome production flow remains gated on MLS pieces |
+| WebSocket live delivery | Ready | Piece 06 authenticated gateway/close-code mapping plus piece 12 lifecycle supervisor complete; socket envelopes are wake-up hints only and always trigger authoritative REST drain |
 | DM identity/session | Client protocol | Pending hybrid PQXDH/Double Ratchet |
 | Text messages | Client protocol | Pending |
 | Replies/edits/deletes | Client protocol | Pending |
@@ -115,8 +117,8 @@ opaque/client-owned; **Pending** = Flutter implementation not started.
 | Capability | Backend | Flutter |
 |---|---|---|
 | Android encrypted database/Keystore | Not applicable | Piece 05 versioned Drift schema, SQLCipher database, Keystore AES-GCM wrapping with StrongBox/TEE preference, transactional repositories, bounded cleanup, and cryptographic wipe flows complete; physical-device process-death/Keystore matrix remains a release gate |
-| Android normal resume/drain | Durable queue supports it | Pending |
-| Android background polling | Seven-day durable queue supports it | Pending WorkManager polling/gap handling |
+| Android normal resume/drain | Durable queue supports it | Piece 12 lifecycle/network resume, durable reconnect, socket-hint, and authoritative drain flow complete |
+| Android background polling | Seven-day durable queue supports it | Piece 12 app-owned best-effort/headless scheduler interface complete with no Firebase or messaging foreground service; concrete WorkManager registration and physical-device matrix remain pending |
 | Android local notifications | No foreign push by design | Pending |
 | Web persistent encrypted device | Device API supports it | Preserved piece-05 ciphertext-only Drift/WebCrypto foundation; post-v1 only, with supported-browser persistence matrix deferred |
 | Web open-tab realtime | WebSocket auth supports it | Preserved piece-06 origin-derived `wss` gateway; post-v1 only, with page lifecycle/drain integration deferred |
@@ -156,6 +158,14 @@ opaque/client-owned; **Pending** = Flutter implementation not started.
   profile-authentication, accessibility, RTL, locked Rust/Clippy, analyze, widget,
   and three-ABI Android APK build gates. The profile transport fake is
   development-only and encrypted device-log gossip remains a later messaging task.
+- [x] Piece 12 deterministic 513-target fan-out, exact-ciphertext ambiguous retry,
+  durable REST drain/ack paging, opaque event deduplication, contiguous checkpointing,
+  stale-device invalidation/refresh, full-jitter retry state, queue-gap MLS blocking,
+  lifecycle/network/socket-close handling, offline restart, bounded queues, transaction
+  fault injection, and redaction pass the full Flutter suite, fatal analysis,
+  development/production Android APK builds, and preserved fail-closed Web build on
+  2026-07-29. Concrete Android WorkManager registration/Doze validation and all message
+  crypto/domain application remain later gates.
 - [x] Android reproduces the backend `cross_sig`, `master_sig`, `spk_sig`, and
   `pq_spk_sig` golden vectors, including optional fields and the 64-byte `ik_pub` layout
   (Piece 08: Rust vectors, strict Clippy, Flutter tests, three-ABI native package build,

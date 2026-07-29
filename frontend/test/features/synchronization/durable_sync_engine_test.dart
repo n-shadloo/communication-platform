@@ -1,0 +1,694 @@
+import 'dart:io';
+import 'dart:typed_data';
+
+import 'package:communication_platform/core/application/ports/time_source.dart';
+import 'package:communication_platform/core/result/failure.dart';
+import 'package:communication_platform/core/result/result.dart';
+import 'package:communication_platform/features/local_storage/infrastructure/database/local_database.dart';
+import 'package:communication_platform/features/synchronization/application/durable_sync_engine.dart';
+import 'package:communication_platform/features/synchronization/application/ports/sync_ports.dart';
+import 'package:communication_platform/features/synchronization/domain/sync_model.dart';
+import 'package:communication_platform/features/synchronization/infrastructure/drift_sync_store.dart';
+import 'package:drift/drift.dart' hide isNull;
+import 'package:drift/native.dart';
+import 'package:flutter_test/flutter_test.dart';
+
+void main() {
+  late LocalDatabase database;
+  late DriftSyncStore store;
+  late FakeSyncRemote remote;
+  late FixtureInspector inspector;
+  late FakeClock clock;
+  late RecordingStaleRefresh staleRefresh;
+  late DurableSyncEngine engine;
+
+  setUp(() {
+    database = LocalDatabase(NativeDatabase.memory());
+    store = DriftSyncStore(database);
+    remote = FakeSyncRemote();
+    inspector = FixtureInspector();
+    clock = FakeClock(DateTime.utc(2026, 7, 29));
+    staleRefresh = RecordingStaleRefresh();
+    engine = DurableSyncEngine(
+      store: store,
+      remote: remote,
+      inspector: inspector,
+      staleDeviceRefresh: staleRefresh,
+      clock: clock,
+      jitter: const ZeroJitter(),
+    );
+  });
+
+  tearDown(() async {
+    await database.close();
+  });
+
+  test(
+    '>256 targets use deterministic UUID-byte batches and exact retry bytes',
+    () async {
+      final targets = List.generate(513, (index) {
+        final reversed = 513 - index;
+        return PreparedOutboxTarget(
+          recipientUserId: 'user-${reversed % 3}',
+          recipientDeviceId: uuid(reversed),
+          exactCiphertext: blob(reversed % 251),
+        );
+      });
+      final queued = await engine.queuePreparedOperation(
+        operationId: 'operation-513',
+        eventId: 'event-513',
+        targets: targets,
+      );
+      expect(queued, isA<Success<void>>());
+      remote.sendFailuresRemaining = 1;
+
+      final lostResponse = await engine.synchronize();
+      expect(lostResponse, isA<FailureResult<SyncRunReport>>());
+      final firstAttempt = remote.sentBatches.single;
+      expect(firstAttempt.targets, hasLength(256));
+
+      final completed = await engine.synchronize();
+      expect(completed, isA<Success<SyncRunReport>>());
+      expect(remote.sentBatches, hasLength(4));
+      final retry = remote.sentBatches[1];
+      expect(retry.targets, hasLength(256));
+      expect(
+        retry.targets.map((target) => target.recipientDeviceId),
+        firstAttempt.targets.map((target) => target.recipientDeviceId),
+      );
+      for (var index = 0; index < firstAttempt.targets.length; index += 1) {
+        expect(
+          retry.targets[index].exactCiphertext,
+          firstAttempt.targets[index].exactCiphertext,
+        );
+      }
+      expect(remote.sentBatches[2].targets, hasLength(256));
+      expect(remote.sentBatches[3].targets, hasLength(1));
+      final allTargets = remote.sentBatches
+          .skip(1)
+          .expand((batch) => batch.targets)
+          .map((target) => target.recipientDeviceId)
+          .toList();
+      expect(allTargets, List.generate(513, (index) => uuid(index + 1)));
+    },
+  );
+
+  test(
+    'duplicate and reordered deliveries commit one opaque event and advance contiguous ack',
+    () async {
+      await store.persistDrainPage(
+        DrainPage(
+          envelopes: [
+            SyncEnvelope(id: uuid(22), sequence: 2, exactCiphertext: blob(7)),
+            SyncEnvelope(id: uuid(21), sequence: 1, exactCiphertext: blob(7)),
+          ],
+          hasMore: false,
+          prunedThrough: 0,
+        ),
+      );
+      await store.persistDrainPage(
+        DrainPage(
+          envelopes: [
+            SyncEnvelope(id: uuid(22), sequence: 2, exactCiphertext: blob(7)),
+          ],
+          hasMore: false,
+          prunedThrough: 0,
+        ),
+      );
+
+      final result = await engine.synchronize();
+
+      expect(result, isA<Success<SyncRunReport>>());
+      expect(inspector.calls, 2);
+      expect(
+        await database.select(database.inboxEventDeduplications).get(),
+        hasLength(1),
+      );
+      expect(remote.acknowledgedIds.single, [uuid(21), uuid(22)]);
+      final projection =
+          await store.readProjection() as Success<SyncProjection>;
+      expect(projection.value.highestContiguousAcknowledgedSequence, 2);
+      expect(await database.select(database.inboxEnvelopes).get(), isEmpty);
+    },
+  );
+
+  test(
+    'drain pages are processed and acknowledged before the next page',
+    () async {
+      remote.pages
+        ..add(
+          DrainPage(
+            envelopes: [
+              SyncEnvelope(id: uuid(23), sequence: 1, exactCiphertext: blob(1)),
+            ],
+            hasMore: true,
+            prunedThrough: 0,
+          ),
+        )
+        ..add(
+          DrainPage(
+            envelopes: [
+              SyncEnvelope(id: uuid(24), sequence: 2, exactCiphertext: blob(2)),
+            ],
+            hasMore: false,
+            prunedThrough: 0,
+          ),
+        );
+
+      final result = await engine.synchronize();
+
+      expect(result, isA<Success<SyncRunReport>>());
+      expect((result as Success<SyncRunReport>).value.drainedPages, 2);
+      expect(remote.acknowledgedIds, [
+        [uuid(23)],
+        [uuid(24)],
+      ]);
+      expect(
+        (await store.readProjection() as Success<SyncProjection>)
+            .value
+            .highestContiguousAcknowledgedSequence,
+        2,
+      );
+    },
+  );
+
+  test('backoff honors Retry-After and caps exponential full-jitter range', () {
+    const policy = SyncRetryPolicy(
+      baseDelay: Duration(seconds: 2),
+      maximumDelay: Duration(minutes: 1),
+    );
+    final retryAfter = policy.delayFor(
+      attempt: 8,
+      failure: const BackendFailure(
+        BackendFailureCode.rateLimited,
+        retryAfter: Duration(minutes: 2),
+      ),
+      jitter: const MaximumJitter(),
+    );
+    final capped = policy.delayFor(
+      attempt: 20,
+      failure: const TransportFailure(TransportFailureKind.timeout),
+      jitter: const MaximumJitter(),
+    );
+
+    expect(retryAfter, const Duration(minutes: 2));
+    expect(capped, const Duration(minutes: 1));
+  });
+
+  test(
+    'REST success does not reset realtime backoff before socket stability',
+    () async {
+      await store.scheduleReconnect(
+        dueAt: clock.now().add(const Duration(seconds: 5)),
+      );
+
+      final result = await engine.synchronize();
+
+      expect(result, isA<Success<SyncRunReport>>());
+      expect(
+        (await store.readReconnectState() as Success<DurableReconnectState>)
+            .value
+            .attempt,
+        1,
+      );
+      await store.clearReconnect(syncedAt: null);
+      expect(
+        (await store.readReconnectState() as Success<DurableReconnectState>)
+            .value
+            .attempt,
+        0,
+      );
+    },
+  );
+
+  test(
+    'seven-day prune gap blocks possible MLS before recovery and resumes at safe baseline',
+    () async {
+      await database
+          .into(database.mlsGroups)
+          .insert(
+            MlsGroupsCompanion.insert(
+              groupId: 'opaque-group',
+              opaqueCryptoStateHandle: Uint8List.fromList([1]),
+              acceptedEpoch: 4,
+              stateVersion: 1,
+            ),
+          );
+      remote.prunedThrough = 5;
+      remote.pages.add(
+        DrainPage(
+          envelopes: [
+            SyncEnvelope(id: uuid(31), sequence: 6, exactCiphertext: blob(9)),
+          ],
+          hasMore: false,
+          prunedThrough: 5,
+        ),
+      );
+
+      final blocked = await engine.synchronize();
+
+      expect(blocked, isA<Success<SyncRunReport>>());
+      expect(inspector.allowMlsValues, [false]);
+      expect(remote.acknowledgedIds, isEmpty);
+      final blockedProjection =
+          await store.readProjection() as Success<SyncProjection>;
+      expect(
+        blockedProjection.value.queueGapState,
+        QueueGapState.recoveryRequired,
+      );
+      expect(
+        (await database.select(database.mlsGroups).getSingle())
+            .queueGapRecoveryState,
+        1,
+      );
+
+      await store.markGroupRecovered('opaque-group');
+      final recovered = await engine.synchronize();
+
+      expect(recovered, isA<Success<SyncRunReport>>());
+      expect(inspector.allowMlsValues, [false, true]);
+      final projection =
+          await store.readProjection() as Success<SyncProjection>;
+      expect(projection.value.queueGapState, QueueGapState.clear);
+      expect(projection.value.highestContiguousAcknowledgedSequence, 6);
+      expect(remote.acknowledgedIds.single, [uuid(31)]);
+    },
+  );
+
+  test(
+    'stale targets are terminal, invalidate sessions, and queue refresh',
+    () async {
+      await database
+          .into(database.pairwiseSessions)
+          .insert(
+            PairwiseSessionsCompanion.insert(
+              localDeviceId: uuid(1),
+              remoteDeviceId: uuid(40),
+              opaqueCryptoStateHandle: Uint8List.fromList([4]),
+              stateVersion: 1,
+            ),
+          );
+      await engine.queuePreparedOperation(
+        operationId: 'stale-operation',
+        eventId: 'stale-event',
+        targets: [
+          PreparedOutboxTarget(
+            recipientUserId: 'stale-user',
+            recipientDeviceId: uuid(40),
+            exactCiphertext: blob(40),
+          ),
+          PreparedOutboxTarget(
+            recipientUserId: 'live-user',
+            recipientDeviceId: uuid(41),
+            exactCiphertext: blob(41),
+          ),
+        ],
+      );
+      remote.staleDeviceIds.add(uuid(40));
+
+      final result = await engine.synchronize();
+
+      expect(result, isA<Success<SyncRunReport>>());
+      final rows = await database.select(database.outboxOperations).get();
+      expect(
+        rows
+            .singleWhere((row) => row.recipientDeviceId == uuid(40))
+            .attemptState,
+        OutboxAttemptState.stale.index,
+      );
+      expect(
+        rows
+            .singleWhere((row) => row.recipientDeviceId == uuid(41))
+            .attemptState,
+        OutboxAttemptState.accepted.index,
+      );
+      expect(await database.select(database.pairwiseSessions).get(), isEmpty);
+      expect(staleRefresh.users, ['stale-user']);
+      expect(
+        await database.select(database.staleDeviceRefreshRequests).get(),
+        isEmpty,
+      );
+    },
+  );
+
+  test(
+    'bounded queues reject new work without dropping existing rows',
+    () async {
+      final bounded = DriftSyncStore(
+        database,
+        maximumInboxEntries: 1,
+        maximumOutboxTargets: 1,
+      );
+      final firstInbox = await bounded.persistDrainPage(
+        DrainPage(
+          envelopes: [
+            SyncEnvelope(id: uuid(51), sequence: 1, exactCiphertext: blob(1)),
+          ],
+          hasMore: false,
+          prunedThrough: 0,
+        ),
+      );
+      final overflowInbox = await bounded.persistDrainPage(
+        DrainPage(
+          envelopes: [
+            SyncEnvelope(id: uuid(52), sequence: 2, exactCiphertext: blob(2)),
+          ],
+          hasMore: false,
+          prunedThrough: 0,
+        ),
+      );
+      expect(firstInbox, isA<Success<void>>());
+      expect(overflowInbox, isA<FailureResult<void>>());
+      expect(
+        await database.select(database.inboxEnvelopes).get(),
+        hasLength(1),
+      );
+
+      final firstOutbox = await bounded.queuePreparedOperation(
+        operationId: 'bounded-1',
+        eventId: 'event-1',
+        targets: [
+          PreparedOutboxTarget(
+            recipientUserId: 'user',
+            recipientDeviceId: uuid(61),
+            exactCiphertext: blob(1),
+          ),
+        ],
+      );
+      final overflowOutbox = await bounded.queuePreparedOperation(
+        operationId: 'bounded-2',
+        eventId: 'event-2',
+        targets: [
+          PreparedOutboxTarget(
+            recipientUserId: 'user',
+            recipientDeviceId: uuid(62),
+            exactCiphertext: blob(2),
+          ),
+        ],
+      );
+      expect(firstOutbox, isA<Success<void>>());
+      expect(overflowOutbox, isA<FailureResult<void>>());
+      expect(
+        await database.select(database.outboxOperations).get(),
+        hasLength(1),
+      );
+    },
+  );
+
+  test(
+    'transaction faults publish no partial inspection, ack, or stale state',
+    () async {
+      await store.persistDrainPage(
+        DrainPage(
+          envelopes: [
+            SyncEnvelope(id: uuid(71), sequence: 1, exactCiphertext: blob(1)),
+          ],
+          hasMore: false,
+          prunedThrough: 0,
+        ),
+      );
+      final envelope =
+          (await store.beginNextEnvelopeInspection(now: clock.now())
+                  as Success<SyncEnvelope?>)
+              .value!;
+      await database.customStatement(
+        "CREATE TRIGGER fail_dedup BEFORE INSERT ON inbox_event_deduplication "
+        "BEGIN SELECT RAISE(ABORT, 'fault'); END",
+      );
+      final failedCommit = await store.commitOpaqueInspection(
+        envelopeId: envelope.id,
+        inspection: const OpaqueEnvelopeInspection(
+          opaqueEventId: 'event-fault',
+          dependency: EnvelopeDependency.directOrLocal,
+        ),
+      );
+      expect(failedCommit, isA<FailureResult<bool>>());
+      expect(
+        await database.select(database.inboxEventDeduplications).get(),
+        isEmpty,
+      );
+      expect(
+        (await database.select(database.inboxEnvelopes).getSingle())
+            .processingState,
+        InboxProcessingState.inspecting.index,
+      );
+      await database.customStatement('DROP TRIGGER fail_dedup');
+      await store.commitOpaqueInspection(
+        envelopeId: envelope.id,
+        inspection: const OpaqueEnvelopeInspection(
+          opaqueEventId: 'event-fault',
+          dependency: EnvelopeDependency.directOrLocal,
+        ),
+      );
+      final ack =
+          (await store.beginAcknowledgementBatch(
+                    now: clock.now(),
+                    maximumIds: 200,
+                  )
+                  as Success<AcknowledgementBatch?>)
+              .value!;
+      await database.customStatement(
+        "CREATE TRIGGER fail_checkpoint BEFORE UPDATE OF "
+        "highest_contiguous_acked_sequence ON sync_checkpoint "
+        "BEGIN SELECT RAISE(ABORT, 'fault'); END",
+      );
+      final failedAck = await store.recordAcknowledgementSuccess(
+        batch: ack,
+        now: clock.now(),
+      );
+      expect(failedAck, isA<FailureResult<void>>());
+      expect(
+        (await database.select(database.inboxEnvelopes).getSingle())
+            .processingState,
+        InboxProcessingState.acknowledgementSending.index,
+      );
+      expect(
+        (await store.readProjection() as Success<SyncProjection>)
+            .value
+            .highestContiguousAcknowledgedSequence,
+        0,
+      );
+      await database.customStatement('DROP TRIGGER fail_checkpoint');
+
+      await store.queuePreparedOperation(
+        operationId: 'fault-stale',
+        eventId: 'fault-event',
+        targets: [
+          PreparedOutboxTarget(
+            recipientUserId: 'fault-user',
+            recipientDeviceId: uuid(72),
+            exactCiphertext: blob(2),
+          ),
+        ],
+      );
+      await database
+          .into(database.pairwiseSessions)
+          .insert(
+            PairwiseSessionsCompanion.insert(
+              localDeviceId: uuid(1),
+              remoteDeviceId: uuid(72),
+              opaqueCryptoStateHandle: Uint8List.fromList([1]),
+              stateVersion: 1,
+            ),
+          );
+      final outbox =
+          (await store.beginNextOutboxBatch(now: clock.now())
+                  as Success<OutboxBatch?>)
+              .value!;
+      await database.customStatement(
+        "CREATE TRIGGER fail_refresh BEFORE INSERT ON stale_device_refresh_requests "
+        "BEGIN SELECT RAISE(ABORT, 'fault'); END",
+      );
+      final failedStale = await store.recordOutboxAcceptance(
+        batch: outbox,
+        acceptance: OutboxAcceptance(accepted: 0, staleDeviceIds: {uuid(72)}),
+        now: clock.now(),
+      );
+      expect(failedStale, isA<FailureResult<void>>());
+      expect(
+        (await database.select(database.outboxOperations).getSingle())
+            .attemptState,
+        OutboxAttemptState.sending.index,
+      );
+      expect(
+        await database.select(database.pairwiseSessions).get(),
+        hasLength(1),
+      );
+    },
+  );
+
+  test(
+    'retry state and exact ciphertext survive an offline process restart',
+    () async {
+      await database.close();
+      final directory = await Directory.systemTemp.createTemp('sync-restart-');
+      final file = File('${directory.path}/sync.sqlite');
+      try {
+        var restartedDatabase = LocalDatabase(NativeDatabase(file));
+        var restartedStore = DriftSyncStore(restartedDatabase);
+        final exact = blob(88);
+        await restartedStore.queuePreparedOperation(
+          operationId: 'restart-operation',
+          eventId: 'restart-event',
+          targets: [
+            PreparedOutboxTarget(
+              recipientUserId: 'restart-user',
+              recipientDeviceId: uuid(88),
+              exactCiphertext: exact,
+            ),
+          ],
+        );
+        final batch =
+            (await restartedStore.beginNextOutboxBatch(now: clock.now())
+                    as Success<OutboxBatch?>)
+                .value!;
+        await restartedStore.recordOutboxRetry(
+          batch: batch,
+          retryAt: clock.now().add(const Duration(hours: 1)),
+        );
+        await restartedDatabase.close();
+
+        restartedDatabase = LocalDatabase(NativeDatabase(file));
+        restartedStore = DriftSyncStore(restartedDatabase);
+        final tooEarly = await restartedStore.beginNextOutboxBatch(
+          now: clock.now(),
+        );
+        expect((tooEarly as Success<OutboxBatch?>).value, isNull);
+        clock.advance(const Duration(hours: 1));
+        final due =
+            (await restartedStore.beginNextOutboxBatch(now: clock.now())
+                    as Success<OutboxBatch?>)
+                .value!;
+        expect(due.targets.single.exactCiphertext, exact);
+        expect(due.attempt, 2);
+        await restartedDatabase.close();
+      } finally {
+        await directory.delete(recursive: true);
+        database = LocalDatabase(NativeDatabase.memory());
+      }
+    },
+  );
+}
+
+final class FakeSyncRemote implements SyncRemotePort {
+  final List<DrainPage> pages = [];
+  final List<OutboxBatch> sentBatches = [];
+  final List<List<String>> acknowledgedIds = [];
+  final Set<String> staleDeviceIds = {};
+  int sendFailuresRemaining = 0;
+  int acknowledgementFailuresRemaining = 0;
+  int prunedThrough = 0;
+
+  @override
+  Future<Result<DrainPage>> drain({required int limit}) async => Result.success(
+    pages.isEmpty
+        ? DrainPage(
+            envelopes: const [],
+            hasMore: false,
+            prunedThrough: prunedThrough,
+          )
+        : pages.removeAt(0),
+  );
+
+  @override
+  Future<Result<int>> acknowledge(List<String> envelopeIds) async {
+    acknowledgedIds.add(List.of(envelopeIds));
+    if (acknowledgementFailuresRemaining > 0) {
+      acknowledgementFailuresRemaining -= 1;
+      return const Result.failure(
+        TransportFailure(TransportFailureKind.timeout),
+      );
+    }
+    return Result.success(envelopeIds.length);
+  }
+
+  @override
+  Future<Result<OutboxAcceptance>> send(OutboxBatch batch) async {
+    sentBatches.add(batch);
+    if (sendFailuresRemaining > 0) {
+      sendFailuresRemaining -= 1;
+      return const Result.failure(
+        TransportFailure(TransportFailureKind.timeout),
+      );
+    }
+    final stale = batch.targets
+        .map((target) => target.recipientDeviceId)
+        .where(staleDeviceIds.contains)
+        .toSet();
+    return Result.success(
+      OutboxAcceptance(
+        accepted: batch.targets.length - stale.length,
+        staleDeviceIds: stale,
+      ),
+    );
+  }
+}
+
+final class FixtureInspector implements OpaqueEnvelopeInspector {
+  int calls = 0;
+  final List<bool> allowMlsValues = [];
+
+  @override
+  Future<Result<OpaqueEnvelopeInspection>> inspect({
+    required String envelopeId,
+    required Uint8List exactCiphertext,
+    required bool allowPotentiallyMls,
+  }) async {
+    calls += 1;
+    allowMlsValues.add(allowPotentiallyMls);
+    final marker = exactCiphertext.first;
+    return Result.success(
+      OpaqueEnvelopeInspection(
+        opaqueEventId: 'opaque-event-$marker',
+        dependency: marker == 9
+            ? EnvelopeDependency.potentiallyMls
+            : EnvelopeDependency.directOrLocal,
+      ),
+    );
+  }
+}
+
+final class RecordingStaleRefresh implements StaleDeviceRefreshPort {
+  final List<String> users = [];
+
+  @override
+  Future<Result<void>> refreshUserDevices(String userId) async {
+    users.add(userId);
+    return const Result.success(null);
+  }
+}
+
+final class FakeClock implements TimeSource {
+  FakeClock(this.value);
+
+  DateTime value;
+
+  void advance(Duration duration) {
+    value = value.add(duration);
+  }
+
+  @override
+  DateTime now() => value;
+}
+
+final class ZeroJitter implements JitterSource {
+  const ZeroJitter();
+
+  @override
+  int nextInt(int upperBoundExclusive) => 0;
+}
+
+final class MaximumJitter implements JitterSource {
+  const MaximumJitter();
+
+  @override
+  int nextInt(int upperBoundExclusive) => upperBoundExclusive - 1;
+}
+
+String uuid(int value) {
+  final suffix = value.toRadixString(16).padLeft(12, '0');
+  return '00000000-0000-0000-0000-$suffix';
+}
+
+Uint8List blob(int marker) =>
+    Uint8List.fromList(List<int>.filled(1024, marker));

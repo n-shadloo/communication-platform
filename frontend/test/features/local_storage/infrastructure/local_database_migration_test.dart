@@ -63,6 +63,25 @@ void main() {
 
       final versionOne = sqlite3.open(databaseFile.path)
         ..execute('DROP TABLE enrollment_intent')
+        ..execute('DROP TABLE inbox_event_deduplication')
+        ..execute('DROP TABLE stale_device_refresh_requests')
+        ..execute('ALTER TABLE mls_groups DROP COLUMN queue_gap_recovery_state')
+        ..execute('ALTER TABLE inbox_envelopes DROP COLUMN opaque_event_id')
+        ..execute('ALTER TABLE inbox_envelopes DROP COLUMN dependency_class')
+        ..execute('ALTER TABLE inbox_envelopes DROP COLUMN attempt_count')
+        ..execute('ALTER TABLE inbox_envelopes DROP COLUMN next_attempt_at')
+        ..execute('ALTER TABLE outbox_operations DROP COLUMN recipient_user_id')
+        ..execute('ALTER TABLE outbox_operations DROP COLUMN next_attempt_at')
+        ..execute('ALTER TABLE outbox_operations DROP COLUMN last_attempt_at')
+        ..execute('ALTER TABLE outbox_operations DROP COLUMN terminal_at')
+        ..execute('ALTER TABLE sync_checkpoint DROP COLUMN queue_gap_state')
+        ..execute('ALTER TABLE sync_checkpoint DROP COLUMN drain_requested')
+        ..execute('ALTER TABLE sync_checkpoint DROP COLUMN connection_phase')
+        ..execute('ALTER TABLE sync_checkpoint DROP COLUMN reconnect_attempt')
+        ..execute('ALTER TABLE sync_checkpoint DROP COLUMN reconnect_at')
+        ..execute(
+          'ALTER TABLE sync_checkpoint DROP COLUMN last_successful_sync_at',
+        )
         ..execute('PRAGMA user_version = 1');
       versionOne.close();
 
@@ -74,6 +93,15 @@ void main() {
             .customSelect(
               "SELECT preference_key FROM local_preferences "
               "WHERE preference_key = 'preserved'",
+            )
+            .getSingle(),
+        isNotNull,
+      );
+      expect(
+        await upgraded
+            .customSelect(
+              "SELECT name FROM sqlite_master WHERE type = 'table' "
+              "AND name = 'inbox_event_deduplication'",
             )
             .getSingle(),
         isNotNull,

@@ -77,7 +77,10 @@ commit. The client:
 4. sends authenticated recovery signals where sessions remain usable;
 5. asks peers to remove and re-add this device to affected groups, producing fresh
    Welcomes; and
-6. clears the state only after each group is safely rejoined or explicitly left.
+6. clears the state only after each group is safely rejoined or explicitly left; in
+   that same transaction it advances the acknowledged loss baseline through the
+   observed `pruned_through` value and releases locally retained MLS-blocked envelopes,
+   preventing the already-recovered permanent gap from reopening on every drain.
 
 Device-to-device history transfer cannot repair ratchets or MLS epochs and is not used as
 a substitute for this flow.

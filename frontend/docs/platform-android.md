@@ -116,6 +116,28 @@ MUST NOT label background polling as `remoteMessaging` or `dataSync` to evade li
 or distribution policy. Force-stop, Doze, and OEM restrictions may delay messages; resume
 always drains the authoritative queue and checks `pruned_through`.
 
+### Piece-12 synchronization baseline
+
+Piece 12 pins `connectivity_plus` 6.0.5 for OS-reported link transitions. A reported
+transport is only a scheduling hint: Android explicitly does not guarantee that an
+available network can reach a particular server, so the provisioned backend REST result
+remains authoritative and no public connectivity probe is added. The lifecycle
+supervisor pauses reconnect timers while no transport is reported and always performs a
+REST drain after foreground resume, network recovery, or a WebSocket envelope hint.
+
+Android background polling is exposed through an app-owned best-effort scheduler port
+whose headless callback must reconstruct its own database and network dependencies; it
+never assumes foreground-isolate memory survived. The port makes no exact-periodic or
+instant-delivery promise and grants no messaging foreground service. Concrete
+WorkManager registration plus the physical-device Doze, standby, reboot, and force-stop
+matrix remain release validation gates.
+
+This choice was verified on 2026-07-29 against the
+[`connectivity_plus` 6.0.5 release](https://pub.dev/packages/connectivity_plus/versions/6.0.5)
+and Android's
+[`ConnectivityManager.NetworkCallback`](https://developer.android.com/reference/android/net/ConnectivityManager.NetworkCallback)
+and [network-state guidance](https://developer.android.com/develop/connectivity/network-ops/reading-network-state).
+
 ## Notifications
 
 - Local notifications are created only after authenticated decryption and durable local

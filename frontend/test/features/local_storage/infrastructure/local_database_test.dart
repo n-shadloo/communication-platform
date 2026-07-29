@@ -41,6 +41,8 @@ void main() {
       'attachments',
       'inbox_envelopes',
       'outbox_operations',
+      'inbox_event_deduplication',
+      'stale_device_refresh_requests',
       'receipts',
       'voice_rooms',
       'history_transfers',

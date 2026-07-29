@@ -1,0 +1,394 @@
+import 'dart:async';
+import 'dart:typed_data';
+
+import 'package:communication_platform/core/application/ports/time_source.dart';
+import 'package:communication_platform/core/result/result.dart';
+import 'package:communication_platform/features/local_storage/infrastructure/database/local_database.dart';
+import 'package:communication_platform/features/networking/application/ports/realtime_gateway.dart';
+import 'package:communication_platform/features/networking/domain/realtime_event.dart';
+import 'package:communication_platform/features/synchronization/application/durable_sync_engine.dart';
+import 'package:communication_platform/features/synchronization/application/ports/sync_ports.dart';
+import 'package:communication_platform/features/synchronization/application/sync_lifecycle_supervisor.dart';
+import 'package:communication_platform/features/synchronization/domain/sync_model.dart';
+import 'package:communication_platform/features/synchronization/infrastructure/drift_sync_store.dart';
+import 'package:communication_platform/features/synchronization/infrastructure/gateway_realtime_sync_adapter.dart';
+import 'package:drift/native.dart';
+import 'package:flutter_test/flutter_test.dart';
+
+void main() {
+  test(
+    'foreground socket events are hints followed by REST drain; lifecycle and network transitions are safe',
+    () async {
+      final database = LocalDatabase(NativeDatabase.memory());
+      final store = DriftSyncStore(database);
+      final remote = CountingRemote();
+      final realtime = FakeRealtimeSyncPort();
+      final network = FakeNetworkPort(NetworkAvailability.available);
+      final lifecycle = FakeLifecyclePort(ApplicationExecutionState.foreground);
+      final polling = FakePollingPort();
+      final clock = SupervisorClock();
+      final engine = DurableSyncEngine(
+        store: store,
+        remote: remote,
+        inspector: const RetainingInspector(),
+        staleDeviceRefresh: const NoopStaleRefresh(),
+        clock: clock,
+        jitter: const SupervisorJitter(),
+      );
+      final supervisor = SyncLifecycleSupervisor(
+        engine: engine,
+        store: store,
+        realtime: realtime,
+        network: network,
+        lifecycle: lifecycle,
+        polling: polling,
+        clock: clock,
+        jitter: const SupervisorJitter(),
+        delay: const ImmediateDelay(),
+      );
+
+      await supervisor.start();
+      expect(realtime.connects, 1);
+      expect(remote.drains, 1);
+
+      realtime.hint();
+      await pumpEvents();
+      expect(remote.drains, 2);
+      expect(
+        remote.receivedSocketPayloads,
+        isEmpty,
+        reason: 'the realtime port exposes no envelope payload to the engine',
+      );
+
+      lifecycle.set(ApplicationExecutionState.background);
+      await pumpEvents();
+      expect(realtime.closes, greaterThanOrEqualTo(1));
+      expect(polling.schedules, 1);
+
+      polling.trigger();
+      await pumpEvents();
+      expect(remote.drains, 3);
+
+      network.set(NetworkAvailability.unavailable);
+      polling.trigger();
+      await pumpEvents();
+      expect(remote.drains, 3);
+      final offline = await store.readProjection() as Success<SyncProjection>;
+      expect(offline.value.connectionPhase, SyncConnectionPhase.offline);
+
+      network.set(NetworkAvailability.available);
+      lifecycle.set(ApplicationExecutionState.foreground);
+      await pumpEvents();
+      expect(realtime.connects, greaterThanOrEqualTo(2));
+      expect(remote.drains, greaterThanOrEqualTo(4));
+
+      await supervisor.dispose();
+      await database.close();
+    },
+  );
+
+  test(
+    'revoked, protocol, and origin closes persist terminal projections',
+    () async {
+      for (final entry in const [
+        (
+          RealtimeDisconnectKind.revoked,
+          RealtimeRecoveryAction.stopRevoked,
+          SyncConnectionPhase.revoked,
+        ),
+        (
+          RealtimeDisconnectKind.protocolViolation,
+          RealtimeRecoveryAction.openCircuit,
+          SyncConnectionPhase.protocolCircuitOpen,
+        ),
+        (
+          RealtimeDisconnectKind.originRejected,
+          RealtimeRecoveryAction.stopOriginRejected,
+          SyncConnectionPhase.originRejected,
+        ),
+      ]) {
+        final database = LocalDatabase(NativeDatabase.memory());
+        final store = DriftSyncStore(database);
+        final realtime = FakeRealtimeSyncPort();
+        final supervisor = SyncLifecycleSupervisor(
+          engine: DurableSyncEngine(
+            store: store,
+            remote: CountingRemote(),
+            inspector: const RetainingInspector(),
+            staleDeviceRefresh: const NoopStaleRefresh(),
+            clock: SupervisorClock(),
+            jitter: const SupervisorJitter(),
+          ),
+          store: store,
+          realtime: realtime,
+          network: FakeNetworkPort(NetworkAvailability.available),
+          lifecycle: FakeLifecyclePort(ApplicationExecutionState.foreground),
+          polling: FakePollingPort(),
+          clock: SupervisorClock(),
+          jitter: const SupervisorJitter(),
+          delay: const ImmediateDelay(),
+        );
+        await supervisor.start();
+
+        realtime.disconnect(
+          RealtimeDisconnect(kind: entry.$1, action: entry.$2),
+        );
+        await pumpEvents();
+
+        final projection =
+            await store.readProjection() as Success<SyncProjection>;
+        expect(projection.value.connectionPhase, entry.$3);
+        await supervisor.dispose();
+        await database.close();
+      }
+    },
+  );
+
+  test(
+    'gateway adapter maps all close codes and drops socket envelope bytes',
+    () async {
+      final adapter = GatewayRealtimeSyncAdapter();
+      final gateway = FakeGateway();
+      adapter.attach(gateway);
+      final hints = <void>[];
+      final hintSubscription = adapter.durableEnvelopeHints.listen(hints.add);
+      gateway.add(
+        RealtimeEnvelope(
+          id: '00000000-0000-0000-0000-000000000001',
+          sequence: 1,
+          blob: 'opaque-socket-bytes-never-forwarded',
+        ),
+      );
+      await pumpEvents();
+      expect(hints, hasLength(1));
+
+      const cases = [
+        (
+          RealtimeCloseReason.authenticationFailed,
+          ReconnectAction.refreshThenReconnectOnce,
+          RealtimeDisconnectKind.authenticationFailed,
+          RealtimeRecoveryAction.refreshThenReconnectOnce,
+        ),
+        (
+          RealtimeCloseReason.revoked,
+          ReconnectAction.stopRevoked,
+          RealtimeDisconnectKind.revoked,
+          RealtimeRecoveryAction.stopRevoked,
+        ),
+        (
+          RealtimeCloseReason.protocolViolation,
+          ReconnectAction.openCircuit,
+          RealtimeDisconnectKind.protocolViolation,
+          RealtimeRecoveryAction.openCircuit,
+        ),
+        (
+          RealtimeCloseReason.originRejected,
+          ReconnectAction.stopOriginRejected,
+          RealtimeDisconnectKind.originRejected,
+          RealtimeRecoveryAction.stopOriginRejected,
+        ),
+        (
+          RealtimeCloseReason.transportLost,
+          ReconnectAction.reconnectWithBackoff,
+          RealtimeDisconnectKind.transportLost,
+          RealtimeRecoveryAction.reconnectWithBackoff,
+        ),
+      ];
+      for (final entry in cases) {
+        final event = adapter.disconnects.first;
+        await adapter.onDisconnected(reason: entry.$1, action: entry.$2);
+        final mapped = await event;
+        expect(mapped.kind, entry.$3);
+        expect(mapped.action, entry.$4);
+      }
+      await hintSubscription.cancel();
+      await adapter.dispose();
+      await gateway.dispose();
+    },
+  );
+}
+
+final class CountingRemote implements SyncRemotePort {
+  int drains = 0;
+  final List<Uint8List> receivedSocketPayloads = [];
+
+  @override
+  Future<Result<DrainPage>> drain({required int limit}) async {
+    drains += 1;
+    return Result.success(
+      DrainPage(envelopes: const [], hasMore: false, prunedThrough: 0),
+    );
+  }
+
+  @override
+  Future<Result<int>> acknowledge(List<String> envelopeIds) async =>
+      Result.success(envelopeIds.length);
+
+  @override
+  Future<Result<OutboxAcceptance>> send(OutboxBatch batch) async =>
+      Result.success(
+        OutboxAcceptance(accepted: batch.targets.length, staleDeviceIds: {}),
+      );
+}
+
+final class FakeRealtimeSyncPort implements RealtimeSyncPort {
+  final StreamController<void> hints = StreamController<void>.broadcast();
+  final StreamController<RealtimeDisconnect> disconnectEvents =
+      StreamController<RealtimeDisconnect>.broadcast();
+  int connects = 0;
+  int closes = 0;
+
+  @override
+  Stream<void> get durableEnvelopeHints => hints.stream;
+
+  @override
+  Stream<RealtimeDisconnect> get disconnects => disconnectEvents.stream;
+
+  void hint() => hints.add(null);
+
+  void disconnect(RealtimeDisconnect event) => disconnectEvents.add(event);
+
+  @override
+  Future<Result<void>> connect() async {
+    connects += 1;
+    return const Result.success(null);
+  }
+
+  @override
+  void markStableConnection() {}
+
+  @override
+  Future<void> close() async {
+    closes += 1;
+  }
+}
+
+final class FakeNetworkPort implements NetworkAvailabilityPort {
+  FakeNetworkPort(this._current);
+
+  final StreamController<NetworkAvailability> controller =
+      StreamController<NetworkAvailability>.broadcast();
+  NetworkAvailability _current;
+
+  @override
+  NetworkAvailability get current => _current;
+
+  @override
+  Stream<NetworkAvailability> get changes => controller.stream;
+
+  void set(NetworkAvailability value) {
+    _current = value;
+    controller.add(value);
+  }
+}
+
+final class FakeLifecyclePort implements ApplicationLifecyclePort {
+  FakeLifecyclePort(this._current);
+
+  final StreamController<ApplicationExecutionState> controller =
+      StreamController<ApplicationExecutionState>.broadcast();
+  ApplicationExecutionState _current;
+
+  @override
+  ApplicationExecutionState get current => _current;
+
+  @override
+  Stream<ApplicationExecutionState> get changes => controller.stream;
+
+  void set(ApplicationExecutionState value) {
+    _current = value;
+    controller.add(value);
+  }
+}
+
+final class FakePollingPort implements BestEffortPollingPort {
+  final StreamController<void> controller = StreamController<void>.broadcast();
+  int schedules = 0;
+
+  @override
+  Stream<void> get triggers => controller.stream;
+
+  void trigger() => controller.add(null);
+
+  @override
+  Future<void> schedule({required Duration minimumInterval}) async {
+    schedules += 1;
+  }
+
+  @override
+  Future<void> cancel() async {}
+}
+
+final class FakeGateway implements RealtimeGateway {
+  final StreamController<RealtimeEvent> controller =
+      StreamController<RealtimeEvent>.broadcast();
+
+  @override
+  Stream<RealtimeEvent> get events => controller.stream;
+
+  void add(RealtimeEvent event) => controller.add(event);
+
+  @override
+  Future<Result<void>> connect() async => const Result.success(null);
+
+  @override
+  void markStableConnection() {}
+
+  @override
+  Future<Result<void>> send(Map<String, Object?> frame) async =>
+      const Result.success(null);
+
+  @override
+  Future<void> close() async {}
+
+  Future<void> dispose() => controller.close();
+}
+
+final class RetainingInspector implements OpaqueEnvelopeInspector {
+  const RetainingInspector();
+
+  @override
+  Future<Result<OpaqueEnvelopeInspection>> inspect({
+    required String envelopeId,
+    required Uint8List exactCiphertext,
+    required bool allowPotentiallyMls,
+  }) async => const Result.success(
+    OpaqueEnvelopeInspection(
+      opaqueEventId: 'fixture',
+      dependency: EnvelopeDependency.directOrLocal,
+    ),
+  );
+}
+
+final class NoopStaleRefresh implements StaleDeviceRefreshPort {
+  const NoopStaleRefresh();
+
+  @override
+  Future<Result<void>> refreshUserDevices(String userId) async =>
+      const Result.success(null);
+}
+
+final class SupervisorClock implements TimeSource {
+  @override
+  DateTime now() => DateTime.utc(2026, 7, 29);
+}
+
+final class SupervisorJitter implements JitterSource {
+  const SupervisorJitter();
+
+  @override
+  int nextInt(int upperBoundExclusive) => 0;
+}
+
+final class ImmediateDelay implements DelayPort {
+  const ImmediateDelay();
+
+  @override
+  Future<void> wait(Duration delay) async {}
+}
+
+Future<void> pumpEvents() async {
+  for (var index = 0; index < 8; index += 1) {
+    await Future<void>.delayed(Duration.zero);
+  }
+}

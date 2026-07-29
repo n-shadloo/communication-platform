@@ -70,6 +70,10 @@ abstract final class ApiContractLimits {
     maximumRequestBytes: 90 * 1024 * 1024,
     maximumResponseBytes: 64 * 1024,
   );
+  static const envelopeDrainJson = PayloadLimits(
+    maximumRequestBytes: 0,
+    maximumResponseBytes: 40 * 1024 * 1024,
+  );
 }
 
 final class ApiRequest<T> {

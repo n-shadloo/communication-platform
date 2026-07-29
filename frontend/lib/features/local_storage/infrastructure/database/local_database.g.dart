@@ -4764,12 +4764,25 @@ class $MlsGroupsTable extends MlsGroups
     type: DriftSqlType.int,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _queueGapRecoveryStateMeta =
+      const VerificationMeta('queueGapRecoveryState');
+  @override
+  late final GeneratedColumn<int> queueGapRecoveryState = GeneratedColumn<int>(
+    'queue_gap_recovery_state',
+    aliasedName,
+    false,
+    check: () => ComparableExpr(queueGapRecoveryState).isBetweenValues(0, 2),
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     groupId,
     opaqueCryptoStateHandle,
     acceptedEpoch,
     stateVersion,
+    queueGapRecoveryState,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -4824,6 +4837,15 @@ class $MlsGroupsTable extends MlsGroups
     } else if (isInserting) {
       context.missing(_stateVersionMeta);
     }
+    if (data.containsKey('queue_gap_recovery_state')) {
+      context.handle(
+        _queueGapRecoveryStateMeta,
+        queueGapRecoveryState.isAcceptableOrUnknown(
+          data['queue_gap_recovery_state']!,
+          _queueGapRecoveryStateMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -4849,6 +4871,10 @@ class $MlsGroupsTable extends MlsGroups
         DriftSqlType.int,
         data['${effectivePrefix}state_version'],
       )!,
+      queueGapRecoveryState: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}queue_gap_recovery_state'],
+      )!,
     );
   }
 
@@ -4863,11 +4889,13 @@ class MlsGroup extends DataClass implements Insertable<MlsGroup> {
   final Uint8List opaqueCryptoStateHandle;
   final int acceptedEpoch;
   final int stateVersion;
+  final int queueGapRecoveryState;
   const MlsGroup({
     required this.groupId,
     required this.opaqueCryptoStateHandle,
     required this.acceptedEpoch,
     required this.stateVersion,
+    required this.queueGapRecoveryState,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -4878,6 +4906,7 @@ class MlsGroup extends DataClass implements Insertable<MlsGroup> {
     );
     map['accepted_epoch'] = Variable<int>(acceptedEpoch);
     map['state_version'] = Variable<int>(stateVersion);
+    map['queue_gap_recovery_state'] = Variable<int>(queueGapRecoveryState);
     return map;
   }
 
@@ -4887,6 +4916,7 @@ class MlsGroup extends DataClass implements Insertable<MlsGroup> {
       opaqueCryptoStateHandle: Value(opaqueCryptoStateHandle),
       acceptedEpoch: Value(acceptedEpoch),
       stateVersion: Value(stateVersion),
+      queueGapRecoveryState: Value(queueGapRecoveryState),
     );
   }
 
@@ -4902,6 +4932,9 @@ class MlsGroup extends DataClass implements Insertable<MlsGroup> {
       ),
       acceptedEpoch: serializer.fromJson<int>(json['acceptedEpoch']),
       stateVersion: serializer.fromJson<int>(json['stateVersion']),
+      queueGapRecoveryState: serializer.fromJson<int>(
+        json['queueGapRecoveryState'],
+      ),
     );
   }
   @override
@@ -4914,6 +4947,7 @@ class MlsGroup extends DataClass implements Insertable<MlsGroup> {
       ),
       'acceptedEpoch': serializer.toJson<int>(acceptedEpoch),
       'stateVersion': serializer.toJson<int>(stateVersion),
+      'queueGapRecoveryState': serializer.toJson<int>(queueGapRecoveryState),
     };
   }
 
@@ -4922,12 +4956,14 @@ class MlsGroup extends DataClass implements Insertable<MlsGroup> {
     Uint8List? opaqueCryptoStateHandle,
     int? acceptedEpoch,
     int? stateVersion,
+    int? queueGapRecoveryState,
   }) => MlsGroup(
     groupId: groupId ?? this.groupId,
     opaqueCryptoStateHandle:
         opaqueCryptoStateHandle ?? this.opaqueCryptoStateHandle,
     acceptedEpoch: acceptedEpoch ?? this.acceptedEpoch,
     stateVersion: stateVersion ?? this.stateVersion,
+    queueGapRecoveryState: queueGapRecoveryState ?? this.queueGapRecoveryState,
   );
   MlsGroup copyWithCompanion(MlsGroupsCompanion data) {
     return MlsGroup(
@@ -4941,6 +4977,9 @@ class MlsGroup extends DataClass implements Insertable<MlsGroup> {
       stateVersion: data.stateVersion.present
           ? data.stateVersion.value
           : this.stateVersion,
+      queueGapRecoveryState: data.queueGapRecoveryState.present
+          ? data.queueGapRecoveryState.value
+          : this.queueGapRecoveryState,
     );
   }
 
@@ -4950,7 +4989,8 @@ class MlsGroup extends DataClass implements Insertable<MlsGroup> {
           ..write('groupId: $groupId, ')
           ..write('opaqueCryptoStateHandle: $opaqueCryptoStateHandle, ')
           ..write('acceptedEpoch: $acceptedEpoch, ')
-          ..write('stateVersion: $stateVersion')
+          ..write('stateVersion: $stateVersion, ')
+          ..write('queueGapRecoveryState: $queueGapRecoveryState')
           ..write(')'))
         .toString();
   }
@@ -4961,6 +5001,7 @@ class MlsGroup extends DataClass implements Insertable<MlsGroup> {
     $driftBlobEquality.hash(opaqueCryptoStateHandle),
     acceptedEpoch,
     stateVersion,
+    queueGapRecoveryState,
   );
   @override
   bool operator ==(Object other) =>
@@ -4972,7 +5013,8 @@ class MlsGroup extends DataClass implements Insertable<MlsGroup> {
             this.opaqueCryptoStateHandle,
           ) &&
           other.acceptedEpoch == this.acceptedEpoch &&
-          other.stateVersion == this.stateVersion);
+          other.stateVersion == this.stateVersion &&
+          other.queueGapRecoveryState == this.queueGapRecoveryState);
 }
 
 class MlsGroupsCompanion extends UpdateCompanion<MlsGroup> {
@@ -4980,12 +5022,14 @@ class MlsGroupsCompanion extends UpdateCompanion<MlsGroup> {
   final Value<Uint8List> opaqueCryptoStateHandle;
   final Value<int> acceptedEpoch;
   final Value<int> stateVersion;
+  final Value<int> queueGapRecoveryState;
   final Value<int> rowid;
   const MlsGroupsCompanion({
     this.groupId = const Value.absent(),
     this.opaqueCryptoStateHandle = const Value.absent(),
     this.acceptedEpoch = const Value.absent(),
     this.stateVersion = const Value.absent(),
+    this.queueGapRecoveryState = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   MlsGroupsCompanion.insert({
@@ -4993,6 +5037,7 @@ class MlsGroupsCompanion extends UpdateCompanion<MlsGroup> {
     required Uint8List opaqueCryptoStateHandle,
     required int acceptedEpoch,
     required int stateVersion,
+    this.queueGapRecoveryState = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : groupId = Value(groupId),
        opaqueCryptoStateHandle = Value(opaqueCryptoStateHandle),
@@ -5003,6 +5048,7 @@ class MlsGroupsCompanion extends UpdateCompanion<MlsGroup> {
     Expression<Uint8List>? opaqueCryptoStateHandle,
     Expression<int>? acceptedEpoch,
     Expression<int>? stateVersion,
+    Expression<int>? queueGapRecoveryState,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -5011,6 +5057,8 @@ class MlsGroupsCompanion extends UpdateCompanion<MlsGroup> {
         'opaque_crypto_state_handle': opaqueCryptoStateHandle,
       if (acceptedEpoch != null) 'accepted_epoch': acceptedEpoch,
       if (stateVersion != null) 'state_version': stateVersion,
+      if (queueGapRecoveryState != null)
+        'queue_gap_recovery_state': queueGapRecoveryState,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -5020,6 +5068,7 @@ class MlsGroupsCompanion extends UpdateCompanion<MlsGroup> {
     Value<Uint8List>? opaqueCryptoStateHandle,
     Value<int>? acceptedEpoch,
     Value<int>? stateVersion,
+    Value<int>? queueGapRecoveryState,
     Value<int>? rowid,
   }) {
     return MlsGroupsCompanion(
@@ -5028,6 +5077,8 @@ class MlsGroupsCompanion extends UpdateCompanion<MlsGroup> {
           opaqueCryptoStateHandle ?? this.opaqueCryptoStateHandle,
       acceptedEpoch: acceptedEpoch ?? this.acceptedEpoch,
       stateVersion: stateVersion ?? this.stateVersion,
+      queueGapRecoveryState:
+          queueGapRecoveryState ?? this.queueGapRecoveryState,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -5049,6 +5100,11 @@ class MlsGroupsCompanion extends UpdateCompanion<MlsGroup> {
     if (stateVersion.present) {
       map['state_version'] = Variable<int>(stateVersion.value);
     }
+    if (queueGapRecoveryState.present) {
+      map['queue_gap_recovery_state'] = Variable<int>(
+        queueGapRecoveryState.value,
+      );
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -5062,6 +5118,7 @@ class MlsGroupsCompanion extends UpdateCompanion<MlsGroup> {
           ..write('opaqueCryptoStateHandle: $opaqueCryptoStateHandle, ')
           ..write('acceptedEpoch: $acceptedEpoch, ')
           ..write('stateVersion: $stateVersion, ')
+          ..write('queueGapRecoveryState: $queueGapRecoveryState, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -7272,6 +7329,56 @@ class $InboxEnvelopesTable extends InboxEnvelopes
     ),
     defaultValue: const Constant(false),
   );
+  static const VerificationMeta _opaqueEventIdMeta = const VerificationMeta(
+    'opaqueEventId',
+  );
+  @override
+  late final GeneratedColumn<String> opaqueEventId = GeneratedColumn<String>(
+    'opaque_event_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _dependencyClassMeta = const VerificationMeta(
+    'dependencyClass',
+  );
+  @override
+  late final GeneratedColumn<int> dependencyClass = GeneratedColumn<int>(
+    'dependency_class',
+    aliasedName,
+    true,
+    check: () =>
+        dependencyClass.isNull() |
+        ComparableExpr(dependencyClass).isBetweenValues(0, 1),
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _attemptCountMeta = const VerificationMeta(
+    'attemptCount',
+  );
+  @override
+  late final GeneratedColumn<int> attemptCount = GeneratedColumn<int>(
+    'attempt_count',
+    aliasedName,
+    false,
+    check: () => ComparableExpr(attemptCount).isBiggerOrEqualValue(0),
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _nextAttemptAtMeta = const VerificationMeta(
+    'nextAttemptAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> nextAttemptAt =
+      GeneratedColumn<DateTime>(
+        'next_attempt_at',
+        aliasedName,
+        true,
+        type: DriftSqlType.dateTime,
+        requiredDuringInsert: false,
+      );
   @override
   List<GeneratedColumn> get $columns => [
     envelopeId,
@@ -7279,6 +7386,10 @@ class $InboxEnvelopesTable extends InboxEnvelopes
     envelopeCiphertext,
     processingState,
     readyToAcknowledge,
+    opaqueEventId,
+    dependencyClass,
+    attemptCount,
+    nextAttemptAt,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -7339,6 +7450,42 @@ class $InboxEnvelopesTable extends InboxEnvelopes
         ),
       );
     }
+    if (data.containsKey('opaque_event_id')) {
+      context.handle(
+        _opaqueEventIdMeta,
+        opaqueEventId.isAcceptableOrUnknown(
+          data['opaque_event_id']!,
+          _opaqueEventIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('dependency_class')) {
+      context.handle(
+        _dependencyClassMeta,
+        dependencyClass.isAcceptableOrUnknown(
+          data['dependency_class']!,
+          _dependencyClassMeta,
+        ),
+      );
+    }
+    if (data.containsKey('attempt_count')) {
+      context.handle(
+        _attemptCountMeta,
+        attemptCount.isAcceptableOrUnknown(
+          data['attempt_count']!,
+          _attemptCountMeta,
+        ),
+      );
+    }
+    if (data.containsKey('next_attempt_at')) {
+      context.handle(
+        _nextAttemptAtMeta,
+        nextAttemptAt.isAcceptableOrUnknown(
+          data['next_attempt_at']!,
+          _nextAttemptAtMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -7368,6 +7515,22 @@ class $InboxEnvelopesTable extends InboxEnvelopes
         DriftSqlType.bool,
         data['${effectivePrefix}ready_to_acknowledge'],
       )!,
+      opaqueEventId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}opaque_event_id'],
+      ),
+      dependencyClass: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}dependency_class'],
+      ),
+      attemptCount: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}attempt_count'],
+      )!,
+      nextAttemptAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}next_attempt_at'],
+      ),
     );
   }
 
@@ -7383,12 +7546,20 @@ class InboxEnvelope extends DataClass implements Insertable<InboxEnvelope> {
   final Uint8List envelopeCiphertext;
   final int processingState;
   final bool readyToAcknowledge;
+  final String? opaqueEventId;
+  final int? dependencyClass;
+  final int attemptCount;
+  final DateTime? nextAttemptAt;
   const InboxEnvelope({
     required this.envelopeId,
     required this.sequence,
     required this.envelopeCiphertext,
     required this.processingState,
     required this.readyToAcknowledge,
+    this.opaqueEventId,
+    this.dependencyClass,
+    required this.attemptCount,
+    this.nextAttemptAt,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -7398,6 +7569,16 @@ class InboxEnvelope extends DataClass implements Insertable<InboxEnvelope> {
     map['envelope_ciphertext'] = Variable<Uint8List>(envelopeCiphertext);
     map['processing_state'] = Variable<int>(processingState);
     map['ready_to_acknowledge'] = Variable<bool>(readyToAcknowledge);
+    if (!nullToAbsent || opaqueEventId != null) {
+      map['opaque_event_id'] = Variable<String>(opaqueEventId);
+    }
+    if (!nullToAbsent || dependencyClass != null) {
+      map['dependency_class'] = Variable<int>(dependencyClass);
+    }
+    map['attempt_count'] = Variable<int>(attemptCount);
+    if (!nullToAbsent || nextAttemptAt != null) {
+      map['next_attempt_at'] = Variable<DateTime>(nextAttemptAt);
+    }
     return map;
   }
 
@@ -7408,6 +7589,16 @@ class InboxEnvelope extends DataClass implements Insertable<InboxEnvelope> {
       envelopeCiphertext: Value(envelopeCiphertext),
       processingState: Value(processingState),
       readyToAcknowledge: Value(readyToAcknowledge),
+      opaqueEventId: opaqueEventId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(opaqueEventId),
+      dependencyClass: dependencyClass == null && nullToAbsent
+          ? const Value.absent()
+          : Value(dependencyClass),
+      attemptCount: Value(attemptCount),
+      nextAttemptAt: nextAttemptAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(nextAttemptAt),
     );
   }
 
@@ -7424,6 +7615,10 @@ class InboxEnvelope extends DataClass implements Insertable<InboxEnvelope> {
       ),
       processingState: serializer.fromJson<int>(json['processingState']),
       readyToAcknowledge: serializer.fromJson<bool>(json['readyToAcknowledge']),
+      opaqueEventId: serializer.fromJson<String?>(json['opaqueEventId']),
+      dependencyClass: serializer.fromJson<int?>(json['dependencyClass']),
+      attemptCount: serializer.fromJson<int>(json['attemptCount']),
+      nextAttemptAt: serializer.fromJson<DateTime?>(json['nextAttemptAt']),
     );
   }
   @override
@@ -7435,6 +7630,10 @@ class InboxEnvelope extends DataClass implements Insertable<InboxEnvelope> {
       'envelopeCiphertext': serializer.toJson<Uint8List>(envelopeCiphertext),
       'processingState': serializer.toJson<int>(processingState),
       'readyToAcknowledge': serializer.toJson<bool>(readyToAcknowledge),
+      'opaqueEventId': serializer.toJson<String?>(opaqueEventId),
+      'dependencyClass': serializer.toJson<int?>(dependencyClass),
+      'attemptCount': serializer.toJson<int>(attemptCount),
+      'nextAttemptAt': serializer.toJson<DateTime?>(nextAttemptAt),
     };
   }
 
@@ -7444,12 +7643,26 @@ class InboxEnvelope extends DataClass implements Insertable<InboxEnvelope> {
     Uint8List? envelopeCiphertext,
     int? processingState,
     bool? readyToAcknowledge,
+    Value<String?> opaqueEventId = const Value.absent(),
+    Value<int?> dependencyClass = const Value.absent(),
+    int? attemptCount,
+    Value<DateTime?> nextAttemptAt = const Value.absent(),
   }) => InboxEnvelope(
     envelopeId: envelopeId ?? this.envelopeId,
     sequence: sequence ?? this.sequence,
     envelopeCiphertext: envelopeCiphertext ?? this.envelopeCiphertext,
     processingState: processingState ?? this.processingState,
     readyToAcknowledge: readyToAcknowledge ?? this.readyToAcknowledge,
+    opaqueEventId: opaqueEventId.present
+        ? opaqueEventId.value
+        : this.opaqueEventId,
+    dependencyClass: dependencyClass.present
+        ? dependencyClass.value
+        : this.dependencyClass,
+    attemptCount: attemptCount ?? this.attemptCount,
+    nextAttemptAt: nextAttemptAt.present
+        ? nextAttemptAt.value
+        : this.nextAttemptAt,
   );
   InboxEnvelope copyWithCompanion(InboxEnvelopesCompanion data) {
     return InboxEnvelope(
@@ -7466,6 +7679,18 @@ class InboxEnvelope extends DataClass implements Insertable<InboxEnvelope> {
       readyToAcknowledge: data.readyToAcknowledge.present
           ? data.readyToAcknowledge.value
           : this.readyToAcknowledge,
+      opaqueEventId: data.opaqueEventId.present
+          ? data.opaqueEventId.value
+          : this.opaqueEventId,
+      dependencyClass: data.dependencyClass.present
+          ? data.dependencyClass.value
+          : this.dependencyClass,
+      attemptCount: data.attemptCount.present
+          ? data.attemptCount.value
+          : this.attemptCount,
+      nextAttemptAt: data.nextAttemptAt.present
+          ? data.nextAttemptAt.value
+          : this.nextAttemptAt,
     );
   }
 
@@ -7476,7 +7701,11 @@ class InboxEnvelope extends DataClass implements Insertable<InboxEnvelope> {
           ..write('sequence: $sequence, ')
           ..write('envelopeCiphertext: $envelopeCiphertext, ')
           ..write('processingState: $processingState, ')
-          ..write('readyToAcknowledge: $readyToAcknowledge')
+          ..write('readyToAcknowledge: $readyToAcknowledge, ')
+          ..write('opaqueEventId: $opaqueEventId, ')
+          ..write('dependencyClass: $dependencyClass, ')
+          ..write('attemptCount: $attemptCount, ')
+          ..write('nextAttemptAt: $nextAttemptAt')
           ..write(')'))
         .toString();
   }
@@ -7488,6 +7717,10 @@ class InboxEnvelope extends DataClass implements Insertable<InboxEnvelope> {
     $driftBlobEquality.hash(envelopeCiphertext),
     processingState,
     readyToAcknowledge,
+    opaqueEventId,
+    dependencyClass,
+    attemptCount,
+    nextAttemptAt,
   );
   @override
   bool operator ==(Object other) =>
@@ -7500,7 +7733,11 @@ class InboxEnvelope extends DataClass implements Insertable<InboxEnvelope> {
             this.envelopeCiphertext,
           ) &&
           other.processingState == this.processingState &&
-          other.readyToAcknowledge == this.readyToAcknowledge);
+          other.readyToAcknowledge == this.readyToAcknowledge &&
+          other.opaqueEventId == this.opaqueEventId &&
+          other.dependencyClass == this.dependencyClass &&
+          other.attemptCount == this.attemptCount &&
+          other.nextAttemptAt == this.nextAttemptAt);
 }
 
 class InboxEnvelopesCompanion extends UpdateCompanion<InboxEnvelope> {
@@ -7509,6 +7746,10 @@ class InboxEnvelopesCompanion extends UpdateCompanion<InboxEnvelope> {
   final Value<Uint8List> envelopeCiphertext;
   final Value<int> processingState;
   final Value<bool> readyToAcknowledge;
+  final Value<String?> opaqueEventId;
+  final Value<int?> dependencyClass;
+  final Value<int> attemptCount;
+  final Value<DateTime?> nextAttemptAt;
   final Value<int> rowid;
   const InboxEnvelopesCompanion({
     this.envelopeId = const Value.absent(),
@@ -7516,6 +7757,10 @@ class InboxEnvelopesCompanion extends UpdateCompanion<InboxEnvelope> {
     this.envelopeCiphertext = const Value.absent(),
     this.processingState = const Value.absent(),
     this.readyToAcknowledge = const Value.absent(),
+    this.opaqueEventId = const Value.absent(),
+    this.dependencyClass = const Value.absent(),
+    this.attemptCount = const Value.absent(),
+    this.nextAttemptAt = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   InboxEnvelopesCompanion.insert({
@@ -7524,6 +7769,10 @@ class InboxEnvelopesCompanion extends UpdateCompanion<InboxEnvelope> {
     required Uint8List envelopeCiphertext,
     required int processingState,
     this.readyToAcknowledge = const Value.absent(),
+    this.opaqueEventId = const Value.absent(),
+    this.dependencyClass = const Value.absent(),
+    this.attemptCount = const Value.absent(),
+    this.nextAttemptAt = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : envelopeId = Value(envelopeId),
        sequence = Value(sequence),
@@ -7535,6 +7784,10 @@ class InboxEnvelopesCompanion extends UpdateCompanion<InboxEnvelope> {
     Expression<Uint8List>? envelopeCiphertext,
     Expression<int>? processingState,
     Expression<bool>? readyToAcknowledge,
+    Expression<String>? opaqueEventId,
+    Expression<int>? dependencyClass,
+    Expression<int>? attemptCount,
+    Expression<DateTime>? nextAttemptAt,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -7544,6 +7797,10 @@ class InboxEnvelopesCompanion extends UpdateCompanion<InboxEnvelope> {
       if (processingState != null) 'processing_state': processingState,
       if (readyToAcknowledge != null)
         'ready_to_acknowledge': readyToAcknowledge,
+      if (opaqueEventId != null) 'opaque_event_id': opaqueEventId,
+      if (dependencyClass != null) 'dependency_class': dependencyClass,
+      if (attemptCount != null) 'attempt_count': attemptCount,
+      if (nextAttemptAt != null) 'next_attempt_at': nextAttemptAt,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -7554,6 +7811,10 @@ class InboxEnvelopesCompanion extends UpdateCompanion<InboxEnvelope> {
     Value<Uint8List>? envelopeCiphertext,
     Value<int>? processingState,
     Value<bool>? readyToAcknowledge,
+    Value<String?>? opaqueEventId,
+    Value<int?>? dependencyClass,
+    Value<int>? attemptCount,
+    Value<DateTime?>? nextAttemptAt,
     Value<int>? rowid,
   }) {
     return InboxEnvelopesCompanion(
@@ -7562,6 +7823,10 @@ class InboxEnvelopesCompanion extends UpdateCompanion<InboxEnvelope> {
       envelopeCiphertext: envelopeCiphertext ?? this.envelopeCiphertext,
       processingState: processingState ?? this.processingState,
       readyToAcknowledge: readyToAcknowledge ?? this.readyToAcknowledge,
+      opaqueEventId: opaqueEventId ?? this.opaqueEventId,
+      dependencyClass: dependencyClass ?? this.dependencyClass,
+      attemptCount: attemptCount ?? this.attemptCount,
+      nextAttemptAt: nextAttemptAt ?? this.nextAttemptAt,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -7586,6 +7851,18 @@ class InboxEnvelopesCompanion extends UpdateCompanion<InboxEnvelope> {
     if (readyToAcknowledge.present) {
       map['ready_to_acknowledge'] = Variable<bool>(readyToAcknowledge.value);
     }
+    if (opaqueEventId.present) {
+      map['opaque_event_id'] = Variable<String>(opaqueEventId.value);
+    }
+    if (dependencyClass.present) {
+      map['dependency_class'] = Variable<int>(dependencyClass.value);
+    }
+    if (attemptCount.present) {
+      map['attempt_count'] = Variable<int>(attemptCount.value);
+    }
+    if (nextAttemptAt.present) {
+      map['next_attempt_at'] = Variable<DateTime>(nextAttemptAt.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -7600,6 +7877,10 @@ class InboxEnvelopesCompanion extends UpdateCompanion<InboxEnvelope> {
           ..write('envelopeCiphertext: $envelopeCiphertext, ')
           ..write('processingState: $processingState, ')
           ..write('readyToAcknowledge: $readyToAcknowledge, ')
+          ..write('opaqueEventId: $opaqueEventId, ')
+          ..write('dependencyClass: $dependencyClass, ')
+          ..write('attemptCount: $attemptCount, ')
+          ..write('nextAttemptAt: $nextAttemptAt, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -7646,6 +7927,18 @@ class $OutboxOperationsTable extends OutboxOperations
         type: DriftSqlType.string,
         requiredDuringInsert: true,
       );
+  static const VerificationMeta _recipientUserIdMeta = const VerificationMeta(
+    'recipientUserId',
+  );
+  @override
+  late final GeneratedColumn<String> recipientUserId = GeneratedColumn<String>(
+    'recipient_user_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
   static const VerificationMeta _batchIndexMeta = const VerificationMeta(
     'batchIndex',
   );
@@ -7694,15 +7987,54 @@ class $OutboxOperationsTable extends OutboxOperations
     requiredDuringInsert: false,
     defaultValue: const Constant(0),
   );
+  static const VerificationMeta _nextAttemptAtMeta = const VerificationMeta(
+    'nextAttemptAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> nextAttemptAt =
+      GeneratedColumn<DateTime>(
+        'next_attempt_at',
+        aliasedName,
+        true,
+        type: DriftSqlType.dateTime,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _lastAttemptAtMeta = const VerificationMeta(
+    'lastAttemptAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> lastAttemptAt =
+      GeneratedColumn<DateTime>(
+        'last_attempt_at',
+        aliasedName,
+        true,
+        type: DriftSqlType.dateTime,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _terminalAtMeta = const VerificationMeta(
+    'terminalAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> terminalAt = GeneratedColumn<DateTime>(
+    'terminal_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
   @override
   List<GeneratedColumn> get $columns => [
     operationId,
     eventId,
     recipientDeviceId,
+    recipientUserId,
     batchIndex,
     exactRecipientCiphertext,
     attemptState,
     attemptCount,
+    nextAttemptAt,
+    lastAttemptAt,
+    terminalAt,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -7746,6 +8078,15 @@ class $OutboxOperationsTable extends OutboxOperations
     } else if (isInserting) {
       context.missing(_recipientDeviceIdMeta);
     }
+    if (data.containsKey('recipient_user_id')) {
+      context.handle(
+        _recipientUserIdMeta,
+        recipientUserId.isAcceptableOrUnknown(
+          data['recipient_user_id']!,
+          _recipientUserIdMeta,
+        ),
+      );
+    }
     if (data.containsKey('batch_index')) {
       context.handle(
         _batchIndexMeta,
@@ -7785,6 +8126,30 @@ class $OutboxOperationsTable extends OutboxOperations
         ),
       );
     }
+    if (data.containsKey('next_attempt_at')) {
+      context.handle(
+        _nextAttemptAtMeta,
+        nextAttemptAt.isAcceptableOrUnknown(
+          data['next_attempt_at']!,
+          _nextAttemptAtMeta,
+        ),
+      );
+    }
+    if (data.containsKey('last_attempt_at')) {
+      context.handle(
+        _lastAttemptAtMeta,
+        lastAttemptAt.isAcceptableOrUnknown(
+          data['last_attempt_at']!,
+          _lastAttemptAtMeta,
+        ),
+      );
+    }
+    if (data.containsKey('terminal_at')) {
+      context.handle(
+        _terminalAtMeta,
+        terminalAt.isAcceptableOrUnknown(data['terminal_at']!, _terminalAtMeta),
+      );
+    }
     return context;
   }
 
@@ -7806,6 +8171,10 @@ class $OutboxOperationsTable extends OutboxOperations
         DriftSqlType.string,
         data['${effectivePrefix}recipient_device_id'],
       )!,
+      recipientUserId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}recipient_user_id'],
+      )!,
       batchIndex: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}batch_index'],
@@ -7822,6 +8191,18 @@ class $OutboxOperationsTable extends OutboxOperations
         DriftSqlType.int,
         data['${effectivePrefix}attempt_count'],
       )!,
+      nextAttemptAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}next_attempt_at'],
+      ),
+      lastAttemptAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}last_attempt_at'],
+      ),
+      terminalAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}terminal_at'],
+      ),
     );
   }
 
@@ -7835,18 +8216,26 @@ class OutboxOperation extends DataClass implements Insertable<OutboxOperation> {
   final String operationId;
   final String eventId;
   final String recipientDeviceId;
+  final String recipientUserId;
   final int batchIndex;
   final Uint8List exactRecipientCiphertext;
   final int attemptState;
   final int attemptCount;
+  final DateTime? nextAttemptAt;
+  final DateTime? lastAttemptAt;
+  final DateTime? terminalAt;
   const OutboxOperation({
     required this.operationId,
     required this.eventId,
     required this.recipientDeviceId,
+    required this.recipientUserId,
     required this.batchIndex,
     required this.exactRecipientCiphertext,
     required this.attemptState,
     required this.attemptCount,
+    this.nextAttemptAt,
+    this.lastAttemptAt,
+    this.terminalAt,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -7854,12 +8243,22 @@ class OutboxOperation extends DataClass implements Insertable<OutboxOperation> {
     map['operation_id'] = Variable<String>(operationId);
     map['event_id'] = Variable<String>(eventId);
     map['recipient_device_id'] = Variable<String>(recipientDeviceId);
+    map['recipient_user_id'] = Variable<String>(recipientUserId);
     map['batch_index'] = Variable<int>(batchIndex);
     map['exact_recipient_ciphertext'] = Variable<Uint8List>(
       exactRecipientCiphertext,
     );
     map['attempt_state'] = Variable<int>(attemptState);
     map['attempt_count'] = Variable<int>(attemptCount);
+    if (!nullToAbsent || nextAttemptAt != null) {
+      map['next_attempt_at'] = Variable<DateTime>(nextAttemptAt);
+    }
+    if (!nullToAbsent || lastAttemptAt != null) {
+      map['last_attempt_at'] = Variable<DateTime>(lastAttemptAt);
+    }
+    if (!nullToAbsent || terminalAt != null) {
+      map['terminal_at'] = Variable<DateTime>(terminalAt);
+    }
     return map;
   }
 
@@ -7868,10 +8267,20 @@ class OutboxOperation extends DataClass implements Insertable<OutboxOperation> {
       operationId: Value(operationId),
       eventId: Value(eventId),
       recipientDeviceId: Value(recipientDeviceId),
+      recipientUserId: Value(recipientUserId),
       batchIndex: Value(batchIndex),
       exactRecipientCiphertext: Value(exactRecipientCiphertext),
       attemptState: Value(attemptState),
       attemptCount: Value(attemptCount),
+      nextAttemptAt: nextAttemptAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(nextAttemptAt),
+      lastAttemptAt: lastAttemptAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(lastAttemptAt),
+      terminalAt: terminalAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(terminalAt),
     );
   }
 
@@ -7884,12 +8293,16 @@ class OutboxOperation extends DataClass implements Insertable<OutboxOperation> {
       operationId: serializer.fromJson<String>(json['operationId']),
       eventId: serializer.fromJson<String>(json['eventId']),
       recipientDeviceId: serializer.fromJson<String>(json['recipientDeviceId']),
+      recipientUserId: serializer.fromJson<String>(json['recipientUserId']),
       batchIndex: serializer.fromJson<int>(json['batchIndex']),
       exactRecipientCiphertext: serializer.fromJson<Uint8List>(
         json['exactRecipientCiphertext'],
       ),
       attemptState: serializer.fromJson<int>(json['attemptState']),
       attemptCount: serializer.fromJson<int>(json['attemptCount']),
+      nextAttemptAt: serializer.fromJson<DateTime?>(json['nextAttemptAt']),
+      lastAttemptAt: serializer.fromJson<DateTime?>(json['lastAttemptAt']),
+      terminalAt: serializer.fromJson<DateTime?>(json['terminalAt']),
     );
   }
   @override
@@ -7899,12 +8312,16 @@ class OutboxOperation extends DataClass implements Insertable<OutboxOperation> {
       'operationId': serializer.toJson<String>(operationId),
       'eventId': serializer.toJson<String>(eventId),
       'recipientDeviceId': serializer.toJson<String>(recipientDeviceId),
+      'recipientUserId': serializer.toJson<String>(recipientUserId),
       'batchIndex': serializer.toJson<int>(batchIndex),
       'exactRecipientCiphertext': serializer.toJson<Uint8List>(
         exactRecipientCiphertext,
       ),
       'attemptState': serializer.toJson<int>(attemptState),
       'attemptCount': serializer.toJson<int>(attemptCount),
+      'nextAttemptAt': serializer.toJson<DateTime?>(nextAttemptAt),
+      'lastAttemptAt': serializer.toJson<DateTime?>(lastAttemptAt),
+      'terminalAt': serializer.toJson<DateTime?>(terminalAt),
     };
   }
 
@@ -7912,19 +8329,31 @@ class OutboxOperation extends DataClass implements Insertable<OutboxOperation> {
     String? operationId,
     String? eventId,
     String? recipientDeviceId,
+    String? recipientUserId,
     int? batchIndex,
     Uint8List? exactRecipientCiphertext,
     int? attemptState,
     int? attemptCount,
+    Value<DateTime?> nextAttemptAt = const Value.absent(),
+    Value<DateTime?> lastAttemptAt = const Value.absent(),
+    Value<DateTime?> terminalAt = const Value.absent(),
   }) => OutboxOperation(
     operationId: operationId ?? this.operationId,
     eventId: eventId ?? this.eventId,
     recipientDeviceId: recipientDeviceId ?? this.recipientDeviceId,
+    recipientUserId: recipientUserId ?? this.recipientUserId,
     batchIndex: batchIndex ?? this.batchIndex,
     exactRecipientCiphertext:
         exactRecipientCiphertext ?? this.exactRecipientCiphertext,
     attemptState: attemptState ?? this.attemptState,
     attemptCount: attemptCount ?? this.attemptCount,
+    nextAttemptAt: nextAttemptAt.present
+        ? nextAttemptAt.value
+        : this.nextAttemptAt,
+    lastAttemptAt: lastAttemptAt.present
+        ? lastAttemptAt.value
+        : this.lastAttemptAt,
+    terminalAt: terminalAt.present ? terminalAt.value : this.terminalAt,
   );
   OutboxOperation copyWithCompanion(OutboxOperationsCompanion data) {
     return OutboxOperation(
@@ -7935,6 +8364,9 @@ class OutboxOperation extends DataClass implements Insertable<OutboxOperation> {
       recipientDeviceId: data.recipientDeviceId.present
           ? data.recipientDeviceId.value
           : this.recipientDeviceId,
+      recipientUserId: data.recipientUserId.present
+          ? data.recipientUserId.value
+          : this.recipientUserId,
       batchIndex: data.batchIndex.present
           ? data.batchIndex.value
           : this.batchIndex,
@@ -7947,6 +8379,15 @@ class OutboxOperation extends DataClass implements Insertable<OutboxOperation> {
       attemptCount: data.attemptCount.present
           ? data.attemptCount.value
           : this.attemptCount,
+      nextAttemptAt: data.nextAttemptAt.present
+          ? data.nextAttemptAt.value
+          : this.nextAttemptAt,
+      lastAttemptAt: data.lastAttemptAt.present
+          ? data.lastAttemptAt.value
+          : this.lastAttemptAt,
+      terminalAt: data.terminalAt.present
+          ? data.terminalAt.value
+          : this.terminalAt,
     );
   }
 
@@ -7956,10 +8397,14 @@ class OutboxOperation extends DataClass implements Insertable<OutboxOperation> {
           ..write('operationId: $operationId, ')
           ..write('eventId: $eventId, ')
           ..write('recipientDeviceId: $recipientDeviceId, ')
+          ..write('recipientUserId: $recipientUserId, ')
           ..write('batchIndex: $batchIndex, ')
           ..write('exactRecipientCiphertext: $exactRecipientCiphertext, ')
           ..write('attemptState: $attemptState, ')
-          ..write('attemptCount: $attemptCount')
+          ..write('attemptCount: $attemptCount, ')
+          ..write('nextAttemptAt: $nextAttemptAt, ')
+          ..write('lastAttemptAt: $lastAttemptAt, ')
+          ..write('terminalAt: $terminalAt')
           ..write(')'))
         .toString();
   }
@@ -7969,10 +8414,14 @@ class OutboxOperation extends DataClass implements Insertable<OutboxOperation> {
     operationId,
     eventId,
     recipientDeviceId,
+    recipientUserId,
     batchIndex,
     $driftBlobEquality.hash(exactRecipientCiphertext),
     attemptState,
     attemptCount,
+    nextAttemptAt,
+    lastAttemptAt,
+    terminalAt,
   );
   @override
   bool operator ==(Object other) =>
@@ -7981,42 +8430,58 @@ class OutboxOperation extends DataClass implements Insertable<OutboxOperation> {
           other.operationId == this.operationId &&
           other.eventId == this.eventId &&
           other.recipientDeviceId == this.recipientDeviceId &&
+          other.recipientUserId == this.recipientUserId &&
           other.batchIndex == this.batchIndex &&
           $driftBlobEquality.equals(
             other.exactRecipientCiphertext,
             this.exactRecipientCiphertext,
           ) &&
           other.attemptState == this.attemptState &&
-          other.attemptCount == this.attemptCount);
+          other.attemptCount == this.attemptCount &&
+          other.nextAttemptAt == this.nextAttemptAt &&
+          other.lastAttemptAt == this.lastAttemptAt &&
+          other.terminalAt == this.terminalAt);
 }
 
 class OutboxOperationsCompanion extends UpdateCompanion<OutboxOperation> {
   final Value<String> operationId;
   final Value<String> eventId;
   final Value<String> recipientDeviceId;
+  final Value<String> recipientUserId;
   final Value<int> batchIndex;
   final Value<Uint8List> exactRecipientCiphertext;
   final Value<int> attemptState;
   final Value<int> attemptCount;
+  final Value<DateTime?> nextAttemptAt;
+  final Value<DateTime?> lastAttemptAt;
+  final Value<DateTime?> terminalAt;
   final Value<int> rowid;
   const OutboxOperationsCompanion({
     this.operationId = const Value.absent(),
     this.eventId = const Value.absent(),
     this.recipientDeviceId = const Value.absent(),
+    this.recipientUserId = const Value.absent(),
     this.batchIndex = const Value.absent(),
     this.exactRecipientCiphertext = const Value.absent(),
     this.attemptState = const Value.absent(),
     this.attemptCount = const Value.absent(),
+    this.nextAttemptAt = const Value.absent(),
+    this.lastAttemptAt = const Value.absent(),
+    this.terminalAt = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   OutboxOperationsCompanion.insert({
     required String operationId,
     required String eventId,
     required String recipientDeviceId,
+    this.recipientUserId = const Value.absent(),
     required int batchIndex,
     required Uint8List exactRecipientCiphertext,
     required int attemptState,
     this.attemptCount = const Value.absent(),
+    this.nextAttemptAt = const Value.absent(),
+    this.lastAttemptAt = const Value.absent(),
+    this.terminalAt = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : operationId = Value(operationId),
        eventId = Value(eventId),
@@ -8028,21 +8493,29 @@ class OutboxOperationsCompanion extends UpdateCompanion<OutboxOperation> {
     Expression<String>? operationId,
     Expression<String>? eventId,
     Expression<String>? recipientDeviceId,
+    Expression<String>? recipientUserId,
     Expression<int>? batchIndex,
     Expression<Uint8List>? exactRecipientCiphertext,
     Expression<int>? attemptState,
     Expression<int>? attemptCount,
+    Expression<DateTime>? nextAttemptAt,
+    Expression<DateTime>? lastAttemptAt,
+    Expression<DateTime>? terminalAt,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
       if (operationId != null) 'operation_id': operationId,
       if (eventId != null) 'event_id': eventId,
       if (recipientDeviceId != null) 'recipient_device_id': recipientDeviceId,
+      if (recipientUserId != null) 'recipient_user_id': recipientUserId,
       if (batchIndex != null) 'batch_index': batchIndex,
       if (exactRecipientCiphertext != null)
         'exact_recipient_ciphertext': exactRecipientCiphertext,
       if (attemptState != null) 'attempt_state': attemptState,
       if (attemptCount != null) 'attempt_count': attemptCount,
+      if (nextAttemptAt != null) 'next_attempt_at': nextAttemptAt,
+      if (lastAttemptAt != null) 'last_attempt_at': lastAttemptAt,
+      if (terminalAt != null) 'terminal_at': terminalAt,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -8051,21 +8524,29 @@ class OutboxOperationsCompanion extends UpdateCompanion<OutboxOperation> {
     Value<String>? operationId,
     Value<String>? eventId,
     Value<String>? recipientDeviceId,
+    Value<String>? recipientUserId,
     Value<int>? batchIndex,
     Value<Uint8List>? exactRecipientCiphertext,
     Value<int>? attemptState,
     Value<int>? attemptCount,
+    Value<DateTime?>? nextAttemptAt,
+    Value<DateTime?>? lastAttemptAt,
+    Value<DateTime?>? terminalAt,
     Value<int>? rowid,
   }) {
     return OutboxOperationsCompanion(
       operationId: operationId ?? this.operationId,
       eventId: eventId ?? this.eventId,
       recipientDeviceId: recipientDeviceId ?? this.recipientDeviceId,
+      recipientUserId: recipientUserId ?? this.recipientUserId,
       batchIndex: batchIndex ?? this.batchIndex,
       exactRecipientCiphertext:
           exactRecipientCiphertext ?? this.exactRecipientCiphertext,
       attemptState: attemptState ?? this.attemptState,
       attemptCount: attemptCount ?? this.attemptCount,
+      nextAttemptAt: nextAttemptAt ?? this.nextAttemptAt,
+      lastAttemptAt: lastAttemptAt ?? this.lastAttemptAt,
+      terminalAt: terminalAt ?? this.terminalAt,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -8082,6 +8563,9 @@ class OutboxOperationsCompanion extends UpdateCompanion<OutboxOperation> {
     if (recipientDeviceId.present) {
       map['recipient_device_id'] = Variable<String>(recipientDeviceId.value);
     }
+    if (recipientUserId.present) {
+      map['recipient_user_id'] = Variable<String>(recipientUserId.value);
+    }
     if (batchIndex.present) {
       map['batch_index'] = Variable<int>(batchIndex.value);
     }
@@ -8096,6 +8580,15 @@ class OutboxOperationsCompanion extends UpdateCompanion<OutboxOperation> {
     if (attemptCount.present) {
       map['attempt_count'] = Variable<int>(attemptCount.value);
     }
+    if (nextAttemptAt.present) {
+      map['next_attempt_at'] = Variable<DateTime>(nextAttemptAt.value);
+    }
+    if (lastAttemptAt.present) {
+      map['last_attempt_at'] = Variable<DateTime>(lastAttemptAt.value);
+    }
+    if (terminalAt.present) {
+      map['terminal_at'] = Variable<DateTime>(terminalAt.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -8108,10 +8601,750 @@ class OutboxOperationsCompanion extends UpdateCompanion<OutboxOperation> {
           ..write('operationId: $operationId, ')
           ..write('eventId: $eventId, ')
           ..write('recipientDeviceId: $recipientDeviceId, ')
+          ..write('recipientUserId: $recipientUserId, ')
           ..write('batchIndex: $batchIndex, ')
           ..write('exactRecipientCiphertext: $exactRecipientCiphertext, ')
           ..write('attemptState: $attemptState, ')
           ..write('attemptCount: $attemptCount, ')
+          ..write('nextAttemptAt: $nextAttemptAt, ')
+          ..write('lastAttemptAt: $lastAttemptAt, ')
+          ..write('terminalAt: $terminalAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $InboxEventDeduplicationsTable extends InboxEventDeduplications
+    with TableInfo<$InboxEventDeduplicationsTable, InboxEventDeduplication> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $InboxEventDeduplicationsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _opaqueEventIdMeta = const VerificationMeta(
+    'opaqueEventId',
+  );
+  @override
+  late final GeneratedColumn<String> opaqueEventId = GeneratedColumn<String>(
+    'opaque_event_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _firstEnvelopeIdMeta = const VerificationMeta(
+    'firstEnvelopeId',
+  );
+  @override
+  late final GeneratedColumn<String> firstEnvelopeId = GeneratedColumn<String>(
+    'first_envelope_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _dependencyClassMeta = const VerificationMeta(
+    'dependencyClass',
+  );
+  @override
+  late final GeneratedColumn<int> dependencyClass = GeneratedColumn<int>(
+    'dependency_class',
+    aliasedName,
+    false,
+    check: () => ComparableExpr(dependencyClass).isBetweenValues(0, 1),
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _committedAtMeta = const VerificationMeta(
+    'committedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> committedAt = GeneratedColumn<DateTime>(
+    'committed_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    opaqueEventId,
+    firstEnvelopeId,
+    dependencyClass,
+    committedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'inbox_event_deduplication';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<InboxEventDeduplication> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('opaque_event_id')) {
+      context.handle(
+        _opaqueEventIdMeta,
+        opaqueEventId.isAcceptableOrUnknown(
+          data['opaque_event_id']!,
+          _opaqueEventIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_opaqueEventIdMeta);
+    }
+    if (data.containsKey('first_envelope_id')) {
+      context.handle(
+        _firstEnvelopeIdMeta,
+        firstEnvelopeId.isAcceptableOrUnknown(
+          data['first_envelope_id']!,
+          _firstEnvelopeIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_firstEnvelopeIdMeta);
+    }
+    if (data.containsKey('dependency_class')) {
+      context.handle(
+        _dependencyClassMeta,
+        dependencyClass.isAcceptableOrUnknown(
+          data['dependency_class']!,
+          _dependencyClassMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_dependencyClassMeta);
+    }
+    if (data.containsKey('committed_at')) {
+      context.handle(
+        _committedAtMeta,
+        committedAt.isAcceptableOrUnknown(
+          data['committed_at']!,
+          _committedAtMeta,
+        ),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {opaqueEventId};
+  @override
+  InboxEventDeduplication map(
+    Map<String, dynamic> data, {
+    String? tablePrefix,
+  }) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return InboxEventDeduplication(
+      opaqueEventId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}opaque_event_id'],
+      )!,
+      firstEnvelopeId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}first_envelope_id'],
+      )!,
+      dependencyClass: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}dependency_class'],
+      )!,
+      committedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}committed_at'],
+      )!,
+    );
+  }
+
+  @override
+  $InboxEventDeduplicationsTable createAlias(String alias) {
+    return $InboxEventDeduplicationsTable(attachedDatabase, alias);
+  }
+}
+
+class InboxEventDeduplication extends DataClass
+    implements Insertable<InboxEventDeduplication> {
+  final String opaqueEventId;
+  final String firstEnvelopeId;
+  final int dependencyClass;
+  final DateTime committedAt;
+  const InboxEventDeduplication({
+    required this.opaqueEventId,
+    required this.firstEnvelopeId,
+    required this.dependencyClass,
+    required this.committedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['opaque_event_id'] = Variable<String>(opaqueEventId);
+    map['first_envelope_id'] = Variable<String>(firstEnvelopeId);
+    map['dependency_class'] = Variable<int>(dependencyClass);
+    map['committed_at'] = Variable<DateTime>(committedAt);
+    return map;
+  }
+
+  InboxEventDeduplicationsCompanion toCompanion(bool nullToAbsent) {
+    return InboxEventDeduplicationsCompanion(
+      opaqueEventId: Value(opaqueEventId),
+      firstEnvelopeId: Value(firstEnvelopeId),
+      dependencyClass: Value(dependencyClass),
+      committedAt: Value(committedAt),
+    );
+  }
+
+  factory InboxEventDeduplication.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return InboxEventDeduplication(
+      opaqueEventId: serializer.fromJson<String>(json['opaqueEventId']),
+      firstEnvelopeId: serializer.fromJson<String>(json['firstEnvelopeId']),
+      dependencyClass: serializer.fromJson<int>(json['dependencyClass']),
+      committedAt: serializer.fromJson<DateTime>(json['committedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'opaqueEventId': serializer.toJson<String>(opaqueEventId),
+      'firstEnvelopeId': serializer.toJson<String>(firstEnvelopeId),
+      'dependencyClass': serializer.toJson<int>(dependencyClass),
+      'committedAt': serializer.toJson<DateTime>(committedAt),
+    };
+  }
+
+  InboxEventDeduplication copyWith({
+    String? opaqueEventId,
+    String? firstEnvelopeId,
+    int? dependencyClass,
+    DateTime? committedAt,
+  }) => InboxEventDeduplication(
+    opaqueEventId: opaqueEventId ?? this.opaqueEventId,
+    firstEnvelopeId: firstEnvelopeId ?? this.firstEnvelopeId,
+    dependencyClass: dependencyClass ?? this.dependencyClass,
+    committedAt: committedAt ?? this.committedAt,
+  );
+  InboxEventDeduplication copyWithCompanion(
+    InboxEventDeduplicationsCompanion data,
+  ) {
+    return InboxEventDeduplication(
+      opaqueEventId: data.opaqueEventId.present
+          ? data.opaqueEventId.value
+          : this.opaqueEventId,
+      firstEnvelopeId: data.firstEnvelopeId.present
+          ? data.firstEnvelopeId.value
+          : this.firstEnvelopeId,
+      dependencyClass: data.dependencyClass.present
+          ? data.dependencyClass.value
+          : this.dependencyClass,
+      committedAt: data.committedAt.present
+          ? data.committedAt.value
+          : this.committedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('InboxEventDeduplication(')
+          ..write('opaqueEventId: $opaqueEventId, ')
+          ..write('firstEnvelopeId: $firstEnvelopeId, ')
+          ..write('dependencyClass: $dependencyClass, ')
+          ..write('committedAt: $committedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode =>
+      Object.hash(opaqueEventId, firstEnvelopeId, dependencyClass, committedAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is InboxEventDeduplication &&
+          other.opaqueEventId == this.opaqueEventId &&
+          other.firstEnvelopeId == this.firstEnvelopeId &&
+          other.dependencyClass == this.dependencyClass &&
+          other.committedAt == this.committedAt);
+}
+
+class InboxEventDeduplicationsCompanion
+    extends UpdateCompanion<InboxEventDeduplication> {
+  final Value<String> opaqueEventId;
+  final Value<String> firstEnvelopeId;
+  final Value<int> dependencyClass;
+  final Value<DateTime> committedAt;
+  final Value<int> rowid;
+  const InboxEventDeduplicationsCompanion({
+    this.opaqueEventId = const Value.absent(),
+    this.firstEnvelopeId = const Value.absent(),
+    this.dependencyClass = const Value.absent(),
+    this.committedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  InboxEventDeduplicationsCompanion.insert({
+    required String opaqueEventId,
+    required String firstEnvelopeId,
+    required int dependencyClass,
+    this.committedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : opaqueEventId = Value(opaqueEventId),
+       firstEnvelopeId = Value(firstEnvelopeId),
+       dependencyClass = Value(dependencyClass);
+  static Insertable<InboxEventDeduplication> custom({
+    Expression<String>? opaqueEventId,
+    Expression<String>? firstEnvelopeId,
+    Expression<int>? dependencyClass,
+    Expression<DateTime>? committedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (opaqueEventId != null) 'opaque_event_id': opaqueEventId,
+      if (firstEnvelopeId != null) 'first_envelope_id': firstEnvelopeId,
+      if (dependencyClass != null) 'dependency_class': dependencyClass,
+      if (committedAt != null) 'committed_at': committedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  InboxEventDeduplicationsCompanion copyWith({
+    Value<String>? opaqueEventId,
+    Value<String>? firstEnvelopeId,
+    Value<int>? dependencyClass,
+    Value<DateTime>? committedAt,
+    Value<int>? rowid,
+  }) {
+    return InboxEventDeduplicationsCompanion(
+      opaqueEventId: opaqueEventId ?? this.opaqueEventId,
+      firstEnvelopeId: firstEnvelopeId ?? this.firstEnvelopeId,
+      dependencyClass: dependencyClass ?? this.dependencyClass,
+      committedAt: committedAt ?? this.committedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (opaqueEventId.present) {
+      map['opaque_event_id'] = Variable<String>(opaqueEventId.value);
+    }
+    if (firstEnvelopeId.present) {
+      map['first_envelope_id'] = Variable<String>(firstEnvelopeId.value);
+    }
+    if (dependencyClass.present) {
+      map['dependency_class'] = Variable<int>(dependencyClass.value);
+    }
+    if (committedAt.present) {
+      map['committed_at'] = Variable<DateTime>(committedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('InboxEventDeduplicationsCompanion(')
+          ..write('opaqueEventId: $opaqueEventId, ')
+          ..write('firstEnvelopeId: $firstEnvelopeId, ')
+          ..write('dependencyClass: $dependencyClass, ')
+          ..write('committedAt: $committedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $StaleDeviceRefreshRequestsTable extends StaleDeviceRefreshRequests
+    with
+        TableInfo<$StaleDeviceRefreshRequestsTable, StaleDeviceRefreshRequest> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $StaleDeviceRefreshRequestsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _userIdMeta = const VerificationMeta('userId');
+  @override
+  late final GeneratedColumn<String> userId = GeneratedColumn<String>(
+    'user_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _staleDeviceIdMeta = const VerificationMeta(
+    'staleDeviceId',
+  );
+  @override
+  late final GeneratedColumn<String> staleDeviceId = GeneratedColumn<String>(
+    'stale_device_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _stateMeta = const VerificationMeta('state');
+  @override
+  late final GeneratedColumn<int> state = GeneratedColumn<int>(
+    'state',
+    aliasedName,
+    false,
+    check: () => ComparableExpr(state).isBetweenValues(0, 3),
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _attemptCountMeta = const VerificationMeta(
+    'attemptCount',
+  );
+  @override
+  late final GeneratedColumn<int> attemptCount = GeneratedColumn<int>(
+    'attempt_count',
+    aliasedName,
+    false,
+    check: () => ComparableExpr(attemptCount).isBiggerOrEqualValue(0),
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _nextAttemptAtMeta = const VerificationMeta(
+    'nextAttemptAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> nextAttemptAt =
+      GeneratedColumn<DateTime>(
+        'next_attempt_at',
+        aliasedName,
+        true,
+        type: DriftSqlType.dateTime,
+        requiredDuringInsert: false,
+      );
+  @override
+  List<GeneratedColumn> get $columns => [
+    userId,
+    staleDeviceId,
+    state,
+    attemptCount,
+    nextAttemptAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'stale_device_refresh_requests';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<StaleDeviceRefreshRequest> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('user_id')) {
+      context.handle(
+        _userIdMeta,
+        userId.isAcceptableOrUnknown(data['user_id']!, _userIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_userIdMeta);
+    }
+    if (data.containsKey('stale_device_id')) {
+      context.handle(
+        _staleDeviceIdMeta,
+        staleDeviceId.isAcceptableOrUnknown(
+          data['stale_device_id']!,
+          _staleDeviceIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_staleDeviceIdMeta);
+    }
+    if (data.containsKey('state')) {
+      context.handle(
+        _stateMeta,
+        state.isAcceptableOrUnknown(data['state']!, _stateMeta),
+      );
+    }
+    if (data.containsKey('attempt_count')) {
+      context.handle(
+        _attemptCountMeta,
+        attemptCount.isAcceptableOrUnknown(
+          data['attempt_count']!,
+          _attemptCountMeta,
+        ),
+      );
+    }
+    if (data.containsKey('next_attempt_at')) {
+      context.handle(
+        _nextAttemptAtMeta,
+        nextAttemptAt.isAcceptableOrUnknown(
+          data['next_attempt_at']!,
+          _nextAttemptAtMeta,
+        ),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {userId, staleDeviceId};
+  @override
+  StaleDeviceRefreshRequest map(
+    Map<String, dynamic> data, {
+    String? tablePrefix,
+  }) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return StaleDeviceRefreshRequest(
+      userId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}user_id'],
+      )!,
+      staleDeviceId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}stale_device_id'],
+      )!,
+      state: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}state'],
+      )!,
+      attemptCount: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}attempt_count'],
+      )!,
+      nextAttemptAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}next_attempt_at'],
+      ),
+    );
+  }
+
+  @override
+  $StaleDeviceRefreshRequestsTable createAlias(String alias) {
+    return $StaleDeviceRefreshRequestsTable(attachedDatabase, alias);
+  }
+}
+
+class StaleDeviceRefreshRequest extends DataClass
+    implements Insertable<StaleDeviceRefreshRequest> {
+  final String userId;
+  final String staleDeviceId;
+  final int state;
+  final int attemptCount;
+  final DateTime? nextAttemptAt;
+  const StaleDeviceRefreshRequest({
+    required this.userId,
+    required this.staleDeviceId,
+    required this.state,
+    required this.attemptCount,
+    this.nextAttemptAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['user_id'] = Variable<String>(userId);
+    map['stale_device_id'] = Variable<String>(staleDeviceId);
+    map['state'] = Variable<int>(state);
+    map['attempt_count'] = Variable<int>(attemptCount);
+    if (!nullToAbsent || nextAttemptAt != null) {
+      map['next_attempt_at'] = Variable<DateTime>(nextAttemptAt);
+    }
+    return map;
+  }
+
+  StaleDeviceRefreshRequestsCompanion toCompanion(bool nullToAbsent) {
+    return StaleDeviceRefreshRequestsCompanion(
+      userId: Value(userId),
+      staleDeviceId: Value(staleDeviceId),
+      state: Value(state),
+      attemptCount: Value(attemptCount),
+      nextAttemptAt: nextAttemptAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(nextAttemptAt),
+    );
+  }
+
+  factory StaleDeviceRefreshRequest.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return StaleDeviceRefreshRequest(
+      userId: serializer.fromJson<String>(json['userId']),
+      staleDeviceId: serializer.fromJson<String>(json['staleDeviceId']),
+      state: serializer.fromJson<int>(json['state']),
+      attemptCount: serializer.fromJson<int>(json['attemptCount']),
+      nextAttemptAt: serializer.fromJson<DateTime?>(json['nextAttemptAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'userId': serializer.toJson<String>(userId),
+      'staleDeviceId': serializer.toJson<String>(staleDeviceId),
+      'state': serializer.toJson<int>(state),
+      'attemptCount': serializer.toJson<int>(attemptCount),
+      'nextAttemptAt': serializer.toJson<DateTime?>(nextAttemptAt),
+    };
+  }
+
+  StaleDeviceRefreshRequest copyWith({
+    String? userId,
+    String? staleDeviceId,
+    int? state,
+    int? attemptCount,
+    Value<DateTime?> nextAttemptAt = const Value.absent(),
+  }) => StaleDeviceRefreshRequest(
+    userId: userId ?? this.userId,
+    staleDeviceId: staleDeviceId ?? this.staleDeviceId,
+    state: state ?? this.state,
+    attemptCount: attemptCount ?? this.attemptCount,
+    nextAttemptAt: nextAttemptAt.present
+        ? nextAttemptAt.value
+        : this.nextAttemptAt,
+  );
+  StaleDeviceRefreshRequest copyWithCompanion(
+    StaleDeviceRefreshRequestsCompanion data,
+  ) {
+    return StaleDeviceRefreshRequest(
+      userId: data.userId.present ? data.userId.value : this.userId,
+      staleDeviceId: data.staleDeviceId.present
+          ? data.staleDeviceId.value
+          : this.staleDeviceId,
+      state: data.state.present ? data.state.value : this.state,
+      attemptCount: data.attemptCount.present
+          ? data.attemptCount.value
+          : this.attemptCount,
+      nextAttemptAt: data.nextAttemptAt.present
+          ? data.nextAttemptAt.value
+          : this.nextAttemptAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('StaleDeviceRefreshRequest(')
+          ..write('userId: $userId, ')
+          ..write('staleDeviceId: $staleDeviceId, ')
+          ..write('state: $state, ')
+          ..write('attemptCount: $attemptCount, ')
+          ..write('nextAttemptAt: $nextAttemptAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode =>
+      Object.hash(userId, staleDeviceId, state, attemptCount, nextAttemptAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is StaleDeviceRefreshRequest &&
+          other.userId == this.userId &&
+          other.staleDeviceId == this.staleDeviceId &&
+          other.state == this.state &&
+          other.attemptCount == this.attemptCount &&
+          other.nextAttemptAt == this.nextAttemptAt);
+}
+
+class StaleDeviceRefreshRequestsCompanion
+    extends UpdateCompanion<StaleDeviceRefreshRequest> {
+  final Value<String> userId;
+  final Value<String> staleDeviceId;
+  final Value<int> state;
+  final Value<int> attemptCount;
+  final Value<DateTime?> nextAttemptAt;
+  final Value<int> rowid;
+  const StaleDeviceRefreshRequestsCompanion({
+    this.userId = const Value.absent(),
+    this.staleDeviceId = const Value.absent(),
+    this.state = const Value.absent(),
+    this.attemptCount = const Value.absent(),
+    this.nextAttemptAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  StaleDeviceRefreshRequestsCompanion.insert({
+    required String userId,
+    required String staleDeviceId,
+    this.state = const Value.absent(),
+    this.attemptCount = const Value.absent(),
+    this.nextAttemptAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : userId = Value(userId),
+       staleDeviceId = Value(staleDeviceId);
+  static Insertable<StaleDeviceRefreshRequest> custom({
+    Expression<String>? userId,
+    Expression<String>? staleDeviceId,
+    Expression<int>? state,
+    Expression<int>? attemptCount,
+    Expression<DateTime>? nextAttemptAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (userId != null) 'user_id': userId,
+      if (staleDeviceId != null) 'stale_device_id': staleDeviceId,
+      if (state != null) 'state': state,
+      if (attemptCount != null) 'attempt_count': attemptCount,
+      if (nextAttemptAt != null) 'next_attempt_at': nextAttemptAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  StaleDeviceRefreshRequestsCompanion copyWith({
+    Value<String>? userId,
+    Value<String>? staleDeviceId,
+    Value<int>? state,
+    Value<int>? attemptCount,
+    Value<DateTime?>? nextAttemptAt,
+    Value<int>? rowid,
+  }) {
+    return StaleDeviceRefreshRequestsCompanion(
+      userId: userId ?? this.userId,
+      staleDeviceId: staleDeviceId ?? this.staleDeviceId,
+      state: state ?? this.state,
+      attemptCount: attemptCount ?? this.attemptCount,
+      nextAttemptAt: nextAttemptAt ?? this.nextAttemptAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (userId.present) {
+      map['user_id'] = Variable<String>(userId.value);
+    }
+    if (staleDeviceId.present) {
+      map['stale_device_id'] = Variable<String>(staleDeviceId.value);
+    }
+    if (state.present) {
+      map['state'] = Variable<int>(state.value);
+    }
+    if (attemptCount.present) {
+      map['attempt_count'] = Variable<int>(attemptCount.value);
+    }
+    if (nextAttemptAt.present) {
+      map['next_attempt_at'] = Variable<DateTime>(nextAttemptAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('StaleDeviceRefreshRequestsCompanion(')
+          ..write('userId: $userId, ')
+          ..write('staleDeviceId: $staleDeviceId, ')
+          ..write('state: $state, ')
+          ..write('attemptCount: $attemptCount, ')
+          ..write('nextAttemptAt: $nextAttemptAt, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -9301,6 +10534,82 @@ class $SyncCheckpointsTable extends SyncCheckpoints
     type: DriftSqlType.int,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _queueGapStateMeta = const VerificationMeta(
+    'queueGapState',
+  );
+  @override
+  late final GeneratedColumn<int> queueGapState = GeneratedColumn<int>(
+    'queue_gap_state',
+    aliasedName,
+    false,
+    check: () => ComparableExpr(queueGapState).isBetweenValues(0, 1),
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _drainRequestedMeta = const VerificationMeta(
+    'drainRequested',
+  );
+  @override
+  late final GeneratedColumn<bool> drainRequested = GeneratedColumn<bool>(
+    'drain_requested',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("drain_requested" IN (0, 1))',
+    ),
+    defaultValue: const Constant(true),
+  );
+  static const VerificationMeta _connectionPhaseMeta = const VerificationMeta(
+    'connectionPhase',
+  );
+  @override
+  late final GeneratedColumn<int> connectionPhase = GeneratedColumn<int>(
+    'connection_phase',
+    aliasedName,
+    false,
+    check: () => ComparableExpr(connectionPhase).isBetweenValues(0, 9),
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _reconnectAttemptMeta = const VerificationMeta(
+    'reconnectAttempt',
+  );
+  @override
+  late final GeneratedColumn<int> reconnectAttempt = GeneratedColumn<int>(
+    'reconnect_attempt',
+    aliasedName,
+    false,
+    check: () => ComparableExpr(reconnectAttempt).isBiggerOrEqualValue(0),
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _reconnectAtMeta = const VerificationMeta(
+    'reconnectAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> reconnectAt = GeneratedColumn<DateTime>(
+    'reconnect_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _lastSuccessfulSyncAtMeta =
+      const VerificationMeta('lastSuccessfulSyncAt');
+  @override
+  late final GeneratedColumn<DateTime> lastSuccessfulSyncAt =
+      GeneratedColumn<DateTime>(
+        'last_successful_sync_at',
+        aliasedName,
+        true,
+        type: DriftSqlType.dateTime,
+        requiredDuringInsert: false,
+      );
   @override
   List<GeneratedColumn> get $columns => [
     singletonId,
@@ -9309,6 +10618,12 @@ class $SyncCheckpointsTable extends SyncCheckpoints
     etagsCiphertext,
     retryState,
     protocolVersion,
+    queueGapState,
+    drainRequested,
+    connectionPhase,
+    reconnectAttempt,
+    reconnectAt,
+    lastSuccessfulSyncAt,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -9379,6 +10694,60 @@ class $SyncCheckpointsTable extends SyncCheckpoints
     } else if (isInserting) {
       context.missing(_protocolVersionMeta);
     }
+    if (data.containsKey('queue_gap_state')) {
+      context.handle(
+        _queueGapStateMeta,
+        queueGapState.isAcceptableOrUnknown(
+          data['queue_gap_state']!,
+          _queueGapStateMeta,
+        ),
+      );
+    }
+    if (data.containsKey('drain_requested')) {
+      context.handle(
+        _drainRequestedMeta,
+        drainRequested.isAcceptableOrUnknown(
+          data['drain_requested']!,
+          _drainRequestedMeta,
+        ),
+      );
+    }
+    if (data.containsKey('connection_phase')) {
+      context.handle(
+        _connectionPhaseMeta,
+        connectionPhase.isAcceptableOrUnknown(
+          data['connection_phase']!,
+          _connectionPhaseMeta,
+        ),
+      );
+    }
+    if (data.containsKey('reconnect_attempt')) {
+      context.handle(
+        _reconnectAttemptMeta,
+        reconnectAttempt.isAcceptableOrUnknown(
+          data['reconnect_attempt']!,
+          _reconnectAttemptMeta,
+        ),
+      );
+    }
+    if (data.containsKey('reconnect_at')) {
+      context.handle(
+        _reconnectAtMeta,
+        reconnectAt.isAcceptableOrUnknown(
+          data['reconnect_at']!,
+          _reconnectAtMeta,
+        ),
+      );
+    }
+    if (data.containsKey('last_successful_sync_at')) {
+      context.handle(
+        _lastSuccessfulSyncAtMeta,
+        lastSuccessfulSyncAt.isAcceptableOrUnknown(
+          data['last_successful_sync_at']!,
+          _lastSuccessfulSyncAtMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -9412,6 +10781,30 @@ class $SyncCheckpointsTable extends SyncCheckpoints
         DriftSqlType.int,
         data['${effectivePrefix}protocol_version'],
       )!,
+      queueGapState: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}queue_gap_state'],
+      )!,
+      drainRequested: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}drain_requested'],
+      )!,
+      connectionPhase: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}connection_phase'],
+      )!,
+      reconnectAttempt: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}reconnect_attempt'],
+      )!,
+      reconnectAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}reconnect_at'],
+      ),
+      lastSuccessfulSyncAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}last_successful_sync_at'],
+      ),
     );
   }
 
@@ -9428,6 +10821,12 @@ class SyncCheckpoint extends DataClass implements Insertable<SyncCheckpoint> {
   final Uint8List etagsCiphertext;
   final int retryState;
   final int protocolVersion;
+  final int queueGapState;
+  final bool drainRequested;
+  final int connectionPhase;
+  final int reconnectAttempt;
+  final DateTime? reconnectAt;
+  final DateTime? lastSuccessfulSyncAt;
   const SyncCheckpoint({
     required this.singletonId,
     required this.highestContiguousAckedSequence,
@@ -9435,6 +10834,12 @@ class SyncCheckpoint extends DataClass implements Insertable<SyncCheckpoint> {
     required this.etagsCiphertext,
     required this.retryState,
     required this.protocolVersion,
+    required this.queueGapState,
+    required this.drainRequested,
+    required this.connectionPhase,
+    required this.reconnectAttempt,
+    this.reconnectAt,
+    this.lastSuccessfulSyncAt,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -9447,6 +10852,16 @@ class SyncCheckpoint extends DataClass implements Insertable<SyncCheckpoint> {
     map['etags_ciphertext'] = Variable<Uint8List>(etagsCiphertext);
     map['retry_state'] = Variable<int>(retryState);
     map['protocol_version'] = Variable<int>(protocolVersion);
+    map['queue_gap_state'] = Variable<int>(queueGapState);
+    map['drain_requested'] = Variable<bool>(drainRequested);
+    map['connection_phase'] = Variable<int>(connectionPhase);
+    map['reconnect_attempt'] = Variable<int>(reconnectAttempt);
+    if (!nullToAbsent || reconnectAt != null) {
+      map['reconnect_at'] = Variable<DateTime>(reconnectAt);
+    }
+    if (!nullToAbsent || lastSuccessfulSyncAt != null) {
+      map['last_successful_sync_at'] = Variable<DateTime>(lastSuccessfulSyncAt);
+    }
     return map;
   }
 
@@ -9458,6 +10873,16 @@ class SyncCheckpoint extends DataClass implements Insertable<SyncCheckpoint> {
       etagsCiphertext: Value(etagsCiphertext),
       retryState: Value(retryState),
       protocolVersion: Value(protocolVersion),
+      queueGapState: Value(queueGapState),
+      drainRequested: Value(drainRequested),
+      connectionPhase: Value(connectionPhase),
+      reconnectAttempt: Value(reconnectAttempt),
+      reconnectAt: reconnectAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(reconnectAt),
+      lastSuccessfulSyncAt: lastSuccessfulSyncAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(lastSuccessfulSyncAt),
     );
   }
 
@@ -9475,6 +10900,14 @@ class SyncCheckpoint extends DataClass implements Insertable<SyncCheckpoint> {
       etagsCiphertext: serializer.fromJson<Uint8List>(json['etagsCiphertext']),
       retryState: serializer.fromJson<int>(json['retryState']),
       protocolVersion: serializer.fromJson<int>(json['protocolVersion']),
+      queueGapState: serializer.fromJson<int>(json['queueGapState']),
+      drainRequested: serializer.fromJson<bool>(json['drainRequested']),
+      connectionPhase: serializer.fromJson<int>(json['connectionPhase']),
+      reconnectAttempt: serializer.fromJson<int>(json['reconnectAttempt']),
+      reconnectAt: serializer.fromJson<DateTime?>(json['reconnectAt']),
+      lastSuccessfulSyncAt: serializer.fromJson<DateTime?>(
+        json['lastSuccessfulSyncAt'],
+      ),
     );
   }
   @override
@@ -9489,6 +10922,14 @@ class SyncCheckpoint extends DataClass implements Insertable<SyncCheckpoint> {
       'etagsCiphertext': serializer.toJson<Uint8List>(etagsCiphertext),
       'retryState': serializer.toJson<int>(retryState),
       'protocolVersion': serializer.toJson<int>(protocolVersion),
+      'queueGapState': serializer.toJson<int>(queueGapState),
+      'drainRequested': serializer.toJson<bool>(drainRequested),
+      'connectionPhase': serializer.toJson<int>(connectionPhase),
+      'reconnectAttempt': serializer.toJson<int>(reconnectAttempt),
+      'reconnectAt': serializer.toJson<DateTime?>(reconnectAt),
+      'lastSuccessfulSyncAt': serializer.toJson<DateTime?>(
+        lastSuccessfulSyncAt,
+      ),
     };
   }
 
@@ -9499,6 +10940,12 @@ class SyncCheckpoint extends DataClass implements Insertable<SyncCheckpoint> {
     Uint8List? etagsCiphertext,
     int? retryState,
     int? protocolVersion,
+    int? queueGapState,
+    bool? drainRequested,
+    int? connectionPhase,
+    int? reconnectAttempt,
+    Value<DateTime?> reconnectAt = const Value.absent(),
+    Value<DateTime?> lastSuccessfulSyncAt = const Value.absent(),
   }) => SyncCheckpoint(
     singletonId: singletonId ?? this.singletonId,
     highestContiguousAckedSequence:
@@ -9507,6 +10954,14 @@ class SyncCheckpoint extends DataClass implements Insertable<SyncCheckpoint> {
     etagsCiphertext: etagsCiphertext ?? this.etagsCiphertext,
     retryState: retryState ?? this.retryState,
     protocolVersion: protocolVersion ?? this.protocolVersion,
+    queueGapState: queueGapState ?? this.queueGapState,
+    drainRequested: drainRequested ?? this.drainRequested,
+    connectionPhase: connectionPhase ?? this.connectionPhase,
+    reconnectAttempt: reconnectAttempt ?? this.reconnectAttempt,
+    reconnectAt: reconnectAt.present ? reconnectAt.value : this.reconnectAt,
+    lastSuccessfulSyncAt: lastSuccessfulSyncAt.present
+        ? lastSuccessfulSyncAt.value
+        : this.lastSuccessfulSyncAt,
   );
   SyncCheckpoint copyWithCompanion(SyncCheckpointsCompanion data) {
     return SyncCheckpoint(
@@ -9529,6 +10984,24 @@ class SyncCheckpoint extends DataClass implements Insertable<SyncCheckpoint> {
       protocolVersion: data.protocolVersion.present
           ? data.protocolVersion.value
           : this.protocolVersion,
+      queueGapState: data.queueGapState.present
+          ? data.queueGapState.value
+          : this.queueGapState,
+      drainRequested: data.drainRequested.present
+          ? data.drainRequested.value
+          : this.drainRequested,
+      connectionPhase: data.connectionPhase.present
+          ? data.connectionPhase.value
+          : this.connectionPhase,
+      reconnectAttempt: data.reconnectAttempt.present
+          ? data.reconnectAttempt.value
+          : this.reconnectAttempt,
+      reconnectAt: data.reconnectAt.present
+          ? data.reconnectAt.value
+          : this.reconnectAt,
+      lastSuccessfulSyncAt: data.lastSuccessfulSyncAt.present
+          ? data.lastSuccessfulSyncAt.value
+          : this.lastSuccessfulSyncAt,
     );
   }
 
@@ -9542,7 +11015,13 @@ class SyncCheckpoint extends DataClass implements Insertable<SyncCheckpoint> {
           ..write('prunedThrough: $prunedThrough, ')
           ..write('etagsCiphertext: $etagsCiphertext, ')
           ..write('retryState: $retryState, ')
-          ..write('protocolVersion: $protocolVersion')
+          ..write('protocolVersion: $protocolVersion, ')
+          ..write('queueGapState: $queueGapState, ')
+          ..write('drainRequested: $drainRequested, ')
+          ..write('connectionPhase: $connectionPhase, ')
+          ..write('reconnectAttempt: $reconnectAttempt, ')
+          ..write('reconnectAt: $reconnectAt, ')
+          ..write('lastSuccessfulSyncAt: $lastSuccessfulSyncAt')
           ..write(')'))
         .toString();
   }
@@ -9555,6 +11034,12 @@ class SyncCheckpoint extends DataClass implements Insertable<SyncCheckpoint> {
     $driftBlobEquality.hash(etagsCiphertext),
     retryState,
     protocolVersion,
+    queueGapState,
+    drainRequested,
+    connectionPhase,
+    reconnectAttempt,
+    reconnectAt,
+    lastSuccessfulSyncAt,
   );
   @override
   bool operator ==(Object other) =>
@@ -9569,7 +11054,13 @@ class SyncCheckpoint extends DataClass implements Insertable<SyncCheckpoint> {
             this.etagsCiphertext,
           ) &&
           other.retryState == this.retryState &&
-          other.protocolVersion == this.protocolVersion);
+          other.protocolVersion == this.protocolVersion &&
+          other.queueGapState == this.queueGapState &&
+          other.drainRequested == this.drainRequested &&
+          other.connectionPhase == this.connectionPhase &&
+          other.reconnectAttempt == this.reconnectAttempt &&
+          other.reconnectAt == this.reconnectAt &&
+          other.lastSuccessfulSyncAt == this.lastSuccessfulSyncAt);
 }
 
 class SyncCheckpointsCompanion extends UpdateCompanion<SyncCheckpoint> {
@@ -9579,6 +11070,12 @@ class SyncCheckpointsCompanion extends UpdateCompanion<SyncCheckpoint> {
   final Value<Uint8List> etagsCiphertext;
   final Value<int> retryState;
   final Value<int> protocolVersion;
+  final Value<int> queueGapState;
+  final Value<bool> drainRequested;
+  final Value<int> connectionPhase;
+  final Value<int> reconnectAttempt;
+  final Value<DateTime?> reconnectAt;
+  final Value<DateTime?> lastSuccessfulSyncAt;
   const SyncCheckpointsCompanion({
     this.singletonId = const Value.absent(),
     this.highestContiguousAckedSequence = const Value.absent(),
@@ -9586,6 +11083,12 @@ class SyncCheckpointsCompanion extends UpdateCompanion<SyncCheckpoint> {
     this.etagsCiphertext = const Value.absent(),
     this.retryState = const Value.absent(),
     this.protocolVersion = const Value.absent(),
+    this.queueGapState = const Value.absent(),
+    this.drainRequested = const Value.absent(),
+    this.connectionPhase = const Value.absent(),
+    this.reconnectAttempt = const Value.absent(),
+    this.reconnectAt = const Value.absent(),
+    this.lastSuccessfulSyncAt = const Value.absent(),
   });
   SyncCheckpointsCompanion.insert({
     this.singletonId = const Value.absent(),
@@ -9594,6 +11097,12 @@ class SyncCheckpointsCompanion extends UpdateCompanion<SyncCheckpoint> {
     required Uint8List etagsCiphertext,
     required int retryState,
     required int protocolVersion,
+    this.queueGapState = const Value.absent(),
+    this.drainRequested = const Value.absent(),
+    this.connectionPhase = const Value.absent(),
+    this.reconnectAttempt = const Value.absent(),
+    this.reconnectAt = const Value.absent(),
+    this.lastSuccessfulSyncAt = const Value.absent(),
   }) : etagsCiphertext = Value(etagsCiphertext),
        retryState = Value(retryState),
        protocolVersion = Value(protocolVersion);
@@ -9604,6 +11113,12 @@ class SyncCheckpointsCompanion extends UpdateCompanion<SyncCheckpoint> {
     Expression<Uint8List>? etagsCiphertext,
     Expression<int>? retryState,
     Expression<int>? protocolVersion,
+    Expression<int>? queueGapState,
+    Expression<bool>? drainRequested,
+    Expression<int>? connectionPhase,
+    Expression<int>? reconnectAttempt,
+    Expression<DateTime>? reconnectAt,
+    Expression<DateTime>? lastSuccessfulSyncAt,
   }) {
     return RawValuesInsertable({
       if (singletonId != null) 'singleton_id': singletonId,
@@ -9613,6 +11128,13 @@ class SyncCheckpointsCompanion extends UpdateCompanion<SyncCheckpoint> {
       if (etagsCiphertext != null) 'etags_ciphertext': etagsCiphertext,
       if (retryState != null) 'retry_state': retryState,
       if (protocolVersion != null) 'protocol_version': protocolVersion,
+      if (queueGapState != null) 'queue_gap_state': queueGapState,
+      if (drainRequested != null) 'drain_requested': drainRequested,
+      if (connectionPhase != null) 'connection_phase': connectionPhase,
+      if (reconnectAttempt != null) 'reconnect_attempt': reconnectAttempt,
+      if (reconnectAt != null) 'reconnect_at': reconnectAt,
+      if (lastSuccessfulSyncAt != null)
+        'last_successful_sync_at': lastSuccessfulSyncAt,
     });
   }
 
@@ -9623,6 +11145,12 @@ class SyncCheckpointsCompanion extends UpdateCompanion<SyncCheckpoint> {
     Value<Uint8List>? etagsCiphertext,
     Value<int>? retryState,
     Value<int>? protocolVersion,
+    Value<int>? queueGapState,
+    Value<bool>? drainRequested,
+    Value<int>? connectionPhase,
+    Value<int>? reconnectAttempt,
+    Value<DateTime?>? reconnectAt,
+    Value<DateTime?>? lastSuccessfulSyncAt,
   }) {
     return SyncCheckpointsCompanion(
       singletonId: singletonId ?? this.singletonId,
@@ -9632,6 +11160,12 @@ class SyncCheckpointsCompanion extends UpdateCompanion<SyncCheckpoint> {
       etagsCiphertext: etagsCiphertext ?? this.etagsCiphertext,
       retryState: retryState ?? this.retryState,
       protocolVersion: protocolVersion ?? this.protocolVersion,
+      queueGapState: queueGapState ?? this.queueGapState,
+      drainRequested: drainRequested ?? this.drainRequested,
+      connectionPhase: connectionPhase ?? this.connectionPhase,
+      reconnectAttempt: reconnectAttempt ?? this.reconnectAttempt,
+      reconnectAt: reconnectAt ?? this.reconnectAt,
+      lastSuccessfulSyncAt: lastSuccessfulSyncAt ?? this.lastSuccessfulSyncAt,
     );
   }
 
@@ -9658,6 +11192,26 @@ class SyncCheckpointsCompanion extends UpdateCompanion<SyncCheckpoint> {
     if (protocolVersion.present) {
       map['protocol_version'] = Variable<int>(protocolVersion.value);
     }
+    if (queueGapState.present) {
+      map['queue_gap_state'] = Variable<int>(queueGapState.value);
+    }
+    if (drainRequested.present) {
+      map['drain_requested'] = Variable<bool>(drainRequested.value);
+    }
+    if (connectionPhase.present) {
+      map['connection_phase'] = Variable<int>(connectionPhase.value);
+    }
+    if (reconnectAttempt.present) {
+      map['reconnect_attempt'] = Variable<int>(reconnectAttempt.value);
+    }
+    if (reconnectAt.present) {
+      map['reconnect_at'] = Variable<DateTime>(reconnectAt.value);
+    }
+    if (lastSuccessfulSyncAt.present) {
+      map['last_successful_sync_at'] = Variable<DateTime>(
+        lastSuccessfulSyncAt.value,
+      );
+    }
     return map;
   }
 
@@ -9671,7 +11225,13 @@ class SyncCheckpointsCompanion extends UpdateCompanion<SyncCheckpoint> {
           ..write('prunedThrough: $prunedThrough, ')
           ..write('etagsCiphertext: $etagsCiphertext, ')
           ..write('retryState: $retryState, ')
-          ..write('protocolVersion: $protocolVersion')
+          ..write('protocolVersion: $protocolVersion, ')
+          ..write('queueGapState: $queueGapState, ')
+          ..write('drainRequested: $drainRequested, ')
+          ..write('connectionPhase: $connectionPhase, ')
+          ..write('reconnectAttempt: $reconnectAttempt, ')
+          ..write('reconnectAt: $reconnectAt, ')
+          ..write('lastSuccessfulSyncAt: $lastSuccessfulSyncAt')
           ..write(')'))
         .toString();
   }
@@ -10325,6 +11885,10 @@ abstract class _$LocalDatabase extends GeneratedDatabase {
   late final $OutboxOperationsTable outboxOperations = $OutboxOperationsTable(
     this,
   );
+  late final $InboxEventDeduplicationsTable inboxEventDeduplications =
+      $InboxEventDeduplicationsTable(this);
+  late final $StaleDeviceRefreshRequestsTable staleDeviceRefreshRequests =
+      $StaleDeviceRefreshRequestsTable(this);
   late final $ReceiptsTable receipts = $ReceiptsTable(this);
   late final $VoiceRoomsTable voiceRooms = $VoiceRoomsTable(this);
   late final $HistoryTransfersTable historyTransfers = $HistoryTransfersTable(
@@ -10361,6 +11925,8 @@ abstract class _$LocalDatabase extends GeneratedDatabase {
     attachments,
     inboxEnvelopes,
     outboxOperations,
+    inboxEventDeduplications,
+    staleDeviceRefreshRequests,
     receipts,
     voiceRooms,
     historyTransfers,
@@ -13548,6 +15114,7 @@ typedef $$MlsGroupsTableCreateCompanionBuilder =
       required Uint8List opaqueCryptoStateHandle,
       required int acceptedEpoch,
       required int stateVersion,
+      Value<int> queueGapRecoveryState,
       Value<int> rowid,
     });
 typedef $$MlsGroupsTableUpdateCompanionBuilder =
@@ -13556,6 +15123,7 @@ typedef $$MlsGroupsTableUpdateCompanionBuilder =
       Value<Uint8List> opaqueCryptoStateHandle,
       Value<int> acceptedEpoch,
       Value<int> stateVersion,
+      Value<int> queueGapRecoveryState,
       Value<int> rowid,
     });
 
@@ -13585,6 +15153,11 @@ class $$MlsGroupsTableFilterComposer
 
   ColumnFilters<int> get stateVersion => $composableBuilder(
     column: $table.stateVersion,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get queueGapRecoveryState => $composableBuilder(
+    column: $table.queueGapRecoveryState,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -13617,6 +15190,11 @@ class $$MlsGroupsTableOrderingComposer
     column: $table.stateVersion,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<int> get queueGapRecoveryState => $composableBuilder(
+    column: $table.queueGapRecoveryState,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$MlsGroupsTableAnnotationComposer
@@ -13643,6 +15221,11 @@ class $$MlsGroupsTableAnnotationComposer
 
   GeneratedColumn<int> get stateVersion => $composableBuilder(
     column: $table.stateVersion,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get queueGapRecoveryState => $composableBuilder(
+    column: $table.queueGapRecoveryState,
     builder: (column) => column,
   );
 }
@@ -13682,12 +15265,14 @@ class $$MlsGroupsTableTableManager
                 Value<Uint8List> opaqueCryptoStateHandle = const Value.absent(),
                 Value<int> acceptedEpoch = const Value.absent(),
                 Value<int> stateVersion = const Value.absent(),
+                Value<int> queueGapRecoveryState = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => MlsGroupsCompanion(
                 groupId: groupId,
                 opaqueCryptoStateHandle: opaqueCryptoStateHandle,
                 acceptedEpoch: acceptedEpoch,
                 stateVersion: stateVersion,
+                queueGapRecoveryState: queueGapRecoveryState,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -13696,12 +15281,14 @@ class $$MlsGroupsTableTableManager
                 required Uint8List opaqueCryptoStateHandle,
                 required int acceptedEpoch,
                 required int stateVersion,
+                Value<int> queueGapRecoveryState = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => MlsGroupsCompanion.insert(
                 groupId: groupId,
                 opaqueCryptoStateHandle: opaqueCryptoStateHandle,
                 acceptedEpoch: acceptedEpoch,
                 stateVersion: stateVersion,
+                queueGapRecoveryState: queueGapRecoveryState,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
@@ -15879,6 +17466,10 @@ typedef $$InboxEnvelopesTableCreateCompanionBuilder =
       required Uint8List envelopeCiphertext,
       required int processingState,
       Value<bool> readyToAcknowledge,
+      Value<String?> opaqueEventId,
+      Value<int?> dependencyClass,
+      Value<int> attemptCount,
+      Value<DateTime?> nextAttemptAt,
       Value<int> rowid,
     });
 typedef $$InboxEnvelopesTableUpdateCompanionBuilder =
@@ -15888,6 +17479,10 @@ typedef $$InboxEnvelopesTableUpdateCompanionBuilder =
       Value<Uint8List> envelopeCiphertext,
       Value<int> processingState,
       Value<bool> readyToAcknowledge,
+      Value<String?> opaqueEventId,
+      Value<int?> dependencyClass,
+      Value<int> attemptCount,
+      Value<DateTime?> nextAttemptAt,
       Value<int> rowid,
     });
 
@@ -15922,6 +17517,26 @@ class $$InboxEnvelopesTableFilterComposer
 
   ColumnFilters<bool> get readyToAcknowledge => $composableBuilder(
     column: $table.readyToAcknowledge,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get opaqueEventId => $composableBuilder(
+    column: $table.opaqueEventId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get dependencyClass => $composableBuilder(
+    column: $table.dependencyClass,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get attemptCount => $composableBuilder(
+    column: $table.attemptCount,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get nextAttemptAt => $composableBuilder(
+    column: $table.nextAttemptAt,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -15959,6 +17574,26 @@ class $$InboxEnvelopesTableOrderingComposer
     column: $table.readyToAcknowledge,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<String> get opaqueEventId => $composableBuilder(
+    column: $table.opaqueEventId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get dependencyClass => $composableBuilder(
+    column: $table.dependencyClass,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get attemptCount => $composableBuilder(
+    column: $table.attemptCount,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get nextAttemptAt => $composableBuilder(
+    column: $table.nextAttemptAt,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$InboxEnvelopesTableAnnotationComposer
@@ -15990,6 +17625,26 @@ class $$InboxEnvelopesTableAnnotationComposer
 
   GeneratedColumn<bool> get readyToAcknowledge => $composableBuilder(
     column: $table.readyToAcknowledge,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get opaqueEventId => $composableBuilder(
+    column: $table.opaqueEventId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get dependencyClass => $composableBuilder(
+    column: $table.dependencyClass,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get attemptCount => $composableBuilder(
+    column: $table.attemptCount,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get nextAttemptAt => $composableBuilder(
+    column: $table.nextAttemptAt,
     builder: (column) => column,
   );
 }
@@ -16036,6 +17691,10 @@ class $$InboxEnvelopesTableTableManager
                 Value<Uint8List> envelopeCiphertext = const Value.absent(),
                 Value<int> processingState = const Value.absent(),
                 Value<bool> readyToAcknowledge = const Value.absent(),
+                Value<String?> opaqueEventId = const Value.absent(),
+                Value<int?> dependencyClass = const Value.absent(),
+                Value<int> attemptCount = const Value.absent(),
+                Value<DateTime?> nextAttemptAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => InboxEnvelopesCompanion(
                 envelopeId: envelopeId,
@@ -16043,6 +17702,10 @@ class $$InboxEnvelopesTableTableManager
                 envelopeCiphertext: envelopeCiphertext,
                 processingState: processingState,
                 readyToAcknowledge: readyToAcknowledge,
+                opaqueEventId: opaqueEventId,
+                dependencyClass: dependencyClass,
+                attemptCount: attemptCount,
+                nextAttemptAt: nextAttemptAt,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -16052,6 +17715,10 @@ class $$InboxEnvelopesTableTableManager
                 required Uint8List envelopeCiphertext,
                 required int processingState,
                 Value<bool> readyToAcknowledge = const Value.absent(),
+                Value<String?> opaqueEventId = const Value.absent(),
+                Value<int?> dependencyClass = const Value.absent(),
+                Value<int> attemptCount = const Value.absent(),
+                Value<DateTime?> nextAttemptAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => InboxEnvelopesCompanion.insert(
                 envelopeId: envelopeId,
@@ -16059,6 +17726,10 @@ class $$InboxEnvelopesTableTableManager
                 envelopeCiphertext: envelopeCiphertext,
                 processingState: processingState,
                 readyToAcknowledge: readyToAcknowledge,
+                opaqueEventId: opaqueEventId,
+                dependencyClass: dependencyClass,
+                attemptCount: attemptCount,
+                nextAttemptAt: nextAttemptAt,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
@@ -16091,10 +17762,14 @@ typedef $$OutboxOperationsTableCreateCompanionBuilder =
       required String operationId,
       required String eventId,
       required String recipientDeviceId,
+      Value<String> recipientUserId,
       required int batchIndex,
       required Uint8List exactRecipientCiphertext,
       required int attemptState,
       Value<int> attemptCount,
+      Value<DateTime?> nextAttemptAt,
+      Value<DateTime?> lastAttemptAt,
+      Value<DateTime?> terminalAt,
       Value<int> rowid,
     });
 typedef $$OutboxOperationsTableUpdateCompanionBuilder =
@@ -16102,10 +17777,14 @@ typedef $$OutboxOperationsTableUpdateCompanionBuilder =
       Value<String> operationId,
       Value<String> eventId,
       Value<String> recipientDeviceId,
+      Value<String> recipientUserId,
       Value<int> batchIndex,
       Value<Uint8List> exactRecipientCiphertext,
       Value<int> attemptState,
       Value<int> attemptCount,
+      Value<DateTime?> nextAttemptAt,
+      Value<DateTime?> lastAttemptAt,
+      Value<DateTime?> terminalAt,
       Value<int> rowid,
     });
 
@@ -16133,6 +17812,11 @@ class $$OutboxOperationsTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
+  ColumnFilters<String> get recipientUserId => $composableBuilder(
+    column: $table.recipientUserId,
+    builder: (column) => ColumnFilters(column),
+  );
+
   ColumnFilters<int> get batchIndex => $composableBuilder(
     column: $table.batchIndex,
     builder: (column) => ColumnFilters(column),
@@ -16150,6 +17834,21 @@ class $$OutboxOperationsTableFilterComposer
 
   ColumnFilters<int> get attemptCount => $composableBuilder(
     column: $table.attemptCount,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get nextAttemptAt => $composableBuilder(
+    column: $table.nextAttemptAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get lastAttemptAt => $composableBuilder(
+    column: $table.lastAttemptAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get terminalAt => $composableBuilder(
+    column: $table.terminalAt,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -16178,6 +17877,11 @@ class $$OutboxOperationsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get recipientUserId => $composableBuilder(
+    column: $table.recipientUserId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<int> get batchIndex => $composableBuilder(
     column: $table.batchIndex,
     builder: (column) => ColumnOrderings(column),
@@ -16195,6 +17899,21 @@ class $$OutboxOperationsTableOrderingComposer
 
   ColumnOrderings<int> get attemptCount => $composableBuilder(
     column: $table.attemptCount,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get nextAttemptAt => $composableBuilder(
+    column: $table.nextAttemptAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get lastAttemptAt => $composableBuilder(
+    column: $table.lastAttemptAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get terminalAt => $composableBuilder(
+    column: $table.terminalAt,
     builder: (column) => ColumnOrderings(column),
   );
 }
@@ -16221,6 +17940,11 @@ class $$OutboxOperationsTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<String> get recipientUserId => $composableBuilder(
+    column: $table.recipientUserId,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<int> get batchIndex => $composableBuilder(
     column: $table.batchIndex,
     builder: (column) => column,
@@ -16238,6 +17962,21 @@ class $$OutboxOperationsTableAnnotationComposer
 
   GeneratedColumn<int> get attemptCount => $composableBuilder(
     column: $table.attemptCount,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get nextAttemptAt => $composableBuilder(
+    column: $table.nextAttemptAt,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get lastAttemptAt => $composableBuilder(
+    column: $table.lastAttemptAt,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get terminalAt => $composableBuilder(
+    column: $table.terminalAt,
     builder: (column) => column,
   );
 }
@@ -16282,20 +18021,28 @@ class $$OutboxOperationsTableTableManager
                 Value<String> operationId = const Value.absent(),
                 Value<String> eventId = const Value.absent(),
                 Value<String> recipientDeviceId = const Value.absent(),
+                Value<String> recipientUserId = const Value.absent(),
                 Value<int> batchIndex = const Value.absent(),
                 Value<Uint8List> exactRecipientCiphertext =
                     const Value.absent(),
                 Value<int> attemptState = const Value.absent(),
                 Value<int> attemptCount = const Value.absent(),
+                Value<DateTime?> nextAttemptAt = const Value.absent(),
+                Value<DateTime?> lastAttemptAt = const Value.absent(),
+                Value<DateTime?> terminalAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => OutboxOperationsCompanion(
                 operationId: operationId,
                 eventId: eventId,
                 recipientDeviceId: recipientDeviceId,
+                recipientUserId: recipientUserId,
                 batchIndex: batchIndex,
                 exactRecipientCiphertext: exactRecipientCiphertext,
                 attemptState: attemptState,
                 attemptCount: attemptCount,
+                nextAttemptAt: nextAttemptAt,
+                lastAttemptAt: lastAttemptAt,
+                terminalAt: terminalAt,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -16303,19 +18050,27 @@ class $$OutboxOperationsTableTableManager
                 required String operationId,
                 required String eventId,
                 required String recipientDeviceId,
+                Value<String> recipientUserId = const Value.absent(),
                 required int batchIndex,
                 required Uint8List exactRecipientCiphertext,
                 required int attemptState,
                 Value<int> attemptCount = const Value.absent(),
+                Value<DateTime?> nextAttemptAt = const Value.absent(),
+                Value<DateTime?> lastAttemptAt = const Value.absent(),
+                Value<DateTime?> terminalAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => OutboxOperationsCompanion.insert(
                 operationId: operationId,
                 eventId: eventId,
                 recipientDeviceId: recipientDeviceId,
+                recipientUserId: recipientUserId,
                 batchIndex: batchIndex,
                 exactRecipientCiphertext: exactRecipientCiphertext,
                 attemptState: attemptState,
                 attemptCount: attemptCount,
+                nextAttemptAt: nextAttemptAt,
+                lastAttemptAt: lastAttemptAt,
+                terminalAt: terminalAt,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
@@ -16345,6 +18100,439 @@ typedef $$OutboxOperationsTableProcessedTableManager =
         >,
       ),
       OutboxOperation,
+      PrefetchHooks Function()
+    >;
+typedef $$InboxEventDeduplicationsTableCreateCompanionBuilder =
+    InboxEventDeduplicationsCompanion Function({
+      required String opaqueEventId,
+      required String firstEnvelopeId,
+      required int dependencyClass,
+      Value<DateTime> committedAt,
+      Value<int> rowid,
+    });
+typedef $$InboxEventDeduplicationsTableUpdateCompanionBuilder =
+    InboxEventDeduplicationsCompanion Function({
+      Value<String> opaqueEventId,
+      Value<String> firstEnvelopeId,
+      Value<int> dependencyClass,
+      Value<DateTime> committedAt,
+      Value<int> rowid,
+    });
+
+class $$InboxEventDeduplicationsTableFilterComposer
+    extends Composer<_$LocalDatabase, $InboxEventDeduplicationsTable> {
+  $$InboxEventDeduplicationsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get opaqueEventId => $composableBuilder(
+    column: $table.opaqueEventId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get firstEnvelopeId => $composableBuilder(
+    column: $table.firstEnvelopeId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get dependencyClass => $composableBuilder(
+    column: $table.dependencyClass,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get committedAt => $composableBuilder(
+    column: $table.committedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$InboxEventDeduplicationsTableOrderingComposer
+    extends Composer<_$LocalDatabase, $InboxEventDeduplicationsTable> {
+  $$InboxEventDeduplicationsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get opaqueEventId => $composableBuilder(
+    column: $table.opaqueEventId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get firstEnvelopeId => $composableBuilder(
+    column: $table.firstEnvelopeId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get dependencyClass => $composableBuilder(
+    column: $table.dependencyClass,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get committedAt => $composableBuilder(
+    column: $table.committedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$InboxEventDeduplicationsTableAnnotationComposer
+    extends Composer<_$LocalDatabase, $InboxEventDeduplicationsTable> {
+  $$InboxEventDeduplicationsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get opaqueEventId => $composableBuilder(
+    column: $table.opaqueEventId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get firstEnvelopeId => $composableBuilder(
+    column: $table.firstEnvelopeId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get dependencyClass => $composableBuilder(
+    column: $table.dependencyClass,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get committedAt => $composableBuilder(
+    column: $table.committedAt,
+    builder: (column) => column,
+  );
+}
+
+class $$InboxEventDeduplicationsTableTableManager
+    extends
+        RootTableManager<
+          _$LocalDatabase,
+          $InboxEventDeduplicationsTable,
+          InboxEventDeduplication,
+          $$InboxEventDeduplicationsTableFilterComposer,
+          $$InboxEventDeduplicationsTableOrderingComposer,
+          $$InboxEventDeduplicationsTableAnnotationComposer,
+          $$InboxEventDeduplicationsTableCreateCompanionBuilder,
+          $$InboxEventDeduplicationsTableUpdateCompanionBuilder,
+          (
+            InboxEventDeduplication,
+            BaseReferences<
+              _$LocalDatabase,
+              $InboxEventDeduplicationsTable,
+              InboxEventDeduplication
+            >,
+          ),
+          InboxEventDeduplication,
+          PrefetchHooks Function()
+        > {
+  $$InboxEventDeduplicationsTableTableManager(
+    _$LocalDatabase db,
+    $InboxEventDeduplicationsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$InboxEventDeduplicationsTableFilterComposer(
+                $db: db,
+                $table: table,
+              ),
+          createOrderingComposer: () =>
+              $$InboxEventDeduplicationsTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$InboxEventDeduplicationsTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> opaqueEventId = const Value.absent(),
+                Value<String> firstEnvelopeId = const Value.absent(),
+                Value<int> dependencyClass = const Value.absent(),
+                Value<DateTime> committedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => InboxEventDeduplicationsCompanion(
+                opaqueEventId: opaqueEventId,
+                firstEnvelopeId: firstEnvelopeId,
+                dependencyClass: dependencyClass,
+                committedAt: committedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String opaqueEventId,
+                required String firstEnvelopeId,
+                required int dependencyClass,
+                Value<DateTime> committedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => InboxEventDeduplicationsCompanion.insert(
+                opaqueEventId: opaqueEventId,
+                firstEnvelopeId: firstEnvelopeId,
+                dependencyClass: dependencyClass,
+                committedAt: committedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$InboxEventDeduplicationsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$LocalDatabase,
+      $InboxEventDeduplicationsTable,
+      InboxEventDeduplication,
+      $$InboxEventDeduplicationsTableFilterComposer,
+      $$InboxEventDeduplicationsTableOrderingComposer,
+      $$InboxEventDeduplicationsTableAnnotationComposer,
+      $$InboxEventDeduplicationsTableCreateCompanionBuilder,
+      $$InboxEventDeduplicationsTableUpdateCompanionBuilder,
+      (
+        InboxEventDeduplication,
+        BaseReferences<
+          _$LocalDatabase,
+          $InboxEventDeduplicationsTable,
+          InboxEventDeduplication
+        >,
+      ),
+      InboxEventDeduplication,
+      PrefetchHooks Function()
+    >;
+typedef $$StaleDeviceRefreshRequestsTableCreateCompanionBuilder =
+    StaleDeviceRefreshRequestsCompanion Function({
+      required String userId,
+      required String staleDeviceId,
+      Value<int> state,
+      Value<int> attemptCount,
+      Value<DateTime?> nextAttemptAt,
+      Value<int> rowid,
+    });
+typedef $$StaleDeviceRefreshRequestsTableUpdateCompanionBuilder =
+    StaleDeviceRefreshRequestsCompanion Function({
+      Value<String> userId,
+      Value<String> staleDeviceId,
+      Value<int> state,
+      Value<int> attemptCount,
+      Value<DateTime?> nextAttemptAt,
+      Value<int> rowid,
+    });
+
+class $$StaleDeviceRefreshRequestsTableFilterComposer
+    extends Composer<_$LocalDatabase, $StaleDeviceRefreshRequestsTable> {
+  $$StaleDeviceRefreshRequestsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get userId => $composableBuilder(
+    column: $table.userId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get staleDeviceId => $composableBuilder(
+    column: $table.staleDeviceId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get state => $composableBuilder(
+    column: $table.state,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get attemptCount => $composableBuilder(
+    column: $table.attemptCount,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get nextAttemptAt => $composableBuilder(
+    column: $table.nextAttemptAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$StaleDeviceRefreshRequestsTableOrderingComposer
+    extends Composer<_$LocalDatabase, $StaleDeviceRefreshRequestsTable> {
+  $$StaleDeviceRefreshRequestsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get userId => $composableBuilder(
+    column: $table.userId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get staleDeviceId => $composableBuilder(
+    column: $table.staleDeviceId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get state => $composableBuilder(
+    column: $table.state,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get attemptCount => $composableBuilder(
+    column: $table.attemptCount,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get nextAttemptAt => $composableBuilder(
+    column: $table.nextAttemptAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$StaleDeviceRefreshRequestsTableAnnotationComposer
+    extends Composer<_$LocalDatabase, $StaleDeviceRefreshRequestsTable> {
+  $$StaleDeviceRefreshRequestsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get userId =>
+      $composableBuilder(column: $table.userId, builder: (column) => column);
+
+  GeneratedColumn<String> get staleDeviceId => $composableBuilder(
+    column: $table.staleDeviceId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get state =>
+      $composableBuilder(column: $table.state, builder: (column) => column);
+
+  GeneratedColumn<int> get attemptCount => $composableBuilder(
+    column: $table.attemptCount,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get nextAttemptAt => $composableBuilder(
+    column: $table.nextAttemptAt,
+    builder: (column) => column,
+  );
+}
+
+class $$StaleDeviceRefreshRequestsTableTableManager
+    extends
+        RootTableManager<
+          _$LocalDatabase,
+          $StaleDeviceRefreshRequestsTable,
+          StaleDeviceRefreshRequest,
+          $$StaleDeviceRefreshRequestsTableFilterComposer,
+          $$StaleDeviceRefreshRequestsTableOrderingComposer,
+          $$StaleDeviceRefreshRequestsTableAnnotationComposer,
+          $$StaleDeviceRefreshRequestsTableCreateCompanionBuilder,
+          $$StaleDeviceRefreshRequestsTableUpdateCompanionBuilder,
+          (
+            StaleDeviceRefreshRequest,
+            BaseReferences<
+              _$LocalDatabase,
+              $StaleDeviceRefreshRequestsTable,
+              StaleDeviceRefreshRequest
+            >,
+          ),
+          StaleDeviceRefreshRequest,
+          PrefetchHooks Function()
+        > {
+  $$StaleDeviceRefreshRequestsTableTableManager(
+    _$LocalDatabase db,
+    $StaleDeviceRefreshRequestsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$StaleDeviceRefreshRequestsTableFilterComposer(
+                $db: db,
+                $table: table,
+              ),
+          createOrderingComposer: () =>
+              $$StaleDeviceRefreshRequestsTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$StaleDeviceRefreshRequestsTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> userId = const Value.absent(),
+                Value<String> staleDeviceId = const Value.absent(),
+                Value<int> state = const Value.absent(),
+                Value<int> attemptCount = const Value.absent(),
+                Value<DateTime?> nextAttemptAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => StaleDeviceRefreshRequestsCompanion(
+                userId: userId,
+                staleDeviceId: staleDeviceId,
+                state: state,
+                attemptCount: attemptCount,
+                nextAttemptAt: nextAttemptAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String userId,
+                required String staleDeviceId,
+                Value<int> state = const Value.absent(),
+                Value<int> attemptCount = const Value.absent(),
+                Value<DateTime?> nextAttemptAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => StaleDeviceRefreshRequestsCompanion.insert(
+                userId: userId,
+                staleDeviceId: staleDeviceId,
+                state: state,
+                attemptCount: attemptCount,
+                nextAttemptAt: nextAttemptAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$StaleDeviceRefreshRequestsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$LocalDatabase,
+      $StaleDeviceRefreshRequestsTable,
+      StaleDeviceRefreshRequest,
+      $$StaleDeviceRefreshRequestsTableFilterComposer,
+      $$StaleDeviceRefreshRequestsTableOrderingComposer,
+      $$StaleDeviceRefreshRequestsTableAnnotationComposer,
+      $$StaleDeviceRefreshRequestsTableCreateCompanionBuilder,
+      $$StaleDeviceRefreshRequestsTableUpdateCompanionBuilder,
+      (
+        StaleDeviceRefreshRequest,
+        BaseReferences<
+          _$LocalDatabase,
+          $StaleDeviceRefreshRequestsTable,
+          StaleDeviceRefreshRequest
+        >,
+      ),
+      StaleDeviceRefreshRequest,
       PrefetchHooks Function()
     >;
 typedef $$ReceiptsTableCreateCompanionBuilder =
@@ -17059,6 +19247,12 @@ typedef $$SyncCheckpointsTableCreateCompanionBuilder =
       required Uint8List etagsCiphertext,
       required int retryState,
       required int protocolVersion,
+      Value<int> queueGapState,
+      Value<bool> drainRequested,
+      Value<int> connectionPhase,
+      Value<int> reconnectAttempt,
+      Value<DateTime?> reconnectAt,
+      Value<DateTime?> lastSuccessfulSyncAt,
     });
 typedef $$SyncCheckpointsTableUpdateCompanionBuilder =
     SyncCheckpointsCompanion Function({
@@ -17068,6 +19262,12 @@ typedef $$SyncCheckpointsTableUpdateCompanionBuilder =
       Value<Uint8List> etagsCiphertext,
       Value<int> retryState,
       Value<int> protocolVersion,
+      Value<int> queueGapState,
+      Value<bool> drainRequested,
+      Value<int> connectionPhase,
+      Value<int> reconnectAttempt,
+      Value<DateTime?> reconnectAt,
+      Value<DateTime?> lastSuccessfulSyncAt,
     });
 
 class $$SyncCheckpointsTableFilterComposer
@@ -17106,6 +19306,36 @@ class $$SyncCheckpointsTableFilterComposer
 
   ColumnFilters<int> get protocolVersion => $composableBuilder(
     column: $table.protocolVersion,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get queueGapState => $composableBuilder(
+    column: $table.queueGapState,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get drainRequested => $composableBuilder(
+    column: $table.drainRequested,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get connectionPhase => $composableBuilder(
+    column: $table.connectionPhase,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get reconnectAttempt => $composableBuilder(
+    column: $table.reconnectAttempt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get reconnectAt => $composableBuilder(
+    column: $table.reconnectAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get lastSuccessfulSyncAt => $composableBuilder(
+    column: $table.lastSuccessfulSyncAt,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -17148,6 +19378,36 @@ class $$SyncCheckpointsTableOrderingComposer
     column: $table.protocolVersion,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<int> get queueGapState => $composableBuilder(
+    column: $table.queueGapState,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get drainRequested => $composableBuilder(
+    column: $table.drainRequested,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get connectionPhase => $composableBuilder(
+    column: $table.connectionPhase,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get reconnectAttempt => $composableBuilder(
+    column: $table.reconnectAttempt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get reconnectAt => $composableBuilder(
+    column: $table.reconnectAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get lastSuccessfulSyncAt => $composableBuilder(
+    column: $table.lastSuccessfulSyncAt,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$SyncCheckpointsTableAnnotationComposer
@@ -17186,6 +19446,36 @@ class $$SyncCheckpointsTableAnnotationComposer
 
   GeneratedColumn<int> get protocolVersion => $composableBuilder(
     column: $table.protocolVersion,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get queueGapState => $composableBuilder(
+    column: $table.queueGapState,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get drainRequested => $composableBuilder(
+    column: $table.drainRequested,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get connectionPhase => $composableBuilder(
+    column: $table.connectionPhase,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get reconnectAttempt => $composableBuilder(
+    column: $table.reconnectAttempt,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get reconnectAt => $composableBuilder(
+    column: $table.reconnectAt,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get lastSuccessfulSyncAt => $composableBuilder(
+    column: $table.lastSuccessfulSyncAt,
     builder: (column) => column,
   );
 }
@@ -17234,6 +19524,12 @@ class $$SyncCheckpointsTableTableManager
                 Value<Uint8List> etagsCiphertext = const Value.absent(),
                 Value<int> retryState = const Value.absent(),
                 Value<int> protocolVersion = const Value.absent(),
+                Value<int> queueGapState = const Value.absent(),
+                Value<bool> drainRequested = const Value.absent(),
+                Value<int> connectionPhase = const Value.absent(),
+                Value<int> reconnectAttempt = const Value.absent(),
+                Value<DateTime?> reconnectAt = const Value.absent(),
+                Value<DateTime?> lastSuccessfulSyncAt = const Value.absent(),
               }) => SyncCheckpointsCompanion(
                 singletonId: singletonId,
                 highestContiguousAckedSequence: highestContiguousAckedSequence,
@@ -17241,6 +19537,12 @@ class $$SyncCheckpointsTableTableManager
                 etagsCiphertext: etagsCiphertext,
                 retryState: retryState,
                 protocolVersion: protocolVersion,
+                queueGapState: queueGapState,
+                drainRequested: drainRequested,
+                connectionPhase: connectionPhase,
+                reconnectAttempt: reconnectAttempt,
+                reconnectAt: reconnectAt,
+                lastSuccessfulSyncAt: lastSuccessfulSyncAt,
               ),
           createCompanionCallback:
               ({
@@ -17251,6 +19553,12 @@ class $$SyncCheckpointsTableTableManager
                 required Uint8List etagsCiphertext,
                 required int retryState,
                 required int protocolVersion,
+                Value<int> queueGapState = const Value.absent(),
+                Value<bool> drainRequested = const Value.absent(),
+                Value<int> connectionPhase = const Value.absent(),
+                Value<int> reconnectAttempt = const Value.absent(),
+                Value<DateTime?> reconnectAt = const Value.absent(),
+                Value<DateTime?> lastSuccessfulSyncAt = const Value.absent(),
               }) => SyncCheckpointsCompanion.insert(
                 singletonId: singletonId,
                 highestContiguousAckedSequence: highestContiguousAckedSequence,
@@ -17258,6 +19566,12 @@ class $$SyncCheckpointsTableTableManager
                 etagsCiphertext: etagsCiphertext,
                 retryState: retryState,
                 protocolVersion: protocolVersion,
+                queueGapState: queueGapState,
+                drainRequested: drainRequested,
+                connectionPhase: connectionPhase,
+                reconnectAttempt: reconnectAttempt,
+                reconnectAt: reconnectAt,
+                lastSuccessfulSyncAt: lastSuccessfulSyncAt,
               ),
           withReferenceMapper: (p0) => p0
               .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
@@ -17696,6 +20010,17 @@ class $LocalDatabaseManager {
       $$InboxEnvelopesTableTableManager(_db, _db.inboxEnvelopes);
   $$OutboxOperationsTableTableManager get outboxOperations =>
       $$OutboxOperationsTableTableManager(_db, _db.outboxOperations);
+  $$InboxEventDeduplicationsTableTableManager get inboxEventDeduplications =>
+      $$InboxEventDeduplicationsTableTableManager(
+        _db,
+        _db.inboxEventDeduplications,
+      );
+  $$StaleDeviceRefreshRequestsTableTableManager
+  get staleDeviceRefreshRequests =>
+      $$StaleDeviceRefreshRequestsTableTableManager(
+        _db,
+        _db.staleDeviceRefreshRequests,
+      );
   $$ReceiptsTableTableManager get receipts =>
       $$ReceiptsTableTableManager(_db, _db.receipts);
   $$VoiceRoomsTableTableManager get voiceRooms =>

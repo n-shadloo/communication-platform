@@ -10,8 +10,8 @@ import 'package:communication_platform/core/protocol/enrollment_crypto_model.dar
 import 'package:communication_platform/core/protocol/identity_protocol_model.dart';
 import 'package:communication_platform/core/result/failure.dart';
 import 'package:communication_platform/core/result/result.dart';
-import 'package:communication_platform/shared/infrastructure/crypto/native/enrollment_crypto_native_session.dart';
 import 'package:communication_platform/shared/infrastructure/crypto/platform_crypto_core.dart';
+import 'package:communication_platform/shared/infrastructure/crypto/unsupported_enrollment_crypto.dart';
 import 'package:communication_platform/shared/infrastructure/time/system_time_source.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 

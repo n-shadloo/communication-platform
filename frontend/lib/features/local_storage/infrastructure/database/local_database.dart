@@ -197,6 +197,9 @@ class MlsGroups extends Table {
       integer().check(acceptedEpoch.isBiggerOrEqualValue(0))();
   IntColumn get stateVersion =>
       integer().check(stateVersion.isBiggerThanValue(0))();
+  IntColumn get queueGapRecoveryState => integer()
+      .withDefault(const Constant(0))
+      .check(queueGapRecoveryState.isBetweenValues(0, 2))();
 
   @override
   Set<Column<Object>> get primaryKey => {groupId};
@@ -302,6 +305,14 @@ class InboxEnvelopes extends Table {
       integer().check(processingState.isBetweenValues(0, 5))();
   BoolColumn get readyToAcknowledge =>
       boolean().withDefault(const Constant(false))();
+  TextColumn get opaqueEventId => text().nullable()();
+  IntColumn get dependencyClass => integer().nullable().check(
+    dependencyClass.isNull() | dependencyClass.isBetweenValues(0, 1),
+  )();
+  IntColumn get attemptCount => integer()
+      .withDefault(const Constant(0))
+      .check(attemptCount.isBiggerOrEqualValue(0))();
+  DateTimeColumn get nextAttemptAt => dateTime().nullable()();
 
   @override
   Set<Column<Object>> get primaryKey => {envelopeId};
@@ -314,6 +325,7 @@ class OutboxOperations extends Table {
   TextColumn get operationId => text()();
   TextColumn get eventId => text()();
   TextColumn get recipientDeviceId => text()();
+  TextColumn get recipientUserId => text().withDefault(const Constant(''))();
   IntColumn get batchIndex =>
       integer().check(batchIndex.isBiggerOrEqualValue(0))();
   BlobColumn get exactRecipientCiphertext => blob()();
@@ -322,9 +334,45 @@ class OutboxOperations extends Table {
   IntColumn get attemptCount => integer()
       .withDefault(const Constant(0))
       .check(attemptCount.isBiggerOrEqualValue(0))();
+  DateTimeColumn get nextAttemptAt => dateTime().nullable()();
+  DateTimeColumn get lastAttemptAt => dateTime().nullable()();
+  DateTimeColumn get terminalAt => dateTime().nullable()();
 
   @override
   Set<Column<Object>> get primaryKey => {operationId, recipientDeviceId};
+}
+
+class InboxEventDeduplications extends Table {
+  @override
+  String get tableName => 'inbox_event_deduplication';
+
+  TextColumn get opaqueEventId => text()();
+  TextColumn get firstEnvelopeId => text()();
+  IntColumn get dependencyClass =>
+      integer().check(dependencyClass.isBetweenValues(0, 1))();
+  DateTimeColumn get committedAt =>
+      dateTime().withDefault(currentDateAndTime)();
+
+  @override
+  Set<Column<Object>> get primaryKey => {opaqueEventId};
+}
+
+class StaleDeviceRefreshRequests extends Table {
+  @override
+  String get tableName => 'stale_device_refresh_requests';
+
+  TextColumn get userId => text()();
+  TextColumn get staleDeviceId => text()();
+  IntColumn get state => integer()
+      .withDefault(const Constant(0))
+      .check(state.isBetweenValues(0, 3))();
+  IntColumn get attemptCount => integer()
+      .withDefault(const Constant(0))
+      .check(attemptCount.isBiggerOrEqualValue(0))();
+  DateTimeColumn get nextAttemptAt => dateTime().nullable()();
+
+  @override
+  Set<Column<Object>> get primaryKey => {userId, staleDeviceId};
 }
 
 class Receipts extends Table {
@@ -389,6 +437,19 @@ class SyncCheckpoints extends Table {
       integer().check(retryState.isBetweenValues(0, 5))();
   IntColumn get protocolVersion =>
       integer().check(protocolVersion.isBiggerThanValue(0))();
+  IntColumn get queueGapState => integer()
+      .withDefault(const Constant(0))
+      .check(queueGapState.isBetweenValues(0, 1))();
+  BoolColumn get drainRequested =>
+      boolean().withDefault(const Constant(true))();
+  IntColumn get connectionPhase => integer()
+      .withDefault(const Constant(0))
+      .check(connectionPhase.isBetweenValues(0, 9))();
+  IntColumn get reconnectAttempt => integer()
+      .withDefault(const Constant(0))
+      .check(reconnectAttempt.isBiggerOrEqualValue(0))();
+  DateTimeColumn get reconnectAt => dateTime().nullable()();
+  DateTimeColumn get lastSuccessfulSyncAt => dateTime().nullable()();
 
   @override
   Set<Column<Object>> get primaryKey => {singletonId};
@@ -446,6 +507,8 @@ class StorageMigrationHooks {
     Attachments,
     InboxEnvelopes,
     OutboxOperations,
+    InboxEventDeduplications,
+    StaleDeviceRefreshRequests,
     Receipts,
     VoiceRooms,
     HistoryTransfers,
@@ -458,7 +521,7 @@ final class LocalDatabase extends _$LocalDatabase {
   LocalDatabase(super.executor, {StorageMigrationHooks? migrationHooks})
     : _migrationHooks = migrationHooks ?? const StorageMigrationHooks();
 
-  static const currentSchemaVersion = 2;
+  static const currentSchemaVersion = 3;
   final StorageMigrationHooks _migrationHooks;
 
   @override
@@ -480,6 +543,64 @@ final class LocalDatabase extends _$LocalDatabase {
           await migrator.createAll();
         } else if (from < 2) {
           await migrator.createTable(enrollmentIntents);
+        }
+        if (from < 3) {
+          await migrator.addColumn(mlsGroups, mlsGroups.queueGapRecoveryState);
+          await migrator.addColumn(
+            inboxEnvelopes,
+            inboxEnvelopes.opaqueEventId,
+          );
+          await migrator.addColumn(
+            inboxEnvelopes,
+            inboxEnvelopes.dependencyClass,
+          );
+          await migrator.addColumn(inboxEnvelopes, inboxEnvelopes.attemptCount);
+          await migrator.addColumn(
+            inboxEnvelopes,
+            inboxEnvelopes.nextAttemptAt,
+          );
+          await migrator.addColumn(
+            outboxOperations,
+            outboxOperations.recipientUserId,
+          );
+          await migrator.addColumn(
+            outboxOperations,
+            outboxOperations.nextAttemptAt,
+          );
+          await migrator.addColumn(
+            outboxOperations,
+            outboxOperations.lastAttemptAt,
+          );
+          await migrator.addColumn(
+            outboxOperations,
+            outboxOperations.terminalAt,
+          );
+          await migrator.addColumn(
+            syncCheckpoints,
+            syncCheckpoints.queueGapState,
+          );
+          await migrator.addColumn(
+            syncCheckpoints,
+            syncCheckpoints.drainRequested,
+          );
+          await migrator.addColumn(
+            syncCheckpoints,
+            syncCheckpoints.connectionPhase,
+          );
+          await migrator.addColumn(
+            syncCheckpoints,
+            syncCheckpoints.reconnectAttempt,
+          );
+          await migrator.addColumn(
+            syncCheckpoints,
+            syncCheckpoints.reconnectAt,
+          );
+          await migrator.addColumn(
+            syncCheckpoints,
+            syncCheckpoints.lastSuccessfulSyncAt,
+          );
+          await migrator.createTable(inboxEventDeduplications);
+          await migrator.createTable(staleDeviceRefreshRequests);
         }
         await _migrationHooks.afterUpgrade(from, to);
       });

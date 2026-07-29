@@ -15,8 +15,8 @@ import 'package:communication_platform/features/bootstrap/infrastructure/provisi
 import 'package:communication_platform/features/devices/presentation/device_enrollment_controller.dart';
 import 'package:communication_platform/features/local_storage/infrastructure/platform/platform_local_storage.dart';
 import 'package:communication_platform/features/local_storage/infrastructure/protected_storage_bootstrap_adapter.dart';
-import 'package:communication_platform/shared/infrastructure/crypto/native/enrollment_crypto_native_session.dart';
 import 'package:communication_platform/shared/infrastructure/crypto/platform_crypto_core.dart';
+import 'package:communication_platform/shared/infrastructure/crypto/unsupported_enrollment_crypto.dart';
 import 'package:communication_platform/shared/infrastructure/time/system_time_source.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';

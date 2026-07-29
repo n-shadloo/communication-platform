@@ -6,6 +6,9 @@ enum NetworkOperation {
   authLogout,
   api,
   websocket,
+  syncDrain,
+  syncAcknowledge,
+  syncSend,
 }
 
 enum NetworkOutcome {
