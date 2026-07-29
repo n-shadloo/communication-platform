@@ -3,9 +3,11 @@ import 'dart:typed_data';
 import 'package:communication_platform/core/application/ports/crypto_core_port.dart';
 import 'package:communication_platform/core/application/ports/enrollment_crypto_port.dart';
 import 'package:communication_platform/core/application/ports/identity_crypto_port.dart';
+import 'package:communication_platform/core/application/ports/pairwise_crypto_port.dart';
 import 'package:communication_platform/core/protocol/crypto_core_model.dart';
 import 'package:communication_platform/core/protocol/enrollment_crypto_model.dart';
 import 'package:communication_platform/core/protocol/identity_protocol_model.dart';
+import 'package:communication_platform/core/protocol/pairwise_crypto_model.dart';
 import 'package:communication_platform/core/result/failure.dart';
 import 'package:communication_platform/core/result/result.dart';
 
@@ -18,18 +20,31 @@ abstract interface class CryptoCoreWorker {
   Future<void> close();
 }
 
+abstract interface class PairwiseCryptoWorker {
+  Future<Result<PairwiseCryptoResponse>> pairwiseOperation({
+    required PairwiseCryptoOperation operation,
+    required Uint8List payload,
+  });
+}
+
 /// Scope-owned lifecycle wrapper around the platform crypto worker.
 final class CryptoCoreRuntime
-    implements CryptoCorePort, EnrollmentCryptoPort, IdentityCryptoPort {
+    implements
+        CryptoCorePort,
+        EnrollmentCryptoPort,
+        IdentityCryptoPort,
+        PairwiseCryptoPort {
   CryptoCoreRuntime({
     required this.worker,
     this.enrollmentWorker,
     this.identityWorker,
+    this.pairwiseWorker,
   });
 
   final CryptoCoreWorker worker;
   final EnrollmentCryptoWorker? enrollmentWorker;
   final IdentityCryptoWorker? identityWorker;
+  final PairwiseCryptoWorker? pairwiseWorker;
   bool _closed = false;
 
   @override
@@ -227,6 +242,31 @@ final class CryptoCoreRuntime
       ) ??
       _unsupported();
 
+  @override
+  Future<Result<PairwiseCryptoResponse>> pairwiseOperation({
+    required PairwiseCryptoOperation operation,
+    required Uint8List payload,
+  }) async {
+    if (_closed) {
+      return const Result.failure(
+        CryptoCoreFailure(CryptoCoreFailureCode.stateViolation),
+      );
+    }
+    final pairwise = pairwiseWorker;
+    if (pairwise == null) {
+      return _unsupported();
+    }
+    final capabilityResult = await worker.capabilities();
+    if (capabilityResult case FailureResult(failure: final failure)) {
+      return Result.failure(failure);
+    }
+    final capabilities =
+        (capabilityResult as Success<CryptoCoreCapabilities>).value;
+    return capabilities.supportsPairwiseTransportV1
+        ? pairwise.pairwiseOperation(operation: operation, payload: payload)
+        : _unsupported();
+  }
+
   Future<Result<T>> _unsupported<T>() async => const Result.failure(
     UnsupportedProtocolFailure(UnsupportedProtocolFailureKind.capability),
   );
@@ -237,7 +277,11 @@ final class CryptoCoreRuntime
 
 /// Fail-closed implementation used when the reviewed native boundary is absent.
 final class UnsupportedCryptoCore
-    implements CryptoCorePort, EnrollmentCryptoPort, IdentityCryptoPort {
+    implements
+        CryptoCorePort,
+        EnrollmentCryptoPort,
+        IdentityCryptoPort,
+        PairwiseCryptoPort {
   const UnsupportedCryptoCore();
 
   @override
@@ -367,6 +411,12 @@ final class UnsupportedCryptoCore
     required Uint8List peerUserId,
     required Uint8List peerMasterPublic,
     required UserSigningAttestation attestation,
+  }) => _identityUnsupported();
+
+  @override
+  Future<Result<PairwiseCryptoResponse>> pairwiseOperation({
+    required PairwiseCryptoOperation operation,
+    required Uint8List payload,
   }) => _identityUnsupported();
 
   Future<Result<T>> _identityUnsupported<T>() => Future<Result<T>>.value(

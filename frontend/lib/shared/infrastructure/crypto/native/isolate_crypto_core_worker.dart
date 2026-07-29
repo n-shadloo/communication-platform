@@ -7,6 +7,7 @@ import 'package:communication_platform/core/application/ports/identity_crypto_po
 import 'package:communication_platform/core/protocol/crypto_core_model.dart';
 import 'package:communication_platform/core/protocol/enrollment_crypto_model.dart';
 import 'package:communication_platform/core/protocol/identity_protocol_model.dart';
+import 'package:communication_platform/core/protocol/pairwise_crypto_model.dart';
 import 'package:communication_platform/core/result/failure.dart';
 import 'package:communication_platform/core/result/result.dart';
 import 'package:communication_platform/shared/infrastructure/crypto/crypto_core_runtime.dart';
@@ -16,6 +17,8 @@ import 'package:communication_platform/shared/infrastructure/crypto/native/enrol
 import 'package:communication_platform/shared/infrastructure/crypto/native/enrollment_crypto_native_session.dart';
 import 'package:communication_platform/shared/infrastructure/crypto/native/identity_crypto_ffi.dart';
 import 'package:communication_platform/shared/infrastructure/crypto/native/identity_crypto_native_session.dart';
+import 'package:communication_platform/shared/infrastructure/crypto/native/pairwise_crypto_ffi.dart';
+import 'package:communication_platform/shared/infrastructure/crypto/native/pairwise_crypto_native_session.dart';
 
 const int _handshakeReady = 0;
 const int _handshakeFailed = 1;
@@ -35,6 +38,7 @@ const int _operationInspectPeerDeviceLog = 13;
 const int _operationSafetyFingerprint = 14;
 const int _operationAttestPeerMaster = 15;
 const int _operationVerifyUserAttestation = 16;
+const int _operationPairwise = 17;
 const int _replySuccess = 0;
 const int _replyFailure = 1;
 const int _failureCryptoCore = 1;
@@ -43,7 +47,11 @@ const int _failureSecurity = 3;
 
 /// Owns the native library and all native calls in one dedicated isolate.
 final class IsolateCryptoCoreWorker
-    implements CryptoCoreWorker, EnrollmentCryptoWorker, IdentityCryptoWorker {
+    implements
+        CryptoCoreWorker,
+        EnrollmentCryptoWorker,
+        IdentityCryptoWorker,
+        PairwiseCryptoWorker {
   bool _closed = false;
   Future<_CryptoWorkerState?>? _stateFuture;
   Future<void>? _closeFuture;
@@ -351,6 +359,18 @@ final class IsolateCryptoCoreWorker
     return _decodeVoidReply(reply);
   });
 
+  @override
+  Future<Result<PairwiseCryptoResponse>> pairwiseOperation({
+    required PairwiseCryptoOperation operation,
+    required Uint8List payload,
+  }) => _guarded(() async {
+    final reply = await _request(_operationPairwise, <Object?>[
+      operation.wireValue,
+      payload,
+    ]);
+    return _decodePairwiseReply(reply, operation);
+  });
+
   Future<Result<T>> _guarded<T>(Future<Result<T>> Function() operation) {
     if (_closed) {
       return Future<Result<T>>.value(
@@ -490,6 +510,7 @@ Future<void> _runCryptoCoreWorker(SendPort bootstrapPort) async {
   late final CryptoCoreNativeSession session;
   late final EnrollmentCryptoNativeSession enrollmentSession;
   late final IdentityCryptoNativeSession identitySession;
+  late final PairwiseCryptoNativeSession pairwiseSession;
   try {
     session = CryptoCoreNativeSession(
       api: DynamicCryptoCoreNativeApi.openAndroid(),
@@ -499,6 +520,9 @@ Future<void> _runCryptoCoreWorker(SendPort bootstrapPort) async {
     );
     identitySession = IdentityCryptoNativeSession(
       api: DynamicIdentityCryptoNativeApi.openAndroid(),
+    );
+    pairwiseSession = PairwiseCryptoNativeSession(
+      api: DynamicPairwiseCryptoNativeApi.openAndroid(),
     );
   } on Object {
     bootstrapPort.send(const <Object?>[_handshakeFailed]);
@@ -625,6 +649,11 @@ Future<void> _runCryptoCoreWorker(SendPort bootstrapPort) async {
               _encodeVoidReply(
                 _verifyAttestationInWorker(identitySession, message),
               ),
+            );
+            continue;
+          case _operationPairwise:
+            replyPort.send(
+              _encodePairwiseReply(_pairwiseInWorker(pairwiseSession, message)),
             );
             continue;
           case _operationClose:
@@ -884,6 +913,31 @@ Result<void> _verifyAttestationInWorker(
   }
 }
 
+Result<PairwiseCryptoResponse> _pairwiseInWorker(
+  PairwiseCryptoNativeSession session,
+  List<Object?> message,
+) {
+  final wireOperation = message.length > 2 ? message[2] : null;
+  if (wireOperation is! int) {
+    return const Result.failure(
+      SecurityFailure(SecurityFailureKind.malformedServerResponse),
+    );
+  }
+  PairwiseCryptoOperation? operation;
+  for (final candidate in PairwiseCryptoOperation.values) {
+    if (candidate.wireValue == wireOperation) {
+      operation = candidate;
+      break;
+    }
+  }
+  if (operation == null) {
+    return const Result.failure(
+      UnsupportedProtocolFailure(UnsupportedProtocolFailureKind.version),
+    );
+  }
+  return session.operation(operation, _bytesArgument(message, 3));
+}
+
 List<Object?> _encodeCapabilitiesReply(Result<CryptoCoreCapabilities> result) {
   return result.fold(
     onSuccess: (capabilities) => <Object?>[
@@ -964,6 +1018,53 @@ List<Object?> _encodeAttestationReply(Result<UserSigningAttestation> result) =>
       onSuccess: (value) => <Object?>[_replySuccess, value.signature],
       onFailure: _encodeFailureReply,
     );
+
+List<Object?> _encodePairwiseReply(Result<PairwiseCryptoResponse> result) =>
+    result.fold(
+      onSuccess: (value) => <Object?>[
+        _replySuccess,
+        value.operation.wireValue,
+        value.outcome.index,
+        value.body,
+      ],
+      onFailure: _encodeFailureReply,
+    );
+
+Result<PairwiseCryptoResponse> _decodePairwiseReply(
+  Object? reply,
+  PairwiseCryptoOperation expectedOperation,
+) {
+  if (reply is! List<Object?> || reply.isEmpty) {
+    return const Result.failure(
+      SecurityFailure(SecurityFailureKind.policyBlocked),
+    );
+  }
+  if (reply[0] == _replyFailure) {
+    return Result.failure(_decodeFailureReply(reply));
+  }
+  if (reply.length != 4 ||
+      reply[0] != _replySuccess ||
+      reply[1] != expectedOperation.wireValue ||
+      reply[2] is! int ||
+      reply[3] is! Uint8List) {
+    return const Result.failure(
+      SecurityFailure(SecurityFailureKind.malformedServerResponse),
+    );
+  }
+  final outcome = reply[2]! as int;
+  if (outcome < 0 || outcome >= PairwiseCryptoOutcome.values.length) {
+    return const Result.failure(
+      SecurityFailure(SecurityFailureKind.malformedServerResponse),
+    );
+  }
+  return Result.success(
+    PairwiseCryptoResponse(
+      operation: expectedOperation,
+      outcome: PairwiseCryptoOutcome.values[outcome],
+      body: reply[3]! as Uint8List,
+    ),
+  );
+}
 
 Result<void> _decodeVoidReply(Object? reply) {
   if (reply is! List<Object?> || reply.isEmpty) {

@@ -49,7 +49,7 @@ final directoryServiceProvider = FutureProvider<DirectoryService>((ref) async {
 });
 
 final peerAuthenticationServiceProvider =
-    FutureProvider<PeerAuthenticationService>((ref) async {
+    FutureProvider<ClientAuthenticationService>((ref) async {
       final local = await ref.watch(contactLocalProvider.future);
       return ClientAuthenticationService(
         remote: ref.watch(contactRemoteProvider),

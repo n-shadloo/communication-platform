@@ -125,7 +125,7 @@ build_abi() {
   exports="$("$llvm_nm" -D --defined-only "$destination_dir/$LIBRARY_NAME" |
     awk '{print $NF}' | sort)"
   local expected_exports
-  expected_exports=$'cp_crypto_v1_abi_version\ncp_crypto_v1_attest_peer_master\ncp_crypto_v1_capabilities\ncp_crypto_v1_create_device_log_record\ncp_crypto_v1_cross_sign_device\ncp_crypto_v1_identity_operation\ncp_crypto_v1_inspect_device_log_record\ncp_crypto_v1_prepare_device\ncp_crypto_v1_prepare_first_identity\ncp_crypto_v1_restore_identity\ncp_crypto_v1_sanitize_identity\ncp_crypto_v1_self_test'
+  expected_exports=$'cp_crypto_v1_abi_version\ncp_crypto_v1_attest_peer_master\ncp_crypto_v1_capabilities\ncp_crypto_v1_create_device_log_record\ncp_crypto_v1_cross_sign_device\ncp_crypto_v1_identity_operation\ncp_crypto_v1_inspect_device_log_record\ncp_crypto_v1_pairwise_operation\ncp_crypto_v1_prepare_device\ncp_crypto_v1_prepare_first_identity\ncp_crypto_v1_restore_identity\ncp_crypto_v1_sanitize_identity\ncp_crypto_v1_self_test'
   if [[ "$exports" != "$expected_exports" ]]; then
     echo "Unexpected exported symbols in $destination_dir/$LIBRARY_NAME:" >&2
     printf '%s\n' "$exports" >&2

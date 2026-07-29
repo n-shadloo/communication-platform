@@ -592,6 +592,19 @@ class $SecureSecretsTable extends SecureSecrets
     type: DriftSqlType.int,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _stateRevisionMeta = const VerificationMeta(
+    'stateRevision',
+  );
+  @override
+  late final GeneratedColumn<int> stateRevision = GeneratedColumn<int>(
+    'state_revision',
+    aliasedName,
+    false,
+    check: () => ComparableExpr(stateRevision).isBiggerThanValue(0),
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(1),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     createdAt,
@@ -599,6 +612,7 @@ class $SecureSecretsTable extends SecureSecrets
     kind,
     wrappedCiphertextOrOpaqueHandle,
     formatVersion,
+    stateRevision,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -656,6 +670,15 @@ class $SecureSecretsTable extends SecureSecrets
     } else if (isInserting) {
       context.missing(_formatVersionMeta);
     }
+    if (data.containsKey('state_revision')) {
+      context.handle(
+        _stateRevisionMeta,
+        stateRevision.isAcceptableOrUnknown(
+          data['state_revision']!,
+          _stateRevisionMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -685,6 +708,10 @@ class $SecureSecretsTable extends SecureSecrets
         DriftSqlType.int,
         data['${effectivePrefix}format_version'],
       )!,
+      stateRevision: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}state_revision'],
+      )!,
     );
   }
 
@@ -700,12 +727,14 @@ class SecureSecret extends DataClass implements Insertable<SecureSecret> {
   final int kind;
   final Uint8List wrappedCiphertextOrOpaqueHandle;
   final int formatVersion;
+  final int stateRevision;
   const SecureSecret({
     required this.createdAt,
     required this.secretId,
     required this.kind,
     required this.wrappedCiphertextOrOpaqueHandle,
     required this.formatVersion,
+    required this.stateRevision,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -717,6 +746,7 @@ class SecureSecret extends DataClass implements Insertable<SecureSecret> {
       wrappedCiphertextOrOpaqueHandle,
     );
     map['format_version'] = Variable<int>(formatVersion);
+    map['state_revision'] = Variable<int>(stateRevision);
     return map;
   }
 
@@ -727,6 +757,7 @@ class SecureSecret extends DataClass implements Insertable<SecureSecret> {
       kind: Value(kind),
       wrappedCiphertextOrOpaqueHandle: Value(wrappedCiphertextOrOpaqueHandle),
       formatVersion: Value(formatVersion),
+      stateRevision: Value(stateRevision),
     );
   }
 
@@ -743,6 +774,7 @@ class SecureSecret extends DataClass implements Insertable<SecureSecret> {
         json['wrappedCiphertextOrOpaqueHandle'],
       ),
       formatVersion: serializer.fromJson<int>(json['formatVersion']),
+      stateRevision: serializer.fromJson<int>(json['stateRevision']),
     );
   }
   @override
@@ -756,6 +788,7 @@ class SecureSecret extends DataClass implements Insertable<SecureSecret> {
         wrappedCiphertextOrOpaqueHandle,
       ),
       'formatVersion': serializer.toJson<int>(formatVersion),
+      'stateRevision': serializer.toJson<int>(stateRevision),
     };
   }
 
@@ -765,6 +798,7 @@ class SecureSecret extends DataClass implements Insertable<SecureSecret> {
     int? kind,
     Uint8List? wrappedCiphertextOrOpaqueHandle,
     int? formatVersion,
+    int? stateRevision,
   }) => SecureSecret(
     createdAt: createdAt ?? this.createdAt,
     secretId: secretId ?? this.secretId,
@@ -772,6 +806,7 @@ class SecureSecret extends DataClass implements Insertable<SecureSecret> {
     wrappedCiphertextOrOpaqueHandle:
         wrappedCiphertextOrOpaqueHandle ?? this.wrappedCiphertextOrOpaqueHandle,
     formatVersion: formatVersion ?? this.formatVersion,
+    stateRevision: stateRevision ?? this.stateRevision,
   );
   SecureSecret copyWithCompanion(SecureSecretsCompanion data) {
     return SecureSecret(
@@ -785,6 +820,9 @@ class SecureSecret extends DataClass implements Insertable<SecureSecret> {
       formatVersion: data.formatVersion.present
           ? data.formatVersion.value
           : this.formatVersion,
+      stateRevision: data.stateRevision.present
+          ? data.stateRevision.value
+          : this.stateRevision,
     );
   }
 
@@ -797,7 +835,8 @@ class SecureSecret extends DataClass implements Insertable<SecureSecret> {
           ..write(
             'wrappedCiphertextOrOpaqueHandle: $wrappedCiphertextOrOpaqueHandle, ',
           )
-          ..write('formatVersion: $formatVersion')
+          ..write('formatVersion: $formatVersion, ')
+          ..write('stateRevision: $stateRevision')
           ..write(')'))
         .toString();
   }
@@ -809,6 +848,7 @@ class SecureSecret extends DataClass implements Insertable<SecureSecret> {
     kind,
     $driftBlobEquality.hash(wrappedCiphertextOrOpaqueHandle),
     formatVersion,
+    stateRevision,
   );
   @override
   bool operator ==(Object other) =>
@@ -821,7 +861,8 @@ class SecureSecret extends DataClass implements Insertable<SecureSecret> {
             other.wrappedCiphertextOrOpaqueHandle,
             this.wrappedCiphertextOrOpaqueHandle,
           ) &&
-          other.formatVersion == this.formatVersion);
+          other.formatVersion == this.formatVersion &&
+          other.stateRevision == this.stateRevision);
 }
 
 class SecureSecretsCompanion extends UpdateCompanion<SecureSecret> {
@@ -830,6 +871,7 @@ class SecureSecretsCompanion extends UpdateCompanion<SecureSecret> {
   final Value<int> kind;
   final Value<Uint8List> wrappedCiphertextOrOpaqueHandle;
   final Value<int> formatVersion;
+  final Value<int> stateRevision;
   final Value<int> rowid;
   const SecureSecretsCompanion({
     this.createdAt = const Value.absent(),
@@ -837,6 +879,7 @@ class SecureSecretsCompanion extends UpdateCompanion<SecureSecret> {
     this.kind = const Value.absent(),
     this.wrappedCiphertextOrOpaqueHandle = const Value.absent(),
     this.formatVersion = const Value.absent(),
+    this.stateRevision = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   SecureSecretsCompanion.insert({
@@ -845,6 +888,7 @@ class SecureSecretsCompanion extends UpdateCompanion<SecureSecret> {
     required int kind,
     required Uint8List wrappedCiphertextOrOpaqueHandle,
     required int formatVersion,
+    this.stateRevision = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : secretId = Value(secretId),
        kind = Value(kind),
@@ -856,6 +900,7 @@ class SecureSecretsCompanion extends UpdateCompanion<SecureSecret> {
     Expression<int>? kind,
     Expression<Uint8List>? wrappedCiphertextOrOpaqueHandle,
     Expression<int>? formatVersion,
+    Expression<int>? stateRevision,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -865,6 +910,7 @@ class SecureSecretsCompanion extends UpdateCompanion<SecureSecret> {
       if (wrappedCiphertextOrOpaqueHandle != null)
         'wrapped_ciphertext_or_opaque_handle': wrappedCiphertextOrOpaqueHandle,
       if (formatVersion != null) 'format_version': formatVersion,
+      if (stateRevision != null) 'state_revision': stateRevision,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -875,6 +921,7 @@ class SecureSecretsCompanion extends UpdateCompanion<SecureSecret> {
     Value<int>? kind,
     Value<Uint8List>? wrappedCiphertextOrOpaqueHandle,
     Value<int>? formatVersion,
+    Value<int>? stateRevision,
     Value<int>? rowid,
   }) {
     return SecureSecretsCompanion(
@@ -885,6 +932,7 @@ class SecureSecretsCompanion extends UpdateCompanion<SecureSecret> {
           wrappedCiphertextOrOpaqueHandle ??
           this.wrappedCiphertextOrOpaqueHandle,
       formatVersion: formatVersion ?? this.formatVersion,
+      stateRevision: stateRevision ?? this.stateRevision,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -909,6 +957,9 @@ class SecureSecretsCompanion extends UpdateCompanion<SecureSecret> {
     if (formatVersion.present) {
       map['format_version'] = Variable<int>(formatVersion.value);
     }
+    if (stateRevision.present) {
+      map['state_revision'] = Variable<int>(stateRevision.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -925,6 +976,7 @@ class SecureSecretsCompanion extends UpdateCompanion<SecureSecret> {
             'wrappedCiphertextOrOpaqueHandle: $wrappedCiphertextOrOpaqueHandle, ',
           )
           ..write('formatVersion: $formatVersion, ')
+          ..write('stateRevision: $stateRevision, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -3091,6 +3143,21 @@ class $DevicesTable extends Devices with TableInfo<$DevicesTable, Device> {
     type: DriftSqlType.int,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _lastSignedPrekeyRotationUnixDayMeta =
+      const VerificationMeta('lastSignedPrekeyRotationUnixDay');
+  @override
+  late final GeneratedColumn<int> lastSignedPrekeyRotationUnixDay =
+      GeneratedColumn<int>(
+        'last_signed_prekey_rotation_unix_day',
+        aliasedName,
+        false,
+        check: () => ComparableExpr(
+          lastSignedPrekeyRotationUnixDay,
+        ).isBiggerOrEqualValue(0),
+        type: DriftSqlType.int,
+        requiredDuringInsert: false,
+        defaultValue: const Constant(0),
+      );
   @override
   List<GeneratedColumn> get $columns => [
     deviceId,
@@ -3100,6 +3167,7 @@ class $DevicesTable extends Devices with TableInfo<$DevicesTable, Device> {
     labelCiphertext,
     revocationState,
     bundleVersion,
+    lastSignedPrekeyRotationUnixDay,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -3178,6 +3246,15 @@ class $DevicesTable extends Devices with TableInfo<$DevicesTable, Device> {
         ),
       );
     }
+    if (data.containsKey('last_signed_prekey_rotation_unix_day')) {
+      context.handle(
+        _lastSignedPrekeyRotationUnixDayMeta,
+        lastSignedPrekeyRotationUnixDay.isAcceptableOrUnknown(
+          data['last_signed_prekey_rotation_unix_day']!,
+          _lastSignedPrekeyRotationUnixDayMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -3215,6 +3292,10 @@ class $DevicesTable extends Devices with TableInfo<$DevicesTable, Device> {
         DriftSqlType.int,
         data['${effectivePrefix}bundle_version'],
       ),
+      lastSignedPrekeyRotationUnixDay: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}last_signed_prekey_rotation_unix_day'],
+      )!,
     );
   }
 
@@ -3232,6 +3313,7 @@ class Device extends DataClass implements Insertable<Device> {
   final Uint8List? labelCiphertext;
   final int revocationState;
   final int? bundleVersion;
+  final int lastSignedPrekeyRotationUnixDay;
   const Device({
     required this.deviceId,
     required this.userId,
@@ -3240,6 +3322,7 @@ class Device extends DataClass implements Insertable<Device> {
     this.labelCiphertext,
     required this.revocationState,
     this.bundleVersion,
+    required this.lastSignedPrekeyRotationUnixDay,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -3257,6 +3340,9 @@ class Device extends DataClass implements Insertable<Device> {
     if (!nullToAbsent || bundleVersion != null) {
       map['bundle_version'] = Variable<int>(bundleVersion);
     }
+    map['last_signed_prekey_rotation_unix_day'] = Variable<int>(
+      lastSignedPrekeyRotationUnixDay,
+    );
     return map;
   }
 
@@ -3275,6 +3361,7 @@ class Device extends DataClass implements Insertable<Device> {
       bundleVersion: bundleVersion == null && nullToAbsent
           ? const Value.absent()
           : Value(bundleVersion),
+      lastSignedPrekeyRotationUnixDay: Value(lastSignedPrekeyRotationUnixDay),
     );
   }
 
@@ -3291,6 +3378,9 @@ class Device extends DataClass implements Insertable<Device> {
       labelCiphertext: serializer.fromJson<Uint8List?>(json['labelCiphertext']),
       revocationState: serializer.fromJson<int>(json['revocationState']),
       bundleVersion: serializer.fromJson<int?>(json['bundleVersion']),
+      lastSignedPrekeyRotationUnixDay: serializer.fromJson<int>(
+        json['lastSignedPrekeyRotationUnixDay'],
+      ),
     );
   }
   @override
@@ -3304,6 +3394,9 @@ class Device extends DataClass implements Insertable<Device> {
       'labelCiphertext': serializer.toJson<Uint8List?>(labelCiphertext),
       'revocationState': serializer.toJson<int>(revocationState),
       'bundleVersion': serializer.toJson<int?>(bundleVersion),
+      'lastSignedPrekeyRotationUnixDay': serializer.toJson<int>(
+        lastSignedPrekeyRotationUnixDay,
+      ),
     };
   }
 
@@ -3315,6 +3408,7 @@ class Device extends DataClass implements Insertable<Device> {
     Value<Uint8List?> labelCiphertext = const Value.absent(),
     int? revocationState,
     Value<int?> bundleVersion = const Value.absent(),
+    int? lastSignedPrekeyRotationUnixDay,
   }) => Device(
     deviceId: deviceId ?? this.deviceId,
     userId: userId ?? this.userId,
@@ -3329,6 +3423,8 @@ class Device extends DataClass implements Insertable<Device> {
     bundleVersion: bundleVersion.present
         ? bundleVersion.value
         : this.bundleVersion,
+    lastSignedPrekeyRotationUnixDay:
+        lastSignedPrekeyRotationUnixDay ?? this.lastSignedPrekeyRotationUnixDay,
   );
   Device copyWithCompanion(DevicesCompanion data) {
     return Device(
@@ -3349,6 +3445,10 @@ class Device extends DataClass implements Insertable<Device> {
       bundleVersion: data.bundleVersion.present
           ? data.bundleVersion.value
           : this.bundleVersion,
+      lastSignedPrekeyRotationUnixDay:
+          data.lastSignedPrekeyRotationUnixDay.present
+          ? data.lastSignedPrekeyRotationUnixDay.value
+          : this.lastSignedPrekeyRotationUnixDay,
     );
   }
 
@@ -3361,7 +3461,10 @@ class Device extends DataClass implements Insertable<Device> {
           ..write('etagCiphertext: $etagCiphertext, ')
           ..write('labelCiphertext: $labelCiphertext, ')
           ..write('revocationState: $revocationState, ')
-          ..write('bundleVersion: $bundleVersion')
+          ..write('bundleVersion: $bundleVersion, ')
+          ..write(
+            'lastSignedPrekeyRotationUnixDay: $lastSignedPrekeyRotationUnixDay',
+          )
           ..write(')'))
         .toString();
   }
@@ -3375,6 +3478,7 @@ class Device extends DataClass implements Insertable<Device> {
     $driftBlobEquality.hash(labelCiphertext),
     revocationState,
     bundleVersion,
+    lastSignedPrekeyRotationUnixDay,
   );
   @override
   bool operator ==(Object other) =>
@@ -3392,7 +3496,9 @@ class Device extends DataClass implements Insertable<Device> {
             this.labelCiphertext,
           ) &&
           other.revocationState == this.revocationState &&
-          other.bundleVersion == this.bundleVersion);
+          other.bundleVersion == this.bundleVersion &&
+          other.lastSignedPrekeyRotationUnixDay ==
+              this.lastSignedPrekeyRotationUnixDay);
 }
 
 class DevicesCompanion extends UpdateCompanion<Device> {
@@ -3403,6 +3509,7 @@ class DevicesCompanion extends UpdateCompanion<Device> {
   final Value<Uint8List?> labelCiphertext;
   final Value<int> revocationState;
   final Value<int?> bundleVersion;
+  final Value<int> lastSignedPrekeyRotationUnixDay;
   final Value<int> rowid;
   const DevicesCompanion({
     this.deviceId = const Value.absent(),
@@ -3412,6 +3519,7 @@ class DevicesCompanion extends UpdateCompanion<Device> {
     this.labelCiphertext = const Value.absent(),
     this.revocationState = const Value.absent(),
     this.bundleVersion = const Value.absent(),
+    this.lastSignedPrekeyRotationUnixDay = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   DevicesCompanion.insert({
@@ -3422,6 +3530,7 @@ class DevicesCompanion extends UpdateCompanion<Device> {
     this.labelCiphertext = const Value.absent(),
     required int revocationState,
     this.bundleVersion = const Value.absent(),
+    this.lastSignedPrekeyRotationUnixDay = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : deviceId = Value(deviceId),
        userId = Value(userId),
@@ -3435,6 +3544,7 @@ class DevicesCompanion extends UpdateCompanion<Device> {
     Expression<Uint8List>? labelCiphertext,
     Expression<int>? revocationState,
     Expression<int>? bundleVersion,
+    Expression<int>? lastSignedPrekeyRotationUnixDay,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -3445,6 +3555,8 @@ class DevicesCompanion extends UpdateCompanion<Device> {
       if (labelCiphertext != null) 'label_ciphertext': labelCiphertext,
       if (revocationState != null) 'revocation_state': revocationState,
       if (bundleVersion != null) 'bundle_version': bundleVersion,
+      if (lastSignedPrekeyRotationUnixDay != null)
+        'last_signed_prekey_rotation_unix_day': lastSignedPrekeyRotationUnixDay,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -3457,6 +3569,7 @@ class DevicesCompanion extends UpdateCompanion<Device> {
     Value<Uint8List?>? labelCiphertext,
     Value<int>? revocationState,
     Value<int?>? bundleVersion,
+    Value<int>? lastSignedPrekeyRotationUnixDay,
     Value<int>? rowid,
   }) {
     return DevicesCompanion(
@@ -3467,6 +3580,9 @@ class DevicesCompanion extends UpdateCompanion<Device> {
       labelCiphertext: labelCiphertext ?? this.labelCiphertext,
       revocationState: revocationState ?? this.revocationState,
       bundleVersion: bundleVersion ?? this.bundleVersion,
+      lastSignedPrekeyRotationUnixDay:
+          lastSignedPrekeyRotationUnixDay ??
+          this.lastSignedPrekeyRotationUnixDay,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -3495,6 +3611,11 @@ class DevicesCompanion extends UpdateCompanion<Device> {
     if (bundleVersion.present) {
       map['bundle_version'] = Variable<int>(bundleVersion.value);
     }
+    if (lastSignedPrekeyRotationUnixDay.present) {
+      map['last_signed_prekey_rotation_unix_day'] = Variable<int>(
+        lastSignedPrekeyRotationUnixDay.value,
+      );
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -3511,6 +3632,9 @@ class DevicesCompanion extends UpdateCompanion<Device> {
           ..write('labelCiphertext: $labelCiphertext, ')
           ..write('revocationState: $revocationState, ')
           ..write('bundleVersion: $bundleVersion, ')
+          ..write(
+            'lastSignedPrekeyRotationUnixDay: $lastSignedPrekeyRotationUnixDay, ',
+          )
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -3979,6 +4103,769 @@ class $PairwiseSessionsTable extends PairwiseSessions
     type: DriftSqlType.string,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _remoteUserIdMeta = const VerificationMeta(
+    'remoteUserId',
+  );
+  @override
+  late final GeneratedColumn<String> remoteUserId = GeneratedColumn<String>(
+    'remote_user_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
+  static const VerificationMeta _remoteDeviceIdMeta = const VerificationMeta(
+    'remoteDeviceId',
+  );
+  @override
+  late final GeneratedColumn<String> remoteDeviceId = GeneratedColumn<String>(
+    'remote_device_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _sessionIdMeta = const VerificationMeta(
+    'sessionId',
+  );
+  @override
+  late final GeneratedColumn<Uint8List> sessionId = GeneratedColumn<Uint8List>(
+    'session_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.blob,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _opaqueCryptoStateHandleMeta =
+      const VerificationMeta('opaqueCryptoStateHandle');
+  @override
+  late final GeneratedColumn<Uint8List> opaqueCryptoStateHandle =
+      GeneratedColumn<Uint8List>(
+        'opaque_crypto_state_handle',
+        aliasedName,
+        false,
+        type: DriftSqlType.blob,
+        requiredDuringInsert: true,
+      );
+  static const VerificationMeta _stateVersionMeta = const VerificationMeta(
+    'stateVersion',
+  );
+  @override
+  late final GeneratedColumn<int> stateVersion = GeneratedColumn<int>(
+    'state_version',
+    aliasedName,
+    false,
+    check: () => ComparableExpr(stateVersion).isBiggerThanValue(0),
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _skippedKeyCountMeta = const VerificationMeta(
+    'skippedKeyCount',
+  );
+  @override
+  late final GeneratedColumn<int> skippedKeyCount = GeneratedColumn<int>(
+    'skipped_key_count',
+    aliasedName,
+    false,
+    check: () => ComparableExpr(skippedKeyCount).isBetweenValues(0, 2000),
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _dispositionMeta = const VerificationMeta(
+    'disposition',
+  );
+  @override
+  late final GeneratedColumn<int> disposition = GeneratedColumn<int>(
+    'disposition',
+    aliasedName,
+    false,
+    check: () => ComparableExpr(disposition).isBetweenValues(0, 1),
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _repairStateMeta = const VerificationMeta(
+    'repairState',
+  );
+  @override
+  late final GeneratedColumn<int> repairState = GeneratedColumn<int>(
+    'repair_state',
+    aliasedName,
+    false,
+    check: () => ComparableExpr(repairState).isBetweenValues(0, 3),
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _repairAuthorizationMeta =
+      const VerificationMeta('repairAuthorization');
+  @override
+  late final GeneratedColumn<Uint8List> repairAuthorization =
+      GeneratedColumn<Uint8List>(
+        'repair_authorization',
+        aliasedName,
+        true,
+        type: DriftSqlType.blob,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _lastAuthenticatedAtMeta =
+      const VerificationMeta('lastAuthenticatedAt');
+  @override
+  late final GeneratedColumn<DateTime> lastAuthenticatedAt =
+      GeneratedColumn<DateTime>(
+        'last_authenticated_at',
+        aliasedName,
+        true,
+        type: DriftSqlType.dateTime,
+        requiredDuringInsert: false,
+      );
+  @override
+  List<GeneratedColumn> get $columns => [
+    localDeviceId,
+    remoteUserId,
+    remoteDeviceId,
+    sessionId,
+    opaqueCryptoStateHandle,
+    stateVersion,
+    skippedKeyCount,
+    disposition,
+    repairState,
+    repairAuthorization,
+    lastAuthenticatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'pairwise_sessions';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<PairwiseSession> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('local_device_id')) {
+      context.handle(
+        _localDeviceIdMeta,
+        localDeviceId.isAcceptableOrUnknown(
+          data['local_device_id']!,
+          _localDeviceIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_localDeviceIdMeta);
+    }
+    if (data.containsKey('remote_user_id')) {
+      context.handle(
+        _remoteUserIdMeta,
+        remoteUserId.isAcceptableOrUnknown(
+          data['remote_user_id']!,
+          _remoteUserIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('remote_device_id')) {
+      context.handle(
+        _remoteDeviceIdMeta,
+        remoteDeviceId.isAcceptableOrUnknown(
+          data['remote_device_id']!,
+          _remoteDeviceIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_remoteDeviceIdMeta);
+    }
+    if (data.containsKey('session_id')) {
+      context.handle(
+        _sessionIdMeta,
+        sessionId.isAcceptableOrUnknown(data['session_id']!, _sessionIdMeta),
+      );
+    }
+    if (data.containsKey('opaque_crypto_state_handle')) {
+      context.handle(
+        _opaqueCryptoStateHandleMeta,
+        opaqueCryptoStateHandle.isAcceptableOrUnknown(
+          data['opaque_crypto_state_handle']!,
+          _opaqueCryptoStateHandleMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_opaqueCryptoStateHandleMeta);
+    }
+    if (data.containsKey('state_version')) {
+      context.handle(
+        _stateVersionMeta,
+        stateVersion.isAcceptableOrUnknown(
+          data['state_version']!,
+          _stateVersionMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_stateVersionMeta);
+    }
+    if (data.containsKey('skipped_key_count')) {
+      context.handle(
+        _skippedKeyCountMeta,
+        skippedKeyCount.isAcceptableOrUnknown(
+          data['skipped_key_count']!,
+          _skippedKeyCountMeta,
+        ),
+      );
+    }
+    if (data.containsKey('disposition')) {
+      context.handle(
+        _dispositionMeta,
+        disposition.isAcceptableOrUnknown(
+          data['disposition']!,
+          _dispositionMeta,
+        ),
+      );
+    }
+    if (data.containsKey('repair_state')) {
+      context.handle(
+        _repairStateMeta,
+        repairState.isAcceptableOrUnknown(
+          data['repair_state']!,
+          _repairStateMeta,
+        ),
+      );
+    }
+    if (data.containsKey('repair_authorization')) {
+      context.handle(
+        _repairAuthorizationMeta,
+        repairAuthorization.isAcceptableOrUnknown(
+          data['repair_authorization']!,
+          _repairAuthorizationMeta,
+        ),
+      );
+    }
+    if (data.containsKey('last_authenticated_at')) {
+      context.handle(
+        _lastAuthenticatedAtMeta,
+        lastAuthenticatedAt.isAcceptableOrUnknown(
+          data['last_authenticated_at']!,
+          _lastAuthenticatedAtMeta,
+        ),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {localDeviceId, remoteDeviceId};
+  @override
+  PairwiseSession map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return PairwiseSession(
+      localDeviceId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}local_device_id'],
+      )!,
+      remoteUserId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}remote_user_id'],
+      )!,
+      remoteDeviceId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}remote_device_id'],
+      )!,
+      sessionId: attachedDatabase.typeMapping.read(
+        DriftSqlType.blob,
+        data['${effectivePrefix}session_id'],
+      ),
+      opaqueCryptoStateHandle: attachedDatabase.typeMapping.read(
+        DriftSqlType.blob,
+        data['${effectivePrefix}opaque_crypto_state_handle'],
+      )!,
+      stateVersion: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}state_version'],
+      )!,
+      skippedKeyCount: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}skipped_key_count'],
+      )!,
+      disposition: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}disposition'],
+      )!,
+      repairState: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}repair_state'],
+      )!,
+      repairAuthorization: attachedDatabase.typeMapping.read(
+        DriftSqlType.blob,
+        data['${effectivePrefix}repair_authorization'],
+      ),
+      lastAuthenticatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}last_authenticated_at'],
+      ),
+    );
+  }
+
+  @override
+  $PairwiseSessionsTable createAlias(String alias) {
+    return $PairwiseSessionsTable(attachedDatabase, alias);
+  }
+}
+
+class PairwiseSession extends DataClass implements Insertable<PairwiseSession> {
+  final String localDeviceId;
+  final String remoteUserId;
+  final String remoteDeviceId;
+  final Uint8List? sessionId;
+  final Uint8List opaqueCryptoStateHandle;
+  final int stateVersion;
+  final int skippedKeyCount;
+  final int disposition;
+  final int repairState;
+  final Uint8List? repairAuthorization;
+  final DateTime? lastAuthenticatedAt;
+  const PairwiseSession({
+    required this.localDeviceId,
+    required this.remoteUserId,
+    required this.remoteDeviceId,
+    this.sessionId,
+    required this.opaqueCryptoStateHandle,
+    required this.stateVersion,
+    required this.skippedKeyCount,
+    required this.disposition,
+    required this.repairState,
+    this.repairAuthorization,
+    this.lastAuthenticatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['local_device_id'] = Variable<String>(localDeviceId);
+    map['remote_user_id'] = Variable<String>(remoteUserId);
+    map['remote_device_id'] = Variable<String>(remoteDeviceId);
+    if (!nullToAbsent || sessionId != null) {
+      map['session_id'] = Variable<Uint8List>(sessionId);
+    }
+    map['opaque_crypto_state_handle'] = Variable<Uint8List>(
+      opaqueCryptoStateHandle,
+    );
+    map['state_version'] = Variable<int>(stateVersion);
+    map['skipped_key_count'] = Variable<int>(skippedKeyCount);
+    map['disposition'] = Variable<int>(disposition);
+    map['repair_state'] = Variable<int>(repairState);
+    if (!nullToAbsent || repairAuthorization != null) {
+      map['repair_authorization'] = Variable<Uint8List>(repairAuthorization);
+    }
+    if (!nullToAbsent || lastAuthenticatedAt != null) {
+      map['last_authenticated_at'] = Variable<DateTime>(lastAuthenticatedAt);
+    }
+    return map;
+  }
+
+  PairwiseSessionsCompanion toCompanion(bool nullToAbsent) {
+    return PairwiseSessionsCompanion(
+      localDeviceId: Value(localDeviceId),
+      remoteUserId: Value(remoteUserId),
+      remoteDeviceId: Value(remoteDeviceId),
+      sessionId: sessionId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(sessionId),
+      opaqueCryptoStateHandle: Value(opaqueCryptoStateHandle),
+      stateVersion: Value(stateVersion),
+      skippedKeyCount: Value(skippedKeyCount),
+      disposition: Value(disposition),
+      repairState: Value(repairState),
+      repairAuthorization: repairAuthorization == null && nullToAbsent
+          ? const Value.absent()
+          : Value(repairAuthorization),
+      lastAuthenticatedAt: lastAuthenticatedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(lastAuthenticatedAt),
+    );
+  }
+
+  factory PairwiseSession.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return PairwiseSession(
+      localDeviceId: serializer.fromJson<String>(json['localDeviceId']),
+      remoteUserId: serializer.fromJson<String>(json['remoteUserId']),
+      remoteDeviceId: serializer.fromJson<String>(json['remoteDeviceId']),
+      sessionId: serializer.fromJson<Uint8List?>(json['sessionId']),
+      opaqueCryptoStateHandle: serializer.fromJson<Uint8List>(
+        json['opaqueCryptoStateHandle'],
+      ),
+      stateVersion: serializer.fromJson<int>(json['stateVersion']),
+      skippedKeyCount: serializer.fromJson<int>(json['skippedKeyCount']),
+      disposition: serializer.fromJson<int>(json['disposition']),
+      repairState: serializer.fromJson<int>(json['repairState']),
+      repairAuthorization: serializer.fromJson<Uint8List?>(
+        json['repairAuthorization'],
+      ),
+      lastAuthenticatedAt: serializer.fromJson<DateTime?>(
+        json['lastAuthenticatedAt'],
+      ),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'localDeviceId': serializer.toJson<String>(localDeviceId),
+      'remoteUserId': serializer.toJson<String>(remoteUserId),
+      'remoteDeviceId': serializer.toJson<String>(remoteDeviceId),
+      'sessionId': serializer.toJson<Uint8List?>(sessionId),
+      'opaqueCryptoStateHandle': serializer.toJson<Uint8List>(
+        opaqueCryptoStateHandle,
+      ),
+      'stateVersion': serializer.toJson<int>(stateVersion),
+      'skippedKeyCount': serializer.toJson<int>(skippedKeyCount),
+      'disposition': serializer.toJson<int>(disposition),
+      'repairState': serializer.toJson<int>(repairState),
+      'repairAuthorization': serializer.toJson<Uint8List?>(repairAuthorization),
+      'lastAuthenticatedAt': serializer.toJson<DateTime?>(lastAuthenticatedAt),
+    };
+  }
+
+  PairwiseSession copyWith({
+    String? localDeviceId,
+    String? remoteUserId,
+    String? remoteDeviceId,
+    Value<Uint8List?> sessionId = const Value.absent(),
+    Uint8List? opaqueCryptoStateHandle,
+    int? stateVersion,
+    int? skippedKeyCount,
+    int? disposition,
+    int? repairState,
+    Value<Uint8List?> repairAuthorization = const Value.absent(),
+    Value<DateTime?> lastAuthenticatedAt = const Value.absent(),
+  }) => PairwiseSession(
+    localDeviceId: localDeviceId ?? this.localDeviceId,
+    remoteUserId: remoteUserId ?? this.remoteUserId,
+    remoteDeviceId: remoteDeviceId ?? this.remoteDeviceId,
+    sessionId: sessionId.present ? sessionId.value : this.sessionId,
+    opaqueCryptoStateHandle:
+        opaqueCryptoStateHandle ?? this.opaqueCryptoStateHandle,
+    stateVersion: stateVersion ?? this.stateVersion,
+    skippedKeyCount: skippedKeyCount ?? this.skippedKeyCount,
+    disposition: disposition ?? this.disposition,
+    repairState: repairState ?? this.repairState,
+    repairAuthorization: repairAuthorization.present
+        ? repairAuthorization.value
+        : this.repairAuthorization,
+    lastAuthenticatedAt: lastAuthenticatedAt.present
+        ? lastAuthenticatedAt.value
+        : this.lastAuthenticatedAt,
+  );
+  PairwiseSession copyWithCompanion(PairwiseSessionsCompanion data) {
+    return PairwiseSession(
+      localDeviceId: data.localDeviceId.present
+          ? data.localDeviceId.value
+          : this.localDeviceId,
+      remoteUserId: data.remoteUserId.present
+          ? data.remoteUserId.value
+          : this.remoteUserId,
+      remoteDeviceId: data.remoteDeviceId.present
+          ? data.remoteDeviceId.value
+          : this.remoteDeviceId,
+      sessionId: data.sessionId.present ? data.sessionId.value : this.sessionId,
+      opaqueCryptoStateHandle: data.opaqueCryptoStateHandle.present
+          ? data.opaqueCryptoStateHandle.value
+          : this.opaqueCryptoStateHandle,
+      stateVersion: data.stateVersion.present
+          ? data.stateVersion.value
+          : this.stateVersion,
+      skippedKeyCount: data.skippedKeyCount.present
+          ? data.skippedKeyCount.value
+          : this.skippedKeyCount,
+      disposition: data.disposition.present
+          ? data.disposition.value
+          : this.disposition,
+      repairState: data.repairState.present
+          ? data.repairState.value
+          : this.repairState,
+      repairAuthorization: data.repairAuthorization.present
+          ? data.repairAuthorization.value
+          : this.repairAuthorization,
+      lastAuthenticatedAt: data.lastAuthenticatedAt.present
+          ? data.lastAuthenticatedAt.value
+          : this.lastAuthenticatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('PairwiseSession(')
+          ..write('localDeviceId: $localDeviceId, ')
+          ..write('remoteUserId: $remoteUserId, ')
+          ..write('remoteDeviceId: $remoteDeviceId, ')
+          ..write('sessionId: $sessionId, ')
+          ..write('opaqueCryptoStateHandle: $opaqueCryptoStateHandle, ')
+          ..write('stateVersion: $stateVersion, ')
+          ..write('skippedKeyCount: $skippedKeyCount, ')
+          ..write('disposition: $disposition, ')
+          ..write('repairState: $repairState, ')
+          ..write('repairAuthorization: $repairAuthorization, ')
+          ..write('lastAuthenticatedAt: $lastAuthenticatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    localDeviceId,
+    remoteUserId,
+    remoteDeviceId,
+    $driftBlobEquality.hash(sessionId),
+    $driftBlobEquality.hash(opaqueCryptoStateHandle),
+    stateVersion,
+    skippedKeyCount,
+    disposition,
+    repairState,
+    $driftBlobEquality.hash(repairAuthorization),
+    lastAuthenticatedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is PairwiseSession &&
+          other.localDeviceId == this.localDeviceId &&
+          other.remoteUserId == this.remoteUserId &&
+          other.remoteDeviceId == this.remoteDeviceId &&
+          $driftBlobEquality.equals(other.sessionId, this.sessionId) &&
+          $driftBlobEquality.equals(
+            other.opaqueCryptoStateHandle,
+            this.opaqueCryptoStateHandle,
+          ) &&
+          other.stateVersion == this.stateVersion &&
+          other.skippedKeyCount == this.skippedKeyCount &&
+          other.disposition == this.disposition &&
+          other.repairState == this.repairState &&
+          $driftBlobEquality.equals(
+            other.repairAuthorization,
+            this.repairAuthorization,
+          ) &&
+          other.lastAuthenticatedAt == this.lastAuthenticatedAt);
+}
+
+class PairwiseSessionsCompanion extends UpdateCompanion<PairwiseSession> {
+  final Value<String> localDeviceId;
+  final Value<String> remoteUserId;
+  final Value<String> remoteDeviceId;
+  final Value<Uint8List?> sessionId;
+  final Value<Uint8List> opaqueCryptoStateHandle;
+  final Value<int> stateVersion;
+  final Value<int> skippedKeyCount;
+  final Value<int> disposition;
+  final Value<int> repairState;
+  final Value<Uint8List?> repairAuthorization;
+  final Value<DateTime?> lastAuthenticatedAt;
+  final Value<int> rowid;
+  const PairwiseSessionsCompanion({
+    this.localDeviceId = const Value.absent(),
+    this.remoteUserId = const Value.absent(),
+    this.remoteDeviceId = const Value.absent(),
+    this.sessionId = const Value.absent(),
+    this.opaqueCryptoStateHandle = const Value.absent(),
+    this.stateVersion = const Value.absent(),
+    this.skippedKeyCount = const Value.absent(),
+    this.disposition = const Value.absent(),
+    this.repairState = const Value.absent(),
+    this.repairAuthorization = const Value.absent(),
+    this.lastAuthenticatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  PairwiseSessionsCompanion.insert({
+    required String localDeviceId,
+    this.remoteUserId = const Value.absent(),
+    required String remoteDeviceId,
+    this.sessionId = const Value.absent(),
+    required Uint8List opaqueCryptoStateHandle,
+    required int stateVersion,
+    this.skippedKeyCount = const Value.absent(),
+    this.disposition = const Value.absent(),
+    this.repairState = const Value.absent(),
+    this.repairAuthorization = const Value.absent(),
+    this.lastAuthenticatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : localDeviceId = Value(localDeviceId),
+       remoteDeviceId = Value(remoteDeviceId),
+       opaqueCryptoStateHandle = Value(opaqueCryptoStateHandle),
+       stateVersion = Value(stateVersion);
+  static Insertable<PairwiseSession> custom({
+    Expression<String>? localDeviceId,
+    Expression<String>? remoteUserId,
+    Expression<String>? remoteDeviceId,
+    Expression<Uint8List>? sessionId,
+    Expression<Uint8List>? opaqueCryptoStateHandle,
+    Expression<int>? stateVersion,
+    Expression<int>? skippedKeyCount,
+    Expression<int>? disposition,
+    Expression<int>? repairState,
+    Expression<Uint8List>? repairAuthorization,
+    Expression<DateTime>? lastAuthenticatedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (localDeviceId != null) 'local_device_id': localDeviceId,
+      if (remoteUserId != null) 'remote_user_id': remoteUserId,
+      if (remoteDeviceId != null) 'remote_device_id': remoteDeviceId,
+      if (sessionId != null) 'session_id': sessionId,
+      if (opaqueCryptoStateHandle != null)
+        'opaque_crypto_state_handle': opaqueCryptoStateHandle,
+      if (stateVersion != null) 'state_version': stateVersion,
+      if (skippedKeyCount != null) 'skipped_key_count': skippedKeyCount,
+      if (disposition != null) 'disposition': disposition,
+      if (repairState != null) 'repair_state': repairState,
+      if (repairAuthorization != null)
+        'repair_authorization': repairAuthorization,
+      if (lastAuthenticatedAt != null)
+        'last_authenticated_at': lastAuthenticatedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  PairwiseSessionsCompanion copyWith({
+    Value<String>? localDeviceId,
+    Value<String>? remoteUserId,
+    Value<String>? remoteDeviceId,
+    Value<Uint8List?>? sessionId,
+    Value<Uint8List>? opaqueCryptoStateHandle,
+    Value<int>? stateVersion,
+    Value<int>? skippedKeyCount,
+    Value<int>? disposition,
+    Value<int>? repairState,
+    Value<Uint8List?>? repairAuthorization,
+    Value<DateTime?>? lastAuthenticatedAt,
+    Value<int>? rowid,
+  }) {
+    return PairwiseSessionsCompanion(
+      localDeviceId: localDeviceId ?? this.localDeviceId,
+      remoteUserId: remoteUserId ?? this.remoteUserId,
+      remoteDeviceId: remoteDeviceId ?? this.remoteDeviceId,
+      sessionId: sessionId ?? this.sessionId,
+      opaqueCryptoStateHandle:
+          opaqueCryptoStateHandle ?? this.opaqueCryptoStateHandle,
+      stateVersion: stateVersion ?? this.stateVersion,
+      skippedKeyCount: skippedKeyCount ?? this.skippedKeyCount,
+      disposition: disposition ?? this.disposition,
+      repairState: repairState ?? this.repairState,
+      repairAuthorization: repairAuthorization ?? this.repairAuthorization,
+      lastAuthenticatedAt: lastAuthenticatedAt ?? this.lastAuthenticatedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (localDeviceId.present) {
+      map['local_device_id'] = Variable<String>(localDeviceId.value);
+    }
+    if (remoteUserId.present) {
+      map['remote_user_id'] = Variable<String>(remoteUserId.value);
+    }
+    if (remoteDeviceId.present) {
+      map['remote_device_id'] = Variable<String>(remoteDeviceId.value);
+    }
+    if (sessionId.present) {
+      map['session_id'] = Variable<Uint8List>(sessionId.value);
+    }
+    if (opaqueCryptoStateHandle.present) {
+      map['opaque_crypto_state_handle'] = Variable<Uint8List>(
+        opaqueCryptoStateHandle.value,
+      );
+    }
+    if (stateVersion.present) {
+      map['state_version'] = Variable<int>(stateVersion.value);
+    }
+    if (skippedKeyCount.present) {
+      map['skipped_key_count'] = Variable<int>(skippedKeyCount.value);
+    }
+    if (disposition.present) {
+      map['disposition'] = Variable<int>(disposition.value);
+    }
+    if (repairState.present) {
+      map['repair_state'] = Variable<int>(repairState.value);
+    }
+    if (repairAuthorization.present) {
+      map['repair_authorization'] = Variable<Uint8List>(
+        repairAuthorization.value,
+      );
+    }
+    if (lastAuthenticatedAt.present) {
+      map['last_authenticated_at'] = Variable<DateTime>(
+        lastAuthenticatedAt.value,
+      );
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('PairwiseSessionsCompanion(')
+          ..write('localDeviceId: $localDeviceId, ')
+          ..write('remoteUserId: $remoteUserId, ')
+          ..write('remoteDeviceId: $remoteDeviceId, ')
+          ..write('sessionId: $sessionId, ')
+          ..write('opaqueCryptoStateHandle: $opaqueCryptoStateHandle, ')
+          ..write('stateVersion: $stateVersion, ')
+          ..write('skippedKeyCount: $skippedKeyCount, ')
+          ..write('disposition: $disposition, ')
+          ..write('repairState: $repairState, ')
+          ..write('repairAuthorization: $repairAuthorization, ')
+          ..write('lastAuthenticatedAt: $lastAuthenticatedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $PairwiseSessionAlternatesTable extends PairwiseSessionAlternates
+    with TableInfo<$PairwiseSessionAlternatesTable, PairwiseSessionAlternate> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $PairwiseSessionAlternatesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _sessionIdMeta = const VerificationMeta(
+    'sessionId',
+  );
+  @override
+  late final GeneratedColumn<Uint8List> sessionId = GeneratedColumn<Uint8List>(
+    'session_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.blob,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _localDeviceIdMeta = const VerificationMeta(
+    'localDeviceId',
+  );
+  @override
+  late final GeneratedColumn<String> localDeviceId = GeneratedColumn<String>(
+    'local_device_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _remoteUserIdMeta = const VerificationMeta(
+    'remoteUserId',
+  );
+  @override
+  late final GeneratedColumn<String> remoteUserId = GeneratedColumn<String>(
+    'remote_user_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
   static const VerificationMeta _remoteDeviceIdMeta = const VerificationMeta(
     'remoteDeviceId',
   );
@@ -4013,25 +4900,98 @@ class $PairwiseSessionsTable extends PairwiseSessions
     type: DriftSqlType.int,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _skippedKeyCountMeta = const VerificationMeta(
+    'skippedKeyCount',
+  );
+  @override
+  late final GeneratedColumn<int> skippedKeyCount = GeneratedColumn<int>(
+    'skipped_key_count',
+    aliasedName,
+    false,
+    check: () => ComparableExpr(skippedKeyCount).isBetweenValues(0, 2000),
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _repairStateMeta = const VerificationMeta(
+    'repairState',
+  );
+  @override
+  late final GeneratedColumn<int> repairState = GeneratedColumn<int>(
+    'repair_state',
+    aliasedName,
+    false,
+    check: () => ComparableExpr(repairState).isBetweenValues(0, 3),
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _repairAuthorizationMeta =
+      const VerificationMeta('repairAuthorization');
+  @override
+  late final GeneratedColumn<Uint8List> repairAuthorization =
+      GeneratedColumn<Uint8List>(
+        'repair_authorization',
+        aliasedName,
+        true,
+        type: DriftSqlType.blob,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  static const VerificationMeta _lastAuthenticatedAtMeta =
+      const VerificationMeta('lastAuthenticatedAt');
+  @override
+  late final GeneratedColumn<DateTime> lastAuthenticatedAt =
+      GeneratedColumn<DateTime>(
+        'last_authenticated_at',
+        aliasedName,
+        true,
+        type: DriftSqlType.dateTime,
+        requiredDuringInsert: false,
+      );
   @override
   List<GeneratedColumn> get $columns => [
+    sessionId,
     localDeviceId,
+    remoteUserId,
     remoteDeviceId,
     opaqueCryptoStateHandle,
     stateVersion,
+    skippedKeyCount,
+    repairState,
+    repairAuthorization,
+    createdAt,
+    lastAuthenticatedAt,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
   @override
   String get actualTableName => $name;
-  static const String $name = 'pairwise_sessions';
+  static const String $name = 'pairwise_session_alternates';
   @override
   VerificationContext validateIntegrity(
-    Insertable<PairwiseSession> instance, {
+    Insertable<PairwiseSessionAlternate> instance, {
     bool isInserting = false,
   }) {
     final context = VerificationContext();
     final data = instance.toColumns(true);
+    if (data.containsKey('session_id')) {
+      context.handle(
+        _sessionIdMeta,
+        sessionId.isAcceptableOrUnknown(data['session_id']!, _sessionIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_sessionIdMeta);
+    }
     if (data.containsKey('local_device_id')) {
       context.handle(
         _localDeviceIdMeta,
@@ -4042,6 +5002,17 @@ class $PairwiseSessionsTable extends PairwiseSessions
       );
     } else if (isInserting) {
       context.missing(_localDeviceIdMeta);
+    }
+    if (data.containsKey('remote_user_id')) {
+      context.handle(
+        _remoteUserIdMeta,
+        remoteUserId.isAcceptableOrUnknown(
+          data['remote_user_id']!,
+          _remoteUserIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_remoteUserIdMeta);
     }
     if (data.containsKey('remote_device_id')) {
       context.handle(
@@ -4076,18 +5047,79 @@ class $PairwiseSessionsTable extends PairwiseSessions
     } else if (isInserting) {
       context.missing(_stateVersionMeta);
     }
+    if (data.containsKey('skipped_key_count')) {
+      context.handle(
+        _skippedKeyCountMeta,
+        skippedKeyCount.isAcceptableOrUnknown(
+          data['skipped_key_count']!,
+          _skippedKeyCountMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_skippedKeyCountMeta);
+    }
+    if (data.containsKey('repair_state')) {
+      context.handle(
+        _repairStateMeta,
+        repairState.isAcceptableOrUnknown(
+          data['repair_state']!,
+          _repairStateMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_repairStateMeta);
+    }
+    if (data.containsKey('repair_authorization')) {
+      context.handle(
+        _repairAuthorizationMeta,
+        repairAuthorization.isAcceptableOrUnknown(
+          data['repair_authorization']!,
+          _repairAuthorizationMeta,
+        ),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    }
+    if (data.containsKey('last_authenticated_at')) {
+      context.handle(
+        _lastAuthenticatedAtMeta,
+        lastAuthenticatedAt.isAcceptableOrUnknown(
+          data['last_authenticated_at']!,
+          _lastAuthenticatedAtMeta,
+        ),
+      );
+    }
     return context;
   }
 
   @override
-  Set<GeneratedColumn> get $primaryKey => {localDeviceId, remoteDeviceId};
+  Set<GeneratedColumn> get $primaryKey => {sessionId};
   @override
-  PairwiseSession map(Map<String, dynamic> data, {String? tablePrefix}) {
+  List<Set<GeneratedColumn>> get uniqueKeys => [
+    {localDeviceId, remoteDeviceId},
+  ];
+  @override
+  PairwiseSessionAlternate map(
+    Map<String, dynamic> data, {
+    String? tablePrefix,
+  }) {
     final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
-    return PairwiseSession(
+    return PairwiseSessionAlternate(
+      sessionId: attachedDatabase.typeMapping.read(
+        DriftSqlType.blob,
+        data['${effectivePrefix}session_id'],
+      )!,
       localDeviceId: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}local_device_id'],
+      )!,
+      remoteUserId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}remote_user_id'],
       )!,
       remoteDeviceId: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
@@ -4101,91 +5133,190 @@ class $PairwiseSessionsTable extends PairwiseSessions
         DriftSqlType.int,
         data['${effectivePrefix}state_version'],
       )!,
+      skippedKeyCount: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}skipped_key_count'],
+      )!,
+      repairState: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}repair_state'],
+      )!,
+      repairAuthorization: attachedDatabase.typeMapping.read(
+        DriftSqlType.blob,
+        data['${effectivePrefix}repair_authorization'],
+      ),
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      lastAuthenticatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}last_authenticated_at'],
+      ),
     );
   }
 
   @override
-  $PairwiseSessionsTable createAlias(String alias) {
-    return $PairwiseSessionsTable(attachedDatabase, alias);
+  $PairwiseSessionAlternatesTable createAlias(String alias) {
+    return $PairwiseSessionAlternatesTable(attachedDatabase, alias);
   }
 }
 
-class PairwiseSession extends DataClass implements Insertable<PairwiseSession> {
+class PairwiseSessionAlternate extends DataClass
+    implements Insertable<PairwiseSessionAlternate> {
+  final Uint8List sessionId;
   final String localDeviceId;
+  final String remoteUserId;
   final String remoteDeviceId;
   final Uint8List opaqueCryptoStateHandle;
   final int stateVersion;
-  const PairwiseSession({
+  final int skippedKeyCount;
+  final int repairState;
+  final Uint8List? repairAuthorization;
+  final DateTime createdAt;
+  final DateTime? lastAuthenticatedAt;
+  const PairwiseSessionAlternate({
+    required this.sessionId,
     required this.localDeviceId,
+    required this.remoteUserId,
     required this.remoteDeviceId,
     required this.opaqueCryptoStateHandle,
     required this.stateVersion,
+    required this.skippedKeyCount,
+    required this.repairState,
+    this.repairAuthorization,
+    required this.createdAt,
+    this.lastAuthenticatedAt,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
+    map['session_id'] = Variable<Uint8List>(sessionId);
     map['local_device_id'] = Variable<String>(localDeviceId);
+    map['remote_user_id'] = Variable<String>(remoteUserId);
     map['remote_device_id'] = Variable<String>(remoteDeviceId);
     map['opaque_crypto_state_handle'] = Variable<Uint8List>(
       opaqueCryptoStateHandle,
     );
     map['state_version'] = Variable<int>(stateVersion);
+    map['skipped_key_count'] = Variable<int>(skippedKeyCount);
+    map['repair_state'] = Variable<int>(repairState);
+    if (!nullToAbsent || repairAuthorization != null) {
+      map['repair_authorization'] = Variable<Uint8List>(repairAuthorization);
+    }
+    map['created_at'] = Variable<DateTime>(createdAt);
+    if (!nullToAbsent || lastAuthenticatedAt != null) {
+      map['last_authenticated_at'] = Variable<DateTime>(lastAuthenticatedAt);
+    }
     return map;
   }
 
-  PairwiseSessionsCompanion toCompanion(bool nullToAbsent) {
-    return PairwiseSessionsCompanion(
+  PairwiseSessionAlternatesCompanion toCompanion(bool nullToAbsent) {
+    return PairwiseSessionAlternatesCompanion(
+      sessionId: Value(sessionId),
       localDeviceId: Value(localDeviceId),
+      remoteUserId: Value(remoteUserId),
       remoteDeviceId: Value(remoteDeviceId),
       opaqueCryptoStateHandle: Value(opaqueCryptoStateHandle),
       stateVersion: Value(stateVersion),
+      skippedKeyCount: Value(skippedKeyCount),
+      repairState: Value(repairState),
+      repairAuthorization: repairAuthorization == null && nullToAbsent
+          ? const Value.absent()
+          : Value(repairAuthorization),
+      createdAt: Value(createdAt),
+      lastAuthenticatedAt: lastAuthenticatedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(lastAuthenticatedAt),
     );
   }
 
-  factory PairwiseSession.fromJson(
+  factory PairwiseSessionAlternate.fromJson(
     Map<String, dynamic> json, {
     ValueSerializer? serializer,
   }) {
     serializer ??= driftRuntimeOptions.defaultSerializer;
-    return PairwiseSession(
+    return PairwiseSessionAlternate(
+      sessionId: serializer.fromJson<Uint8List>(json['sessionId']),
       localDeviceId: serializer.fromJson<String>(json['localDeviceId']),
+      remoteUserId: serializer.fromJson<String>(json['remoteUserId']),
       remoteDeviceId: serializer.fromJson<String>(json['remoteDeviceId']),
       opaqueCryptoStateHandle: serializer.fromJson<Uint8List>(
         json['opaqueCryptoStateHandle'],
       ),
       stateVersion: serializer.fromJson<int>(json['stateVersion']),
+      skippedKeyCount: serializer.fromJson<int>(json['skippedKeyCount']),
+      repairState: serializer.fromJson<int>(json['repairState']),
+      repairAuthorization: serializer.fromJson<Uint8List?>(
+        json['repairAuthorization'],
+      ),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      lastAuthenticatedAt: serializer.fromJson<DateTime?>(
+        json['lastAuthenticatedAt'],
+      ),
     );
   }
   @override
   Map<String, dynamic> toJson({ValueSerializer? serializer}) {
     serializer ??= driftRuntimeOptions.defaultSerializer;
     return <String, dynamic>{
+      'sessionId': serializer.toJson<Uint8List>(sessionId),
       'localDeviceId': serializer.toJson<String>(localDeviceId),
+      'remoteUserId': serializer.toJson<String>(remoteUserId),
       'remoteDeviceId': serializer.toJson<String>(remoteDeviceId),
       'opaqueCryptoStateHandle': serializer.toJson<Uint8List>(
         opaqueCryptoStateHandle,
       ),
       'stateVersion': serializer.toJson<int>(stateVersion),
+      'skippedKeyCount': serializer.toJson<int>(skippedKeyCount),
+      'repairState': serializer.toJson<int>(repairState),
+      'repairAuthorization': serializer.toJson<Uint8List?>(repairAuthorization),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'lastAuthenticatedAt': serializer.toJson<DateTime?>(lastAuthenticatedAt),
     };
   }
 
-  PairwiseSession copyWith({
+  PairwiseSessionAlternate copyWith({
+    Uint8List? sessionId,
     String? localDeviceId,
+    String? remoteUserId,
     String? remoteDeviceId,
     Uint8List? opaqueCryptoStateHandle,
     int? stateVersion,
-  }) => PairwiseSession(
+    int? skippedKeyCount,
+    int? repairState,
+    Value<Uint8List?> repairAuthorization = const Value.absent(),
+    DateTime? createdAt,
+    Value<DateTime?> lastAuthenticatedAt = const Value.absent(),
+  }) => PairwiseSessionAlternate(
+    sessionId: sessionId ?? this.sessionId,
     localDeviceId: localDeviceId ?? this.localDeviceId,
+    remoteUserId: remoteUserId ?? this.remoteUserId,
     remoteDeviceId: remoteDeviceId ?? this.remoteDeviceId,
     opaqueCryptoStateHandle:
         opaqueCryptoStateHandle ?? this.opaqueCryptoStateHandle,
     stateVersion: stateVersion ?? this.stateVersion,
+    skippedKeyCount: skippedKeyCount ?? this.skippedKeyCount,
+    repairState: repairState ?? this.repairState,
+    repairAuthorization: repairAuthorization.present
+        ? repairAuthorization.value
+        : this.repairAuthorization,
+    createdAt: createdAt ?? this.createdAt,
+    lastAuthenticatedAt: lastAuthenticatedAt.present
+        ? lastAuthenticatedAt.value
+        : this.lastAuthenticatedAt,
   );
-  PairwiseSession copyWithCompanion(PairwiseSessionsCompanion data) {
-    return PairwiseSession(
+  PairwiseSessionAlternate copyWithCompanion(
+    PairwiseSessionAlternatesCompanion data,
+  ) {
+    return PairwiseSessionAlternate(
+      sessionId: data.sessionId.present ? data.sessionId.value : this.sessionId,
       localDeviceId: data.localDeviceId.present
           ? data.localDeviceId.value
           : this.localDeviceId,
+      remoteUserId: data.remoteUserId.present
+          ? data.remoteUserId.value
+          : this.remoteUserId,
       remoteDeviceId: data.remoteDeviceId.present
           ? data.remoteDeviceId.value
           : this.remoteDeviceId,
@@ -4195,93 +5326,186 @@ class PairwiseSession extends DataClass implements Insertable<PairwiseSession> {
       stateVersion: data.stateVersion.present
           ? data.stateVersion.value
           : this.stateVersion,
+      skippedKeyCount: data.skippedKeyCount.present
+          ? data.skippedKeyCount.value
+          : this.skippedKeyCount,
+      repairState: data.repairState.present
+          ? data.repairState.value
+          : this.repairState,
+      repairAuthorization: data.repairAuthorization.present
+          ? data.repairAuthorization.value
+          : this.repairAuthorization,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      lastAuthenticatedAt: data.lastAuthenticatedAt.present
+          ? data.lastAuthenticatedAt.value
+          : this.lastAuthenticatedAt,
     );
   }
 
   @override
   String toString() {
-    return (StringBuffer('PairwiseSession(')
+    return (StringBuffer('PairwiseSessionAlternate(')
+          ..write('sessionId: $sessionId, ')
           ..write('localDeviceId: $localDeviceId, ')
+          ..write('remoteUserId: $remoteUserId, ')
           ..write('remoteDeviceId: $remoteDeviceId, ')
           ..write('opaqueCryptoStateHandle: $opaqueCryptoStateHandle, ')
-          ..write('stateVersion: $stateVersion')
+          ..write('stateVersion: $stateVersion, ')
+          ..write('skippedKeyCount: $skippedKeyCount, ')
+          ..write('repairState: $repairState, ')
+          ..write('repairAuthorization: $repairAuthorization, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('lastAuthenticatedAt: $lastAuthenticatedAt')
           ..write(')'))
         .toString();
   }
 
   @override
   int get hashCode => Object.hash(
+    $driftBlobEquality.hash(sessionId),
     localDeviceId,
+    remoteUserId,
     remoteDeviceId,
     $driftBlobEquality.hash(opaqueCryptoStateHandle),
     stateVersion,
+    skippedKeyCount,
+    repairState,
+    $driftBlobEquality.hash(repairAuthorization),
+    createdAt,
+    lastAuthenticatedAt,
   );
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      (other is PairwiseSession &&
+      (other is PairwiseSessionAlternate &&
+          $driftBlobEquality.equals(other.sessionId, this.sessionId) &&
           other.localDeviceId == this.localDeviceId &&
+          other.remoteUserId == this.remoteUserId &&
           other.remoteDeviceId == this.remoteDeviceId &&
           $driftBlobEquality.equals(
             other.opaqueCryptoStateHandle,
             this.opaqueCryptoStateHandle,
           ) &&
-          other.stateVersion == this.stateVersion);
+          other.stateVersion == this.stateVersion &&
+          other.skippedKeyCount == this.skippedKeyCount &&
+          other.repairState == this.repairState &&
+          $driftBlobEquality.equals(
+            other.repairAuthorization,
+            this.repairAuthorization,
+          ) &&
+          other.createdAt == this.createdAt &&
+          other.lastAuthenticatedAt == this.lastAuthenticatedAt);
 }
 
-class PairwiseSessionsCompanion extends UpdateCompanion<PairwiseSession> {
+class PairwiseSessionAlternatesCompanion
+    extends UpdateCompanion<PairwiseSessionAlternate> {
+  final Value<Uint8List> sessionId;
   final Value<String> localDeviceId;
+  final Value<String> remoteUserId;
   final Value<String> remoteDeviceId;
   final Value<Uint8List> opaqueCryptoStateHandle;
   final Value<int> stateVersion;
+  final Value<int> skippedKeyCount;
+  final Value<int> repairState;
+  final Value<Uint8List?> repairAuthorization;
+  final Value<DateTime> createdAt;
+  final Value<DateTime?> lastAuthenticatedAt;
   final Value<int> rowid;
-  const PairwiseSessionsCompanion({
+  const PairwiseSessionAlternatesCompanion({
+    this.sessionId = const Value.absent(),
     this.localDeviceId = const Value.absent(),
+    this.remoteUserId = const Value.absent(),
     this.remoteDeviceId = const Value.absent(),
     this.opaqueCryptoStateHandle = const Value.absent(),
     this.stateVersion = const Value.absent(),
+    this.skippedKeyCount = const Value.absent(),
+    this.repairState = const Value.absent(),
+    this.repairAuthorization = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.lastAuthenticatedAt = const Value.absent(),
     this.rowid = const Value.absent(),
   });
-  PairwiseSessionsCompanion.insert({
+  PairwiseSessionAlternatesCompanion.insert({
+    required Uint8List sessionId,
     required String localDeviceId,
+    required String remoteUserId,
     required String remoteDeviceId,
     required Uint8List opaqueCryptoStateHandle,
     required int stateVersion,
+    required int skippedKeyCount,
+    required int repairState,
+    this.repairAuthorization = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.lastAuthenticatedAt = const Value.absent(),
     this.rowid = const Value.absent(),
-  }) : localDeviceId = Value(localDeviceId),
+  }) : sessionId = Value(sessionId),
+       localDeviceId = Value(localDeviceId),
+       remoteUserId = Value(remoteUserId),
        remoteDeviceId = Value(remoteDeviceId),
        opaqueCryptoStateHandle = Value(opaqueCryptoStateHandle),
-       stateVersion = Value(stateVersion);
-  static Insertable<PairwiseSession> custom({
+       stateVersion = Value(stateVersion),
+       skippedKeyCount = Value(skippedKeyCount),
+       repairState = Value(repairState);
+  static Insertable<PairwiseSessionAlternate> custom({
+    Expression<Uint8List>? sessionId,
     Expression<String>? localDeviceId,
+    Expression<String>? remoteUserId,
     Expression<String>? remoteDeviceId,
     Expression<Uint8List>? opaqueCryptoStateHandle,
     Expression<int>? stateVersion,
+    Expression<int>? skippedKeyCount,
+    Expression<int>? repairState,
+    Expression<Uint8List>? repairAuthorization,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? lastAuthenticatedAt,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
+      if (sessionId != null) 'session_id': sessionId,
       if (localDeviceId != null) 'local_device_id': localDeviceId,
+      if (remoteUserId != null) 'remote_user_id': remoteUserId,
       if (remoteDeviceId != null) 'remote_device_id': remoteDeviceId,
       if (opaqueCryptoStateHandle != null)
         'opaque_crypto_state_handle': opaqueCryptoStateHandle,
       if (stateVersion != null) 'state_version': stateVersion,
+      if (skippedKeyCount != null) 'skipped_key_count': skippedKeyCount,
+      if (repairState != null) 'repair_state': repairState,
+      if (repairAuthorization != null)
+        'repair_authorization': repairAuthorization,
+      if (createdAt != null) 'created_at': createdAt,
+      if (lastAuthenticatedAt != null)
+        'last_authenticated_at': lastAuthenticatedAt,
       if (rowid != null) 'rowid': rowid,
     });
   }
 
-  PairwiseSessionsCompanion copyWith({
+  PairwiseSessionAlternatesCompanion copyWith({
+    Value<Uint8List>? sessionId,
     Value<String>? localDeviceId,
+    Value<String>? remoteUserId,
     Value<String>? remoteDeviceId,
     Value<Uint8List>? opaqueCryptoStateHandle,
     Value<int>? stateVersion,
+    Value<int>? skippedKeyCount,
+    Value<int>? repairState,
+    Value<Uint8List?>? repairAuthorization,
+    Value<DateTime>? createdAt,
+    Value<DateTime?>? lastAuthenticatedAt,
     Value<int>? rowid,
   }) {
-    return PairwiseSessionsCompanion(
+    return PairwiseSessionAlternatesCompanion(
+      sessionId: sessionId ?? this.sessionId,
       localDeviceId: localDeviceId ?? this.localDeviceId,
+      remoteUserId: remoteUserId ?? this.remoteUserId,
       remoteDeviceId: remoteDeviceId ?? this.remoteDeviceId,
       opaqueCryptoStateHandle:
           opaqueCryptoStateHandle ?? this.opaqueCryptoStateHandle,
       stateVersion: stateVersion ?? this.stateVersion,
+      skippedKeyCount: skippedKeyCount ?? this.skippedKeyCount,
+      repairState: repairState ?? this.repairState,
+      repairAuthorization: repairAuthorization ?? this.repairAuthorization,
+      createdAt: createdAt ?? this.createdAt,
+      lastAuthenticatedAt: lastAuthenticatedAt ?? this.lastAuthenticatedAt,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -4289,8 +5513,14 @@ class PairwiseSessionsCompanion extends UpdateCompanion<PairwiseSession> {
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
+    if (sessionId.present) {
+      map['session_id'] = Variable<Uint8List>(sessionId.value);
+    }
     if (localDeviceId.present) {
       map['local_device_id'] = Variable<String>(localDeviceId.value);
+    }
+    if (remoteUserId.present) {
+      map['remote_user_id'] = Variable<String>(remoteUserId.value);
     }
     if (remoteDeviceId.present) {
       map['remote_device_id'] = Variable<String>(remoteDeviceId.value);
@@ -4303,6 +5533,25 @@ class PairwiseSessionsCompanion extends UpdateCompanion<PairwiseSession> {
     if (stateVersion.present) {
       map['state_version'] = Variable<int>(stateVersion.value);
     }
+    if (skippedKeyCount.present) {
+      map['skipped_key_count'] = Variable<int>(skippedKeyCount.value);
+    }
+    if (repairState.present) {
+      map['repair_state'] = Variable<int>(repairState.value);
+    }
+    if (repairAuthorization.present) {
+      map['repair_authorization'] = Variable<Uint8List>(
+        repairAuthorization.value,
+      );
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (lastAuthenticatedAt.present) {
+      map['last_authenticated_at'] = Variable<DateTime>(
+        lastAuthenticatedAt.value,
+      );
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -4311,11 +5560,18 @@ class PairwiseSessionsCompanion extends UpdateCompanion<PairwiseSession> {
 
   @override
   String toString() {
-    return (StringBuffer('PairwiseSessionsCompanion(')
+    return (StringBuffer('PairwiseSessionAlternatesCompanion(')
+          ..write('sessionId: $sessionId, ')
           ..write('localDeviceId: $localDeviceId, ')
+          ..write('remoteUserId: $remoteUserId, ')
           ..write('remoteDeviceId: $remoteDeviceId, ')
           ..write('opaqueCryptoStateHandle: $opaqueCryptoStateHandle, ')
           ..write('stateVersion: $stateVersion, ')
+          ..write('skippedKeyCount: $skippedKeyCount, ')
+          ..write('repairState: $repairState, ')
+          ..write('repairAuthorization: $repairAuthorization, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('lastAuthenticatedAt: $lastAuthenticatedAt, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -4706,6 +5962,830 @@ class PrekeysCompanion extends UpdateCompanion<Prekey> {
           ..write('privateStateHandle: $privateStateHandle, ')
           ..write('uploadState: $uploadState, ')
           ..write('useState: $useState, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $PrekeyMaintenancePlansTable extends PrekeyMaintenancePlans
+    with TableInfo<$PrekeyMaintenancePlansTable, StoredPrekeyMaintenancePlan> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $PrekeyMaintenancePlansTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _deviceIdMeta = const VerificationMeta(
+    'deviceId',
+  );
+  @override
+  late final GeneratedColumn<String> deviceId = GeneratedColumn<String>(
+    'device_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _stageMeta = const VerificationMeta('stage');
+  @override
+  late final GeneratedColumn<int> stage = GeneratedColumn<int>(
+    'stage',
+    aliasedName,
+    false,
+    check: () => ComparableExpr(stage).isBetweenValues(0, 2),
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _expectedStateRevisionMeta =
+      const VerificationMeta('expectedStateRevision');
+  @override
+  late final GeneratedColumn<int> expectedStateRevision = GeneratedColumn<int>(
+    'expected_state_revision',
+    aliasedName,
+    false,
+    check: () => ComparableExpr(expectedStateRevision).isBiggerThanValue(0),
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _preparedUnixDayMeta = const VerificationMeta(
+    'preparedUnixDay',
+  );
+  @override
+  late final GeneratedColumn<int> preparedUnixDay = GeneratedColumn<int>(
+    'prepared_unix_day',
+    aliasedName,
+    false,
+    check: () => ComparableExpr(preparedUnixDay).isBiggerOrEqualValue(0),
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _bundleVersionMeta = const VerificationMeta(
+    'bundleVersion',
+  );
+  @override
+  late final GeneratedColumn<int> bundleVersion = GeneratedColumn<int>(
+    'bundle_version',
+    aliasedName,
+    false,
+    check: () => ComparableExpr(bundleVersion).isBiggerThanValue(0),
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _currentSignedPrekeyCreatedUnixDayMeta =
+      const VerificationMeta('currentSignedPrekeyCreatedUnixDay');
+  @override
+  late final GeneratedColumn<int> currentSignedPrekeyCreatedUnixDay =
+      GeneratedColumn<int>(
+        'current_signed_prekey_created_unix_day',
+        aliasedName,
+        false,
+        check: () => ComparableExpr(
+          currentSignedPrekeyCreatedUnixDay,
+        ).isBiggerOrEqualValue(0),
+        type: DriftSqlType.int,
+        requiredDuringInsert: true,
+      );
+  static const VerificationMeta _batchIdMeta = const VerificationMeta(
+    'batchId',
+  );
+  @override
+  late final GeneratedColumn<Uint8List> batchId = GeneratedColumn<Uint8List>(
+    'batch_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.blob,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _nativeUploadProjectionMeta =
+      const VerificationMeta('nativeUploadProjection');
+  @override
+  late final GeneratedColumn<Uint8List> nativeUploadProjection =
+      GeneratedColumn<Uint8List>(
+        'native_upload_projection',
+        aliasedName,
+        false,
+        type: DriftSqlType.blob,
+        requiredDuringInsert: true,
+      );
+  static const VerificationMeta _exactLogRecordMeta = const VerificationMeta(
+    'exactLogRecord',
+  );
+  @override
+  late final GeneratedColumn<Uint8List> exactLogRecord =
+      GeneratedColumn<Uint8List>(
+        'exact_log_record',
+        aliasedName,
+        true,
+        type: DriftSqlType.blob,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _expectedLogSequenceMeta =
+      const VerificationMeta('expectedLogSequence');
+  @override
+  late final GeneratedColumn<int> expectedLogSequence = GeneratedColumn<int>(
+    'expected_log_sequence',
+    aliasedName,
+    true,
+    check: () =>
+        expectedLogSequence.isNull() |
+        ComparableExpr(expectedLogSequence).isBiggerOrEqualValue(0),
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _previousLogHeadMeta = const VerificationMeta(
+    'previousLogHead',
+  );
+  @override
+  late final GeneratedColumn<Uint8List> previousLogHead =
+      GeneratedColumn<Uint8List>(
+        'previous_log_head',
+        aliasedName,
+        true,
+        type: DriftSqlType.blob,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    deviceId,
+    stage,
+    expectedStateRevision,
+    preparedUnixDay,
+    bundleVersion,
+    currentSignedPrekeyCreatedUnixDay,
+    batchId,
+    nativeUploadProjection,
+    exactLogRecord,
+    expectedLogSequence,
+    previousLogHead,
+    updatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'prekey_maintenance_plans';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<StoredPrekeyMaintenancePlan> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('device_id')) {
+      context.handle(
+        _deviceIdMeta,
+        deviceId.isAcceptableOrUnknown(data['device_id']!, _deviceIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_deviceIdMeta);
+    }
+    if (data.containsKey('stage')) {
+      context.handle(
+        _stageMeta,
+        stage.isAcceptableOrUnknown(data['stage']!, _stageMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_stageMeta);
+    }
+    if (data.containsKey('expected_state_revision')) {
+      context.handle(
+        _expectedStateRevisionMeta,
+        expectedStateRevision.isAcceptableOrUnknown(
+          data['expected_state_revision']!,
+          _expectedStateRevisionMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_expectedStateRevisionMeta);
+    }
+    if (data.containsKey('prepared_unix_day')) {
+      context.handle(
+        _preparedUnixDayMeta,
+        preparedUnixDay.isAcceptableOrUnknown(
+          data['prepared_unix_day']!,
+          _preparedUnixDayMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_preparedUnixDayMeta);
+    }
+    if (data.containsKey('bundle_version')) {
+      context.handle(
+        _bundleVersionMeta,
+        bundleVersion.isAcceptableOrUnknown(
+          data['bundle_version']!,
+          _bundleVersionMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_bundleVersionMeta);
+    }
+    if (data.containsKey('current_signed_prekey_created_unix_day')) {
+      context.handle(
+        _currentSignedPrekeyCreatedUnixDayMeta,
+        currentSignedPrekeyCreatedUnixDay.isAcceptableOrUnknown(
+          data['current_signed_prekey_created_unix_day']!,
+          _currentSignedPrekeyCreatedUnixDayMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_currentSignedPrekeyCreatedUnixDayMeta);
+    }
+    if (data.containsKey('batch_id')) {
+      context.handle(
+        _batchIdMeta,
+        batchId.isAcceptableOrUnknown(data['batch_id']!, _batchIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_batchIdMeta);
+    }
+    if (data.containsKey('native_upload_projection')) {
+      context.handle(
+        _nativeUploadProjectionMeta,
+        nativeUploadProjection.isAcceptableOrUnknown(
+          data['native_upload_projection']!,
+          _nativeUploadProjectionMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_nativeUploadProjectionMeta);
+    }
+    if (data.containsKey('exact_log_record')) {
+      context.handle(
+        _exactLogRecordMeta,
+        exactLogRecord.isAcceptableOrUnknown(
+          data['exact_log_record']!,
+          _exactLogRecordMeta,
+        ),
+      );
+    }
+    if (data.containsKey('expected_log_sequence')) {
+      context.handle(
+        _expectedLogSequenceMeta,
+        expectedLogSequence.isAcceptableOrUnknown(
+          data['expected_log_sequence']!,
+          _expectedLogSequenceMeta,
+        ),
+      );
+    }
+    if (data.containsKey('previous_log_head')) {
+      context.handle(
+        _previousLogHeadMeta,
+        previousLogHead.isAcceptableOrUnknown(
+          data['previous_log_head']!,
+          _previousLogHeadMeta,
+        ),
+      );
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {deviceId};
+  @override
+  StoredPrekeyMaintenancePlan map(
+    Map<String, dynamic> data, {
+    String? tablePrefix,
+  }) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return StoredPrekeyMaintenancePlan(
+      deviceId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}device_id'],
+      )!,
+      stage: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}stage'],
+      )!,
+      expectedStateRevision: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}expected_state_revision'],
+      )!,
+      preparedUnixDay: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}prepared_unix_day'],
+      )!,
+      bundleVersion: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}bundle_version'],
+      )!,
+      currentSignedPrekeyCreatedUnixDay: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}current_signed_prekey_created_unix_day'],
+      )!,
+      batchId: attachedDatabase.typeMapping.read(
+        DriftSqlType.blob,
+        data['${effectivePrefix}batch_id'],
+      )!,
+      nativeUploadProjection: attachedDatabase.typeMapping.read(
+        DriftSqlType.blob,
+        data['${effectivePrefix}native_upload_projection'],
+      )!,
+      exactLogRecord: attachedDatabase.typeMapping.read(
+        DriftSqlType.blob,
+        data['${effectivePrefix}exact_log_record'],
+      ),
+      expectedLogSequence: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}expected_log_sequence'],
+      ),
+      previousLogHead: attachedDatabase.typeMapping.read(
+        DriftSqlType.blob,
+        data['${effectivePrefix}previous_log_head'],
+      ),
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+    );
+  }
+
+  @override
+  $PrekeyMaintenancePlansTable createAlias(String alias) {
+    return $PrekeyMaintenancePlansTable(attachedDatabase, alias);
+  }
+}
+
+class StoredPrekeyMaintenancePlan extends DataClass
+    implements Insertable<StoredPrekeyMaintenancePlan> {
+  final String deviceId;
+  final int stage;
+  final int expectedStateRevision;
+  final int preparedUnixDay;
+  final int bundleVersion;
+  final int currentSignedPrekeyCreatedUnixDay;
+  final Uint8List batchId;
+  final Uint8List nativeUploadProjection;
+  final Uint8List? exactLogRecord;
+  final int? expectedLogSequence;
+  final Uint8List? previousLogHead;
+  final DateTime updatedAt;
+  const StoredPrekeyMaintenancePlan({
+    required this.deviceId,
+    required this.stage,
+    required this.expectedStateRevision,
+    required this.preparedUnixDay,
+    required this.bundleVersion,
+    required this.currentSignedPrekeyCreatedUnixDay,
+    required this.batchId,
+    required this.nativeUploadProjection,
+    this.exactLogRecord,
+    this.expectedLogSequence,
+    this.previousLogHead,
+    required this.updatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['device_id'] = Variable<String>(deviceId);
+    map['stage'] = Variable<int>(stage);
+    map['expected_state_revision'] = Variable<int>(expectedStateRevision);
+    map['prepared_unix_day'] = Variable<int>(preparedUnixDay);
+    map['bundle_version'] = Variable<int>(bundleVersion);
+    map['current_signed_prekey_created_unix_day'] = Variable<int>(
+      currentSignedPrekeyCreatedUnixDay,
+    );
+    map['batch_id'] = Variable<Uint8List>(batchId);
+    map['native_upload_projection'] = Variable<Uint8List>(
+      nativeUploadProjection,
+    );
+    if (!nullToAbsent || exactLogRecord != null) {
+      map['exact_log_record'] = Variable<Uint8List>(exactLogRecord);
+    }
+    if (!nullToAbsent || expectedLogSequence != null) {
+      map['expected_log_sequence'] = Variable<int>(expectedLogSequence);
+    }
+    if (!nullToAbsent || previousLogHead != null) {
+      map['previous_log_head'] = Variable<Uint8List>(previousLogHead);
+    }
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    return map;
+  }
+
+  PrekeyMaintenancePlansCompanion toCompanion(bool nullToAbsent) {
+    return PrekeyMaintenancePlansCompanion(
+      deviceId: Value(deviceId),
+      stage: Value(stage),
+      expectedStateRevision: Value(expectedStateRevision),
+      preparedUnixDay: Value(preparedUnixDay),
+      bundleVersion: Value(bundleVersion),
+      currentSignedPrekeyCreatedUnixDay: Value(
+        currentSignedPrekeyCreatedUnixDay,
+      ),
+      batchId: Value(batchId),
+      nativeUploadProjection: Value(nativeUploadProjection),
+      exactLogRecord: exactLogRecord == null && nullToAbsent
+          ? const Value.absent()
+          : Value(exactLogRecord),
+      expectedLogSequence: expectedLogSequence == null && nullToAbsent
+          ? const Value.absent()
+          : Value(expectedLogSequence),
+      previousLogHead: previousLogHead == null && nullToAbsent
+          ? const Value.absent()
+          : Value(previousLogHead),
+      updatedAt: Value(updatedAt),
+    );
+  }
+
+  factory StoredPrekeyMaintenancePlan.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return StoredPrekeyMaintenancePlan(
+      deviceId: serializer.fromJson<String>(json['deviceId']),
+      stage: serializer.fromJson<int>(json['stage']),
+      expectedStateRevision: serializer.fromJson<int>(
+        json['expectedStateRevision'],
+      ),
+      preparedUnixDay: serializer.fromJson<int>(json['preparedUnixDay']),
+      bundleVersion: serializer.fromJson<int>(json['bundleVersion']),
+      currentSignedPrekeyCreatedUnixDay: serializer.fromJson<int>(
+        json['currentSignedPrekeyCreatedUnixDay'],
+      ),
+      batchId: serializer.fromJson<Uint8List>(json['batchId']),
+      nativeUploadProjection: serializer.fromJson<Uint8List>(
+        json['nativeUploadProjection'],
+      ),
+      exactLogRecord: serializer.fromJson<Uint8List?>(json['exactLogRecord']),
+      expectedLogSequence: serializer.fromJson<int?>(
+        json['expectedLogSequence'],
+      ),
+      previousLogHead: serializer.fromJson<Uint8List?>(json['previousLogHead']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'deviceId': serializer.toJson<String>(deviceId),
+      'stage': serializer.toJson<int>(stage),
+      'expectedStateRevision': serializer.toJson<int>(expectedStateRevision),
+      'preparedUnixDay': serializer.toJson<int>(preparedUnixDay),
+      'bundleVersion': serializer.toJson<int>(bundleVersion),
+      'currentSignedPrekeyCreatedUnixDay': serializer.toJson<int>(
+        currentSignedPrekeyCreatedUnixDay,
+      ),
+      'batchId': serializer.toJson<Uint8List>(batchId),
+      'nativeUploadProjection': serializer.toJson<Uint8List>(
+        nativeUploadProjection,
+      ),
+      'exactLogRecord': serializer.toJson<Uint8List?>(exactLogRecord),
+      'expectedLogSequence': serializer.toJson<int?>(expectedLogSequence),
+      'previousLogHead': serializer.toJson<Uint8List?>(previousLogHead),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+    };
+  }
+
+  StoredPrekeyMaintenancePlan copyWith({
+    String? deviceId,
+    int? stage,
+    int? expectedStateRevision,
+    int? preparedUnixDay,
+    int? bundleVersion,
+    int? currentSignedPrekeyCreatedUnixDay,
+    Uint8List? batchId,
+    Uint8List? nativeUploadProjection,
+    Value<Uint8List?> exactLogRecord = const Value.absent(),
+    Value<int?> expectedLogSequence = const Value.absent(),
+    Value<Uint8List?> previousLogHead = const Value.absent(),
+    DateTime? updatedAt,
+  }) => StoredPrekeyMaintenancePlan(
+    deviceId: deviceId ?? this.deviceId,
+    stage: stage ?? this.stage,
+    expectedStateRevision: expectedStateRevision ?? this.expectedStateRevision,
+    preparedUnixDay: preparedUnixDay ?? this.preparedUnixDay,
+    bundleVersion: bundleVersion ?? this.bundleVersion,
+    currentSignedPrekeyCreatedUnixDay:
+        currentSignedPrekeyCreatedUnixDay ??
+        this.currentSignedPrekeyCreatedUnixDay,
+    batchId: batchId ?? this.batchId,
+    nativeUploadProjection:
+        nativeUploadProjection ?? this.nativeUploadProjection,
+    exactLogRecord: exactLogRecord.present
+        ? exactLogRecord.value
+        : this.exactLogRecord,
+    expectedLogSequence: expectedLogSequence.present
+        ? expectedLogSequence.value
+        : this.expectedLogSequence,
+    previousLogHead: previousLogHead.present
+        ? previousLogHead.value
+        : this.previousLogHead,
+    updatedAt: updatedAt ?? this.updatedAt,
+  );
+  StoredPrekeyMaintenancePlan copyWithCompanion(
+    PrekeyMaintenancePlansCompanion data,
+  ) {
+    return StoredPrekeyMaintenancePlan(
+      deviceId: data.deviceId.present ? data.deviceId.value : this.deviceId,
+      stage: data.stage.present ? data.stage.value : this.stage,
+      expectedStateRevision: data.expectedStateRevision.present
+          ? data.expectedStateRevision.value
+          : this.expectedStateRevision,
+      preparedUnixDay: data.preparedUnixDay.present
+          ? data.preparedUnixDay.value
+          : this.preparedUnixDay,
+      bundleVersion: data.bundleVersion.present
+          ? data.bundleVersion.value
+          : this.bundleVersion,
+      currentSignedPrekeyCreatedUnixDay:
+          data.currentSignedPrekeyCreatedUnixDay.present
+          ? data.currentSignedPrekeyCreatedUnixDay.value
+          : this.currentSignedPrekeyCreatedUnixDay,
+      batchId: data.batchId.present ? data.batchId.value : this.batchId,
+      nativeUploadProjection: data.nativeUploadProjection.present
+          ? data.nativeUploadProjection.value
+          : this.nativeUploadProjection,
+      exactLogRecord: data.exactLogRecord.present
+          ? data.exactLogRecord.value
+          : this.exactLogRecord,
+      expectedLogSequence: data.expectedLogSequence.present
+          ? data.expectedLogSequence.value
+          : this.expectedLogSequence,
+      previousLogHead: data.previousLogHead.present
+          ? data.previousLogHead.value
+          : this.previousLogHead,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('StoredPrekeyMaintenancePlan(')
+          ..write('deviceId: $deviceId, ')
+          ..write('stage: $stage, ')
+          ..write('expectedStateRevision: $expectedStateRevision, ')
+          ..write('preparedUnixDay: $preparedUnixDay, ')
+          ..write('bundleVersion: $bundleVersion, ')
+          ..write(
+            'currentSignedPrekeyCreatedUnixDay: $currentSignedPrekeyCreatedUnixDay, ',
+          )
+          ..write('batchId: $batchId, ')
+          ..write('nativeUploadProjection: $nativeUploadProjection, ')
+          ..write('exactLogRecord: $exactLogRecord, ')
+          ..write('expectedLogSequence: $expectedLogSequence, ')
+          ..write('previousLogHead: $previousLogHead, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    deviceId,
+    stage,
+    expectedStateRevision,
+    preparedUnixDay,
+    bundleVersion,
+    currentSignedPrekeyCreatedUnixDay,
+    $driftBlobEquality.hash(batchId),
+    $driftBlobEquality.hash(nativeUploadProjection),
+    $driftBlobEquality.hash(exactLogRecord),
+    expectedLogSequence,
+    $driftBlobEquality.hash(previousLogHead),
+    updatedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is StoredPrekeyMaintenancePlan &&
+          other.deviceId == this.deviceId &&
+          other.stage == this.stage &&
+          other.expectedStateRevision == this.expectedStateRevision &&
+          other.preparedUnixDay == this.preparedUnixDay &&
+          other.bundleVersion == this.bundleVersion &&
+          other.currentSignedPrekeyCreatedUnixDay ==
+              this.currentSignedPrekeyCreatedUnixDay &&
+          $driftBlobEquality.equals(other.batchId, this.batchId) &&
+          $driftBlobEquality.equals(
+            other.nativeUploadProjection,
+            this.nativeUploadProjection,
+          ) &&
+          $driftBlobEquality.equals(
+            other.exactLogRecord,
+            this.exactLogRecord,
+          ) &&
+          other.expectedLogSequence == this.expectedLogSequence &&
+          $driftBlobEquality.equals(
+            other.previousLogHead,
+            this.previousLogHead,
+          ) &&
+          other.updatedAt == this.updatedAt);
+}
+
+class PrekeyMaintenancePlansCompanion
+    extends UpdateCompanion<StoredPrekeyMaintenancePlan> {
+  final Value<String> deviceId;
+  final Value<int> stage;
+  final Value<int> expectedStateRevision;
+  final Value<int> preparedUnixDay;
+  final Value<int> bundleVersion;
+  final Value<int> currentSignedPrekeyCreatedUnixDay;
+  final Value<Uint8List> batchId;
+  final Value<Uint8List> nativeUploadProjection;
+  final Value<Uint8List?> exactLogRecord;
+  final Value<int?> expectedLogSequence;
+  final Value<Uint8List?> previousLogHead;
+  final Value<DateTime> updatedAt;
+  final Value<int> rowid;
+  const PrekeyMaintenancePlansCompanion({
+    this.deviceId = const Value.absent(),
+    this.stage = const Value.absent(),
+    this.expectedStateRevision = const Value.absent(),
+    this.preparedUnixDay = const Value.absent(),
+    this.bundleVersion = const Value.absent(),
+    this.currentSignedPrekeyCreatedUnixDay = const Value.absent(),
+    this.batchId = const Value.absent(),
+    this.nativeUploadProjection = const Value.absent(),
+    this.exactLogRecord = const Value.absent(),
+    this.expectedLogSequence = const Value.absent(),
+    this.previousLogHead = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  PrekeyMaintenancePlansCompanion.insert({
+    required String deviceId,
+    required int stage,
+    required int expectedStateRevision,
+    required int preparedUnixDay,
+    required int bundleVersion,
+    required int currentSignedPrekeyCreatedUnixDay,
+    required Uint8List batchId,
+    required Uint8List nativeUploadProjection,
+    this.exactLogRecord = const Value.absent(),
+    this.expectedLogSequence = const Value.absent(),
+    this.previousLogHead = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : deviceId = Value(deviceId),
+       stage = Value(stage),
+       expectedStateRevision = Value(expectedStateRevision),
+       preparedUnixDay = Value(preparedUnixDay),
+       bundleVersion = Value(bundleVersion),
+       currentSignedPrekeyCreatedUnixDay = Value(
+         currentSignedPrekeyCreatedUnixDay,
+       ),
+       batchId = Value(batchId),
+       nativeUploadProjection = Value(nativeUploadProjection);
+  static Insertable<StoredPrekeyMaintenancePlan> custom({
+    Expression<String>? deviceId,
+    Expression<int>? stage,
+    Expression<int>? expectedStateRevision,
+    Expression<int>? preparedUnixDay,
+    Expression<int>? bundleVersion,
+    Expression<int>? currentSignedPrekeyCreatedUnixDay,
+    Expression<Uint8List>? batchId,
+    Expression<Uint8List>? nativeUploadProjection,
+    Expression<Uint8List>? exactLogRecord,
+    Expression<int>? expectedLogSequence,
+    Expression<Uint8List>? previousLogHead,
+    Expression<DateTime>? updatedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (deviceId != null) 'device_id': deviceId,
+      if (stage != null) 'stage': stage,
+      if (expectedStateRevision != null)
+        'expected_state_revision': expectedStateRevision,
+      if (preparedUnixDay != null) 'prepared_unix_day': preparedUnixDay,
+      if (bundleVersion != null) 'bundle_version': bundleVersion,
+      if (currentSignedPrekeyCreatedUnixDay != null)
+        'current_signed_prekey_created_unix_day':
+            currentSignedPrekeyCreatedUnixDay,
+      if (batchId != null) 'batch_id': batchId,
+      if (nativeUploadProjection != null)
+        'native_upload_projection': nativeUploadProjection,
+      if (exactLogRecord != null) 'exact_log_record': exactLogRecord,
+      if (expectedLogSequence != null)
+        'expected_log_sequence': expectedLogSequence,
+      if (previousLogHead != null) 'previous_log_head': previousLogHead,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  PrekeyMaintenancePlansCompanion copyWith({
+    Value<String>? deviceId,
+    Value<int>? stage,
+    Value<int>? expectedStateRevision,
+    Value<int>? preparedUnixDay,
+    Value<int>? bundleVersion,
+    Value<int>? currentSignedPrekeyCreatedUnixDay,
+    Value<Uint8List>? batchId,
+    Value<Uint8List>? nativeUploadProjection,
+    Value<Uint8List?>? exactLogRecord,
+    Value<int?>? expectedLogSequence,
+    Value<Uint8List?>? previousLogHead,
+    Value<DateTime>? updatedAt,
+    Value<int>? rowid,
+  }) {
+    return PrekeyMaintenancePlansCompanion(
+      deviceId: deviceId ?? this.deviceId,
+      stage: stage ?? this.stage,
+      expectedStateRevision:
+          expectedStateRevision ?? this.expectedStateRevision,
+      preparedUnixDay: preparedUnixDay ?? this.preparedUnixDay,
+      bundleVersion: bundleVersion ?? this.bundleVersion,
+      currentSignedPrekeyCreatedUnixDay:
+          currentSignedPrekeyCreatedUnixDay ??
+          this.currentSignedPrekeyCreatedUnixDay,
+      batchId: batchId ?? this.batchId,
+      nativeUploadProjection:
+          nativeUploadProjection ?? this.nativeUploadProjection,
+      exactLogRecord: exactLogRecord ?? this.exactLogRecord,
+      expectedLogSequence: expectedLogSequence ?? this.expectedLogSequence,
+      previousLogHead: previousLogHead ?? this.previousLogHead,
+      updatedAt: updatedAt ?? this.updatedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (deviceId.present) {
+      map['device_id'] = Variable<String>(deviceId.value);
+    }
+    if (stage.present) {
+      map['stage'] = Variable<int>(stage.value);
+    }
+    if (expectedStateRevision.present) {
+      map['expected_state_revision'] = Variable<int>(
+        expectedStateRevision.value,
+      );
+    }
+    if (preparedUnixDay.present) {
+      map['prepared_unix_day'] = Variable<int>(preparedUnixDay.value);
+    }
+    if (bundleVersion.present) {
+      map['bundle_version'] = Variable<int>(bundleVersion.value);
+    }
+    if (currentSignedPrekeyCreatedUnixDay.present) {
+      map['current_signed_prekey_created_unix_day'] = Variable<int>(
+        currentSignedPrekeyCreatedUnixDay.value,
+      );
+    }
+    if (batchId.present) {
+      map['batch_id'] = Variable<Uint8List>(batchId.value);
+    }
+    if (nativeUploadProjection.present) {
+      map['native_upload_projection'] = Variable<Uint8List>(
+        nativeUploadProjection.value,
+      );
+    }
+    if (exactLogRecord.present) {
+      map['exact_log_record'] = Variable<Uint8List>(exactLogRecord.value);
+    }
+    if (expectedLogSequence.present) {
+      map['expected_log_sequence'] = Variable<int>(expectedLogSequence.value);
+    }
+    if (previousLogHead.present) {
+      map['previous_log_head'] = Variable<Uint8List>(previousLogHead.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('PrekeyMaintenancePlansCompanion(')
+          ..write('deviceId: $deviceId, ')
+          ..write('stage: $stage, ')
+          ..write('expectedStateRevision: $expectedStateRevision, ')
+          ..write('preparedUnixDay: $preparedUnixDay, ')
+          ..write('bundleVersion: $bundleVersion, ')
+          ..write(
+            'currentSignedPrekeyCreatedUnixDay: $currentSignedPrekeyCreatedUnixDay, ',
+          )
+          ..write('batchId: $batchId, ')
+          ..write('nativeUploadProjection: $nativeUploadProjection, ')
+          ..write('exactLogRecord: $exactLogRecord, ')
+          ..write('expectedLogSequence: $expectedLogSequence, ')
+          ..write('previousLogHead: $previousLogHead, ')
+          ..write('updatedAt: $updatedAt, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -8962,6 +11042,1920 @@ class InboxEventDeduplicationsCompanion
   }
 }
 
+class $PairwiseReplayMarkersTable extends PairwiseReplayMarkers
+    with TableInfo<$PairwiseReplayMarkersTable, PairwiseReplayMarker> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $PairwiseReplayMarkersTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _replayMarkerMeta = const VerificationMeta(
+    'replayMarker',
+  );
+  @override
+  late final GeneratedColumn<Uint8List> replayMarker =
+      GeneratedColumn<Uint8List>(
+        'replay_marker',
+        aliasedName,
+        false,
+        type: DriftSqlType.blob,
+        requiredDuringInsert: true,
+      );
+  static const VerificationMeta _sessionIdMeta = const VerificationMeta(
+    'sessionId',
+  );
+  @override
+  late final GeneratedColumn<Uint8List> sessionId = GeneratedColumn<Uint8List>(
+    'session_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.blob,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _signedPrekeyIdMeta = const VerificationMeta(
+    'signedPrekeyId',
+  );
+  @override
+  late final GeneratedColumn<int> signedPrekeyId = GeneratedColumn<int>(
+    'signed_prekey_id',
+    aliasedName,
+    true,
+    check: () =>
+        signedPrekeyId.isNull() |
+        ComparableExpr(signedPrekeyId).isBetweenValues(0, 0x7fffffff),
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _pqSignedPrekeyIdMeta = const VerificationMeta(
+    'pqSignedPrekeyId',
+  );
+  @override
+  late final GeneratedColumn<int> pqSignedPrekeyId = GeneratedColumn<int>(
+    'pq_signed_prekey_id',
+    aliasedName,
+    true,
+    check: () =>
+        pqSignedPrekeyId.isNull() |
+        ComparableExpr(pqSignedPrekeyId).isBetweenValues(0, 0x7fffffff),
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _firstEnvelopeIdMeta = const VerificationMeta(
+    'firstEnvelopeId',
+  );
+  @override
+  late final GeneratedColumn<String> firstEnvelopeId = GeneratedColumn<String>(
+    'first_envelope_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _committedAtMeta = const VerificationMeta(
+    'committedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> committedAt = GeneratedColumn<DateTime>(
+    'committed_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    replayMarker,
+    sessionId,
+    signedPrekeyId,
+    pqSignedPrekeyId,
+    firstEnvelopeId,
+    committedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'pairwise_replay_markers';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<PairwiseReplayMarker> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('replay_marker')) {
+      context.handle(
+        _replayMarkerMeta,
+        replayMarker.isAcceptableOrUnknown(
+          data['replay_marker']!,
+          _replayMarkerMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_replayMarkerMeta);
+    }
+    if (data.containsKey('session_id')) {
+      context.handle(
+        _sessionIdMeta,
+        sessionId.isAcceptableOrUnknown(data['session_id']!, _sessionIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_sessionIdMeta);
+    }
+    if (data.containsKey('signed_prekey_id')) {
+      context.handle(
+        _signedPrekeyIdMeta,
+        signedPrekeyId.isAcceptableOrUnknown(
+          data['signed_prekey_id']!,
+          _signedPrekeyIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('pq_signed_prekey_id')) {
+      context.handle(
+        _pqSignedPrekeyIdMeta,
+        pqSignedPrekeyId.isAcceptableOrUnknown(
+          data['pq_signed_prekey_id']!,
+          _pqSignedPrekeyIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('first_envelope_id')) {
+      context.handle(
+        _firstEnvelopeIdMeta,
+        firstEnvelopeId.isAcceptableOrUnknown(
+          data['first_envelope_id']!,
+          _firstEnvelopeIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_firstEnvelopeIdMeta);
+    }
+    if (data.containsKey('committed_at')) {
+      context.handle(
+        _committedAtMeta,
+        committedAt.isAcceptableOrUnknown(
+          data['committed_at']!,
+          _committedAtMeta,
+        ),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {replayMarker};
+  @override
+  PairwiseReplayMarker map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return PairwiseReplayMarker(
+      replayMarker: attachedDatabase.typeMapping.read(
+        DriftSqlType.blob,
+        data['${effectivePrefix}replay_marker'],
+      )!,
+      sessionId: attachedDatabase.typeMapping.read(
+        DriftSqlType.blob,
+        data['${effectivePrefix}session_id'],
+      )!,
+      signedPrekeyId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}signed_prekey_id'],
+      ),
+      pqSignedPrekeyId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}pq_signed_prekey_id'],
+      ),
+      firstEnvelopeId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}first_envelope_id'],
+      )!,
+      committedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}committed_at'],
+      )!,
+    );
+  }
+
+  @override
+  $PairwiseReplayMarkersTable createAlias(String alias) {
+    return $PairwiseReplayMarkersTable(attachedDatabase, alias);
+  }
+}
+
+class PairwiseReplayMarker extends DataClass
+    implements Insertable<PairwiseReplayMarker> {
+  final Uint8List replayMarker;
+  final Uint8List sessionId;
+  final int? signedPrekeyId;
+  final int? pqSignedPrekeyId;
+  final String firstEnvelopeId;
+  final DateTime committedAt;
+  const PairwiseReplayMarker({
+    required this.replayMarker,
+    required this.sessionId,
+    this.signedPrekeyId,
+    this.pqSignedPrekeyId,
+    required this.firstEnvelopeId,
+    required this.committedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['replay_marker'] = Variable<Uint8List>(replayMarker);
+    map['session_id'] = Variable<Uint8List>(sessionId);
+    if (!nullToAbsent || signedPrekeyId != null) {
+      map['signed_prekey_id'] = Variable<int>(signedPrekeyId);
+    }
+    if (!nullToAbsent || pqSignedPrekeyId != null) {
+      map['pq_signed_prekey_id'] = Variable<int>(pqSignedPrekeyId);
+    }
+    map['first_envelope_id'] = Variable<String>(firstEnvelopeId);
+    map['committed_at'] = Variable<DateTime>(committedAt);
+    return map;
+  }
+
+  PairwiseReplayMarkersCompanion toCompanion(bool nullToAbsent) {
+    return PairwiseReplayMarkersCompanion(
+      replayMarker: Value(replayMarker),
+      sessionId: Value(sessionId),
+      signedPrekeyId: signedPrekeyId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(signedPrekeyId),
+      pqSignedPrekeyId: pqSignedPrekeyId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(pqSignedPrekeyId),
+      firstEnvelopeId: Value(firstEnvelopeId),
+      committedAt: Value(committedAt),
+    );
+  }
+
+  factory PairwiseReplayMarker.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return PairwiseReplayMarker(
+      replayMarker: serializer.fromJson<Uint8List>(json['replayMarker']),
+      sessionId: serializer.fromJson<Uint8List>(json['sessionId']),
+      signedPrekeyId: serializer.fromJson<int?>(json['signedPrekeyId']),
+      pqSignedPrekeyId: serializer.fromJson<int?>(json['pqSignedPrekeyId']),
+      firstEnvelopeId: serializer.fromJson<String>(json['firstEnvelopeId']),
+      committedAt: serializer.fromJson<DateTime>(json['committedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'replayMarker': serializer.toJson<Uint8List>(replayMarker),
+      'sessionId': serializer.toJson<Uint8List>(sessionId),
+      'signedPrekeyId': serializer.toJson<int?>(signedPrekeyId),
+      'pqSignedPrekeyId': serializer.toJson<int?>(pqSignedPrekeyId),
+      'firstEnvelopeId': serializer.toJson<String>(firstEnvelopeId),
+      'committedAt': serializer.toJson<DateTime>(committedAt),
+    };
+  }
+
+  PairwiseReplayMarker copyWith({
+    Uint8List? replayMarker,
+    Uint8List? sessionId,
+    Value<int?> signedPrekeyId = const Value.absent(),
+    Value<int?> pqSignedPrekeyId = const Value.absent(),
+    String? firstEnvelopeId,
+    DateTime? committedAt,
+  }) => PairwiseReplayMarker(
+    replayMarker: replayMarker ?? this.replayMarker,
+    sessionId: sessionId ?? this.sessionId,
+    signedPrekeyId: signedPrekeyId.present
+        ? signedPrekeyId.value
+        : this.signedPrekeyId,
+    pqSignedPrekeyId: pqSignedPrekeyId.present
+        ? pqSignedPrekeyId.value
+        : this.pqSignedPrekeyId,
+    firstEnvelopeId: firstEnvelopeId ?? this.firstEnvelopeId,
+    committedAt: committedAt ?? this.committedAt,
+  );
+  PairwiseReplayMarker copyWithCompanion(PairwiseReplayMarkersCompanion data) {
+    return PairwiseReplayMarker(
+      replayMarker: data.replayMarker.present
+          ? data.replayMarker.value
+          : this.replayMarker,
+      sessionId: data.sessionId.present ? data.sessionId.value : this.sessionId,
+      signedPrekeyId: data.signedPrekeyId.present
+          ? data.signedPrekeyId.value
+          : this.signedPrekeyId,
+      pqSignedPrekeyId: data.pqSignedPrekeyId.present
+          ? data.pqSignedPrekeyId.value
+          : this.pqSignedPrekeyId,
+      firstEnvelopeId: data.firstEnvelopeId.present
+          ? data.firstEnvelopeId.value
+          : this.firstEnvelopeId,
+      committedAt: data.committedAt.present
+          ? data.committedAt.value
+          : this.committedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('PairwiseReplayMarker(')
+          ..write('replayMarker: $replayMarker, ')
+          ..write('sessionId: $sessionId, ')
+          ..write('signedPrekeyId: $signedPrekeyId, ')
+          ..write('pqSignedPrekeyId: $pqSignedPrekeyId, ')
+          ..write('firstEnvelopeId: $firstEnvelopeId, ')
+          ..write('committedAt: $committedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    $driftBlobEquality.hash(replayMarker),
+    $driftBlobEquality.hash(sessionId),
+    signedPrekeyId,
+    pqSignedPrekeyId,
+    firstEnvelopeId,
+    committedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is PairwiseReplayMarker &&
+          $driftBlobEquality.equals(other.replayMarker, this.replayMarker) &&
+          $driftBlobEquality.equals(other.sessionId, this.sessionId) &&
+          other.signedPrekeyId == this.signedPrekeyId &&
+          other.pqSignedPrekeyId == this.pqSignedPrekeyId &&
+          other.firstEnvelopeId == this.firstEnvelopeId &&
+          other.committedAt == this.committedAt);
+}
+
+class PairwiseReplayMarkersCompanion
+    extends UpdateCompanion<PairwiseReplayMarker> {
+  final Value<Uint8List> replayMarker;
+  final Value<Uint8List> sessionId;
+  final Value<int?> signedPrekeyId;
+  final Value<int?> pqSignedPrekeyId;
+  final Value<String> firstEnvelopeId;
+  final Value<DateTime> committedAt;
+  final Value<int> rowid;
+  const PairwiseReplayMarkersCompanion({
+    this.replayMarker = const Value.absent(),
+    this.sessionId = const Value.absent(),
+    this.signedPrekeyId = const Value.absent(),
+    this.pqSignedPrekeyId = const Value.absent(),
+    this.firstEnvelopeId = const Value.absent(),
+    this.committedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  PairwiseReplayMarkersCompanion.insert({
+    required Uint8List replayMarker,
+    required Uint8List sessionId,
+    this.signedPrekeyId = const Value.absent(),
+    this.pqSignedPrekeyId = const Value.absent(),
+    required String firstEnvelopeId,
+    this.committedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : replayMarker = Value(replayMarker),
+       sessionId = Value(sessionId),
+       firstEnvelopeId = Value(firstEnvelopeId);
+  static Insertable<PairwiseReplayMarker> custom({
+    Expression<Uint8List>? replayMarker,
+    Expression<Uint8List>? sessionId,
+    Expression<int>? signedPrekeyId,
+    Expression<int>? pqSignedPrekeyId,
+    Expression<String>? firstEnvelopeId,
+    Expression<DateTime>? committedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (replayMarker != null) 'replay_marker': replayMarker,
+      if (sessionId != null) 'session_id': sessionId,
+      if (signedPrekeyId != null) 'signed_prekey_id': signedPrekeyId,
+      if (pqSignedPrekeyId != null) 'pq_signed_prekey_id': pqSignedPrekeyId,
+      if (firstEnvelopeId != null) 'first_envelope_id': firstEnvelopeId,
+      if (committedAt != null) 'committed_at': committedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  PairwiseReplayMarkersCompanion copyWith({
+    Value<Uint8List>? replayMarker,
+    Value<Uint8List>? sessionId,
+    Value<int?>? signedPrekeyId,
+    Value<int?>? pqSignedPrekeyId,
+    Value<String>? firstEnvelopeId,
+    Value<DateTime>? committedAt,
+    Value<int>? rowid,
+  }) {
+    return PairwiseReplayMarkersCompanion(
+      replayMarker: replayMarker ?? this.replayMarker,
+      sessionId: sessionId ?? this.sessionId,
+      signedPrekeyId: signedPrekeyId ?? this.signedPrekeyId,
+      pqSignedPrekeyId: pqSignedPrekeyId ?? this.pqSignedPrekeyId,
+      firstEnvelopeId: firstEnvelopeId ?? this.firstEnvelopeId,
+      committedAt: committedAt ?? this.committedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (replayMarker.present) {
+      map['replay_marker'] = Variable<Uint8List>(replayMarker.value);
+    }
+    if (sessionId.present) {
+      map['session_id'] = Variable<Uint8List>(sessionId.value);
+    }
+    if (signedPrekeyId.present) {
+      map['signed_prekey_id'] = Variable<int>(signedPrekeyId.value);
+    }
+    if (pqSignedPrekeyId.present) {
+      map['pq_signed_prekey_id'] = Variable<int>(pqSignedPrekeyId.value);
+    }
+    if (firstEnvelopeId.present) {
+      map['first_envelope_id'] = Variable<String>(firstEnvelopeId.value);
+    }
+    if (committedAt.present) {
+      map['committed_at'] = Variable<DateTime>(committedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('PairwiseReplayMarkersCompanion(')
+          ..write('replayMarker: $replayMarker, ')
+          ..write('sessionId: $sessionId, ')
+          ..write('signedPrekeyId: $signedPrekeyId, ')
+          ..write('pqSignedPrekeyId: $pqSignedPrekeyId, ')
+          ..write('firstEnvelopeId: $firstEnvelopeId, ')
+          ..write('committedAt: $committedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $PairwiseOpenedPayloadsTable extends PairwiseOpenedPayloads
+    with TableInfo<$PairwiseOpenedPayloadsTable, PairwiseOpenedPayload> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $PairwiseOpenedPayloadsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _envelopeIdMeta = const VerificationMeta(
+    'envelopeId',
+  );
+  @override
+  late final GeneratedColumn<String> envelopeId = GeneratedColumn<String>(
+    'envelope_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _opaqueEventIdMeta = const VerificationMeta(
+    'opaqueEventId',
+  );
+  @override
+  late final GeneratedColumn<String> opaqueEventId = GeneratedColumn<String>(
+    'opaque_event_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _senderUserIdMeta = const VerificationMeta(
+    'senderUserId',
+  );
+  @override
+  late final GeneratedColumn<String> senderUserId = GeneratedColumn<String>(
+    'sender_user_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _senderDeviceIdMeta = const VerificationMeta(
+    'senderDeviceId',
+  );
+  @override
+  late final GeneratedColumn<String> senderDeviceId = GeneratedColumn<String>(
+    'sender_device_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _sessionIdMeta = const VerificationMeta(
+    'sessionId',
+  );
+  @override
+  late final GeneratedColumn<Uint8List> sessionId = GeneratedColumn<Uint8List>(
+    'session_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.blob,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _replayMarkerMeta = const VerificationMeta(
+    'replayMarker',
+  );
+  @override
+  late final GeneratedColumn<Uint8List> replayMarker =
+      GeneratedColumn<Uint8List>(
+        'replay_marker',
+        aliasedName,
+        false,
+        type: DriftSqlType.blob,
+        requiredDuringInsert: true,
+      );
+  static const VerificationMeta _openedOpaquePayloadMeta =
+      const VerificationMeta('openedOpaquePayload');
+  @override
+  late final GeneratedColumn<Uint8List> openedOpaquePayload =
+      GeneratedColumn<Uint8List>(
+        'opened_opaque_payload',
+        aliasedName,
+        false,
+        type: DriftSqlType.blob,
+        requiredDuringInsert: true,
+      );
+  static const VerificationMeta _applicationAppliedMeta =
+      const VerificationMeta('applicationApplied');
+  @override
+  late final GeneratedColumn<bool> applicationApplied = GeneratedColumn<bool>(
+    'application_applied',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("application_applied" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _committedAtMeta = const VerificationMeta(
+    'committedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> committedAt = GeneratedColumn<DateTime>(
+    'committed_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    envelopeId,
+    opaqueEventId,
+    senderUserId,
+    senderDeviceId,
+    sessionId,
+    replayMarker,
+    openedOpaquePayload,
+    applicationApplied,
+    committedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'pairwise_opened_payloads';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<PairwiseOpenedPayload> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('envelope_id')) {
+      context.handle(
+        _envelopeIdMeta,
+        envelopeId.isAcceptableOrUnknown(data['envelope_id']!, _envelopeIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_envelopeIdMeta);
+    }
+    if (data.containsKey('opaque_event_id')) {
+      context.handle(
+        _opaqueEventIdMeta,
+        opaqueEventId.isAcceptableOrUnknown(
+          data['opaque_event_id']!,
+          _opaqueEventIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_opaqueEventIdMeta);
+    }
+    if (data.containsKey('sender_user_id')) {
+      context.handle(
+        _senderUserIdMeta,
+        senderUserId.isAcceptableOrUnknown(
+          data['sender_user_id']!,
+          _senderUserIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_senderUserIdMeta);
+    }
+    if (data.containsKey('sender_device_id')) {
+      context.handle(
+        _senderDeviceIdMeta,
+        senderDeviceId.isAcceptableOrUnknown(
+          data['sender_device_id']!,
+          _senderDeviceIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_senderDeviceIdMeta);
+    }
+    if (data.containsKey('session_id')) {
+      context.handle(
+        _sessionIdMeta,
+        sessionId.isAcceptableOrUnknown(data['session_id']!, _sessionIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_sessionIdMeta);
+    }
+    if (data.containsKey('replay_marker')) {
+      context.handle(
+        _replayMarkerMeta,
+        replayMarker.isAcceptableOrUnknown(
+          data['replay_marker']!,
+          _replayMarkerMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_replayMarkerMeta);
+    }
+    if (data.containsKey('opened_opaque_payload')) {
+      context.handle(
+        _openedOpaquePayloadMeta,
+        openedOpaquePayload.isAcceptableOrUnknown(
+          data['opened_opaque_payload']!,
+          _openedOpaquePayloadMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_openedOpaquePayloadMeta);
+    }
+    if (data.containsKey('application_applied')) {
+      context.handle(
+        _applicationAppliedMeta,
+        applicationApplied.isAcceptableOrUnknown(
+          data['application_applied']!,
+          _applicationAppliedMeta,
+        ),
+      );
+    }
+    if (data.containsKey('committed_at')) {
+      context.handle(
+        _committedAtMeta,
+        committedAt.isAcceptableOrUnknown(
+          data['committed_at']!,
+          _committedAtMeta,
+        ),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {envelopeId};
+  @override
+  PairwiseOpenedPayload map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return PairwiseOpenedPayload(
+      envelopeId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}envelope_id'],
+      )!,
+      opaqueEventId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}opaque_event_id'],
+      )!,
+      senderUserId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}sender_user_id'],
+      )!,
+      senderDeviceId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}sender_device_id'],
+      )!,
+      sessionId: attachedDatabase.typeMapping.read(
+        DriftSqlType.blob,
+        data['${effectivePrefix}session_id'],
+      )!,
+      replayMarker: attachedDatabase.typeMapping.read(
+        DriftSqlType.blob,
+        data['${effectivePrefix}replay_marker'],
+      )!,
+      openedOpaquePayload: attachedDatabase.typeMapping.read(
+        DriftSqlType.blob,
+        data['${effectivePrefix}opened_opaque_payload'],
+      )!,
+      applicationApplied: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}application_applied'],
+      )!,
+      committedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}committed_at'],
+      )!,
+    );
+  }
+
+  @override
+  $PairwiseOpenedPayloadsTable createAlias(String alias) {
+    return $PairwiseOpenedPayloadsTable(attachedDatabase, alias);
+  }
+}
+
+class PairwiseOpenedPayload extends DataClass
+    implements Insertable<PairwiseOpenedPayload> {
+  final String envelopeId;
+  final String opaqueEventId;
+  final String senderUserId;
+  final String senderDeviceId;
+  final Uint8List sessionId;
+  final Uint8List replayMarker;
+  final Uint8List openedOpaquePayload;
+  final bool applicationApplied;
+  final DateTime committedAt;
+  const PairwiseOpenedPayload({
+    required this.envelopeId,
+    required this.opaqueEventId,
+    required this.senderUserId,
+    required this.senderDeviceId,
+    required this.sessionId,
+    required this.replayMarker,
+    required this.openedOpaquePayload,
+    required this.applicationApplied,
+    required this.committedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['envelope_id'] = Variable<String>(envelopeId);
+    map['opaque_event_id'] = Variable<String>(opaqueEventId);
+    map['sender_user_id'] = Variable<String>(senderUserId);
+    map['sender_device_id'] = Variable<String>(senderDeviceId);
+    map['session_id'] = Variable<Uint8List>(sessionId);
+    map['replay_marker'] = Variable<Uint8List>(replayMarker);
+    map['opened_opaque_payload'] = Variable<Uint8List>(openedOpaquePayload);
+    map['application_applied'] = Variable<bool>(applicationApplied);
+    map['committed_at'] = Variable<DateTime>(committedAt);
+    return map;
+  }
+
+  PairwiseOpenedPayloadsCompanion toCompanion(bool nullToAbsent) {
+    return PairwiseOpenedPayloadsCompanion(
+      envelopeId: Value(envelopeId),
+      opaqueEventId: Value(opaqueEventId),
+      senderUserId: Value(senderUserId),
+      senderDeviceId: Value(senderDeviceId),
+      sessionId: Value(sessionId),
+      replayMarker: Value(replayMarker),
+      openedOpaquePayload: Value(openedOpaquePayload),
+      applicationApplied: Value(applicationApplied),
+      committedAt: Value(committedAt),
+    );
+  }
+
+  factory PairwiseOpenedPayload.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return PairwiseOpenedPayload(
+      envelopeId: serializer.fromJson<String>(json['envelopeId']),
+      opaqueEventId: serializer.fromJson<String>(json['opaqueEventId']),
+      senderUserId: serializer.fromJson<String>(json['senderUserId']),
+      senderDeviceId: serializer.fromJson<String>(json['senderDeviceId']),
+      sessionId: serializer.fromJson<Uint8List>(json['sessionId']),
+      replayMarker: serializer.fromJson<Uint8List>(json['replayMarker']),
+      openedOpaquePayload: serializer.fromJson<Uint8List>(
+        json['openedOpaquePayload'],
+      ),
+      applicationApplied: serializer.fromJson<bool>(json['applicationApplied']),
+      committedAt: serializer.fromJson<DateTime>(json['committedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'envelopeId': serializer.toJson<String>(envelopeId),
+      'opaqueEventId': serializer.toJson<String>(opaqueEventId),
+      'senderUserId': serializer.toJson<String>(senderUserId),
+      'senderDeviceId': serializer.toJson<String>(senderDeviceId),
+      'sessionId': serializer.toJson<Uint8List>(sessionId),
+      'replayMarker': serializer.toJson<Uint8List>(replayMarker),
+      'openedOpaquePayload': serializer.toJson<Uint8List>(openedOpaquePayload),
+      'applicationApplied': serializer.toJson<bool>(applicationApplied),
+      'committedAt': serializer.toJson<DateTime>(committedAt),
+    };
+  }
+
+  PairwiseOpenedPayload copyWith({
+    String? envelopeId,
+    String? opaqueEventId,
+    String? senderUserId,
+    String? senderDeviceId,
+    Uint8List? sessionId,
+    Uint8List? replayMarker,
+    Uint8List? openedOpaquePayload,
+    bool? applicationApplied,
+    DateTime? committedAt,
+  }) => PairwiseOpenedPayload(
+    envelopeId: envelopeId ?? this.envelopeId,
+    opaqueEventId: opaqueEventId ?? this.opaqueEventId,
+    senderUserId: senderUserId ?? this.senderUserId,
+    senderDeviceId: senderDeviceId ?? this.senderDeviceId,
+    sessionId: sessionId ?? this.sessionId,
+    replayMarker: replayMarker ?? this.replayMarker,
+    openedOpaquePayload: openedOpaquePayload ?? this.openedOpaquePayload,
+    applicationApplied: applicationApplied ?? this.applicationApplied,
+    committedAt: committedAt ?? this.committedAt,
+  );
+  PairwiseOpenedPayload copyWithCompanion(
+    PairwiseOpenedPayloadsCompanion data,
+  ) {
+    return PairwiseOpenedPayload(
+      envelopeId: data.envelopeId.present
+          ? data.envelopeId.value
+          : this.envelopeId,
+      opaqueEventId: data.opaqueEventId.present
+          ? data.opaqueEventId.value
+          : this.opaqueEventId,
+      senderUserId: data.senderUserId.present
+          ? data.senderUserId.value
+          : this.senderUserId,
+      senderDeviceId: data.senderDeviceId.present
+          ? data.senderDeviceId.value
+          : this.senderDeviceId,
+      sessionId: data.sessionId.present ? data.sessionId.value : this.sessionId,
+      replayMarker: data.replayMarker.present
+          ? data.replayMarker.value
+          : this.replayMarker,
+      openedOpaquePayload: data.openedOpaquePayload.present
+          ? data.openedOpaquePayload.value
+          : this.openedOpaquePayload,
+      applicationApplied: data.applicationApplied.present
+          ? data.applicationApplied.value
+          : this.applicationApplied,
+      committedAt: data.committedAt.present
+          ? data.committedAt.value
+          : this.committedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('PairwiseOpenedPayload(')
+          ..write('envelopeId: $envelopeId, ')
+          ..write('opaqueEventId: $opaqueEventId, ')
+          ..write('senderUserId: $senderUserId, ')
+          ..write('senderDeviceId: $senderDeviceId, ')
+          ..write('sessionId: $sessionId, ')
+          ..write('replayMarker: $replayMarker, ')
+          ..write('openedOpaquePayload: $openedOpaquePayload, ')
+          ..write('applicationApplied: $applicationApplied, ')
+          ..write('committedAt: $committedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    envelopeId,
+    opaqueEventId,
+    senderUserId,
+    senderDeviceId,
+    $driftBlobEquality.hash(sessionId),
+    $driftBlobEquality.hash(replayMarker),
+    $driftBlobEquality.hash(openedOpaquePayload),
+    applicationApplied,
+    committedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is PairwiseOpenedPayload &&
+          other.envelopeId == this.envelopeId &&
+          other.opaqueEventId == this.opaqueEventId &&
+          other.senderUserId == this.senderUserId &&
+          other.senderDeviceId == this.senderDeviceId &&
+          $driftBlobEquality.equals(other.sessionId, this.sessionId) &&
+          $driftBlobEquality.equals(other.replayMarker, this.replayMarker) &&
+          $driftBlobEquality.equals(
+            other.openedOpaquePayload,
+            this.openedOpaquePayload,
+          ) &&
+          other.applicationApplied == this.applicationApplied &&
+          other.committedAt == this.committedAt);
+}
+
+class PairwiseOpenedPayloadsCompanion
+    extends UpdateCompanion<PairwiseOpenedPayload> {
+  final Value<String> envelopeId;
+  final Value<String> opaqueEventId;
+  final Value<String> senderUserId;
+  final Value<String> senderDeviceId;
+  final Value<Uint8List> sessionId;
+  final Value<Uint8List> replayMarker;
+  final Value<Uint8List> openedOpaquePayload;
+  final Value<bool> applicationApplied;
+  final Value<DateTime> committedAt;
+  final Value<int> rowid;
+  const PairwiseOpenedPayloadsCompanion({
+    this.envelopeId = const Value.absent(),
+    this.opaqueEventId = const Value.absent(),
+    this.senderUserId = const Value.absent(),
+    this.senderDeviceId = const Value.absent(),
+    this.sessionId = const Value.absent(),
+    this.replayMarker = const Value.absent(),
+    this.openedOpaquePayload = const Value.absent(),
+    this.applicationApplied = const Value.absent(),
+    this.committedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  PairwiseOpenedPayloadsCompanion.insert({
+    required String envelopeId,
+    required String opaqueEventId,
+    required String senderUserId,
+    required String senderDeviceId,
+    required Uint8List sessionId,
+    required Uint8List replayMarker,
+    required Uint8List openedOpaquePayload,
+    this.applicationApplied = const Value.absent(),
+    this.committedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : envelopeId = Value(envelopeId),
+       opaqueEventId = Value(opaqueEventId),
+       senderUserId = Value(senderUserId),
+       senderDeviceId = Value(senderDeviceId),
+       sessionId = Value(sessionId),
+       replayMarker = Value(replayMarker),
+       openedOpaquePayload = Value(openedOpaquePayload);
+  static Insertable<PairwiseOpenedPayload> custom({
+    Expression<String>? envelopeId,
+    Expression<String>? opaqueEventId,
+    Expression<String>? senderUserId,
+    Expression<String>? senderDeviceId,
+    Expression<Uint8List>? sessionId,
+    Expression<Uint8List>? replayMarker,
+    Expression<Uint8List>? openedOpaquePayload,
+    Expression<bool>? applicationApplied,
+    Expression<DateTime>? committedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (envelopeId != null) 'envelope_id': envelopeId,
+      if (opaqueEventId != null) 'opaque_event_id': opaqueEventId,
+      if (senderUserId != null) 'sender_user_id': senderUserId,
+      if (senderDeviceId != null) 'sender_device_id': senderDeviceId,
+      if (sessionId != null) 'session_id': sessionId,
+      if (replayMarker != null) 'replay_marker': replayMarker,
+      if (openedOpaquePayload != null)
+        'opened_opaque_payload': openedOpaquePayload,
+      if (applicationApplied != null) 'application_applied': applicationApplied,
+      if (committedAt != null) 'committed_at': committedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  PairwiseOpenedPayloadsCompanion copyWith({
+    Value<String>? envelopeId,
+    Value<String>? opaqueEventId,
+    Value<String>? senderUserId,
+    Value<String>? senderDeviceId,
+    Value<Uint8List>? sessionId,
+    Value<Uint8List>? replayMarker,
+    Value<Uint8List>? openedOpaquePayload,
+    Value<bool>? applicationApplied,
+    Value<DateTime>? committedAt,
+    Value<int>? rowid,
+  }) {
+    return PairwiseOpenedPayloadsCompanion(
+      envelopeId: envelopeId ?? this.envelopeId,
+      opaqueEventId: opaqueEventId ?? this.opaqueEventId,
+      senderUserId: senderUserId ?? this.senderUserId,
+      senderDeviceId: senderDeviceId ?? this.senderDeviceId,
+      sessionId: sessionId ?? this.sessionId,
+      replayMarker: replayMarker ?? this.replayMarker,
+      openedOpaquePayload: openedOpaquePayload ?? this.openedOpaquePayload,
+      applicationApplied: applicationApplied ?? this.applicationApplied,
+      committedAt: committedAt ?? this.committedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (envelopeId.present) {
+      map['envelope_id'] = Variable<String>(envelopeId.value);
+    }
+    if (opaqueEventId.present) {
+      map['opaque_event_id'] = Variable<String>(opaqueEventId.value);
+    }
+    if (senderUserId.present) {
+      map['sender_user_id'] = Variable<String>(senderUserId.value);
+    }
+    if (senderDeviceId.present) {
+      map['sender_device_id'] = Variable<String>(senderDeviceId.value);
+    }
+    if (sessionId.present) {
+      map['session_id'] = Variable<Uint8List>(sessionId.value);
+    }
+    if (replayMarker.present) {
+      map['replay_marker'] = Variable<Uint8List>(replayMarker.value);
+    }
+    if (openedOpaquePayload.present) {
+      map['opened_opaque_payload'] = Variable<Uint8List>(
+        openedOpaquePayload.value,
+      );
+    }
+    if (applicationApplied.present) {
+      map['application_applied'] = Variable<bool>(applicationApplied.value);
+    }
+    if (committedAt.present) {
+      map['committed_at'] = Variable<DateTime>(committedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('PairwiseOpenedPayloadsCompanion(')
+          ..write('envelopeId: $envelopeId, ')
+          ..write('opaqueEventId: $opaqueEventId, ')
+          ..write('senderUserId: $senderUserId, ')
+          ..write('senderDeviceId: $senderDeviceId, ')
+          ..write('sessionId: $sessionId, ')
+          ..write('replayMarker: $replayMarker, ')
+          ..write('openedOpaquePayload: $openedOpaquePayload, ')
+          ..write('applicationApplied: $applicationApplied, ')
+          ..write('committedAt: $committedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $PairwiseLocalApplicationsTable extends PairwiseLocalApplications
+    with TableInfo<$PairwiseLocalApplicationsTable, PairwiseLocalApplication> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $PairwiseLocalApplicationsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _operationIdMeta = const VerificationMeta(
+    'operationId',
+  );
+  @override
+  late final GeneratedColumn<String> operationId = GeneratedColumn<String>(
+    'operation_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _eventIdMeta = const VerificationMeta(
+    'eventId',
+  );
+  @override
+  late final GeneratedColumn<String> eventId = GeneratedColumn<String>(
+    'event_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways('UNIQUE'),
+  );
+  static const VerificationMeta _localDeviceIdMeta = const VerificationMeta(
+    'localDeviceId',
+  );
+  @override
+  late final GeneratedColumn<String> localDeviceId = GeneratedColumn<String>(
+    'local_device_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _openedOpaquePayloadMeta =
+      const VerificationMeta('openedOpaquePayload');
+  @override
+  late final GeneratedColumn<Uint8List> openedOpaquePayload =
+      GeneratedColumn<Uint8List>(
+        'opened_opaque_payload',
+        aliasedName,
+        false,
+        type: DriftSqlType.blob,
+        requiredDuringInsert: true,
+      );
+  static const VerificationMeta _applicationAppliedMeta =
+      const VerificationMeta('applicationApplied');
+  @override
+  late final GeneratedColumn<bool> applicationApplied = GeneratedColumn<bool>(
+    'application_applied',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("application_applied" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _committedAtMeta = const VerificationMeta(
+    'committedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> committedAt = GeneratedColumn<DateTime>(
+    'committed_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    operationId,
+    eventId,
+    localDeviceId,
+    openedOpaquePayload,
+    applicationApplied,
+    committedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'pairwise_local_applications';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<PairwiseLocalApplication> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('operation_id')) {
+      context.handle(
+        _operationIdMeta,
+        operationId.isAcceptableOrUnknown(
+          data['operation_id']!,
+          _operationIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_operationIdMeta);
+    }
+    if (data.containsKey('event_id')) {
+      context.handle(
+        _eventIdMeta,
+        eventId.isAcceptableOrUnknown(data['event_id']!, _eventIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_eventIdMeta);
+    }
+    if (data.containsKey('local_device_id')) {
+      context.handle(
+        _localDeviceIdMeta,
+        localDeviceId.isAcceptableOrUnknown(
+          data['local_device_id']!,
+          _localDeviceIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_localDeviceIdMeta);
+    }
+    if (data.containsKey('opened_opaque_payload')) {
+      context.handle(
+        _openedOpaquePayloadMeta,
+        openedOpaquePayload.isAcceptableOrUnknown(
+          data['opened_opaque_payload']!,
+          _openedOpaquePayloadMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_openedOpaquePayloadMeta);
+    }
+    if (data.containsKey('application_applied')) {
+      context.handle(
+        _applicationAppliedMeta,
+        applicationApplied.isAcceptableOrUnknown(
+          data['application_applied']!,
+          _applicationAppliedMeta,
+        ),
+      );
+    }
+    if (data.containsKey('committed_at')) {
+      context.handle(
+        _committedAtMeta,
+        committedAt.isAcceptableOrUnknown(
+          data['committed_at']!,
+          _committedAtMeta,
+        ),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {operationId};
+  @override
+  PairwiseLocalApplication map(
+    Map<String, dynamic> data, {
+    String? tablePrefix,
+  }) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return PairwiseLocalApplication(
+      operationId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}operation_id'],
+      )!,
+      eventId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}event_id'],
+      )!,
+      localDeviceId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}local_device_id'],
+      )!,
+      openedOpaquePayload: attachedDatabase.typeMapping.read(
+        DriftSqlType.blob,
+        data['${effectivePrefix}opened_opaque_payload'],
+      )!,
+      applicationApplied: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}application_applied'],
+      )!,
+      committedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}committed_at'],
+      )!,
+    );
+  }
+
+  @override
+  $PairwiseLocalApplicationsTable createAlias(String alias) {
+    return $PairwiseLocalApplicationsTable(attachedDatabase, alias);
+  }
+}
+
+class PairwiseLocalApplication extends DataClass
+    implements Insertable<PairwiseLocalApplication> {
+  final String operationId;
+  final String eventId;
+  final String localDeviceId;
+  final Uint8List openedOpaquePayload;
+  final bool applicationApplied;
+  final DateTime committedAt;
+  const PairwiseLocalApplication({
+    required this.operationId,
+    required this.eventId,
+    required this.localDeviceId,
+    required this.openedOpaquePayload,
+    required this.applicationApplied,
+    required this.committedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['operation_id'] = Variable<String>(operationId);
+    map['event_id'] = Variable<String>(eventId);
+    map['local_device_id'] = Variable<String>(localDeviceId);
+    map['opened_opaque_payload'] = Variable<Uint8List>(openedOpaquePayload);
+    map['application_applied'] = Variable<bool>(applicationApplied);
+    map['committed_at'] = Variable<DateTime>(committedAt);
+    return map;
+  }
+
+  PairwiseLocalApplicationsCompanion toCompanion(bool nullToAbsent) {
+    return PairwiseLocalApplicationsCompanion(
+      operationId: Value(operationId),
+      eventId: Value(eventId),
+      localDeviceId: Value(localDeviceId),
+      openedOpaquePayload: Value(openedOpaquePayload),
+      applicationApplied: Value(applicationApplied),
+      committedAt: Value(committedAt),
+    );
+  }
+
+  factory PairwiseLocalApplication.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return PairwiseLocalApplication(
+      operationId: serializer.fromJson<String>(json['operationId']),
+      eventId: serializer.fromJson<String>(json['eventId']),
+      localDeviceId: serializer.fromJson<String>(json['localDeviceId']),
+      openedOpaquePayload: serializer.fromJson<Uint8List>(
+        json['openedOpaquePayload'],
+      ),
+      applicationApplied: serializer.fromJson<bool>(json['applicationApplied']),
+      committedAt: serializer.fromJson<DateTime>(json['committedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'operationId': serializer.toJson<String>(operationId),
+      'eventId': serializer.toJson<String>(eventId),
+      'localDeviceId': serializer.toJson<String>(localDeviceId),
+      'openedOpaquePayload': serializer.toJson<Uint8List>(openedOpaquePayload),
+      'applicationApplied': serializer.toJson<bool>(applicationApplied),
+      'committedAt': serializer.toJson<DateTime>(committedAt),
+    };
+  }
+
+  PairwiseLocalApplication copyWith({
+    String? operationId,
+    String? eventId,
+    String? localDeviceId,
+    Uint8List? openedOpaquePayload,
+    bool? applicationApplied,
+    DateTime? committedAt,
+  }) => PairwiseLocalApplication(
+    operationId: operationId ?? this.operationId,
+    eventId: eventId ?? this.eventId,
+    localDeviceId: localDeviceId ?? this.localDeviceId,
+    openedOpaquePayload: openedOpaquePayload ?? this.openedOpaquePayload,
+    applicationApplied: applicationApplied ?? this.applicationApplied,
+    committedAt: committedAt ?? this.committedAt,
+  );
+  PairwiseLocalApplication copyWithCompanion(
+    PairwiseLocalApplicationsCompanion data,
+  ) {
+    return PairwiseLocalApplication(
+      operationId: data.operationId.present
+          ? data.operationId.value
+          : this.operationId,
+      eventId: data.eventId.present ? data.eventId.value : this.eventId,
+      localDeviceId: data.localDeviceId.present
+          ? data.localDeviceId.value
+          : this.localDeviceId,
+      openedOpaquePayload: data.openedOpaquePayload.present
+          ? data.openedOpaquePayload.value
+          : this.openedOpaquePayload,
+      applicationApplied: data.applicationApplied.present
+          ? data.applicationApplied.value
+          : this.applicationApplied,
+      committedAt: data.committedAt.present
+          ? data.committedAt.value
+          : this.committedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('PairwiseLocalApplication(')
+          ..write('operationId: $operationId, ')
+          ..write('eventId: $eventId, ')
+          ..write('localDeviceId: $localDeviceId, ')
+          ..write('openedOpaquePayload: $openedOpaquePayload, ')
+          ..write('applicationApplied: $applicationApplied, ')
+          ..write('committedAt: $committedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    operationId,
+    eventId,
+    localDeviceId,
+    $driftBlobEquality.hash(openedOpaquePayload),
+    applicationApplied,
+    committedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is PairwiseLocalApplication &&
+          other.operationId == this.operationId &&
+          other.eventId == this.eventId &&
+          other.localDeviceId == this.localDeviceId &&
+          $driftBlobEquality.equals(
+            other.openedOpaquePayload,
+            this.openedOpaquePayload,
+          ) &&
+          other.applicationApplied == this.applicationApplied &&
+          other.committedAt == this.committedAt);
+}
+
+class PairwiseLocalApplicationsCompanion
+    extends UpdateCompanion<PairwiseLocalApplication> {
+  final Value<String> operationId;
+  final Value<String> eventId;
+  final Value<String> localDeviceId;
+  final Value<Uint8List> openedOpaquePayload;
+  final Value<bool> applicationApplied;
+  final Value<DateTime> committedAt;
+  final Value<int> rowid;
+  const PairwiseLocalApplicationsCompanion({
+    this.operationId = const Value.absent(),
+    this.eventId = const Value.absent(),
+    this.localDeviceId = const Value.absent(),
+    this.openedOpaquePayload = const Value.absent(),
+    this.applicationApplied = const Value.absent(),
+    this.committedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  PairwiseLocalApplicationsCompanion.insert({
+    required String operationId,
+    required String eventId,
+    required String localDeviceId,
+    required Uint8List openedOpaquePayload,
+    this.applicationApplied = const Value.absent(),
+    this.committedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : operationId = Value(operationId),
+       eventId = Value(eventId),
+       localDeviceId = Value(localDeviceId),
+       openedOpaquePayload = Value(openedOpaquePayload);
+  static Insertable<PairwiseLocalApplication> custom({
+    Expression<String>? operationId,
+    Expression<String>? eventId,
+    Expression<String>? localDeviceId,
+    Expression<Uint8List>? openedOpaquePayload,
+    Expression<bool>? applicationApplied,
+    Expression<DateTime>? committedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (operationId != null) 'operation_id': operationId,
+      if (eventId != null) 'event_id': eventId,
+      if (localDeviceId != null) 'local_device_id': localDeviceId,
+      if (openedOpaquePayload != null)
+        'opened_opaque_payload': openedOpaquePayload,
+      if (applicationApplied != null) 'application_applied': applicationApplied,
+      if (committedAt != null) 'committed_at': committedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  PairwiseLocalApplicationsCompanion copyWith({
+    Value<String>? operationId,
+    Value<String>? eventId,
+    Value<String>? localDeviceId,
+    Value<Uint8List>? openedOpaquePayload,
+    Value<bool>? applicationApplied,
+    Value<DateTime>? committedAt,
+    Value<int>? rowid,
+  }) {
+    return PairwiseLocalApplicationsCompanion(
+      operationId: operationId ?? this.operationId,
+      eventId: eventId ?? this.eventId,
+      localDeviceId: localDeviceId ?? this.localDeviceId,
+      openedOpaquePayload: openedOpaquePayload ?? this.openedOpaquePayload,
+      applicationApplied: applicationApplied ?? this.applicationApplied,
+      committedAt: committedAt ?? this.committedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (operationId.present) {
+      map['operation_id'] = Variable<String>(operationId.value);
+    }
+    if (eventId.present) {
+      map['event_id'] = Variable<String>(eventId.value);
+    }
+    if (localDeviceId.present) {
+      map['local_device_id'] = Variable<String>(localDeviceId.value);
+    }
+    if (openedOpaquePayload.present) {
+      map['opened_opaque_payload'] = Variable<Uint8List>(
+        openedOpaquePayload.value,
+      );
+    }
+    if (applicationApplied.present) {
+      map['application_applied'] = Variable<bool>(applicationApplied.value);
+    }
+    if (committedAt.present) {
+      map['committed_at'] = Variable<DateTime>(committedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('PairwiseLocalApplicationsCompanion(')
+          ..write('operationId: $operationId, ')
+          ..write('eventId: $eventId, ')
+          ..write('localDeviceId: $localDeviceId, ')
+          ..write('openedOpaquePayload: $openedOpaquePayload, ')
+          ..write('applicationApplied: $applicationApplied, ')
+          ..write('committedAt: $committedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $PairwiseConsumedPrekeysTable extends PairwiseConsumedPrekeys
+    with TableInfo<$PairwiseConsumedPrekeysTable, PairwiseConsumedPrekey> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $PairwiseConsumedPrekeysTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _localDeviceIdMeta = const VerificationMeta(
+    'localDeviceId',
+  );
+  @override
+  late final GeneratedColumn<String> localDeviceId = GeneratedColumn<String>(
+    'local_device_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _algorithmMeta = const VerificationMeta(
+    'algorithm',
+  );
+  @override
+  late final GeneratedColumn<int> algorithm = GeneratedColumn<int>(
+    'algorithm',
+    aliasedName,
+    false,
+    check: () => ComparableExpr(algorithm).isBetweenValues(0, 1),
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _keyIdMeta = const VerificationMeta('keyId');
+  @override
+  late final GeneratedColumn<int> keyId = GeneratedColumn<int>(
+    'key_id',
+    aliasedName,
+    false,
+    check: () => ComparableExpr(keyId).isBiggerOrEqualValue(0),
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _firstEnvelopeIdMeta = const VerificationMeta(
+    'firstEnvelopeId',
+  );
+  @override
+  late final GeneratedColumn<String> firstEnvelopeId = GeneratedColumn<String>(
+    'first_envelope_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _consumedAtMeta = const VerificationMeta(
+    'consumedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> consumedAt = GeneratedColumn<DateTime>(
+    'consumed_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    localDeviceId,
+    algorithm,
+    keyId,
+    firstEnvelopeId,
+    consumedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'pairwise_consumed_prekeys';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<PairwiseConsumedPrekey> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('local_device_id')) {
+      context.handle(
+        _localDeviceIdMeta,
+        localDeviceId.isAcceptableOrUnknown(
+          data['local_device_id']!,
+          _localDeviceIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_localDeviceIdMeta);
+    }
+    if (data.containsKey('algorithm')) {
+      context.handle(
+        _algorithmMeta,
+        algorithm.isAcceptableOrUnknown(data['algorithm']!, _algorithmMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_algorithmMeta);
+    }
+    if (data.containsKey('key_id')) {
+      context.handle(
+        _keyIdMeta,
+        keyId.isAcceptableOrUnknown(data['key_id']!, _keyIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_keyIdMeta);
+    }
+    if (data.containsKey('first_envelope_id')) {
+      context.handle(
+        _firstEnvelopeIdMeta,
+        firstEnvelopeId.isAcceptableOrUnknown(
+          data['first_envelope_id']!,
+          _firstEnvelopeIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_firstEnvelopeIdMeta);
+    }
+    if (data.containsKey('consumed_at')) {
+      context.handle(
+        _consumedAtMeta,
+        consumedAt.isAcceptableOrUnknown(data['consumed_at']!, _consumedAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {localDeviceId, algorithm, keyId};
+  @override
+  PairwiseConsumedPrekey map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return PairwiseConsumedPrekey(
+      localDeviceId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}local_device_id'],
+      )!,
+      algorithm: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}algorithm'],
+      )!,
+      keyId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}key_id'],
+      )!,
+      firstEnvelopeId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}first_envelope_id'],
+      )!,
+      consumedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}consumed_at'],
+      )!,
+    );
+  }
+
+  @override
+  $PairwiseConsumedPrekeysTable createAlias(String alias) {
+    return $PairwiseConsumedPrekeysTable(attachedDatabase, alias);
+  }
+}
+
+class PairwiseConsumedPrekey extends DataClass
+    implements Insertable<PairwiseConsumedPrekey> {
+  final String localDeviceId;
+  final int algorithm;
+  final int keyId;
+  final String firstEnvelopeId;
+  final DateTime consumedAt;
+  const PairwiseConsumedPrekey({
+    required this.localDeviceId,
+    required this.algorithm,
+    required this.keyId,
+    required this.firstEnvelopeId,
+    required this.consumedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['local_device_id'] = Variable<String>(localDeviceId);
+    map['algorithm'] = Variable<int>(algorithm);
+    map['key_id'] = Variable<int>(keyId);
+    map['first_envelope_id'] = Variable<String>(firstEnvelopeId);
+    map['consumed_at'] = Variable<DateTime>(consumedAt);
+    return map;
+  }
+
+  PairwiseConsumedPrekeysCompanion toCompanion(bool nullToAbsent) {
+    return PairwiseConsumedPrekeysCompanion(
+      localDeviceId: Value(localDeviceId),
+      algorithm: Value(algorithm),
+      keyId: Value(keyId),
+      firstEnvelopeId: Value(firstEnvelopeId),
+      consumedAt: Value(consumedAt),
+    );
+  }
+
+  factory PairwiseConsumedPrekey.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return PairwiseConsumedPrekey(
+      localDeviceId: serializer.fromJson<String>(json['localDeviceId']),
+      algorithm: serializer.fromJson<int>(json['algorithm']),
+      keyId: serializer.fromJson<int>(json['keyId']),
+      firstEnvelopeId: serializer.fromJson<String>(json['firstEnvelopeId']),
+      consumedAt: serializer.fromJson<DateTime>(json['consumedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'localDeviceId': serializer.toJson<String>(localDeviceId),
+      'algorithm': serializer.toJson<int>(algorithm),
+      'keyId': serializer.toJson<int>(keyId),
+      'firstEnvelopeId': serializer.toJson<String>(firstEnvelopeId),
+      'consumedAt': serializer.toJson<DateTime>(consumedAt),
+    };
+  }
+
+  PairwiseConsumedPrekey copyWith({
+    String? localDeviceId,
+    int? algorithm,
+    int? keyId,
+    String? firstEnvelopeId,
+    DateTime? consumedAt,
+  }) => PairwiseConsumedPrekey(
+    localDeviceId: localDeviceId ?? this.localDeviceId,
+    algorithm: algorithm ?? this.algorithm,
+    keyId: keyId ?? this.keyId,
+    firstEnvelopeId: firstEnvelopeId ?? this.firstEnvelopeId,
+    consumedAt: consumedAt ?? this.consumedAt,
+  );
+  PairwiseConsumedPrekey copyWithCompanion(
+    PairwiseConsumedPrekeysCompanion data,
+  ) {
+    return PairwiseConsumedPrekey(
+      localDeviceId: data.localDeviceId.present
+          ? data.localDeviceId.value
+          : this.localDeviceId,
+      algorithm: data.algorithm.present ? data.algorithm.value : this.algorithm,
+      keyId: data.keyId.present ? data.keyId.value : this.keyId,
+      firstEnvelopeId: data.firstEnvelopeId.present
+          ? data.firstEnvelopeId.value
+          : this.firstEnvelopeId,
+      consumedAt: data.consumedAt.present
+          ? data.consumedAt.value
+          : this.consumedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('PairwiseConsumedPrekey(')
+          ..write('localDeviceId: $localDeviceId, ')
+          ..write('algorithm: $algorithm, ')
+          ..write('keyId: $keyId, ')
+          ..write('firstEnvelopeId: $firstEnvelopeId, ')
+          ..write('consumedAt: $consumedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode =>
+      Object.hash(localDeviceId, algorithm, keyId, firstEnvelopeId, consumedAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is PairwiseConsumedPrekey &&
+          other.localDeviceId == this.localDeviceId &&
+          other.algorithm == this.algorithm &&
+          other.keyId == this.keyId &&
+          other.firstEnvelopeId == this.firstEnvelopeId &&
+          other.consumedAt == this.consumedAt);
+}
+
+class PairwiseConsumedPrekeysCompanion
+    extends UpdateCompanion<PairwiseConsumedPrekey> {
+  final Value<String> localDeviceId;
+  final Value<int> algorithm;
+  final Value<int> keyId;
+  final Value<String> firstEnvelopeId;
+  final Value<DateTime> consumedAt;
+  final Value<int> rowid;
+  const PairwiseConsumedPrekeysCompanion({
+    this.localDeviceId = const Value.absent(),
+    this.algorithm = const Value.absent(),
+    this.keyId = const Value.absent(),
+    this.firstEnvelopeId = const Value.absent(),
+    this.consumedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  PairwiseConsumedPrekeysCompanion.insert({
+    required String localDeviceId,
+    required int algorithm,
+    required int keyId,
+    required String firstEnvelopeId,
+    this.consumedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : localDeviceId = Value(localDeviceId),
+       algorithm = Value(algorithm),
+       keyId = Value(keyId),
+       firstEnvelopeId = Value(firstEnvelopeId);
+  static Insertable<PairwiseConsumedPrekey> custom({
+    Expression<String>? localDeviceId,
+    Expression<int>? algorithm,
+    Expression<int>? keyId,
+    Expression<String>? firstEnvelopeId,
+    Expression<DateTime>? consumedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (localDeviceId != null) 'local_device_id': localDeviceId,
+      if (algorithm != null) 'algorithm': algorithm,
+      if (keyId != null) 'key_id': keyId,
+      if (firstEnvelopeId != null) 'first_envelope_id': firstEnvelopeId,
+      if (consumedAt != null) 'consumed_at': consumedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  PairwiseConsumedPrekeysCompanion copyWith({
+    Value<String>? localDeviceId,
+    Value<int>? algorithm,
+    Value<int>? keyId,
+    Value<String>? firstEnvelopeId,
+    Value<DateTime>? consumedAt,
+    Value<int>? rowid,
+  }) {
+    return PairwiseConsumedPrekeysCompanion(
+      localDeviceId: localDeviceId ?? this.localDeviceId,
+      algorithm: algorithm ?? this.algorithm,
+      keyId: keyId ?? this.keyId,
+      firstEnvelopeId: firstEnvelopeId ?? this.firstEnvelopeId,
+      consumedAt: consumedAt ?? this.consumedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (localDeviceId.present) {
+      map['local_device_id'] = Variable<String>(localDeviceId.value);
+    }
+    if (algorithm.present) {
+      map['algorithm'] = Variable<int>(algorithm.value);
+    }
+    if (keyId.present) {
+      map['key_id'] = Variable<int>(keyId.value);
+    }
+    if (firstEnvelopeId.present) {
+      map['first_envelope_id'] = Variable<String>(firstEnvelopeId.value);
+    }
+    if (consumedAt.present) {
+      map['consumed_at'] = Variable<DateTime>(consumedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('PairwiseConsumedPrekeysCompanion(')
+          ..write('localDeviceId: $localDeviceId, ')
+          ..write('algorithm: $algorithm, ')
+          ..write('keyId: $keyId, ')
+          ..write('firstEnvelopeId: $firstEnvelopeId, ')
+          ..write('consumedAt: $consumedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 class $StaleDeviceRefreshRequestsTable extends StaleDeviceRefreshRequests
     with
         TableInfo<$StaleDeviceRefreshRequestsTable, StaleDeviceRefreshRequest> {
@@ -11874,7 +15868,11 @@ abstract class _$LocalDatabase extends GeneratedDatabase {
   late final $PairwiseSessionsTable pairwiseSessions = $PairwiseSessionsTable(
     this,
   );
+  late final $PairwiseSessionAlternatesTable pairwiseSessionAlternates =
+      $PairwiseSessionAlternatesTable(this);
   late final $PrekeysTable prekeys = $PrekeysTable(this);
+  late final $PrekeyMaintenancePlansTable prekeyMaintenancePlans =
+      $PrekeyMaintenancePlansTable(this);
   late final $MlsGroupsTable mlsGroups = $MlsGroupsTable(this);
   late final $ConversationsTable conversations = $ConversationsTable(this);
   late final $MembershipsTable memberships = $MembershipsTable(this);
@@ -11887,6 +15885,14 @@ abstract class _$LocalDatabase extends GeneratedDatabase {
   );
   late final $InboxEventDeduplicationsTable inboxEventDeduplications =
       $InboxEventDeduplicationsTable(this);
+  late final $PairwiseReplayMarkersTable pairwiseReplayMarkers =
+      $PairwiseReplayMarkersTable(this);
+  late final $PairwiseOpenedPayloadsTable pairwiseOpenedPayloads =
+      $PairwiseOpenedPayloadsTable(this);
+  late final $PairwiseLocalApplicationsTable pairwiseLocalApplications =
+      $PairwiseLocalApplicationsTable(this);
+  late final $PairwiseConsumedPrekeysTable pairwiseConsumedPrekeys =
+      $PairwiseConsumedPrekeysTable(this);
   late final $StaleDeviceRefreshRequestsTable staleDeviceRefreshRequests =
       $StaleDeviceRefreshRequestsTable(this);
   late final $ReceiptsTable receipts = $ReceiptsTable(this);
@@ -11916,7 +15922,9 @@ abstract class _$LocalDatabase extends GeneratedDatabase {
     devices,
     deviceLogRecords,
     pairwiseSessions,
+    pairwiseSessionAlternates,
     prekeys,
+    prekeyMaintenancePlans,
     mlsGroups,
     conversations,
     memberships,
@@ -11926,6 +15934,10 @@ abstract class _$LocalDatabase extends GeneratedDatabase {
     inboxEnvelopes,
     outboxOperations,
     inboxEventDeduplications,
+    pairwiseReplayMarkers,
+    pairwiseOpenedPayloads,
+    pairwiseLocalApplications,
+    pairwiseConsumedPrekeys,
     staleDeviceRefreshRequests,
     receipts,
     voiceRooms,
@@ -12257,6 +16269,7 @@ typedef $$SecureSecretsTableCreateCompanionBuilder =
       required int kind,
       required Uint8List wrappedCiphertextOrOpaqueHandle,
       required int formatVersion,
+      Value<int> stateRevision,
       Value<int> rowid,
     });
 typedef $$SecureSecretsTableUpdateCompanionBuilder =
@@ -12266,6 +16279,7 @@ typedef $$SecureSecretsTableUpdateCompanionBuilder =
       Value<int> kind,
       Value<Uint8List> wrappedCiphertextOrOpaqueHandle,
       Value<int> formatVersion,
+      Value<int> stateRevision,
       Value<int> rowid,
     });
 
@@ -12301,6 +16315,11 @@ class $$SecureSecretsTableFilterComposer
 
   ColumnFilters<int> get formatVersion => $composableBuilder(
     column: $table.formatVersion,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get stateRevision => $composableBuilder(
+    column: $table.stateRevision,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -12339,6 +16358,11 @@ class $$SecureSecretsTableOrderingComposer
     column: $table.formatVersion,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<int> get stateRevision => $composableBuilder(
+    column: $table.stateRevision,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$SecureSecretsTableAnnotationComposer
@@ -12367,6 +16391,11 @@ class $$SecureSecretsTableAnnotationComposer
 
   GeneratedColumn<int> get formatVersion => $composableBuilder(
     column: $table.formatVersion,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get stateRevision => $composableBuilder(
+    column: $table.stateRevision,
     builder: (column) => column,
   );
 }
@@ -12410,6 +16439,7 @@ class $$SecureSecretsTableTableManager
                 Value<Uint8List> wrappedCiphertextOrOpaqueHandle =
                     const Value.absent(),
                 Value<int> formatVersion = const Value.absent(),
+                Value<int> stateRevision = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => SecureSecretsCompanion(
                 createdAt: createdAt,
@@ -12418,6 +16448,7 @@ class $$SecureSecretsTableTableManager
                 wrappedCiphertextOrOpaqueHandle:
                     wrappedCiphertextOrOpaqueHandle,
                 formatVersion: formatVersion,
+                stateRevision: stateRevision,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -12427,6 +16458,7 @@ class $$SecureSecretsTableTableManager
                 required int kind,
                 required Uint8List wrappedCiphertextOrOpaqueHandle,
                 required int formatVersion,
+                Value<int> stateRevision = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => SecureSecretsCompanion.insert(
                 createdAt: createdAt,
@@ -12435,6 +16467,7 @@ class $$SecureSecretsTableTableManager
                 wrappedCiphertextOrOpaqueHandle:
                     wrappedCiphertextOrOpaqueHandle,
                 formatVersion: formatVersion,
+                stateRevision: stateRevision,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
@@ -14000,6 +18033,7 @@ typedef $$DevicesTableCreateCompanionBuilder =
       Value<Uint8List?> labelCiphertext,
       required int revocationState,
       Value<int?> bundleVersion,
+      Value<int> lastSignedPrekeyRotationUnixDay,
       Value<int> rowid,
     });
 typedef $$DevicesTableUpdateCompanionBuilder =
@@ -14011,6 +18045,7 @@ typedef $$DevicesTableUpdateCompanionBuilder =
       Value<Uint8List?> labelCiphertext,
       Value<int> revocationState,
       Value<int?> bundleVersion,
+      Value<int> lastSignedPrekeyRotationUnixDay,
       Value<int> rowid,
     });
 
@@ -14072,6 +18107,11 @@ class $$DevicesTableFilterComposer
 
   ColumnFilters<int> get bundleVersion => $composableBuilder(
     column: $table.bundleVersion,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get lastSignedPrekeyRotationUnixDay => $composableBuilder(
+    column: $table.lastSignedPrekeyRotationUnixDay,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -14138,6 +18178,12 @@ class $$DevicesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<int> get lastSignedPrekeyRotationUnixDay =>
+      $composableBuilder(
+        column: $table.lastSignedPrekeyRotationUnixDay,
+        builder: (column) => ColumnOrderings(column),
+      );
+
   $$UsersTableOrderingComposer get userId {
     final $$UsersTableOrderingComposer composer = $composerBuilder(
       composer: this,
@@ -14199,6 +18245,12 @@ class $$DevicesTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<int> get lastSignedPrekeyRotationUnixDay =>
+      $composableBuilder(
+        column: $table.lastSignedPrekeyRotationUnixDay,
+        builder: (column) => column,
+      );
+
   $$UsersTableAnnotationComposer get userId {
     final $$UsersTableAnnotationComposer composer = $composerBuilder(
       composer: this,
@@ -14258,6 +18310,8 @@ class $$DevicesTableTableManager
                 Value<Uint8List?> labelCiphertext = const Value.absent(),
                 Value<int> revocationState = const Value.absent(),
                 Value<int?> bundleVersion = const Value.absent(),
+                Value<int> lastSignedPrekeyRotationUnixDay =
+                    const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => DevicesCompanion(
                 deviceId: deviceId,
@@ -14267,6 +18321,8 @@ class $$DevicesTableTableManager
                 labelCiphertext: labelCiphertext,
                 revocationState: revocationState,
                 bundleVersion: bundleVersion,
+                lastSignedPrekeyRotationUnixDay:
+                    lastSignedPrekeyRotationUnixDay,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -14278,6 +18334,8 @@ class $$DevicesTableTableManager
                 Value<Uint8List?> labelCiphertext = const Value.absent(),
                 required int revocationState,
                 Value<int?> bundleVersion = const Value.absent(),
+                Value<int> lastSignedPrekeyRotationUnixDay =
+                    const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => DevicesCompanion.insert(
                 deviceId: deviceId,
@@ -14287,6 +18345,8 @@ class $$DevicesTableTableManager
                 labelCiphertext: labelCiphertext,
                 revocationState: revocationState,
                 bundleVersion: bundleVersion,
+                lastSignedPrekeyRotationUnixDay:
+                    lastSignedPrekeyRotationUnixDay,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
@@ -14714,17 +18774,31 @@ typedef $$DeviceLogRecordsTableProcessedTableManager =
 typedef $$PairwiseSessionsTableCreateCompanionBuilder =
     PairwiseSessionsCompanion Function({
       required String localDeviceId,
+      Value<String> remoteUserId,
       required String remoteDeviceId,
+      Value<Uint8List?> sessionId,
       required Uint8List opaqueCryptoStateHandle,
       required int stateVersion,
+      Value<int> skippedKeyCount,
+      Value<int> disposition,
+      Value<int> repairState,
+      Value<Uint8List?> repairAuthorization,
+      Value<DateTime?> lastAuthenticatedAt,
       Value<int> rowid,
     });
 typedef $$PairwiseSessionsTableUpdateCompanionBuilder =
     PairwiseSessionsCompanion Function({
       Value<String> localDeviceId,
+      Value<String> remoteUserId,
       Value<String> remoteDeviceId,
+      Value<Uint8List?> sessionId,
       Value<Uint8List> opaqueCryptoStateHandle,
       Value<int> stateVersion,
+      Value<int> skippedKeyCount,
+      Value<int> disposition,
+      Value<int> repairState,
+      Value<Uint8List?> repairAuthorization,
+      Value<DateTime?> lastAuthenticatedAt,
       Value<int> rowid,
     });
 
@@ -14742,8 +18816,18 @@ class $$PairwiseSessionsTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
+  ColumnFilters<String> get remoteUserId => $composableBuilder(
+    column: $table.remoteUserId,
+    builder: (column) => ColumnFilters(column),
+  );
+
   ColumnFilters<String> get remoteDeviceId => $composableBuilder(
     column: $table.remoteDeviceId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<Uint8List> get sessionId => $composableBuilder(
+    column: $table.sessionId,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -14754,6 +18838,31 @@ class $$PairwiseSessionsTableFilterComposer
 
   ColumnFilters<int> get stateVersion => $composableBuilder(
     column: $table.stateVersion,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get skippedKeyCount => $composableBuilder(
+    column: $table.skippedKeyCount,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get disposition => $composableBuilder(
+    column: $table.disposition,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get repairState => $composableBuilder(
+    column: $table.repairState,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<Uint8List> get repairAuthorization => $composableBuilder(
+    column: $table.repairAuthorization,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get lastAuthenticatedAt => $composableBuilder(
+    column: $table.lastAuthenticatedAt,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -14772,8 +18881,18 @@ class $$PairwiseSessionsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get remoteUserId => $composableBuilder(
+    column: $table.remoteUserId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get remoteDeviceId => $composableBuilder(
     column: $table.remoteDeviceId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<Uint8List> get sessionId => $composableBuilder(
+    column: $table.sessionId,
     builder: (column) => ColumnOrderings(column),
   );
 
@@ -14784,6 +18903,31 @@ class $$PairwiseSessionsTableOrderingComposer
 
   ColumnOrderings<int> get stateVersion => $composableBuilder(
     column: $table.stateVersion,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get skippedKeyCount => $composableBuilder(
+    column: $table.skippedKeyCount,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get disposition => $composableBuilder(
+    column: $table.disposition,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get repairState => $composableBuilder(
+    column: $table.repairState,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<Uint8List> get repairAuthorization => $composableBuilder(
+    column: $table.repairAuthorization,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get lastAuthenticatedAt => $composableBuilder(
+    column: $table.lastAuthenticatedAt,
     builder: (column) => ColumnOrderings(column),
   );
 }
@@ -14802,10 +18946,18 @@ class $$PairwiseSessionsTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<String> get remoteUserId => $composableBuilder(
+    column: $table.remoteUserId,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<String> get remoteDeviceId => $composableBuilder(
     column: $table.remoteDeviceId,
     builder: (column) => column,
   );
+
+  GeneratedColumn<Uint8List> get sessionId =>
+      $composableBuilder(column: $table.sessionId, builder: (column) => column);
 
   GeneratedColumn<Uint8List> get opaqueCryptoStateHandle => $composableBuilder(
     column: $table.opaqueCryptoStateHandle,
@@ -14814,6 +18966,31 @@ class $$PairwiseSessionsTableAnnotationComposer
 
   GeneratedColumn<int> get stateVersion => $composableBuilder(
     column: $table.stateVersion,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get skippedKeyCount => $composableBuilder(
+    column: $table.skippedKeyCount,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get disposition => $composableBuilder(
+    column: $table.disposition,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get repairState => $composableBuilder(
+    column: $table.repairState,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<Uint8List> get repairAuthorization => $composableBuilder(
+    column: $table.repairAuthorization,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get lastAuthenticatedAt => $composableBuilder(
+    column: $table.lastAuthenticatedAt,
     builder: (column) => column,
   );
 }
@@ -14856,29 +19033,57 @@ class $$PairwiseSessionsTableTableManager
           updateCompanionCallback:
               ({
                 Value<String> localDeviceId = const Value.absent(),
+                Value<String> remoteUserId = const Value.absent(),
                 Value<String> remoteDeviceId = const Value.absent(),
+                Value<Uint8List?> sessionId = const Value.absent(),
                 Value<Uint8List> opaqueCryptoStateHandle = const Value.absent(),
                 Value<int> stateVersion = const Value.absent(),
+                Value<int> skippedKeyCount = const Value.absent(),
+                Value<int> disposition = const Value.absent(),
+                Value<int> repairState = const Value.absent(),
+                Value<Uint8List?> repairAuthorization = const Value.absent(),
+                Value<DateTime?> lastAuthenticatedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => PairwiseSessionsCompanion(
                 localDeviceId: localDeviceId,
+                remoteUserId: remoteUserId,
                 remoteDeviceId: remoteDeviceId,
+                sessionId: sessionId,
                 opaqueCryptoStateHandle: opaqueCryptoStateHandle,
                 stateVersion: stateVersion,
+                skippedKeyCount: skippedKeyCount,
+                disposition: disposition,
+                repairState: repairState,
+                repairAuthorization: repairAuthorization,
+                lastAuthenticatedAt: lastAuthenticatedAt,
                 rowid: rowid,
               ),
           createCompanionCallback:
               ({
                 required String localDeviceId,
+                Value<String> remoteUserId = const Value.absent(),
                 required String remoteDeviceId,
+                Value<Uint8List?> sessionId = const Value.absent(),
                 required Uint8List opaqueCryptoStateHandle,
                 required int stateVersion,
+                Value<int> skippedKeyCount = const Value.absent(),
+                Value<int> disposition = const Value.absent(),
+                Value<int> repairState = const Value.absent(),
+                Value<Uint8List?> repairAuthorization = const Value.absent(),
+                Value<DateTime?> lastAuthenticatedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => PairwiseSessionsCompanion.insert(
                 localDeviceId: localDeviceId,
+                remoteUserId: remoteUserId,
                 remoteDeviceId: remoteDeviceId,
+                sessionId: sessionId,
                 opaqueCryptoStateHandle: opaqueCryptoStateHandle,
                 stateVersion: stateVersion,
+                skippedKeyCount: skippedKeyCount,
+                disposition: disposition,
+                repairState: repairState,
+                repairAuthorization: repairAuthorization,
+                lastAuthenticatedAt: lastAuthenticatedAt,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
@@ -14908,6 +19113,357 @@ typedef $$PairwiseSessionsTableProcessedTableManager =
         >,
       ),
       PairwiseSession,
+      PrefetchHooks Function()
+    >;
+typedef $$PairwiseSessionAlternatesTableCreateCompanionBuilder =
+    PairwiseSessionAlternatesCompanion Function({
+      required Uint8List sessionId,
+      required String localDeviceId,
+      required String remoteUserId,
+      required String remoteDeviceId,
+      required Uint8List opaqueCryptoStateHandle,
+      required int stateVersion,
+      required int skippedKeyCount,
+      required int repairState,
+      Value<Uint8List?> repairAuthorization,
+      Value<DateTime> createdAt,
+      Value<DateTime?> lastAuthenticatedAt,
+      Value<int> rowid,
+    });
+typedef $$PairwiseSessionAlternatesTableUpdateCompanionBuilder =
+    PairwiseSessionAlternatesCompanion Function({
+      Value<Uint8List> sessionId,
+      Value<String> localDeviceId,
+      Value<String> remoteUserId,
+      Value<String> remoteDeviceId,
+      Value<Uint8List> opaqueCryptoStateHandle,
+      Value<int> stateVersion,
+      Value<int> skippedKeyCount,
+      Value<int> repairState,
+      Value<Uint8List?> repairAuthorization,
+      Value<DateTime> createdAt,
+      Value<DateTime?> lastAuthenticatedAt,
+      Value<int> rowid,
+    });
+
+class $$PairwiseSessionAlternatesTableFilterComposer
+    extends Composer<_$LocalDatabase, $PairwiseSessionAlternatesTable> {
+  $$PairwiseSessionAlternatesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<Uint8List> get sessionId => $composableBuilder(
+    column: $table.sessionId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get localDeviceId => $composableBuilder(
+    column: $table.localDeviceId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get remoteUserId => $composableBuilder(
+    column: $table.remoteUserId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get remoteDeviceId => $composableBuilder(
+    column: $table.remoteDeviceId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<Uint8List> get opaqueCryptoStateHandle => $composableBuilder(
+    column: $table.opaqueCryptoStateHandle,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get stateVersion => $composableBuilder(
+    column: $table.stateVersion,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get skippedKeyCount => $composableBuilder(
+    column: $table.skippedKeyCount,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get repairState => $composableBuilder(
+    column: $table.repairState,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<Uint8List> get repairAuthorization => $composableBuilder(
+    column: $table.repairAuthorization,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get lastAuthenticatedAt => $composableBuilder(
+    column: $table.lastAuthenticatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$PairwiseSessionAlternatesTableOrderingComposer
+    extends Composer<_$LocalDatabase, $PairwiseSessionAlternatesTable> {
+  $$PairwiseSessionAlternatesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<Uint8List> get sessionId => $composableBuilder(
+    column: $table.sessionId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get localDeviceId => $composableBuilder(
+    column: $table.localDeviceId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get remoteUserId => $composableBuilder(
+    column: $table.remoteUserId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get remoteDeviceId => $composableBuilder(
+    column: $table.remoteDeviceId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<Uint8List> get opaqueCryptoStateHandle => $composableBuilder(
+    column: $table.opaqueCryptoStateHandle,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get stateVersion => $composableBuilder(
+    column: $table.stateVersion,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get skippedKeyCount => $composableBuilder(
+    column: $table.skippedKeyCount,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get repairState => $composableBuilder(
+    column: $table.repairState,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<Uint8List> get repairAuthorization => $composableBuilder(
+    column: $table.repairAuthorization,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get lastAuthenticatedAt => $composableBuilder(
+    column: $table.lastAuthenticatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$PairwiseSessionAlternatesTableAnnotationComposer
+    extends Composer<_$LocalDatabase, $PairwiseSessionAlternatesTable> {
+  $$PairwiseSessionAlternatesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<Uint8List> get sessionId =>
+      $composableBuilder(column: $table.sessionId, builder: (column) => column);
+
+  GeneratedColumn<String> get localDeviceId => $composableBuilder(
+    column: $table.localDeviceId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get remoteUserId => $composableBuilder(
+    column: $table.remoteUserId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get remoteDeviceId => $composableBuilder(
+    column: $table.remoteDeviceId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<Uint8List> get opaqueCryptoStateHandle => $composableBuilder(
+    column: $table.opaqueCryptoStateHandle,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get stateVersion => $composableBuilder(
+    column: $table.stateVersion,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get skippedKeyCount => $composableBuilder(
+    column: $table.skippedKeyCount,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get repairState => $composableBuilder(
+    column: $table.repairState,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<Uint8List> get repairAuthorization => $composableBuilder(
+    column: $table.repairAuthorization,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get lastAuthenticatedAt => $composableBuilder(
+    column: $table.lastAuthenticatedAt,
+    builder: (column) => column,
+  );
+}
+
+class $$PairwiseSessionAlternatesTableTableManager
+    extends
+        RootTableManager<
+          _$LocalDatabase,
+          $PairwiseSessionAlternatesTable,
+          PairwiseSessionAlternate,
+          $$PairwiseSessionAlternatesTableFilterComposer,
+          $$PairwiseSessionAlternatesTableOrderingComposer,
+          $$PairwiseSessionAlternatesTableAnnotationComposer,
+          $$PairwiseSessionAlternatesTableCreateCompanionBuilder,
+          $$PairwiseSessionAlternatesTableUpdateCompanionBuilder,
+          (
+            PairwiseSessionAlternate,
+            BaseReferences<
+              _$LocalDatabase,
+              $PairwiseSessionAlternatesTable,
+              PairwiseSessionAlternate
+            >,
+          ),
+          PairwiseSessionAlternate,
+          PrefetchHooks Function()
+        > {
+  $$PairwiseSessionAlternatesTableTableManager(
+    _$LocalDatabase db,
+    $PairwiseSessionAlternatesTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$PairwiseSessionAlternatesTableFilterComposer(
+                $db: db,
+                $table: table,
+              ),
+          createOrderingComposer: () =>
+              $$PairwiseSessionAlternatesTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$PairwiseSessionAlternatesTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<Uint8List> sessionId = const Value.absent(),
+                Value<String> localDeviceId = const Value.absent(),
+                Value<String> remoteUserId = const Value.absent(),
+                Value<String> remoteDeviceId = const Value.absent(),
+                Value<Uint8List> opaqueCryptoStateHandle = const Value.absent(),
+                Value<int> stateVersion = const Value.absent(),
+                Value<int> skippedKeyCount = const Value.absent(),
+                Value<int> repairState = const Value.absent(),
+                Value<Uint8List?> repairAuthorization = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime?> lastAuthenticatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => PairwiseSessionAlternatesCompanion(
+                sessionId: sessionId,
+                localDeviceId: localDeviceId,
+                remoteUserId: remoteUserId,
+                remoteDeviceId: remoteDeviceId,
+                opaqueCryptoStateHandle: opaqueCryptoStateHandle,
+                stateVersion: stateVersion,
+                skippedKeyCount: skippedKeyCount,
+                repairState: repairState,
+                repairAuthorization: repairAuthorization,
+                createdAt: createdAt,
+                lastAuthenticatedAt: lastAuthenticatedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required Uint8List sessionId,
+                required String localDeviceId,
+                required String remoteUserId,
+                required String remoteDeviceId,
+                required Uint8List opaqueCryptoStateHandle,
+                required int stateVersion,
+                required int skippedKeyCount,
+                required int repairState,
+                Value<Uint8List?> repairAuthorization = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime?> lastAuthenticatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => PairwiseSessionAlternatesCompanion.insert(
+                sessionId: sessionId,
+                localDeviceId: localDeviceId,
+                remoteUserId: remoteUserId,
+                remoteDeviceId: remoteDeviceId,
+                opaqueCryptoStateHandle: opaqueCryptoStateHandle,
+                stateVersion: stateVersion,
+                skippedKeyCount: skippedKeyCount,
+                repairState: repairState,
+                repairAuthorization: repairAuthorization,
+                createdAt: createdAt,
+                lastAuthenticatedAt: lastAuthenticatedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$PairwiseSessionAlternatesTableProcessedTableManager =
+    ProcessedTableManager<
+      _$LocalDatabase,
+      $PairwiseSessionAlternatesTable,
+      PairwiseSessionAlternate,
+      $$PairwiseSessionAlternatesTableFilterComposer,
+      $$PairwiseSessionAlternatesTableOrderingComposer,
+      $$PairwiseSessionAlternatesTableAnnotationComposer,
+      $$PairwiseSessionAlternatesTableCreateCompanionBuilder,
+      $$PairwiseSessionAlternatesTableUpdateCompanionBuilder,
+      (
+        PairwiseSessionAlternate,
+        BaseReferences<
+          _$LocalDatabase,
+          $PairwiseSessionAlternatesTable,
+          PairwiseSessionAlternate
+        >,
+      ),
+      PairwiseSessionAlternate,
       PrefetchHooks Function()
     >;
 typedef $$PrekeysTableCreateCompanionBuilder =
@@ -15106,6 +19662,380 @@ typedef $$PrekeysTableProcessedTableManager =
       $$PrekeysTableUpdateCompanionBuilder,
       (Prekey, BaseReferences<_$LocalDatabase, $PrekeysTable, Prekey>),
       Prekey,
+      PrefetchHooks Function()
+    >;
+typedef $$PrekeyMaintenancePlansTableCreateCompanionBuilder =
+    PrekeyMaintenancePlansCompanion Function({
+      required String deviceId,
+      required int stage,
+      required int expectedStateRevision,
+      required int preparedUnixDay,
+      required int bundleVersion,
+      required int currentSignedPrekeyCreatedUnixDay,
+      required Uint8List batchId,
+      required Uint8List nativeUploadProjection,
+      Value<Uint8List?> exactLogRecord,
+      Value<int?> expectedLogSequence,
+      Value<Uint8List?> previousLogHead,
+      Value<DateTime> updatedAt,
+      Value<int> rowid,
+    });
+typedef $$PrekeyMaintenancePlansTableUpdateCompanionBuilder =
+    PrekeyMaintenancePlansCompanion Function({
+      Value<String> deviceId,
+      Value<int> stage,
+      Value<int> expectedStateRevision,
+      Value<int> preparedUnixDay,
+      Value<int> bundleVersion,
+      Value<int> currentSignedPrekeyCreatedUnixDay,
+      Value<Uint8List> batchId,
+      Value<Uint8List> nativeUploadProjection,
+      Value<Uint8List?> exactLogRecord,
+      Value<int?> expectedLogSequence,
+      Value<Uint8List?> previousLogHead,
+      Value<DateTime> updatedAt,
+      Value<int> rowid,
+    });
+
+class $$PrekeyMaintenancePlansTableFilterComposer
+    extends Composer<_$LocalDatabase, $PrekeyMaintenancePlansTable> {
+  $$PrekeyMaintenancePlansTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get deviceId => $composableBuilder(
+    column: $table.deviceId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get stage => $composableBuilder(
+    column: $table.stage,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get expectedStateRevision => $composableBuilder(
+    column: $table.expectedStateRevision,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get preparedUnixDay => $composableBuilder(
+    column: $table.preparedUnixDay,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get bundleVersion => $composableBuilder(
+    column: $table.bundleVersion,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get currentSignedPrekeyCreatedUnixDay =>
+      $composableBuilder(
+        column: $table.currentSignedPrekeyCreatedUnixDay,
+        builder: (column) => ColumnFilters(column),
+      );
+
+  ColumnFilters<Uint8List> get batchId => $composableBuilder(
+    column: $table.batchId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<Uint8List> get nativeUploadProjection => $composableBuilder(
+    column: $table.nativeUploadProjection,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<Uint8List> get exactLogRecord => $composableBuilder(
+    column: $table.exactLogRecord,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get expectedLogSequence => $composableBuilder(
+    column: $table.expectedLogSequence,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<Uint8List> get previousLogHead => $composableBuilder(
+    column: $table.previousLogHead,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$PrekeyMaintenancePlansTableOrderingComposer
+    extends Composer<_$LocalDatabase, $PrekeyMaintenancePlansTable> {
+  $$PrekeyMaintenancePlansTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get deviceId => $composableBuilder(
+    column: $table.deviceId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get stage => $composableBuilder(
+    column: $table.stage,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get expectedStateRevision => $composableBuilder(
+    column: $table.expectedStateRevision,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get preparedUnixDay => $composableBuilder(
+    column: $table.preparedUnixDay,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get bundleVersion => $composableBuilder(
+    column: $table.bundleVersion,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get currentSignedPrekeyCreatedUnixDay =>
+      $composableBuilder(
+        column: $table.currentSignedPrekeyCreatedUnixDay,
+        builder: (column) => ColumnOrderings(column),
+      );
+
+  ColumnOrderings<Uint8List> get batchId => $composableBuilder(
+    column: $table.batchId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<Uint8List> get nativeUploadProjection => $composableBuilder(
+    column: $table.nativeUploadProjection,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<Uint8List> get exactLogRecord => $composableBuilder(
+    column: $table.exactLogRecord,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get expectedLogSequence => $composableBuilder(
+    column: $table.expectedLogSequence,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<Uint8List> get previousLogHead => $composableBuilder(
+    column: $table.previousLogHead,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$PrekeyMaintenancePlansTableAnnotationComposer
+    extends Composer<_$LocalDatabase, $PrekeyMaintenancePlansTable> {
+  $$PrekeyMaintenancePlansTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get deviceId =>
+      $composableBuilder(column: $table.deviceId, builder: (column) => column);
+
+  GeneratedColumn<int> get stage =>
+      $composableBuilder(column: $table.stage, builder: (column) => column);
+
+  GeneratedColumn<int> get expectedStateRevision => $composableBuilder(
+    column: $table.expectedStateRevision,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get preparedUnixDay => $composableBuilder(
+    column: $table.preparedUnixDay,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get bundleVersion => $composableBuilder(
+    column: $table.bundleVersion,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get currentSignedPrekeyCreatedUnixDay =>
+      $composableBuilder(
+        column: $table.currentSignedPrekeyCreatedUnixDay,
+        builder: (column) => column,
+      );
+
+  GeneratedColumn<Uint8List> get batchId =>
+      $composableBuilder(column: $table.batchId, builder: (column) => column);
+
+  GeneratedColumn<Uint8List> get nativeUploadProjection => $composableBuilder(
+    column: $table.nativeUploadProjection,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<Uint8List> get exactLogRecord => $composableBuilder(
+    column: $table.exactLogRecord,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get expectedLogSequence => $composableBuilder(
+    column: $table.expectedLogSequence,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<Uint8List> get previousLogHead => $composableBuilder(
+    column: $table.previousLogHead,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+}
+
+class $$PrekeyMaintenancePlansTableTableManager
+    extends
+        RootTableManager<
+          _$LocalDatabase,
+          $PrekeyMaintenancePlansTable,
+          StoredPrekeyMaintenancePlan,
+          $$PrekeyMaintenancePlansTableFilterComposer,
+          $$PrekeyMaintenancePlansTableOrderingComposer,
+          $$PrekeyMaintenancePlansTableAnnotationComposer,
+          $$PrekeyMaintenancePlansTableCreateCompanionBuilder,
+          $$PrekeyMaintenancePlansTableUpdateCompanionBuilder,
+          (
+            StoredPrekeyMaintenancePlan,
+            BaseReferences<
+              _$LocalDatabase,
+              $PrekeyMaintenancePlansTable,
+              StoredPrekeyMaintenancePlan
+            >,
+          ),
+          StoredPrekeyMaintenancePlan,
+          PrefetchHooks Function()
+        > {
+  $$PrekeyMaintenancePlansTableTableManager(
+    _$LocalDatabase db,
+    $PrekeyMaintenancePlansTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$PrekeyMaintenancePlansTableFilterComposer(
+                $db: db,
+                $table: table,
+              ),
+          createOrderingComposer: () =>
+              $$PrekeyMaintenancePlansTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$PrekeyMaintenancePlansTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> deviceId = const Value.absent(),
+                Value<int> stage = const Value.absent(),
+                Value<int> expectedStateRevision = const Value.absent(),
+                Value<int> preparedUnixDay = const Value.absent(),
+                Value<int> bundleVersion = const Value.absent(),
+                Value<int> currentSignedPrekeyCreatedUnixDay =
+                    const Value.absent(),
+                Value<Uint8List> batchId = const Value.absent(),
+                Value<Uint8List> nativeUploadProjection = const Value.absent(),
+                Value<Uint8List?> exactLogRecord = const Value.absent(),
+                Value<int?> expectedLogSequence = const Value.absent(),
+                Value<Uint8List?> previousLogHead = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => PrekeyMaintenancePlansCompanion(
+                deviceId: deviceId,
+                stage: stage,
+                expectedStateRevision: expectedStateRevision,
+                preparedUnixDay: preparedUnixDay,
+                bundleVersion: bundleVersion,
+                currentSignedPrekeyCreatedUnixDay:
+                    currentSignedPrekeyCreatedUnixDay,
+                batchId: batchId,
+                nativeUploadProjection: nativeUploadProjection,
+                exactLogRecord: exactLogRecord,
+                expectedLogSequence: expectedLogSequence,
+                previousLogHead: previousLogHead,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String deviceId,
+                required int stage,
+                required int expectedStateRevision,
+                required int preparedUnixDay,
+                required int bundleVersion,
+                required int currentSignedPrekeyCreatedUnixDay,
+                required Uint8List batchId,
+                required Uint8List nativeUploadProjection,
+                Value<Uint8List?> exactLogRecord = const Value.absent(),
+                Value<int?> expectedLogSequence = const Value.absent(),
+                Value<Uint8List?> previousLogHead = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => PrekeyMaintenancePlansCompanion.insert(
+                deviceId: deviceId,
+                stage: stage,
+                expectedStateRevision: expectedStateRevision,
+                preparedUnixDay: preparedUnixDay,
+                bundleVersion: bundleVersion,
+                currentSignedPrekeyCreatedUnixDay:
+                    currentSignedPrekeyCreatedUnixDay,
+                batchId: batchId,
+                nativeUploadProjection: nativeUploadProjection,
+                exactLogRecord: exactLogRecord,
+                expectedLogSequence: expectedLogSequence,
+                previousLogHead: previousLogHead,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$PrekeyMaintenancePlansTableProcessedTableManager =
+    ProcessedTableManager<
+      _$LocalDatabase,
+      $PrekeyMaintenancePlansTable,
+      StoredPrekeyMaintenancePlan,
+      $$PrekeyMaintenancePlansTableFilterComposer,
+      $$PrekeyMaintenancePlansTableOrderingComposer,
+      $$PrekeyMaintenancePlansTableAnnotationComposer,
+      $$PrekeyMaintenancePlansTableCreateCompanionBuilder,
+      $$PrekeyMaintenancePlansTableUpdateCompanionBuilder,
+      (
+        StoredPrekeyMaintenancePlan,
+        BaseReferences<
+          _$LocalDatabase,
+          $PrekeyMaintenancePlansTable,
+          StoredPrekeyMaintenancePlan
+        >,
+      ),
+      StoredPrekeyMaintenancePlan,
       PrefetchHooks Function()
     >;
 typedef $$MlsGroupsTableCreateCompanionBuilder =
@@ -18310,6 +23240,1038 @@ typedef $$InboxEventDeduplicationsTableProcessedTableManager =
       InboxEventDeduplication,
       PrefetchHooks Function()
     >;
+typedef $$PairwiseReplayMarkersTableCreateCompanionBuilder =
+    PairwiseReplayMarkersCompanion Function({
+      required Uint8List replayMarker,
+      required Uint8List sessionId,
+      Value<int?> signedPrekeyId,
+      Value<int?> pqSignedPrekeyId,
+      required String firstEnvelopeId,
+      Value<DateTime> committedAt,
+      Value<int> rowid,
+    });
+typedef $$PairwiseReplayMarkersTableUpdateCompanionBuilder =
+    PairwiseReplayMarkersCompanion Function({
+      Value<Uint8List> replayMarker,
+      Value<Uint8List> sessionId,
+      Value<int?> signedPrekeyId,
+      Value<int?> pqSignedPrekeyId,
+      Value<String> firstEnvelopeId,
+      Value<DateTime> committedAt,
+      Value<int> rowid,
+    });
+
+class $$PairwiseReplayMarkersTableFilterComposer
+    extends Composer<_$LocalDatabase, $PairwiseReplayMarkersTable> {
+  $$PairwiseReplayMarkersTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<Uint8List> get replayMarker => $composableBuilder(
+    column: $table.replayMarker,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<Uint8List> get sessionId => $composableBuilder(
+    column: $table.sessionId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get signedPrekeyId => $composableBuilder(
+    column: $table.signedPrekeyId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get pqSignedPrekeyId => $composableBuilder(
+    column: $table.pqSignedPrekeyId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get firstEnvelopeId => $composableBuilder(
+    column: $table.firstEnvelopeId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get committedAt => $composableBuilder(
+    column: $table.committedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$PairwiseReplayMarkersTableOrderingComposer
+    extends Composer<_$LocalDatabase, $PairwiseReplayMarkersTable> {
+  $$PairwiseReplayMarkersTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<Uint8List> get replayMarker => $composableBuilder(
+    column: $table.replayMarker,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<Uint8List> get sessionId => $composableBuilder(
+    column: $table.sessionId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get signedPrekeyId => $composableBuilder(
+    column: $table.signedPrekeyId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get pqSignedPrekeyId => $composableBuilder(
+    column: $table.pqSignedPrekeyId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get firstEnvelopeId => $composableBuilder(
+    column: $table.firstEnvelopeId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get committedAt => $composableBuilder(
+    column: $table.committedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$PairwiseReplayMarkersTableAnnotationComposer
+    extends Composer<_$LocalDatabase, $PairwiseReplayMarkersTable> {
+  $$PairwiseReplayMarkersTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<Uint8List> get replayMarker => $composableBuilder(
+    column: $table.replayMarker,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<Uint8List> get sessionId =>
+      $composableBuilder(column: $table.sessionId, builder: (column) => column);
+
+  GeneratedColumn<int> get signedPrekeyId => $composableBuilder(
+    column: $table.signedPrekeyId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get pqSignedPrekeyId => $composableBuilder(
+    column: $table.pqSignedPrekeyId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get firstEnvelopeId => $composableBuilder(
+    column: $table.firstEnvelopeId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get committedAt => $composableBuilder(
+    column: $table.committedAt,
+    builder: (column) => column,
+  );
+}
+
+class $$PairwiseReplayMarkersTableTableManager
+    extends
+        RootTableManager<
+          _$LocalDatabase,
+          $PairwiseReplayMarkersTable,
+          PairwiseReplayMarker,
+          $$PairwiseReplayMarkersTableFilterComposer,
+          $$PairwiseReplayMarkersTableOrderingComposer,
+          $$PairwiseReplayMarkersTableAnnotationComposer,
+          $$PairwiseReplayMarkersTableCreateCompanionBuilder,
+          $$PairwiseReplayMarkersTableUpdateCompanionBuilder,
+          (
+            PairwiseReplayMarker,
+            BaseReferences<
+              _$LocalDatabase,
+              $PairwiseReplayMarkersTable,
+              PairwiseReplayMarker
+            >,
+          ),
+          PairwiseReplayMarker,
+          PrefetchHooks Function()
+        > {
+  $$PairwiseReplayMarkersTableTableManager(
+    _$LocalDatabase db,
+    $PairwiseReplayMarkersTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$PairwiseReplayMarkersTableFilterComposer(
+                $db: db,
+                $table: table,
+              ),
+          createOrderingComposer: () =>
+              $$PairwiseReplayMarkersTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$PairwiseReplayMarkersTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<Uint8List> replayMarker = const Value.absent(),
+                Value<Uint8List> sessionId = const Value.absent(),
+                Value<int?> signedPrekeyId = const Value.absent(),
+                Value<int?> pqSignedPrekeyId = const Value.absent(),
+                Value<String> firstEnvelopeId = const Value.absent(),
+                Value<DateTime> committedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => PairwiseReplayMarkersCompanion(
+                replayMarker: replayMarker,
+                sessionId: sessionId,
+                signedPrekeyId: signedPrekeyId,
+                pqSignedPrekeyId: pqSignedPrekeyId,
+                firstEnvelopeId: firstEnvelopeId,
+                committedAt: committedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required Uint8List replayMarker,
+                required Uint8List sessionId,
+                Value<int?> signedPrekeyId = const Value.absent(),
+                Value<int?> pqSignedPrekeyId = const Value.absent(),
+                required String firstEnvelopeId,
+                Value<DateTime> committedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => PairwiseReplayMarkersCompanion.insert(
+                replayMarker: replayMarker,
+                sessionId: sessionId,
+                signedPrekeyId: signedPrekeyId,
+                pqSignedPrekeyId: pqSignedPrekeyId,
+                firstEnvelopeId: firstEnvelopeId,
+                committedAt: committedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$PairwiseReplayMarkersTableProcessedTableManager =
+    ProcessedTableManager<
+      _$LocalDatabase,
+      $PairwiseReplayMarkersTable,
+      PairwiseReplayMarker,
+      $$PairwiseReplayMarkersTableFilterComposer,
+      $$PairwiseReplayMarkersTableOrderingComposer,
+      $$PairwiseReplayMarkersTableAnnotationComposer,
+      $$PairwiseReplayMarkersTableCreateCompanionBuilder,
+      $$PairwiseReplayMarkersTableUpdateCompanionBuilder,
+      (
+        PairwiseReplayMarker,
+        BaseReferences<
+          _$LocalDatabase,
+          $PairwiseReplayMarkersTable,
+          PairwiseReplayMarker
+        >,
+      ),
+      PairwiseReplayMarker,
+      PrefetchHooks Function()
+    >;
+typedef $$PairwiseOpenedPayloadsTableCreateCompanionBuilder =
+    PairwiseOpenedPayloadsCompanion Function({
+      required String envelopeId,
+      required String opaqueEventId,
+      required String senderUserId,
+      required String senderDeviceId,
+      required Uint8List sessionId,
+      required Uint8List replayMarker,
+      required Uint8List openedOpaquePayload,
+      Value<bool> applicationApplied,
+      Value<DateTime> committedAt,
+      Value<int> rowid,
+    });
+typedef $$PairwiseOpenedPayloadsTableUpdateCompanionBuilder =
+    PairwiseOpenedPayloadsCompanion Function({
+      Value<String> envelopeId,
+      Value<String> opaqueEventId,
+      Value<String> senderUserId,
+      Value<String> senderDeviceId,
+      Value<Uint8List> sessionId,
+      Value<Uint8List> replayMarker,
+      Value<Uint8List> openedOpaquePayload,
+      Value<bool> applicationApplied,
+      Value<DateTime> committedAt,
+      Value<int> rowid,
+    });
+
+class $$PairwiseOpenedPayloadsTableFilterComposer
+    extends Composer<_$LocalDatabase, $PairwiseOpenedPayloadsTable> {
+  $$PairwiseOpenedPayloadsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get envelopeId => $composableBuilder(
+    column: $table.envelopeId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get opaqueEventId => $composableBuilder(
+    column: $table.opaqueEventId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get senderUserId => $composableBuilder(
+    column: $table.senderUserId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get senderDeviceId => $composableBuilder(
+    column: $table.senderDeviceId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<Uint8List> get sessionId => $composableBuilder(
+    column: $table.sessionId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<Uint8List> get replayMarker => $composableBuilder(
+    column: $table.replayMarker,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<Uint8List> get openedOpaquePayload => $composableBuilder(
+    column: $table.openedOpaquePayload,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get applicationApplied => $composableBuilder(
+    column: $table.applicationApplied,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get committedAt => $composableBuilder(
+    column: $table.committedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$PairwiseOpenedPayloadsTableOrderingComposer
+    extends Composer<_$LocalDatabase, $PairwiseOpenedPayloadsTable> {
+  $$PairwiseOpenedPayloadsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get envelopeId => $composableBuilder(
+    column: $table.envelopeId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get opaqueEventId => $composableBuilder(
+    column: $table.opaqueEventId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get senderUserId => $composableBuilder(
+    column: $table.senderUserId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get senderDeviceId => $composableBuilder(
+    column: $table.senderDeviceId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<Uint8List> get sessionId => $composableBuilder(
+    column: $table.sessionId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<Uint8List> get replayMarker => $composableBuilder(
+    column: $table.replayMarker,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<Uint8List> get openedOpaquePayload => $composableBuilder(
+    column: $table.openedOpaquePayload,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get applicationApplied => $composableBuilder(
+    column: $table.applicationApplied,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get committedAt => $composableBuilder(
+    column: $table.committedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$PairwiseOpenedPayloadsTableAnnotationComposer
+    extends Composer<_$LocalDatabase, $PairwiseOpenedPayloadsTable> {
+  $$PairwiseOpenedPayloadsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get envelopeId => $composableBuilder(
+    column: $table.envelopeId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get opaqueEventId => $composableBuilder(
+    column: $table.opaqueEventId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get senderUserId => $composableBuilder(
+    column: $table.senderUserId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get senderDeviceId => $composableBuilder(
+    column: $table.senderDeviceId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<Uint8List> get sessionId =>
+      $composableBuilder(column: $table.sessionId, builder: (column) => column);
+
+  GeneratedColumn<Uint8List> get replayMarker => $composableBuilder(
+    column: $table.replayMarker,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<Uint8List> get openedOpaquePayload => $composableBuilder(
+    column: $table.openedOpaquePayload,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get applicationApplied => $composableBuilder(
+    column: $table.applicationApplied,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get committedAt => $composableBuilder(
+    column: $table.committedAt,
+    builder: (column) => column,
+  );
+}
+
+class $$PairwiseOpenedPayloadsTableTableManager
+    extends
+        RootTableManager<
+          _$LocalDatabase,
+          $PairwiseOpenedPayloadsTable,
+          PairwiseOpenedPayload,
+          $$PairwiseOpenedPayloadsTableFilterComposer,
+          $$PairwiseOpenedPayloadsTableOrderingComposer,
+          $$PairwiseOpenedPayloadsTableAnnotationComposer,
+          $$PairwiseOpenedPayloadsTableCreateCompanionBuilder,
+          $$PairwiseOpenedPayloadsTableUpdateCompanionBuilder,
+          (
+            PairwiseOpenedPayload,
+            BaseReferences<
+              _$LocalDatabase,
+              $PairwiseOpenedPayloadsTable,
+              PairwiseOpenedPayload
+            >,
+          ),
+          PairwiseOpenedPayload,
+          PrefetchHooks Function()
+        > {
+  $$PairwiseOpenedPayloadsTableTableManager(
+    _$LocalDatabase db,
+    $PairwiseOpenedPayloadsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$PairwiseOpenedPayloadsTableFilterComposer(
+                $db: db,
+                $table: table,
+              ),
+          createOrderingComposer: () =>
+              $$PairwiseOpenedPayloadsTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$PairwiseOpenedPayloadsTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> envelopeId = const Value.absent(),
+                Value<String> opaqueEventId = const Value.absent(),
+                Value<String> senderUserId = const Value.absent(),
+                Value<String> senderDeviceId = const Value.absent(),
+                Value<Uint8List> sessionId = const Value.absent(),
+                Value<Uint8List> replayMarker = const Value.absent(),
+                Value<Uint8List> openedOpaquePayload = const Value.absent(),
+                Value<bool> applicationApplied = const Value.absent(),
+                Value<DateTime> committedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => PairwiseOpenedPayloadsCompanion(
+                envelopeId: envelopeId,
+                opaqueEventId: opaqueEventId,
+                senderUserId: senderUserId,
+                senderDeviceId: senderDeviceId,
+                sessionId: sessionId,
+                replayMarker: replayMarker,
+                openedOpaquePayload: openedOpaquePayload,
+                applicationApplied: applicationApplied,
+                committedAt: committedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String envelopeId,
+                required String opaqueEventId,
+                required String senderUserId,
+                required String senderDeviceId,
+                required Uint8List sessionId,
+                required Uint8List replayMarker,
+                required Uint8List openedOpaquePayload,
+                Value<bool> applicationApplied = const Value.absent(),
+                Value<DateTime> committedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => PairwiseOpenedPayloadsCompanion.insert(
+                envelopeId: envelopeId,
+                opaqueEventId: opaqueEventId,
+                senderUserId: senderUserId,
+                senderDeviceId: senderDeviceId,
+                sessionId: sessionId,
+                replayMarker: replayMarker,
+                openedOpaquePayload: openedOpaquePayload,
+                applicationApplied: applicationApplied,
+                committedAt: committedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$PairwiseOpenedPayloadsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$LocalDatabase,
+      $PairwiseOpenedPayloadsTable,
+      PairwiseOpenedPayload,
+      $$PairwiseOpenedPayloadsTableFilterComposer,
+      $$PairwiseOpenedPayloadsTableOrderingComposer,
+      $$PairwiseOpenedPayloadsTableAnnotationComposer,
+      $$PairwiseOpenedPayloadsTableCreateCompanionBuilder,
+      $$PairwiseOpenedPayloadsTableUpdateCompanionBuilder,
+      (
+        PairwiseOpenedPayload,
+        BaseReferences<
+          _$LocalDatabase,
+          $PairwiseOpenedPayloadsTable,
+          PairwiseOpenedPayload
+        >,
+      ),
+      PairwiseOpenedPayload,
+      PrefetchHooks Function()
+    >;
+typedef $$PairwiseLocalApplicationsTableCreateCompanionBuilder =
+    PairwiseLocalApplicationsCompanion Function({
+      required String operationId,
+      required String eventId,
+      required String localDeviceId,
+      required Uint8List openedOpaquePayload,
+      Value<bool> applicationApplied,
+      Value<DateTime> committedAt,
+      Value<int> rowid,
+    });
+typedef $$PairwiseLocalApplicationsTableUpdateCompanionBuilder =
+    PairwiseLocalApplicationsCompanion Function({
+      Value<String> operationId,
+      Value<String> eventId,
+      Value<String> localDeviceId,
+      Value<Uint8List> openedOpaquePayload,
+      Value<bool> applicationApplied,
+      Value<DateTime> committedAt,
+      Value<int> rowid,
+    });
+
+class $$PairwiseLocalApplicationsTableFilterComposer
+    extends Composer<_$LocalDatabase, $PairwiseLocalApplicationsTable> {
+  $$PairwiseLocalApplicationsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get operationId => $composableBuilder(
+    column: $table.operationId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get eventId => $composableBuilder(
+    column: $table.eventId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get localDeviceId => $composableBuilder(
+    column: $table.localDeviceId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<Uint8List> get openedOpaquePayload => $composableBuilder(
+    column: $table.openedOpaquePayload,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get applicationApplied => $composableBuilder(
+    column: $table.applicationApplied,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get committedAt => $composableBuilder(
+    column: $table.committedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$PairwiseLocalApplicationsTableOrderingComposer
+    extends Composer<_$LocalDatabase, $PairwiseLocalApplicationsTable> {
+  $$PairwiseLocalApplicationsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get operationId => $composableBuilder(
+    column: $table.operationId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get eventId => $composableBuilder(
+    column: $table.eventId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get localDeviceId => $composableBuilder(
+    column: $table.localDeviceId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<Uint8List> get openedOpaquePayload => $composableBuilder(
+    column: $table.openedOpaquePayload,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get applicationApplied => $composableBuilder(
+    column: $table.applicationApplied,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get committedAt => $composableBuilder(
+    column: $table.committedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$PairwiseLocalApplicationsTableAnnotationComposer
+    extends Composer<_$LocalDatabase, $PairwiseLocalApplicationsTable> {
+  $$PairwiseLocalApplicationsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get operationId => $composableBuilder(
+    column: $table.operationId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get eventId =>
+      $composableBuilder(column: $table.eventId, builder: (column) => column);
+
+  GeneratedColumn<String> get localDeviceId => $composableBuilder(
+    column: $table.localDeviceId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<Uint8List> get openedOpaquePayload => $composableBuilder(
+    column: $table.openedOpaquePayload,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get applicationApplied => $composableBuilder(
+    column: $table.applicationApplied,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get committedAt => $composableBuilder(
+    column: $table.committedAt,
+    builder: (column) => column,
+  );
+}
+
+class $$PairwiseLocalApplicationsTableTableManager
+    extends
+        RootTableManager<
+          _$LocalDatabase,
+          $PairwiseLocalApplicationsTable,
+          PairwiseLocalApplication,
+          $$PairwiseLocalApplicationsTableFilterComposer,
+          $$PairwiseLocalApplicationsTableOrderingComposer,
+          $$PairwiseLocalApplicationsTableAnnotationComposer,
+          $$PairwiseLocalApplicationsTableCreateCompanionBuilder,
+          $$PairwiseLocalApplicationsTableUpdateCompanionBuilder,
+          (
+            PairwiseLocalApplication,
+            BaseReferences<
+              _$LocalDatabase,
+              $PairwiseLocalApplicationsTable,
+              PairwiseLocalApplication
+            >,
+          ),
+          PairwiseLocalApplication,
+          PrefetchHooks Function()
+        > {
+  $$PairwiseLocalApplicationsTableTableManager(
+    _$LocalDatabase db,
+    $PairwiseLocalApplicationsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$PairwiseLocalApplicationsTableFilterComposer(
+                $db: db,
+                $table: table,
+              ),
+          createOrderingComposer: () =>
+              $$PairwiseLocalApplicationsTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$PairwiseLocalApplicationsTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> operationId = const Value.absent(),
+                Value<String> eventId = const Value.absent(),
+                Value<String> localDeviceId = const Value.absent(),
+                Value<Uint8List> openedOpaquePayload = const Value.absent(),
+                Value<bool> applicationApplied = const Value.absent(),
+                Value<DateTime> committedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => PairwiseLocalApplicationsCompanion(
+                operationId: operationId,
+                eventId: eventId,
+                localDeviceId: localDeviceId,
+                openedOpaquePayload: openedOpaquePayload,
+                applicationApplied: applicationApplied,
+                committedAt: committedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String operationId,
+                required String eventId,
+                required String localDeviceId,
+                required Uint8List openedOpaquePayload,
+                Value<bool> applicationApplied = const Value.absent(),
+                Value<DateTime> committedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => PairwiseLocalApplicationsCompanion.insert(
+                operationId: operationId,
+                eventId: eventId,
+                localDeviceId: localDeviceId,
+                openedOpaquePayload: openedOpaquePayload,
+                applicationApplied: applicationApplied,
+                committedAt: committedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$PairwiseLocalApplicationsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$LocalDatabase,
+      $PairwiseLocalApplicationsTable,
+      PairwiseLocalApplication,
+      $$PairwiseLocalApplicationsTableFilterComposer,
+      $$PairwiseLocalApplicationsTableOrderingComposer,
+      $$PairwiseLocalApplicationsTableAnnotationComposer,
+      $$PairwiseLocalApplicationsTableCreateCompanionBuilder,
+      $$PairwiseLocalApplicationsTableUpdateCompanionBuilder,
+      (
+        PairwiseLocalApplication,
+        BaseReferences<
+          _$LocalDatabase,
+          $PairwiseLocalApplicationsTable,
+          PairwiseLocalApplication
+        >,
+      ),
+      PairwiseLocalApplication,
+      PrefetchHooks Function()
+    >;
+typedef $$PairwiseConsumedPrekeysTableCreateCompanionBuilder =
+    PairwiseConsumedPrekeysCompanion Function({
+      required String localDeviceId,
+      required int algorithm,
+      required int keyId,
+      required String firstEnvelopeId,
+      Value<DateTime> consumedAt,
+      Value<int> rowid,
+    });
+typedef $$PairwiseConsumedPrekeysTableUpdateCompanionBuilder =
+    PairwiseConsumedPrekeysCompanion Function({
+      Value<String> localDeviceId,
+      Value<int> algorithm,
+      Value<int> keyId,
+      Value<String> firstEnvelopeId,
+      Value<DateTime> consumedAt,
+      Value<int> rowid,
+    });
+
+class $$PairwiseConsumedPrekeysTableFilterComposer
+    extends Composer<_$LocalDatabase, $PairwiseConsumedPrekeysTable> {
+  $$PairwiseConsumedPrekeysTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get localDeviceId => $composableBuilder(
+    column: $table.localDeviceId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get algorithm => $composableBuilder(
+    column: $table.algorithm,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get keyId => $composableBuilder(
+    column: $table.keyId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get firstEnvelopeId => $composableBuilder(
+    column: $table.firstEnvelopeId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get consumedAt => $composableBuilder(
+    column: $table.consumedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$PairwiseConsumedPrekeysTableOrderingComposer
+    extends Composer<_$LocalDatabase, $PairwiseConsumedPrekeysTable> {
+  $$PairwiseConsumedPrekeysTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get localDeviceId => $composableBuilder(
+    column: $table.localDeviceId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get algorithm => $composableBuilder(
+    column: $table.algorithm,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get keyId => $composableBuilder(
+    column: $table.keyId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get firstEnvelopeId => $composableBuilder(
+    column: $table.firstEnvelopeId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get consumedAt => $composableBuilder(
+    column: $table.consumedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$PairwiseConsumedPrekeysTableAnnotationComposer
+    extends Composer<_$LocalDatabase, $PairwiseConsumedPrekeysTable> {
+  $$PairwiseConsumedPrekeysTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get localDeviceId => $composableBuilder(
+    column: $table.localDeviceId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get algorithm =>
+      $composableBuilder(column: $table.algorithm, builder: (column) => column);
+
+  GeneratedColumn<int> get keyId =>
+      $composableBuilder(column: $table.keyId, builder: (column) => column);
+
+  GeneratedColumn<String> get firstEnvelopeId => $composableBuilder(
+    column: $table.firstEnvelopeId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get consumedAt => $composableBuilder(
+    column: $table.consumedAt,
+    builder: (column) => column,
+  );
+}
+
+class $$PairwiseConsumedPrekeysTableTableManager
+    extends
+        RootTableManager<
+          _$LocalDatabase,
+          $PairwiseConsumedPrekeysTable,
+          PairwiseConsumedPrekey,
+          $$PairwiseConsumedPrekeysTableFilterComposer,
+          $$PairwiseConsumedPrekeysTableOrderingComposer,
+          $$PairwiseConsumedPrekeysTableAnnotationComposer,
+          $$PairwiseConsumedPrekeysTableCreateCompanionBuilder,
+          $$PairwiseConsumedPrekeysTableUpdateCompanionBuilder,
+          (
+            PairwiseConsumedPrekey,
+            BaseReferences<
+              _$LocalDatabase,
+              $PairwiseConsumedPrekeysTable,
+              PairwiseConsumedPrekey
+            >,
+          ),
+          PairwiseConsumedPrekey,
+          PrefetchHooks Function()
+        > {
+  $$PairwiseConsumedPrekeysTableTableManager(
+    _$LocalDatabase db,
+    $PairwiseConsumedPrekeysTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$PairwiseConsumedPrekeysTableFilterComposer(
+                $db: db,
+                $table: table,
+              ),
+          createOrderingComposer: () =>
+              $$PairwiseConsumedPrekeysTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$PairwiseConsumedPrekeysTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> localDeviceId = const Value.absent(),
+                Value<int> algorithm = const Value.absent(),
+                Value<int> keyId = const Value.absent(),
+                Value<String> firstEnvelopeId = const Value.absent(),
+                Value<DateTime> consumedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => PairwiseConsumedPrekeysCompanion(
+                localDeviceId: localDeviceId,
+                algorithm: algorithm,
+                keyId: keyId,
+                firstEnvelopeId: firstEnvelopeId,
+                consumedAt: consumedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String localDeviceId,
+                required int algorithm,
+                required int keyId,
+                required String firstEnvelopeId,
+                Value<DateTime> consumedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => PairwiseConsumedPrekeysCompanion.insert(
+                localDeviceId: localDeviceId,
+                algorithm: algorithm,
+                keyId: keyId,
+                firstEnvelopeId: firstEnvelopeId,
+                consumedAt: consumedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$PairwiseConsumedPrekeysTableProcessedTableManager =
+    ProcessedTableManager<
+      _$LocalDatabase,
+      $PairwiseConsumedPrekeysTable,
+      PairwiseConsumedPrekey,
+      $$PairwiseConsumedPrekeysTableFilterComposer,
+      $$PairwiseConsumedPrekeysTableOrderingComposer,
+      $$PairwiseConsumedPrekeysTableAnnotationComposer,
+      $$PairwiseConsumedPrekeysTableCreateCompanionBuilder,
+      $$PairwiseConsumedPrekeysTableUpdateCompanionBuilder,
+      (
+        PairwiseConsumedPrekey,
+        BaseReferences<
+          _$LocalDatabase,
+          $PairwiseConsumedPrekeysTable,
+          PairwiseConsumedPrekey
+        >,
+      ),
+      PairwiseConsumedPrekey,
+      PrefetchHooks Function()
+    >;
 typedef $$StaleDeviceRefreshRequestsTableCreateCompanionBuilder =
     StaleDeviceRefreshRequestsCompanion Function({
       required String userId,
@@ -19992,8 +25954,18 @@ class $LocalDatabaseManager {
       $$DeviceLogRecordsTableTableManager(_db, _db.deviceLogRecords);
   $$PairwiseSessionsTableTableManager get pairwiseSessions =>
       $$PairwiseSessionsTableTableManager(_db, _db.pairwiseSessions);
+  $$PairwiseSessionAlternatesTableTableManager get pairwiseSessionAlternates =>
+      $$PairwiseSessionAlternatesTableTableManager(
+        _db,
+        _db.pairwiseSessionAlternates,
+      );
   $$PrekeysTableTableManager get prekeys =>
       $$PrekeysTableTableManager(_db, _db.prekeys);
+  $$PrekeyMaintenancePlansTableTableManager get prekeyMaintenancePlans =>
+      $$PrekeyMaintenancePlansTableTableManager(
+        _db,
+        _db.prekeyMaintenancePlans,
+      );
   $$MlsGroupsTableTableManager get mlsGroups =>
       $$MlsGroupsTableTableManager(_db, _db.mlsGroups);
   $$ConversationsTableTableManager get conversations =>
@@ -20014,6 +25986,23 @@ class $LocalDatabaseManager {
       $$InboxEventDeduplicationsTableTableManager(
         _db,
         _db.inboxEventDeduplications,
+      );
+  $$PairwiseReplayMarkersTableTableManager get pairwiseReplayMarkers =>
+      $$PairwiseReplayMarkersTableTableManager(_db, _db.pairwiseReplayMarkers);
+  $$PairwiseOpenedPayloadsTableTableManager get pairwiseOpenedPayloads =>
+      $$PairwiseOpenedPayloadsTableTableManager(
+        _db,
+        _db.pairwiseOpenedPayloads,
+      );
+  $$PairwiseLocalApplicationsTableTableManager get pairwiseLocalApplications =>
+      $$PairwiseLocalApplicationsTableTableManager(
+        _db,
+        _db.pairwiseLocalApplications,
+      );
+  $$PairwiseConsumedPrekeysTableTableManager get pairwiseConsumedPrekeys =>
+      $$PairwiseConsumedPrekeysTableTableManager(
+        _db,
+        _db.pairwiseConsumedPrekeys,
       );
   $$StaleDeviceRefreshRequestsTableTableManager
   get staleDeviceRefreshRequests =>

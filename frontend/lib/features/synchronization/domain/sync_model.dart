@@ -1,5 +1,7 @@
 import 'dart:typed_data';
 
+import 'package:communication_platform/core/protocol/pairwise_sync_model.dart';
+
 enum EnvelopeDependency { directOrLocal, potentiallyMls }
 
 enum QueueGapState { clear, recoveryRequired }
@@ -87,10 +89,12 @@ final class OpaqueEnvelopeInspection {
   const OpaqueEnvelopeInspection({
     required this.opaqueEventId,
     required this.dependency,
+    this.pairwiseCommit,
   });
 
   final String opaqueEventId;
   final EnvelopeDependency dependency;
+  final PairwiseSyncReceiveCommit? pairwiseCommit;
 }
 
 final class PreparedOutboxTarget {

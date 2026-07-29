@@ -1,6 +1,8 @@
 import 'package:communication_platform/core/result/failure.dart';
 import 'package:communication_platform/core/result/result.dart';
 import 'package:communication_platform/features/local_storage/infrastructure/database/local_database.dart';
+import 'package:communication_platform/features/pairwise/domain/pairwise_model.dart';
+import 'package:communication_platform/features/pairwise/infrastructure/drift_pairwise_transport_store.dart';
 import 'package:communication_platform/features/synchronization/application/ports/sync_ports.dart';
 import 'package:communication_platform/features/synchronization/domain/sync_model.dart';
 import 'package:drift/drift.dart';
@@ -338,6 +340,109 @@ WHERE c.singleton_id = 1
     if (inspection.opaqueEventId.isEmpty) {
       return const Result.failure(
         ValidationFailure(ValidationFailureKind.invalidInput),
+      );
+    }
+    final pairwise = inspection.pairwiseCommit;
+    if (pairwise != null) {
+      if (inspection.dependency != EnvelopeDependency.directOrLocal ||
+          pairwise.envelopeId != envelopeId ||
+          pairwise.opaqueEventId != inspection.opaqueEventId ||
+          pairwise.sessionTransition.disposition < 0 ||
+          pairwise.sessionTransition.disposition >=
+              PairwiseSessionDisposition.values.length ||
+          pairwise.sessionTransition.repairState < 0 ||
+          pairwise.sessionTransition.repairState >=
+              PairwiseRepairState.values.length ||
+          pairwise.consumedOneTimePrekeys.any(
+            (key) =>
+                key.algorithm < 0 ||
+                key.algorithm >= PairwiseOneTimePrekeyKind.values.length,
+          )) {
+        return const Result.failure(
+          SecurityFailure(SecurityFailureKind.malformedServerResponse),
+        );
+      }
+      return DriftPairwiseTransportStore(database).commitPreparedReceive(
+        PairwiseReceiveCommit(
+          envelopeId: pairwise.envelopeId,
+          opaqueEventId: pairwise.opaqueEventId,
+          senderUserId: pairwise.senderUserId,
+          senderDeviceId: pairwise.senderDeviceId,
+          replayMarker: pairwise.replayMarker,
+          openedOpaquePayload: pairwise.openedOpaquePayload,
+          signedPrekeyId: pairwise.signedPrekeyId,
+          pqSignedPrekeyId: pairwise.pqSignedPrekeyId,
+          sessionTransition: PairwiseSessionTransition(
+            localDeviceId: pairwise.sessionTransition.localDeviceId,
+            remoteUserId: pairwise.sessionTransition.remoteUserId,
+            remoteDeviceId: pairwise.sessionTransition.remoteDeviceId,
+            sessionId: pairwise.sessionTransition.sessionId,
+            nextOpaqueState: pairwise.sessionTransition.nextOpaqueState,
+            expectedStateVersion:
+                pairwise.sessionTransition.expectedStateVersion,
+            nextStateVersion: pairwise.sessionTransition.nextStateVersion,
+            nextSkippedKeyCount: pairwise.sessionTransition.nextSkippedKeyCount,
+            disposition: PairwiseSessionDisposition
+                .values[pairwise.sessionTransition.disposition],
+            repairState: PairwiseRepairState
+                .values[pairwise.sessionTransition.repairState],
+            repairAuthorization: pairwise.sessionTransition.repairAuthorization,
+          ),
+          demotedExistingSessionTransition:
+              pairwise.demotedExistingSessionTransition == null
+              ? null
+              : PairwiseSessionTransition(
+                  localDeviceId:
+                      pairwise.demotedExistingSessionTransition!.localDeviceId,
+                  remoteUserId:
+                      pairwise.demotedExistingSessionTransition!.remoteUserId,
+                  remoteDeviceId:
+                      pairwise.demotedExistingSessionTransition!.remoteDeviceId,
+                  sessionId:
+                      pairwise.demotedExistingSessionTransition!.sessionId,
+                  nextOpaqueState: pairwise
+                      .demotedExistingSessionTransition!
+                      .nextOpaqueState,
+                  expectedStateVersion: pairwise
+                      .demotedExistingSessionTransition!
+                      .expectedStateVersion,
+                  nextStateVersion: pairwise
+                      .demotedExistingSessionTransition!
+                      .nextStateVersion,
+                  nextSkippedKeyCount: pairwise
+                      .demotedExistingSessionTransition!
+                      .nextSkippedKeyCount,
+                  disposition:
+                      PairwiseSessionDisposition.values[pairwise
+                          .demotedExistingSessionTransition!
+                          .disposition],
+                  repairState:
+                      PairwiseRepairState.values[pairwise
+                          .demotedExistingSessionTransition!
+                          .repairState],
+                  repairAuthorization: pairwise
+                      .demotedExistingSessionTransition!
+                      .repairAuthorization,
+                ),
+          replacedSessionId: pairwise.replacedSessionId,
+          deviceStateTransition: pairwise.deviceStateTransition == null
+              ? null
+              : PairwiseDeviceStateTransition(
+                  nextOpaqueState:
+                      pairwise.deviceStateTransition!.nextOpaqueState,
+                  expectedStateVersion:
+                      pairwise.deviceStateTransition!.expectedStateVersion,
+                  nextStateVersion:
+                      pairwise.deviceStateTransition!.nextStateVersion,
+                ),
+          consumedOneTimePrekeys: [
+            for (final key in pairwise.consumedOneTimePrekeys)
+              ConsumedPairwiseOneTimePrekey(
+                kind: PairwiseOneTimePrekeyKind.values[key.algorithm],
+                keyId: key.keyId,
+              ),
+          ],
+        ),
       );
     }
     try {
@@ -723,6 +828,10 @@ WHERE c.singleton_id = 1
         continue;
       }
       await (database.delete(database.pairwiseSessions)..where(
+            (row) => row.remoteDeviceId.equals(target.recipientDeviceId),
+          ))
+          .go();
+      await (database.delete(database.pairwiseSessionAlternates)..where(
             (row) => row.remoteDeviceId.equals(target.recipientDeviceId),
           ))
           .go();

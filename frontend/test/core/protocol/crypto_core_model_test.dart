@@ -8,7 +8,10 @@ void main() {
     expect(CryptoCoreProtocolV1.capabilitiesStructSizeBytes, 32);
     expect(
       CryptoCoreCapability.values.map((capability) => capability.featureBit),
-      <int>[for (var bit = 0; bit < 12; bit += 1) 1 << bit],
+      <int>[
+        for (var bit = 0; bit < CryptoCoreCapability.values.length; bit += 1)
+          1 << bit,
+      ],
     );
 
     final capabilities = CryptoCoreCapabilities(

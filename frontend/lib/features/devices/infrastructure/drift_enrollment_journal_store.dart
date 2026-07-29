@@ -417,6 +417,10 @@ final class DriftEnrollmentJournalStore
                 publicBundle: publicDevice,
                 revocationState: 0,
                 bundleVersion: const Value(1),
+                lastSignedPrekeyRotationUnixDay: Value(
+                  DateTime.now().toUtc().millisecondsSinceEpoch ~/
+                      Duration.millisecondsPerDay,
+                ),
               ),
             );
         await (database.delete(

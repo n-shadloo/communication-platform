@@ -494,7 +494,7 @@ class _SafetyNumberPageState extends ConsumerState<SafetyNumberPage> {
         widget.local ?? await ref.read(contactLocalProvider.future);
     await authentication.refreshPeer(
       userId: widget.userId,
-      requirePrekeys: true,
+      requirePrekeys: false,
     );
     final trustResult = await local.readTrust(widget.userId);
     final fingerprintResult = await authentication.safetyFingerprint(

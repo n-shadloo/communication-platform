@@ -162,7 +162,6 @@ pub fn prepare_device_with_provider<P: CryptoProvider>(
     let mut registration_bytes = [0u8; 4];
     provider.random_bytes(&mut registration_bytes)?;
     let registration_id = u32::from_be_bytes(registration_bytes) & 0x7fff_ffff;
-    let registration_id = registration_id.max(1);
     let fingerprint = provider.sha256(ik_public.as_bytes())?;
 
     let mut classical_public =

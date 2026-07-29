@@ -102,6 +102,15 @@ forward-secrecy degradation, not treated as equivalent inventory. Failed signatu
 cross-signature verification blocks session setup. No production KeyPackage is generated
 or uploaded while those gates remain open.
 
+A routine prekey rotation does not reset the contact's confirmed master key only when
+the user/device ID, `ik_pub`, and registration ID are unchanged, the new classical/PQ
+prekey signatures and device `cross_sig` all verify, `bundle_version` increments by
+exactly one, and the device log extends to the new canonical live-set hash. A peer that
+observes the prekey PUT before its separately appended log record treats the state as a
+temporary security block and retries; it does not persist a fork alarm. Any other
+cross-signature change remains a blocking safety-number change requiring explicit
+out-of-band resolution.
+
 ## Recovery
 
 Recovery requires the server key-backup blob and user-held recovery secret. The client

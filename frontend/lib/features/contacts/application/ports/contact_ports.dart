@@ -84,6 +84,22 @@ abstract interface class PeerAuthenticationService implements Port {
   Future<Result<SafetyFingerprint>> safetyFingerprint(String userId);
 }
 
+/// Claims consumable prekeys only for the explicitly missing/repairing sessions.
+/// The full live device list and device log are still authenticated before claim.
+abstract interface class SelectivePeerPrekeyClaimPort implements Port {
+  Future<Result<AuthenticatedPeer>> refreshPeerForDevices({
+    required String userId,
+    required List<String> deviceIds,
+  });
+}
+
+/// Authenticates and returns the complete live device set without consuming keys.
+abstract interface class VerifiedLiveDeviceResolverPort implements Port {
+  Future<Result<AuthenticatedPeer>> resolveLiveDevices({
+    required String userId,
+  });
+}
+
 final class VerifiedDeviceLogRecord {
   VerifiedDeviceLogRecord({
     required this.sequence,

@@ -5,11 +5,15 @@ import 'package:communication_platform/app/config/app_environment.dart';
 import 'package:communication_platform/core/application/ports/crypto_core_port.dart';
 import 'package:communication_platform/core/application/ports/enrollment_crypto_port.dart';
 import 'package:communication_platform/core/application/ports/identity_crypto_port.dart';
+import 'package:communication_platform/core/application/ports/pairwise_crypto_port.dart';
+import 'package:communication_platform/core/application/ports/pairwise_session_crypto_port.dart';
 import 'package:communication_platform/core/application/ports/time_source.dart';
 import 'package:communication_platform/core/protocol/enrollment_crypto_model.dart';
 import 'package:communication_platform/core/protocol/identity_protocol_model.dart';
 import 'package:communication_platform/core/result/failure.dart';
 import 'package:communication_platform/core/result/result.dart';
+import 'package:communication_platform/shared/infrastructure/crypto/crypto_core_runtime.dart';
+import 'package:communication_platform/shared/infrastructure/crypto/native/pairwise_session_crypto.dart';
 import 'package:communication_platform/shared/infrastructure/crypto/platform_crypto_core.dart';
 import 'package:communication_platform/shared/infrastructure/crypto/unsupported_enrollment_crypto.dart';
 import 'package:communication_platform/shared/infrastructure/time/system_time_source.dart';
@@ -52,6 +56,17 @@ final identityCryptoProvider = Provider<IdentityCryptoPort>((ref) {
       ? cryptoCore as IdentityCryptoPort
       : const UnsupportedIdentityCrypto();
 });
+
+final pairwiseCryptoProvider = Provider<PairwiseCryptoPort>((ref) {
+  final cryptoCore = ref.watch(cryptoCoreProvider);
+  return cryptoCore is PairwiseCryptoPort
+      ? cryptoCore as PairwiseCryptoPort
+      : const UnsupportedCryptoCore();
+});
+
+final pairwiseSessionCryptoProvider = Provider<PairwiseSessionCryptoPort>(
+  (ref) => NativePairwiseSessionCrypto(ref.watch(pairwiseCryptoProvider)),
+);
 
 final class UnsupportedIdentityCrypto implements IdentityCryptoPort {
   const UnsupportedIdentityCrypto();

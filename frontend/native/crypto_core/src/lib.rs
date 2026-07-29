@@ -5,6 +5,9 @@ mod cbor;
 pub mod device_signatures;
 pub mod enrollment;
 mod error;
+mod pairwise;
+mod prekey_state;
+mod protocol;
 mod provider;
 mod random;
 mod secret;
@@ -40,6 +43,8 @@ pub const CAP_SECRETSTREAM: u64 = 1 << 8;
 pub const CAP_SECURE_RANDOM: u64 = 1 << 9;
 pub const CAP_ZEROIZING_SECRETS: u64 = 1 << 10;
 pub const CAP_PANIC_CONTAINMENT: u64 = 1 << 11;
+pub const CAP_HYBRID_PQXDH_V1: u64 = 1 << 12;
+pub const CAP_DOUBLE_RATCHET_V1: u64 = 1 << 13;
 
 #[repr(C)]
 pub struct CpCryptoCapabilitiesV1 {
@@ -67,7 +72,9 @@ const CAPABILITIES: CpCryptoCapabilitiesV1 = CpCryptoCapabilitiesV1 {
         | CAP_SECRETSTREAM
         | CAP_SECURE_RANDOM
         | CAP_ZEROIZING_SECRETS
-        | CAP_PANIC_CONTAINMENT,
+        | CAP_PANIC_CONTAINMENT
+        | CAP_HYBRID_PQXDH_V1
+        | CAP_DOUBLE_RATCHET_V1,
     max_input_bytes: MAX_INPUT_BYTES,
     max_cbor_depth: bounds::MAX_CBOR_DEPTH,
     max_cbor_items: bounds::MAX_CBOR_ITEMS,
@@ -124,11 +131,20 @@ pub extern "C" fn cp_crypto_v1_self_test() -> i32 {
 }
 
 unsafe fn ffi_input<'a>(input: *const u8, input_len: usize) -> CryptoResult<&'a [u8]> {
+    // SAFETY: forwarded caller contract is identical with the foundation cap.
+    unsafe { ffi_input_bounded(input, input_len, bounds::MAX_INPUT_BYTES) }
+}
+
+unsafe fn ffi_input_bounded<'a>(
+    input: *const u8,
+    input_len: usize,
+    maximum: usize,
+) -> CryptoResult<&'a [u8]> {
     if input_len == 0 {
         return Ok(&[]);
     }
-    if input.is_null() || input_len > bounds::MAX_INPUT_BYTES {
-        return Err(if input_len > bounds::MAX_INPUT_BYTES {
+    if input.is_null() || input_len > maximum {
+        return Err(if input_len > maximum {
             CryptoError::InputTooLarge
         } else {
             CryptoError::InvalidArgument
@@ -421,6 +437,33 @@ pub unsafe extern "C" fn cp_crypto_v1_identity_operation(
 }
 
 #[unsafe(no_mangle)]
+/// Runs one bounded hybrid pairwise/prekey operation.
+///
+/// The operation-specific request and response frames are strictly versioned;
+/// private device and ratchet states remain opaque to the caller.
+///
+/// # Safety
+///
+/// Pointer requirements are identical to [`cp_crypto_v1_prepare_device`].
+pub unsafe extern "C" fn cp_crypto_v1_pairwise_operation(
+    operation: u32,
+    input: *const u8,
+    input_len: usize,
+    output: *mut u8,
+    output_len: usize,
+    written: *mut usize,
+) -> i32 {
+    guard(|| {
+        // SAFETY: upheld by this function's caller contract.
+        let input =
+            unsafe { ffi_input_bounded(input, input_len, pairwise::PAIRWISE_MAX_IO_BYTES)? };
+        let value = pairwise::operation(operation, input)?;
+        // SAFETY: upheld by this function's caller contract.
+        unsafe { ffi_output(&value, output, output_len, written) }
+    })
+}
+
+#[unsafe(no_mangle)]
 /// Signs the exact peer master-key attestation with the local user-signing key.
 ///
 /// # Safety
@@ -516,10 +559,11 @@ mod tests {
     use std::{mem, ptr};
 
     use super::{
-        ABI_VERSION, CAP_ARGON2ID, CAP_DETERMINISTIC_CBOR, CAP_ED25519, CAP_HKDF, CAP_MLKEM768,
-        CAP_PANIC_CONTAINMENT, CAP_SECRETSTREAM, CAP_SECURE_RANDOM, CAP_SHA2, CAP_X25519,
-        CAP_XCHACHA20POLY1305, CAP_ZEROIZING_SECRETS, CAPABILITIES_SIZE, CpCryptoCapabilitiesV1,
-        cp_crypto_v1_abi_version, cp_crypto_v1_capabilities, cp_crypto_v1_self_test, guard,
+        ABI_VERSION, CAP_ARGON2ID, CAP_DETERMINISTIC_CBOR, CAP_DOUBLE_RATCHET_V1, CAP_ED25519,
+        CAP_HKDF, CAP_HYBRID_PQXDH_V1, CAP_MLKEM768, CAP_PANIC_CONTAINMENT, CAP_SECRETSTREAM,
+        CAP_SECURE_RANDOM, CAP_SHA2, CAP_X25519, CAP_XCHACHA20POLY1305, CAP_ZEROIZING_SECRETS,
+        CAPABILITIES_SIZE, CpCryptoCapabilitiesV1, cp_crypto_v1_abi_version,
+        cp_crypto_v1_capabilities, cp_crypto_v1_self_test, guard,
     };
     use crate::error::CryptoError;
 
@@ -569,6 +613,8 @@ mod tests {
                 | CAP_SECURE_RANDOM
                 | CAP_ZEROIZING_SECRETS
                 | CAP_PANIC_CONTAINMENT
+                | CAP_HYBRID_PQXDH_V1
+                | CAP_DOUBLE_RATCHET_V1
         );
 
         let mut unaligned_storage =

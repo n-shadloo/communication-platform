@@ -1,0 +1,399 @@
+import 'dart:typed_data';
+
+import 'package:communication_platform/core/application/ports/time_source.dart';
+import 'package:communication_platform/core/protocol/identity_protocol_model.dart';
+import 'package:communication_platform/core/result/failure.dart';
+import 'package:communication_platform/core/result/result.dart';
+import 'package:communication_platform/features/pairwise/application/pairwise_fanout_coordinator.dart';
+import 'package:communication_platform/features/pairwise/application/ports/pairwise_orchestration_ports.dart';
+import 'package:communication_platform/features/pairwise/application/ports/pairwise_transport_store.dart';
+import 'package:communication_platform/features/pairwise/domain/pairwise_model.dart';
+import 'package:flutter_test/flutter_test.dart';
+
+void main() {
+  const currentUserNumber = 1000;
+  const peerUserNumber = 1001;
+  const currentDeviceNumber = 900;
+  late FakePairwiseStore store;
+  late FakeLiveResolver resolver;
+  late FakeSelectiveClaims claims;
+  late FakeOutboundCrypto crypto;
+  late PairwiseFanoutCoordinator coordinator;
+
+  setUp(() {
+    store = FakePairwiseStore();
+    resolver = FakeLiveResolver({
+      uuid(peerUserNumber): [live(peerUserNumber, 1), live(peerUserNumber, 2)],
+      uuid(currentUserNumber): [
+        live(currentUserNumber, currentDeviceNumber),
+        live(currentUserNumber, 3),
+        live(currentUserNumber, 4),
+      ],
+    });
+    store.contexts.addAll({
+      uuid(1): context(primary: session(peerUserNumber, 1)),
+      uuid(2): context(),
+      uuid(3): context(
+        primary: session(
+          currentUserNumber,
+          3,
+          repairState: PairwiseRepairState.replacementPending,
+          repairAuthorization: bytes(88, 8),
+        ),
+      ),
+      uuid(4): context(primary: session(currentUserNumber, 4)),
+    });
+    claims = FakeSelectiveClaims(resolver);
+    crypto = FakeOutboundCrypto();
+    coordinator = PairwiseFanoutCoordinator(
+      store: store,
+      liveDevices: resolver,
+      claims: claims,
+      crypto: crypto,
+      clock: const FixedClock(),
+    );
+  });
+
+  test(
+    'fans out to every verified peer and own-other device, claiming only missing or repair',
+    () async {
+      final first = await coordinator.prepareAndQueue(
+        operationId: 'operation-1',
+        eventId: 'event-1',
+        currentUserId: uuid(currentUserNumber),
+        currentDeviceId: uuid(currentDeviceNumber),
+        peerUserId: uuid(peerUserNumber),
+        openedOpaquePayload: bytes(16, 9),
+      );
+
+      expect(first, isA<Success<DurablePairwiseOperation>>());
+      expect(resolver.calls, [uuid(peerUserNumber), uuid(currentUserNumber)]);
+      expect(claims.calls, {
+        uuid(peerUserNumber): [uuid(2)],
+        uuid(currentUserNumber): [uuid(3)],
+      });
+      expect(crypto.calls.map((call) => call.recipient.deviceId), [
+        uuid(1),
+        uuid(2),
+        uuid(3),
+        uuid(4),
+      ]);
+      expect(crypto.calls[0].claimedBundle, isNull);
+      expect(crypto.calls[1].claimedBundle, isNotNull);
+      expect(crypto.calls[2].claimedBundle, isNotNull);
+      expect(crypto.calls[3].claimedBundle, isNull);
+      expect(
+        store.commits.single.targets.map((target) => target.recipientDeviceId),
+        [uuid(1), uuid(2), uuid(3), uuid(4)],
+      );
+      expect(
+        store.commits.single.targets
+            .map((target) => target.recipientDeviceId)
+            .contains(uuid(currentDeviceNumber)),
+        isFalse,
+      );
+      expect(store.commits.single.openedLocalPayload, bytes(16, 9));
+      expect(store.commits.single.expectedDeviceStateVersion, 7);
+
+      final retry = await coordinator.prepareAndQueue(
+        operationId: 'operation-1',
+        eventId: 'event-1',
+        currentUserId: uuid(currentUserNumber),
+        currentDeviceId: uuid(currentDeviceNumber),
+        peerUserId: uuid(peerUserNumber),
+        openedOpaquePayload: bytes(16, 9),
+      );
+
+      expect(retry, isA<Success<DurablePairwiseOperation>>());
+      expect(resolver.calls, hasLength(2));
+      expect(crypto.calls, hasLength(4));
+      expect(store.commits, hasLength(1));
+      final firstBytes = (first as Success<DurablePairwiseOperation>)
+          .value
+          .targets
+          .map((target) => target.exactCiphertext)
+          .toList();
+      final retryBytes = (retry as Success<DurablePairwiseOperation>)
+          .value
+          .targets
+          .map((target) => target.exactCiphertext)
+          .toList();
+      expect(retryBytes, firstBytes);
+    },
+  );
+
+  test(
+    'fails closed when verified own live set omits the current device',
+    () async {
+      resolver.devices[uuid(currentUserNumber)] = [live(currentUserNumber, 3)];
+
+      final result = await coordinator.prepareAndQueue(
+        operationId: 'operation-2',
+        eventId: 'event-2',
+        currentUserId: uuid(currentUserNumber),
+        currentDeviceId: uuid(currentDeviceNumber),
+        peerUserId: uuid(peerUserNumber),
+        openedOpaquePayload: bytes(16, 2),
+      );
+
+      expect(
+        (result as FailureResult<DurablePairwiseOperation>).failure,
+        isA<SecurityFailure>(),
+      );
+      expect(claims.calls, isEmpty);
+      expect(crypto.calls, isEmpty);
+    },
+  );
+
+  test(
+    'fails closed if live set changes between resolve and selective claim',
+    () async {
+      claims.mutateLiveUserId = uuid(peerUserNumber);
+
+      final result = await coordinator.prepareAndQueue(
+        operationId: 'operation-3',
+        eventId: 'event-3',
+        currentUserId: uuid(currentUserNumber),
+        currentDeviceId: uuid(currentDeviceNumber),
+        peerUserId: uuid(peerUserNumber),
+        openedOpaquePayload: bytes(16, 3),
+      );
+
+      expect(
+        (result as FailureResult<DurablePairwiseOperation>).failure,
+        isA<SecurityFailure>(),
+      );
+      expect(crypto.calls, isEmpty);
+      expect(store.commits, isEmpty);
+    },
+  );
+}
+
+final class FakePairwiseStore implements PairwiseTransportStore {
+  final Map<String, PairwisePreparationContext> contexts = {};
+  final Map<String, DurablePairwiseOperation> durable = {};
+  final List<PairwiseSendCommit> commits = [];
+  final List<(String, Set<String>)> reconciliations = [];
+
+  @override
+  Future<Result<PairwisePreparationContext>> readPreparationContext({
+    required String localDeviceId,
+    required String remoteUserId,
+    required String remoteDeviceId,
+  }) async => Result.success(contexts[remoteDeviceId]!);
+
+  @override
+  Future<Result<DurablePairwiseOperation?>> readPreparedOperation(
+    String operationId,
+  ) async => Result.success(durable[operationId]);
+
+  @override
+  Future<Result<void>> commitPreparedSend(PairwiseSendCommit commit) async {
+    commits.add(commit);
+    final operation = DurablePairwiseOperation(
+      operationId: commit.operationId,
+      eventId: commit.eventId,
+      currentDeviceId: commit.currentDeviceId,
+      openedLocalPayload: commit.openedLocalPayload,
+      targets: [
+        for (final target in commit.targets)
+          DurablePairwiseTarget(
+            recipientUserId: target.recipientUserId,
+            recipientDeviceId: target.recipientDeviceId,
+            exactCiphertext: target.exactCiphertext,
+          ),
+      ],
+    );
+    durable[commit.operationId] = operation;
+    return const Result.success(null);
+  }
+
+  @override
+  Future<Result<void>> reconcileRemoteLiveDevices({
+    required String remoteUserId,
+    required Set<String> liveDeviceIds,
+  }) async {
+    reconciliations.add((remoteUserId, Set.of(liveDeviceIds)));
+    return const Result.success(null);
+  }
+
+  @override
+  Future<Result<bool>> commitPreparedReceive(
+    PairwiseReceiveCommit commit,
+  ) async =>
+      const Result.failure(SecurityFailure(SecurityFailureKind.policyBlocked));
+
+  @override
+  Future<Result<void>> invalidateRemoteDevices({
+    required String remoteUserId,
+    required Set<String> remoteDeviceIds,
+  }) async => const Result.success(null);
+
+  @override
+  Future<Result<PairwiseInboundPreparationContext>> readInboundContext({
+    required String localDeviceId,
+    Uint8List? sessionId,
+  }) async =>
+      const Result.failure(SecurityFailure(SecurityFailureKind.policyBlocked));
+
+  @override
+  Future<Result<void>> pruneRetainedMetadata({
+    required DateTime now,
+    List<ErasedPairwiseSignedPrekeyPair> erasedSignedPrekeys = const [],
+  }) async => const Result.success(null);
+}
+
+final class FakeLiveResolver implements PairwiseLiveDeviceResolverPort {
+  FakeLiveResolver(this.devices);
+
+  final Map<String, List<VerifiedPairwiseLiveDevice>> devices;
+  final List<String> calls = [];
+
+  @override
+  Future<Result<List<VerifiedPairwiseLiveDevice>>> resolveVerifiedLiveDevices(
+    String userId,
+  ) async {
+    calls.add(userId);
+    return Result.success(List.of(devices[userId]!));
+  }
+}
+
+final class FakeSelectiveClaims implements PairwiseSelectiveClaimPort {
+  FakeSelectiveClaims(this.resolver);
+
+  final FakeLiveResolver resolver;
+  final Map<String, List<String>> calls = {};
+  String? mutateLiveUserId;
+
+  @override
+  Future<Result<VerifiedPairwiseClaims>> claimVerifiedDevices({
+    required String userId,
+    required List<String> deviceIds,
+  }) async {
+    calls[userId] = List.of(deviceIds);
+    final liveDevices = List<VerifiedPairwiseLiveDevice>.of(
+      resolver.devices[userId]!,
+    );
+    if (mutateLiveUserId == userId) {
+      liveDevices.add(live(int.parse(userId.substring(24), radix: 16), 77));
+    }
+    return Result.success(
+      VerifiedPairwiseClaims(
+        liveDevices: liveDevices,
+        claims: {
+          for (final deviceId in deviceIds)
+            deviceId: VerifiedPairwiseClaim(
+              device: liveDevices.singleWhere(
+                (device) => device.deviceId == deviceId,
+              ),
+              bundle: bundle(deviceId),
+            ),
+        },
+      ),
+    );
+  }
+}
+
+final class FakeOutboundCrypto implements PairwiseOutboundPreparationPort {
+  final List<CryptoCall> calls = [];
+
+  @override
+  Future<Result<PairwisePreparedOutbound>> prepareOutbound({
+    required String currentDeviceId,
+    required VerifiedPairwiseLiveDevice recipient,
+    required Uint8List openedOpaquePayload,
+    required int migrationUnixDay,
+    required PairwisePreparationContext context,
+    required VerifiedPairwiseClaim? claim,
+  }) async {
+    calls.add(CryptoCall(recipient: recipient, claim: claim));
+    final marker = int.parse(recipient.deviceId.substring(24), radix: 16);
+    return Result.success(
+      PairwisePreparedOutbound(
+        exactCiphertext: bytes(1024, marker),
+        sessionId: context.primary?.sessionId ?? bytes(16, marker),
+        nextOpaqueSessionState: bytes(32, marker),
+        nextSkippedKeyCount: 0,
+        disposition: PairwiseSessionDisposition.primaryBidirectional,
+      ),
+    );
+  }
+}
+
+final class CryptoCall {
+  const CryptoCall({required this.recipient, required this.claim});
+
+  final VerifiedPairwiseLiveDevice recipient;
+  final VerifiedPairwiseClaim? claim;
+
+  ClaimedPrekeyBundle? get claimedBundle => claim?.bundle;
+}
+
+final class FixedClock implements TimeSource {
+  const FixedClock();
+
+  @override
+  DateTime now() => DateTime.utc(2026, 7, 29);
+}
+
+PairwisePreparationContext context({PairwiseSessionSnapshot? primary}) =>
+    PairwisePreparationContext(
+      primary: primary,
+      alternate: null,
+      deviceState: PairwiseDeviceStateSnapshot(
+        opaqueState: bytes(32, 7),
+        stateVersion: 7,
+      ),
+      otherSessionsSkippedKeyCount: 0,
+    );
+
+PairwiseSessionSnapshot session(
+  int userNumber,
+  int deviceNumber, {
+  PairwiseRepairState repairState = PairwiseRepairState.ready,
+  Uint8List? repairAuthorization,
+}) => PairwiseSessionSnapshot(
+  localDeviceId: uuid(900),
+  remoteUserId: uuid(userNumber),
+  remoteDeviceId: uuid(deviceNumber),
+  sessionId: bytes(16, deviceNumber),
+  opaqueState: bytes(32, deviceNumber),
+  stateVersion: 1,
+  skippedKeyCount: 0,
+  disposition: PairwiseSessionDisposition.primaryBidirectional,
+  repairState: repairState,
+  repairAuthorization: repairAuthorization,
+);
+
+VerifiedPairwiseLiveDevice live(int userNumber, int deviceNumber) =>
+    VerifiedPairwiseLiveDevice(
+      userId: uuid(userNumber),
+      device: PeerPublicDevice(
+        deviceId: uuid(deviceNumber),
+        identityPublic: bytes(64, deviceNumber),
+        registrationId: 0,
+        bundleVersion: 1,
+        crossSignature: bytes(64, deviceNumber + 1),
+      ),
+      selfSigningPublic: bytes(32, userNumber),
+    );
+
+ClaimedPrekeyBundle bundle(String deviceId) => ClaimedPrekeyBundle(
+  deviceId: deviceId,
+  registrationId: 1,
+  identityPublic: bytes(64, 1),
+  signedPrekeyId: 1,
+  signedPrekeyPublic: bytes(32, 2),
+  signedPrekeySignature: bytes(64, 3),
+  crossSignature: bytes(64, 4),
+  bundleVersion: 1,
+  pqSignedPrekeyId: 2,
+  pqSignedPrekeyPublic: bytes(1184, 5),
+  pqSignedPrekeySignature: bytes(64, 6),
+);
+
+String uuid(int value) =>
+    '00000000-0000-0000-0000-${value.toRadixString(16).padLeft(12, '0')}';
+
+Uint8List bytes(int length, int marker) =>
+    Uint8List.fromList(List<int>.filled(length, marker & 0xff));

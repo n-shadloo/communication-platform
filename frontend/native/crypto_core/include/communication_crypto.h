@@ -3,6 +3,13 @@
 
 #include <stdint.h>
 
+/* The pairwise operation mux carries padded envelopes and authenticated
+ * device state, so it has a larger frozen bound than the other v1 entrypoints. */
+#define CP_CRYPTO_V1_PAIRWISE_MAX_IO_BYTES UINT32_C(2097152)
+#define CP_CRYPTO_V1_PAIRWISE_OP_INSPECT_PUBLIC_HEADER UINT32_C(17)
+#define CP_CRYPTO_V1_ENVELOPE_KIND_REGULAR UINT8_C(0)
+#define CP_CRYPTO_V1_ENVELOPE_KIND_INITIAL UINT8_C(1)
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -109,6 +116,13 @@ int32_t cp_crypto_v1_inspect_device_log_record(
     uintptr_t output_len,
     uintptr_t* written);
 int32_t cp_crypto_v1_identity_operation(
+    uint32_t operation,
+    const uint8_t* input,
+    uintptr_t input_len,
+    uint8_t* output,
+    uintptr_t output_len,
+    uintptr_t* written);
+int32_t cp_crypto_v1_pairwise_operation(
     uint32_t operation,
     const uint8_t* input,
     uintptr_t input_len,

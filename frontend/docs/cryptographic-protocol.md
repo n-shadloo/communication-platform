@@ -218,6 +218,12 @@ version, recipient device ID, ratchet header, and fixed `pairwise-transport-v1` 
 purpose. The event kind remains encrypted. The server does not
 learn the sender or conversation ID.
 
+The exact Android version-1 transcript, KDF/AEAD choices, sender-hidden initial header,
+ratchet encoding, replay/repair behavior, simultaneous-initiation rule, and transactional
+state boundaries are frozen in [Pairwise transport version 1](pairwise-transport-v1.md).
+That profile always mixes the signed PQ prekey; the backend's unsigned PQ one-time key is
+only an additional contribution and can never replace the authenticated PQ layer.
+
 ## Groups
 
 Each device is an MLS member with an authenticated credential bound to its device public

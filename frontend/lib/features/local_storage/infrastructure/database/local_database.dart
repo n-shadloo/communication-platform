@@ -34,6 +34,9 @@ class SecureSecrets extends _NamedTable {
   BlobColumn get wrappedCiphertextOrOpaqueHandle => blob()();
   IntColumn get formatVersion =>
       integer().check(formatVersion.isBiggerThanValue(0))();
+  IntColumn get stateRevision => integer()
+      .withDefault(const Constant(1))
+      .check(stateRevision.isBiggerThanValue(0))();
 
   @override
   Set<Column<Object>> get primaryKey => {secretId};
@@ -136,6 +139,9 @@ class Devices extends Table {
   IntColumn get bundleVersion => integer().nullable().check(
     bundleVersion.isNull() | bundleVersion.isBiggerThanValue(0),
   )();
+  IntColumn get lastSignedPrekeyRotationUnixDay => integer()
+      .withDefault(const Constant(0))
+      .check(lastSignedPrekeyRotationUnixDay.isBiggerOrEqualValue(0))();
 
   @override
   Set<Column<Object>> get primaryKey => {deviceId};
@@ -163,13 +169,55 @@ class PairwiseSessions extends Table {
   String get tableName => 'pairwise_sessions';
 
   TextColumn get localDeviceId => text()();
+  TextColumn get remoteUserId => text().withDefault(const Constant(''))();
+  TextColumn get remoteDeviceId => text()();
+  BlobColumn get sessionId => blob().nullable()();
+  BlobColumn get opaqueCryptoStateHandle => blob()();
+  IntColumn get stateVersion =>
+      integer().check(stateVersion.isBiggerThanValue(0))();
+  IntColumn get skippedKeyCount => integer()
+      .withDefault(const Constant(0))
+      .check(skippedKeyCount.isBetweenValues(0, 2000))();
+  IntColumn get disposition => integer()
+      .withDefault(const Constant(0))
+      .check(disposition.isBetweenValues(0, 1))();
+  IntColumn get repairState => integer()
+      .withDefault(const Constant(0))
+      .check(repairState.isBetweenValues(0, 3))();
+  BlobColumn get repairAuthorization => blob().nullable()();
+  DateTimeColumn get lastAuthenticatedAt => dateTime().nullable()();
+
+  @override
+  Set<Column<Object>> get primaryKey => {localDeviceId, remoteDeviceId};
+}
+
+/// The single receive-only session retained during simultaneous initiation.
+class PairwiseSessionAlternates extends Table {
+  @override
+  String get tableName => 'pairwise_session_alternates';
+
+  BlobColumn get sessionId => blob()();
+  TextColumn get localDeviceId => text()();
+  TextColumn get remoteUserId => text()();
   TextColumn get remoteDeviceId => text()();
   BlobColumn get opaqueCryptoStateHandle => blob()();
   IntColumn get stateVersion =>
       integer().check(stateVersion.isBiggerThanValue(0))();
+  IntColumn get skippedKeyCount =>
+      integer().check(skippedKeyCount.isBetweenValues(0, 2000))();
+  IntColumn get repairState =>
+      integer().check(repairState.isBetweenValues(0, 3))();
+  BlobColumn get repairAuthorization => blob().nullable()();
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+  DateTimeColumn get lastAuthenticatedAt => dateTime().nullable()();
 
   @override
-  Set<Column<Object>> get primaryKey => {localDeviceId, remoteDeviceId};
+  Set<Column<Object>> get primaryKey => {sessionId};
+
+  @override
+  List<Set<Column<Object>>> get uniqueKeys => [
+    {localDeviceId, remoteDeviceId},
+  ];
 }
 
 class Prekeys extends Table {
@@ -185,6 +233,36 @@ class Prekeys extends Table {
 
   @override
   Set<Column<Object>> get primaryKey => {kind, keyId};
+}
+
+/// Resumable public/checkpoint projection for an authenticated native prekey plan.
+@DataClassName('StoredPrekeyMaintenancePlan')
+class PrekeyMaintenancePlans extends Table {
+  @override
+  String get tableName => 'prekey_maintenance_plans';
+
+  TextColumn get deviceId => text()();
+  IntColumn get stage => integer().check(stage.isBetweenValues(0, 2))();
+  IntColumn get expectedStateRevision =>
+      integer().check(expectedStateRevision.isBiggerThanValue(0))();
+  IntColumn get preparedUnixDay =>
+      integer().check(preparedUnixDay.isBiggerOrEqualValue(0))();
+  IntColumn get bundleVersion =>
+      integer().check(bundleVersion.isBiggerThanValue(0))();
+  IntColumn get currentSignedPrekeyCreatedUnixDay => integer().check(
+    currentSignedPrekeyCreatedUnixDay.isBiggerOrEqualValue(0),
+  )();
+  BlobColumn get batchId => blob()();
+  BlobColumn get nativeUploadProjection => blob()();
+  BlobColumn get exactLogRecord => blob().nullable()();
+  IntColumn get expectedLogSequence => integer().nullable().check(
+    expectedLogSequence.isNull() | expectedLogSequence.isBiggerOrEqualValue(0),
+  )();
+  BlobColumn get previousLogHead => blob().nullable()();
+  DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
+
+  @override
+  Set<Column<Object>> get primaryKey => {deviceId};
 }
 
 class MlsGroups extends Table {
@@ -357,6 +435,81 @@ class InboxEventDeduplications extends Table {
   Set<Column<Object>> get primaryKey => {opaqueEventId};
 }
 
+/// Cryptographic replay identifiers survive inbox acknowledgement cleanup.
+class PairwiseReplayMarkers extends Table {
+  @override
+  String get tableName => 'pairwise_replay_markers';
+
+  BlobColumn get replayMarker => blob()();
+  BlobColumn get sessionId => blob()();
+  IntColumn get signedPrekeyId => integer().nullable().check(
+    signedPrekeyId.isNull() | signedPrekeyId.isBetweenValues(0, 0x7fffffff),
+  )();
+  IntColumn get pqSignedPrekeyId => integer().nullable().check(
+    pqSignedPrekeyId.isNull() | pqSignedPrekeyId.isBetweenValues(0, 0x7fffffff),
+  )();
+  TextColumn get firstEnvelopeId => text()();
+  DateTimeColumn get committedAt =>
+      dateTime().withDefault(currentDateAndTime)();
+
+  @override
+  Set<Column<Object>> get primaryKey => {replayMarker};
+}
+
+/// Authenticated plaintext remains opaque until message semantics are implemented.
+class PairwiseOpenedPayloads extends Table {
+  @override
+  String get tableName => 'pairwise_opened_payloads';
+
+  TextColumn get envelopeId => text()();
+  TextColumn get opaqueEventId => text()();
+  TextColumn get senderUserId => text()();
+  TextColumn get senderDeviceId => text()();
+  BlobColumn get sessionId => blob()();
+  BlobColumn get replayMarker => blob()();
+  BlobColumn get openedOpaquePayload => blob()();
+  BoolColumn get applicationApplied =>
+      boolean().withDefault(const Constant(false))();
+  DateTimeColumn get committedAt =>
+      dateTime().withDefault(currentDateAndTime)();
+
+  @override
+  Set<Column<Object>> get primaryKey => {envelopeId};
+}
+
+/// Current-device application marker committed with remote ciphertext targets.
+class PairwiseLocalApplications extends Table {
+  @override
+  String get tableName => 'pairwise_local_applications';
+
+  TextColumn get operationId => text()();
+  TextColumn get eventId => text().unique()();
+  TextColumn get localDeviceId => text()();
+  BlobColumn get openedOpaquePayload => blob()();
+  BoolColumn get applicationApplied =>
+      boolean().withDefault(const Constant(false))();
+  DateTimeColumn get committedAt =>
+      dateTime().withDefault(currentDateAndTime)();
+
+  @override
+  Set<Column<Object>> get primaryKey => {operationId};
+}
+
+/// Tombstones contain no key material and make one-time consumption auditable.
+class PairwiseConsumedPrekeys extends Table {
+  @override
+  String get tableName => 'pairwise_consumed_prekeys';
+
+  TextColumn get localDeviceId => text()();
+  IntColumn get algorithm => integer().check(algorithm.isBetweenValues(0, 1))();
+  IntColumn get keyId => integer().check(keyId.isBiggerOrEqualValue(0))();
+  TextColumn get firstEnvelopeId => text()();
+  DateTimeColumn get consumedAt => dateTime().withDefault(currentDateAndTime)();
+
+  @override
+  Set<Column<Object>> get primaryKey => {localDeviceId, algorithm, keyId};
+}
+
 class StaleDeviceRefreshRequests extends Table {
   @override
   String get tableName => 'stale_device_refresh_requests';
@@ -498,7 +651,9 @@ class StorageMigrationHooks {
     Devices,
     DeviceLogRecords,
     PairwiseSessions,
+    PairwiseSessionAlternates,
     Prekeys,
+    PrekeyMaintenancePlans,
     MlsGroups,
     Conversations,
     Memberships,
@@ -508,6 +663,10 @@ class StorageMigrationHooks {
     InboxEnvelopes,
     OutboxOperations,
     InboxEventDeduplications,
+    PairwiseReplayMarkers,
+    PairwiseOpenedPayloads,
+    PairwiseLocalApplications,
+    PairwiseConsumedPrekeys,
     StaleDeviceRefreshRequests,
     Receipts,
     VoiceRooms,
@@ -521,7 +680,7 @@ final class LocalDatabase extends _$LocalDatabase {
   LocalDatabase(super.executor, {StorageMigrationHooks? migrationHooks})
     : _migrationHooks = migrationHooks ?? const StorageMigrationHooks();
 
-  static const currentSchemaVersion = 3;
+  static const currentSchemaVersion = 4;
   final StorageMigrationHooks _migrationHooks;
 
   @override
@@ -601,6 +760,47 @@ final class LocalDatabase extends _$LocalDatabase {
           );
           await migrator.createTable(inboxEventDeduplications);
           await migrator.createTable(staleDeviceRefreshRequests);
+        }
+        if (from < 4) {
+          await migrator.addColumn(secureSecrets, secureSecrets.stateRevision);
+          await migrator.addColumn(
+            devices,
+            devices.lastSignedPrekeyRotationUnixDay,
+          );
+          await migrator.addColumn(
+            pairwiseSessions,
+            pairwiseSessions.remoteUserId,
+          );
+          await migrator.addColumn(
+            pairwiseSessions,
+            pairwiseSessions.sessionId,
+          );
+          await migrator.addColumn(
+            pairwiseSessions,
+            pairwiseSessions.skippedKeyCount,
+          );
+          await migrator.addColumn(
+            pairwiseSessions,
+            pairwiseSessions.disposition,
+          );
+          await migrator.addColumn(
+            pairwiseSessions,
+            pairwiseSessions.repairState,
+          );
+          await migrator.addColumn(
+            pairwiseSessions,
+            pairwiseSessions.repairAuthorization,
+          );
+          await migrator.addColumn(
+            pairwiseSessions,
+            pairwiseSessions.lastAuthenticatedAt,
+          );
+          await migrator.createTable(pairwiseSessionAlternates);
+          await migrator.createTable(pairwiseReplayMarkers);
+          await migrator.createTable(pairwiseOpenedPayloads);
+          await migrator.createTable(pairwiseLocalApplications);
+          await migrator.createTable(pairwiseConsumedPrekeys);
+          await migrator.createTable(prekeyMaintenancePlans);
         }
         await _migrationHooks.afterUpgrade(from, to);
       });

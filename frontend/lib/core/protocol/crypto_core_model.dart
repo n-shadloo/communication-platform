@@ -21,7 +21,12 @@ abstract final class CryptoCoreProtocolV1 {
     CryptoCoreCapability.panicContainment,
   };
 
-  static const int knownFeatureBits = (1 << 12) - 1;
+  static const Set<CryptoCoreCapability> requiredPairwiseCapabilities = {
+    CryptoCoreCapability.hybridPqxdhV1,
+    CryptoCoreCapability.doubleRatchetV1,
+  };
+
+  static const int knownFeatureBits = (1 << 14) - 1;
 }
 
 enum CryptoCoreCapability {
@@ -36,7 +41,9 @@ enum CryptoCoreCapability {
   secretStream(1 << 8),
   secureRandom(1 << 9),
   zeroizingSecrets(1 << 10),
-  panicContainment(1 << 11);
+  panicContainment(1 << 11),
+  hybridPqxdhV1(1 << 12),
+  doubleRatchetV1(1 << 13);
 
   const CryptoCoreCapability(this.featureBit);
 
@@ -66,6 +73,10 @@ final class CryptoCoreCapabilities {
 
   bool get supportsRequiredFoundation =>
       capabilities.containsAll(CryptoCoreProtocolV1.requiredCapabilities);
+
+  bool get supportsPairwiseTransportV1 => capabilities.containsAll(
+    CryptoCoreProtocolV1.requiredPairwiseCapabilities,
+  );
 
   int get unknownFeatureBits =>
       featureBits & ~CryptoCoreProtocolV1.knownFeatureBits;
