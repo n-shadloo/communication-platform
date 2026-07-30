@@ -292,6 +292,13 @@ class Conversations extends Table {
   BlobColumn get listProjectionCiphertext => blob()();
   IntColumn get sortKey => integer()();
   BoolColumn get tombstoned => boolean().withDefault(const Constant(false))();
+  TextColumn get peerUserId => text().nullable()();
+  TextColumn get lastActivityEventId => text().nullable()();
+  IntColumn get unreadCount => integer()
+      .withDefault(const Constant(0))
+      .check(unreadCount.isBiggerOrEqualValue(0))();
+  DateTimeColumn get mutedUntil => dateTime().nullable()();
+  BlobColumn get draftCiphertext => blob().nullable()();
 
   @override
   Set<Column<Object>> get primaryKey => {conversationId};
@@ -329,6 +336,20 @@ class Messages extends Table {
   IntColumn get status => integer().check(status.isBetweenValues(0, 8))();
   IntColumn get revision => integer().check(revision.isBiggerOrEqualValue(0))();
   DateTimeColumn get createdAt => dateTime()();
+  TextColumn get senderUserId => text().withDefault(const Constant(''))();
+  TextColumn get senderDeviceId => text().withDefault(const Constant(''))();
+  TextColumn get replyToMessageId => text().nullable()();
+  BlobColumn get quoteFallbackCiphertext => blob().nullable()();
+  IntColumn get orderingMs => integer().withDefault(const Constant(0))();
+  TextColumn get orderingEventId => text().withDefault(const Constant(''))();
+  IntColumn get timestampState => integer()
+      .withDefault(const Constant(0))
+      .check(timestampState.isBetweenValues(0, 1))();
+  BoolColumn get deletedForEveryone =>
+      boolean().withDefault(const Constant(false))();
+  BoolColumn get deletedForMe => boolean().withDefault(const Constant(false))();
+  BoolColumn get pinned => boolean().withDefault(const Constant(false))();
+  BoolColumn get unread => boolean().withDefault(const Constant(false))();
 
   @override
   Set<Column<Object>> get primaryKey => {messageId};
@@ -352,6 +373,93 @@ class MessageEvents extends Table {
 
   @override
   Set<Column<Object>> get primaryKey => {eventId};
+}
+
+/// Every authenticated version-1 event fact retained for deterministic rebuilds.
+class StoredApplicationEvents extends Table {
+  @override
+  String get tableName => 'application_events';
+
+  TextColumn get eventId => text()();
+  TextColumn get conversationId => text()();
+  IntColumn get kind => integer().check(kind.isBetweenValues(1, 65535))();
+  TextColumn get senderUserId => text()();
+  TextColumn get senderDeviceId => text()();
+  IntColumn get senderCounter =>
+      integer().check(senderCounter.isBiggerThanValue(0))();
+  IntColumn get createdMs =>
+      integer().check(createdMs.isBiggerOrEqualValue(0))();
+  IntColumn get orderingMs => integer()();
+  BlobColumn get canonicalEvent => blob()();
+  BlobColumn get bodyProjection => blob()();
+  IntColumn get applyState =>
+      integer().check(applyState.isBetweenValues(0, 5))();
+  BoolColumn get localOrigin => boolean().withDefault(const Constant(false))();
+  TextColumn get localDeviceId => text().withDefault(const Constant(''))();
+  TextColumn get targetMessageId => text().nullable()();
+  IntColumn get revision => integer().nullable().check(
+    revision.isNull() | revision.isBiggerThanValue(0),
+  )();
+  DateTimeColumn get authenticatedAt =>
+      dateTime().withDefault(currentDateAndTime)();
+
+  @override
+  Set<Column<Object>> get primaryKey => {eventId};
+}
+
+/// Unknown future versions/kinds are retained but never projected.
+class UnsupportedApplicationEvents extends Table {
+  @override
+  String get tableName => 'unsupported_application_events';
+
+  TextColumn get recordKey => text()();
+  TextColumn get eventId => text().nullable().unique()();
+  TextColumn get conversationId => text().nullable()();
+  IntColumn get version => integer().check(version.isBetweenValues(0, 255))();
+  IntColumn get kind => integer().nullable().check(
+    kind.isNull() | kind.isBetweenValues(0, 65535),
+  )();
+  TextColumn get senderUserId => text()();
+  TextColumn get senderDeviceId => text()();
+  IntColumn get senderCounter => integer().nullable().check(
+    senderCounter.isNull() | senderCounter.isBiggerThanValue(0),
+  )();
+  IntColumn get applyState => integer()
+      .withDefault(const Constant(0))
+      .check(applyState.isBetweenValues(0, 2))();
+  BlobColumn get retainedPayload => blob()();
+  DateTimeColumn get authenticatedAt =>
+      dateTime().withDefault(currentDateAndTime)();
+
+  @override
+  Set<Column<Object>> get primaryKey => {recordKey};
+}
+
+class ApplicationSenderCounters extends Table {
+  @override
+  String get tableName => 'application_sender_counters';
+
+  TextColumn get deviceId => text()();
+  IntColumn get lastCounter => integer()
+      .withDefault(const Constant(0))
+      .check(lastCounter.isBiggerOrEqualValue(0))();
+
+  @override
+  Set<Column<Object>> get primaryKey => {deviceId};
+}
+
+class MessageReactions extends Table {
+  @override
+  String get tableName => 'message_reactions';
+
+  TextColumn get messageId =>
+      text().references(Messages, #messageId, onDelete: KeyAction.cascade)();
+  TextColumn get reactingUserId => text()();
+  TextColumn get eventId => text()();
+  BlobColumn get emojiCiphertext => blob().nullable()();
+
+  @override
+  Set<Column<Object>> get primaryKey => {messageId, reactingUserId};
 }
 
 class Attachments extends Table {
@@ -544,6 +652,22 @@ class Receipts extends Table {
   Set<Column<Object>> get primaryKey => {messageId, userId, deviceId};
 }
 
+/// Durable work created only after an incoming message projection commits.
+class PendingApplicationReceipts extends Table {
+  @override
+  String get tableName => 'pending_application_receipts';
+
+  TextColumn get messageId =>
+      text().references(Messages, #messageId, onDelete: KeyAction.cascade)();
+  TextColumn get conversationId => text()();
+  TextColumn get targetUserId => text()();
+  TextColumn get localDeviceId => text()();
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+
+  @override
+  Set<Column<Object>> get primaryKey => {messageId, localDeviceId};
+}
+
 class VoiceRooms extends Table {
   @override
   String get tableName => 'voice_rooms';
@@ -659,6 +783,10 @@ class StorageMigrationHooks {
     Memberships,
     Messages,
     MessageEvents,
+    StoredApplicationEvents,
+    UnsupportedApplicationEvents,
+    ApplicationSenderCounters,
+    MessageReactions,
     Attachments,
     InboxEnvelopes,
     OutboxOperations,
@@ -669,6 +797,7 @@ class StorageMigrationHooks {
     PairwiseConsumedPrekeys,
     StaleDeviceRefreshRequests,
     Receipts,
+    PendingApplicationReceipts,
     VoiceRooms,
     HistoryTransfers,
     SyncCheckpoints,
@@ -680,7 +809,7 @@ final class LocalDatabase extends _$LocalDatabase {
   LocalDatabase(super.executor, {StorageMigrationHooks? migrationHooks})
     : _migrationHooks = migrationHooks ?? const StorageMigrationHooks();
 
-  static const currentSchemaVersion = 4;
+  static const currentSchemaVersion = 5;
   final StorageMigrationHooks _migrationHooks;
 
   @override
@@ -801,6 +930,35 @@ final class LocalDatabase extends _$LocalDatabase {
           await migrator.createTable(pairwiseLocalApplications);
           await migrator.createTable(pairwiseConsumedPrekeys);
           await migrator.createTable(prekeyMaintenancePlans);
+        }
+        if (from < 5) {
+          await migrator.addColumn(conversations, conversations.peerUserId);
+          await migrator.addColumn(
+            conversations,
+            conversations.lastActivityEventId,
+          );
+          await migrator.addColumn(conversations, conversations.unreadCount);
+          await migrator.addColumn(conversations, conversations.mutedUntil);
+          await migrator.addColumn(
+            conversations,
+            conversations.draftCiphertext,
+          );
+          await migrator.addColumn(messages, messages.senderUserId);
+          await migrator.addColumn(messages, messages.senderDeviceId);
+          await migrator.addColumn(messages, messages.replyToMessageId);
+          await migrator.addColumn(messages, messages.quoteFallbackCiphertext);
+          await migrator.addColumn(messages, messages.orderingMs);
+          await migrator.addColumn(messages, messages.orderingEventId);
+          await migrator.addColumn(messages, messages.timestampState);
+          await migrator.addColumn(messages, messages.deletedForEveryone);
+          await migrator.addColumn(messages, messages.deletedForMe);
+          await migrator.addColumn(messages, messages.pinned);
+          await migrator.addColumn(messages, messages.unread);
+          await migrator.createTable(storedApplicationEvents);
+          await migrator.createTable(unsupportedApplicationEvents);
+          await migrator.createTable(applicationSenderCounters);
+          await migrator.createTable(messageReactions);
+          await migrator.createTable(pendingApplicationReceipts);
         }
         await _migrationHooks.afterUpgrade(from, to);
       });

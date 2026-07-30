@@ -1,9 +1,12 @@
+import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:communication_platform/core/application/ports/application_protocol_port.dart';
 import 'package:communication_platform/core/application/ports/crypto_core_port.dart';
 import 'package:communication_platform/core/application/ports/enrollment_crypto_port.dart';
 import 'package:communication_platform/core/application/ports/identity_crypto_port.dart';
 import 'package:communication_platform/core/application/ports/pairwise_crypto_port.dart';
+import 'package:communication_platform/core/protocol/application_message_model.dart';
 import 'package:communication_platform/core/protocol/crypto_core_model.dart';
 import 'package:communication_platform/core/protocol/enrollment_crypto_model.dart';
 import 'package:communication_platform/core/protocol/identity_protocol_model.dart';
@@ -27,24 +30,34 @@ abstract interface class PairwiseCryptoWorker {
   });
 }
 
+abstract interface class ApplicationProtocolWorker {
+  Future<Result<Uint8List>> applicationOperation({
+    required int operation,
+    required Uint8List payload,
+  });
+}
+
 /// Scope-owned lifecycle wrapper around the platform crypto worker.
 final class CryptoCoreRuntime
     implements
         CryptoCorePort,
         EnrollmentCryptoPort,
         IdentityCryptoPort,
-        PairwiseCryptoPort {
+        PairwiseCryptoPort,
+        ApplicationProtocolPort {
   CryptoCoreRuntime({
     required this.worker,
     this.enrollmentWorker,
     this.identityWorker,
     this.pairwiseWorker,
+    this.applicationWorker,
   });
 
   final CryptoCoreWorker worker;
   final EnrollmentCryptoWorker? enrollmentWorker;
   final IdentityCryptoWorker? identityWorker;
   final PairwiseCryptoWorker? pairwiseWorker;
+  final ApplicationProtocolWorker? applicationWorker;
   bool _closed = false;
 
   @override
@@ -267,6 +280,170 @@ final class CryptoCoreRuntime
         : _unsupported();
   }
 
+  @override
+  Future<Result<Uint8List>> encode(ApplicationEventRecord event) async {
+    try {
+      final writer = _ApplicationWriter()..bytes(ascii.encode('CPAEV001'));
+      _writeApplicationProjection(writer, event);
+      final response = await _applicationCall(1, writer.takeBytes());
+      return response.fold(
+        onSuccess: (bytes) => _prefixedPayload(bytes, 'CPAOE001'),
+        onFailure: Result.failure,
+      );
+    } on Object {
+      return const Result.failure(
+        ValidationFailure(ValidationFailureKind.invalidInput),
+      );
+    }
+  }
+
+  @override
+  Future<Result<DecodedApplicationEvent>> decode(Uint8List bytes) async {
+    if (bytes.isEmpty ||
+        bytes.length > ApplicationMessageProtocolV1.maximumApplicationBytes) {
+      return const Result.failure(
+        ValidationFailure(ValidationFailureKind.invalidInput),
+      );
+    }
+    final response = await _applicationCall(2, bytes);
+    return response.fold(
+      onSuccess: (projection) {
+        try {
+          final reader = _ApplicationReader(projection);
+          reader.expectMagic('CPAOD001');
+          final outcome = reader.u8();
+          if (outcome == 2) {
+            final version = reader.u8();
+            if (!reader.finished) {
+              throw const FormatException('trailing future event projection');
+            }
+            return Result.success(
+              UnsupportedApplicationEvent(
+                version: version,
+                kindValue: null,
+                header: null,
+                retainedBytes: bytes,
+              ),
+            );
+          }
+          if (outcome > 1) {
+            throw const FormatException('unknown decode outcome');
+          }
+          final event = _readApplicationProjection(
+            reader,
+            unsupported: outcome == 1,
+          );
+          if (!reader.finished) {
+            throw const FormatException('trailing event projection');
+          }
+          return outcome == 0
+              ? Result.success(
+                  SupportedApplicationEvent(
+                    event: event,
+                    canonicalBytes: bytes,
+                  ),
+                )
+              : Result.success(
+                  UnsupportedApplicationEvent(
+                    version: event.version,
+                    kindValue: event.kindValue,
+                    header: event,
+                    retainedBytes: bytes,
+                  ),
+                );
+        } on Object {
+          return const Result.failure(
+            SecurityFailure(SecurityFailureKind.malformedServerResponse),
+          );
+        }
+      },
+      onFailure: Result.failure,
+    );
+  }
+
+  @override
+  Future<Result<Uint8List>> generateEventId() async {
+    final response = await _applicationCall(3, Uint8List(0));
+    return response.fold(
+      onSuccess: (bytes) => _fixedPrefixedPayload(
+        bytes,
+        magic: 'CPAOG001',
+        length: ApplicationMessageProtocolV1.eventIdBytes,
+      ),
+      onFailure: Result.failure,
+    );
+  }
+
+  @override
+  Future<Result<Uint8List>> deriveDirectConversationId({
+    required Uint8List firstUserId,
+    required Uint8List secondUserId,
+  }) async {
+    if (firstUserId.length != ApplicationMessageProtocolV1.uuidBytes ||
+        secondUserId.length != ApplicationMessageProtocolV1.uuidBytes) {
+      return const Result.failure(
+        ValidationFailure(ValidationFailureKind.invalidInput),
+      );
+    }
+    final input = Uint8List(32)
+      ..setRange(0, 16, firstUserId)
+      ..setRange(16, 32, secondUserId);
+    final response = await _applicationCall(4, input);
+    return response.fold(
+      onSuccess: (bytes) => _fixedPrefixedPayload(
+        bytes,
+        magic: 'CPAOC001',
+        length: ApplicationMessageProtocolV1.conversationIdBytes,
+      ),
+      onFailure: Result.failure,
+    );
+  }
+
+  @override
+  Future<Result<Uint8List>> deriveSavedConversationId(Uint8List userId) async {
+    if (userId.length != ApplicationMessageProtocolV1.uuidBytes) {
+      return const Result.failure(
+        ValidationFailure(ValidationFailureKind.invalidInput),
+      );
+    }
+    final response = await _applicationCall(5, userId);
+    return response.fold(
+      onSuccess: (bytes) => _fixedPrefixedPayload(
+        bytes,
+        magic: 'CPAOC001',
+        length: ApplicationMessageProtocolV1.conversationIdBytes,
+      ),
+      onFailure: Result.failure,
+    );
+  }
+
+  Future<Result<Uint8List>> _applicationCall(
+    int operation,
+    Uint8List payload,
+  ) async {
+    if (_closed) {
+      return const Result.failure(
+        CryptoCoreFailure(CryptoCoreFailureCode.stateViolation),
+      );
+    }
+    final application = applicationWorker;
+    if (application == null) {
+      return _unsupported();
+    }
+    final capabilityResult = await worker.capabilities();
+    if (capabilityResult case FailureResult(failure: final failure)) {
+      return Result.failure(failure);
+    }
+    final capabilities =
+        (capabilityResult as Success<CryptoCoreCapabilities>).value;
+    return capabilities.supportsApplicationMessagesV1
+        ? application.applicationOperation(
+            operation: operation,
+            payload: payload,
+          )
+        : _unsupported();
+  }
+
   Future<Result<T>> _unsupported<T>() async => const Result.failure(
     UnsupportedProtocolFailure(UnsupportedProtocolFailureKind.capability),
   );
@@ -281,7 +458,8 @@ final class UnsupportedCryptoCore
         CryptoCorePort,
         EnrollmentCryptoPort,
         IdentityCryptoPort,
-        PairwiseCryptoPort {
+        PairwiseCryptoPort,
+        ApplicationProtocolPort {
   const UnsupportedCryptoCore();
 
   @override
@@ -300,6 +478,27 @@ final class UnsupportedCryptoCore
       UnsupportedProtocolFailure(UnsupportedProtocolFailureKind.capability),
     );
   }
+
+  @override
+  Future<Result<Uint8List>> encode(ApplicationEventRecord event) =>
+      _identityUnsupported();
+
+  @override
+  Future<Result<DecodedApplicationEvent>> decode(Uint8List bytes) =>
+      _identityUnsupported();
+
+  @override
+  Future<Result<Uint8List>> generateEventId() => _identityUnsupported();
+
+  @override
+  Future<Result<Uint8List>> deriveDirectConversationId({
+    required Uint8List firstUserId,
+    required Uint8List secondUserId,
+  }) => _identityUnsupported();
+
+  @override
+  Future<Result<Uint8List>> deriveSavedConversationId(Uint8List userId) =>
+      _identityUnsupported();
 
   @override
   Future<Result<Uint8List>> createDeviceLogRecord({
@@ -424,4 +623,354 @@ final class UnsupportedCryptoCore
       UnsupportedProtocolFailure(UnsupportedProtocolFailureKind.capability),
     ),
   );
+}
+
+void _writeApplicationProjection(
+  _ApplicationWriter writer,
+  ApplicationEventRecord event,
+) {
+  writer
+    ..u8(event.version)
+    ..bytes(event.eventId)
+    ..bytes(event.conversationId)
+    ..u16(event.kindValue)
+    ..bytes(event.senderUserId)
+    ..bytes(event.senderDeviceId)
+    ..u64(event.senderCounter)
+    ..u64(event.createdMs)
+    ..u8(event.references.length);
+  for (final reference in event.references) {
+    writer.bytes(reference);
+  }
+  final kind = event.kind;
+  final body = event.body;
+  switch ((kind, body)) {
+    case (
+      ApplicationEventKind.messageCreate,
+      MessageCreateBody(
+        :final messageId,
+        :final text,
+        :final replyToMessageId,
+        :final quoteFallback,
+      ),
+    ):
+      writer
+        ..bytes(messageId)
+        ..u8(MessageContentType.text.index)
+        ..text(text)
+        ..optionalBytes(replyToMessageId)
+        ..optionalText(quoteFallback);
+    case (
+      ApplicationEventKind.messageEdit,
+      MessageEditBody(
+        :final targetMessageId,
+        :final revision,
+        :final replacementText,
+      ),
+    ):
+      writer
+        ..bytes(targetMessageId)
+        ..u32(revision)
+        ..text(replacementText);
+    case (
+      ApplicationEventKind.messageDelete,
+      MessageDeleteBody(:final targetMessageId),
+    ):
+      writer.bytes(targetMessageId);
+    case (
+      ApplicationEventKind.reactionSet,
+      ReactionSetBody(:final targetMessageId, :final emoji),
+    ):
+      writer
+        ..bytes(targetMessageId)
+        ..optionalText(emoji);
+    case (
+      ApplicationEventKind.pinSet,
+      PinSetBody(:final targetMessageId, :final pinned),
+    ):
+      writer
+        ..bytes(targetMessageId)
+        ..boolean(pinned);
+    case (
+      ApplicationEventKind.receiptDelivered || ApplicationEventKind.receiptRead,
+      ReceiptBody(:final messageIds),
+    ):
+      writer.u8(messageIds.length);
+      for (final messageId in messageIds) {
+        writer.bytes(messageId);
+      }
+    case (
+      ApplicationEventKind.typingSet,
+      TypingSetBody(:final isTyping, :final expiresMs),
+    ):
+      writer
+        ..boolean(isTyping)
+        ..u64(expiresMs);
+    default:
+      throw const FormatException('event kind/body mismatch');
+  }
+}
+
+ApplicationEventRecord _readApplicationProjection(
+  _ApplicationReader reader, {
+  required bool unsupported,
+}) {
+  final version = reader.u8();
+  final eventId = reader.take(ApplicationMessageProtocolV1.eventIdBytes);
+  final conversationId = reader.take(
+    ApplicationMessageProtocolV1.conversationIdBytes,
+  );
+  final kindValue = reader.u16();
+  final senderUserId = reader.take(ApplicationMessageProtocolV1.uuidBytes);
+  final senderDeviceId = reader.take(ApplicationMessageProtocolV1.uuidBytes);
+  final senderCounter = reader.u64();
+  final createdMs = reader.u64();
+  final referenceCount = reader.u8();
+  if (referenceCount > ApplicationMessageProtocolV1.maximumReferences) {
+    throw const FormatException('too many references');
+  }
+  final references = [
+    for (var index = 0; index < referenceCount; index += 1)
+      reader.take(ApplicationMessageProtocolV1.eventIdBytes),
+  ];
+  final kind = ApplicationEventKind.fromWireValue(kindValue);
+  final ApplicationEventBody body;
+  if (unsupported || kind == null) {
+    body = const UnsupportedEventBody();
+  } else {
+    body = switch (kind) {
+      ApplicationEventKind.messageCreate => _readCreateBody(reader),
+      ApplicationEventKind.messageEdit => MessageEditBody(
+        targetMessageId: reader.take(ApplicationMessageProtocolV1.eventIdBytes),
+        revision: reader.u32(),
+        replacementText: reader.text(
+          maximumBytes: ApplicationMessageProtocolV1.maximumTextBytes,
+          maximumScalars: ApplicationMessageProtocolV1.maximumTextScalars,
+        ),
+      ),
+      ApplicationEventKind.messageDelete => MessageDeleteBody(
+        targetMessageId: reader.take(ApplicationMessageProtocolV1.eventIdBytes),
+      ),
+      ApplicationEventKind.reactionSet => ReactionSetBody(
+        targetMessageId: reader.take(ApplicationMessageProtocolV1.eventIdBytes),
+        emoji: reader.optionalText(maximumBytes: 64, maximumScalars: 64),
+      ),
+      ApplicationEventKind.pinSet => PinSetBody(
+        targetMessageId: reader.take(ApplicationMessageProtocolV1.eventIdBytes),
+        pinned: reader.boolean(),
+      ),
+      ApplicationEventKind.receiptDelivered ||
+      ApplicationEventKind.receiptRead => _readReceiptBody(reader),
+      ApplicationEventKind.typingSet => TypingSetBody(
+        isTyping: reader.boolean(),
+        expiresMs: reader.u64(),
+      ),
+    };
+  }
+  return ApplicationEventRecord(
+    version: version,
+    eventId: eventId,
+    conversationId: conversationId,
+    kindValue: kindValue,
+    senderUserId: senderUserId,
+    senderDeviceId: senderDeviceId,
+    senderCounter: senderCounter,
+    createdMs: createdMs,
+    references: references,
+    body: body,
+  );
+}
+
+MessageCreateBody _readCreateBody(_ApplicationReader reader) {
+  final messageId = reader.take(ApplicationMessageProtocolV1.eventIdBytes);
+  if (reader.u8() != MessageContentType.text.index) {
+    throw const FormatException('unsupported content type');
+  }
+  return MessageCreateBody(
+    messageId: messageId,
+    text: reader.text(
+      maximumBytes: ApplicationMessageProtocolV1.maximumTextBytes,
+      maximumScalars: ApplicationMessageProtocolV1.maximumTextScalars,
+    ),
+    replyToMessageId: reader.optionalBytes(
+      ApplicationMessageProtocolV1.eventIdBytes,
+    ),
+    quoteFallback: reader.optionalText(maximumBytes: 2048, maximumScalars: 512),
+  );
+}
+
+ReceiptBody _readReceiptBody(_ApplicationReader reader) {
+  final count = reader.u8();
+  if (count < 1 || count > ApplicationMessageProtocolV1.maximumReferences) {
+    throw const FormatException('invalid receipt count');
+  }
+  return ReceiptBody(
+    messageIds: [
+      for (var index = 0; index < count; index += 1)
+        reader.take(ApplicationMessageProtocolV1.eventIdBytes),
+    ],
+  );
+}
+
+Result<Uint8List> _prefixedPayload(Uint8List bytes, String magic) {
+  try {
+    final reader = _ApplicationReader(bytes)..expectMagic(magic);
+    final payload = reader.take(bytes.length - ascii.encode(magic).length);
+    if (!reader.finished || payload.isEmpty) {
+      throw const FormatException('invalid native payload');
+    }
+    return Result.success(payload);
+  } on Object {
+    return const Result.failure(
+      SecurityFailure(SecurityFailureKind.malformedServerResponse),
+    );
+  }
+}
+
+Result<Uint8List> _fixedPrefixedPayload(
+  Uint8List bytes, {
+  required String magic,
+  required int length,
+}) {
+  final result = _prefixedPayload(bytes, magic);
+  return result.fold(
+    onSuccess: (payload) => payload.length == length
+        ? Result.success(payload)
+        : const Result.failure(
+            SecurityFailure(SecurityFailureKind.malformedServerResponse),
+          ),
+    onFailure: Result.failure,
+  );
+}
+
+final class _ApplicationWriter {
+  final BytesBuilder _builder = BytesBuilder(copy: false);
+
+  void bytes(List<int> value) => _builder.add(value);
+
+  void u8(int value) {
+    if (value < 0 || value > 0xff) {
+      throw const FormatException('u8 out of range');
+    }
+    _builder.addByte(value);
+  }
+
+  void u16(int value) {
+    if (value < 0 || value > 0xffff) {
+      throw const FormatException('u16 out of range');
+    }
+    final bytes = ByteData(2)..setUint16(0, value, Endian.big);
+    _builder.add(bytes.buffer.asUint8List());
+  }
+
+  void u32(int value) {
+    if (value < 0 || value > 0xffffffff) {
+      throw const FormatException('u32 out of range');
+    }
+    final bytes = ByteData(4)..setUint32(0, value, Endian.big);
+    _builder.add(bytes.buffer.asUint8List());
+  }
+
+  void u64(int value) {
+    if (value < 0) {
+      throw const FormatException('u64 out of range');
+    }
+    final bytes = ByteData(8)
+      ..setUint32(0, value ~/ 0x100000000, Endian.big)
+      ..setUint32(4, value & 0xffffffff, Endian.big);
+    _builder.add(bytes.buffer.asUint8List());
+  }
+
+  void boolean(bool value) => u8(value ? 1 : 0);
+
+  void text(String value) {
+    final bytes = utf8.encode(value);
+    u32(bytes.length);
+    this.bytes(bytes);
+  }
+
+  void optionalText(String? value) {
+    boolean(value != null);
+    if (value != null) {
+      text(value);
+    }
+  }
+
+  void optionalBytes(Uint8List? value) {
+    boolean(value != null);
+    if (value != null) {
+      bytes(value);
+    }
+  }
+
+  Uint8List takeBytes() => _builder.takeBytes();
+}
+
+final class _ApplicationReader {
+  _ApplicationReader(Uint8List bytes) : _bytes = bytes;
+
+  final Uint8List _bytes;
+  int _position = 0;
+
+  bool get finished => _position == _bytes.length;
+
+  Uint8List take(int length) {
+    if (length < 0 || _position + length > _bytes.length) {
+      throw const FormatException('truncated application projection');
+    }
+    final value = Uint8List.fromList(
+      _bytes.sublist(_position, _position + length),
+    );
+    _position += length;
+    return value;
+  }
+
+  int u8() => take(1).single;
+
+  int u16() => ByteData.sublistView(take(2)).getUint16(0, Endian.big);
+
+  int u32() => ByteData.sublistView(take(4)).getUint32(0, Endian.big);
+
+  int u64() {
+    final bytes = ByteData.sublistView(take(8));
+    return bytes.getUint32(0, Endian.big) * 0x100000000 +
+        bytes.getUint32(4, Endian.big);
+  }
+
+  bool boolean() => switch (u8()) {
+    0 => false,
+    1 => true,
+    _ => throw const FormatException('invalid boolean'),
+  };
+
+  String text({required int maximumBytes, required int maximumScalars}) {
+    final length = u32();
+    if (length < 1 || length > maximumBytes) {
+      throw const FormatException('invalid text length');
+    }
+    final value = utf8.decode(take(length), allowMalformed: false);
+    if (value.runes.length > maximumScalars) {
+      throw const FormatException('too many text scalars');
+    }
+    return value;
+  }
+
+  String? optionalText({
+    required int maximumBytes,
+    required int maximumScalars,
+  }) => boolean()
+      ? text(maximumBytes: maximumBytes, maximumScalars: maximumScalars)
+      : null;
+
+  Uint8List? optionalBytes(int length) => boolean() ? take(length) : null;
+
+  void expectMagic(String value) {
+    final expected = ascii.encode(value);
+    final actual = take(expected.length);
+    for (var index = 0; index < expected.length; index += 1) {
+      if (actual[index] != expected[index]) {
+        throw const FormatException('invalid application response magic');
+      }
+    }
+  }
 }

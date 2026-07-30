@@ -77,6 +77,7 @@ final class DurableSyncEngine {
     required StaleDeviceRefreshPort staleDeviceRefresh,
     required TimeSource clock,
     required JitterSource jitter,
+    PostInboxCommitWorkPort? postInboxCommitWork,
     this.retryPolicy = const SyncRetryPolicy(),
     this.limits = const SyncEngineLimits(),
   }) : _store = store,
@@ -84,7 +85,8 @@ final class DurableSyncEngine {
        _inspector = inspector,
        _staleDeviceRefresh = staleDeviceRefresh,
        _clock = clock,
-       _jitter = jitter;
+       _jitter = jitter,
+       _postInboxCommitWork = postInboxCommitWork;
 
   final DurableSyncStore _store;
   final SyncRemotePort _remote;
@@ -92,6 +94,7 @@ final class DurableSyncEngine {
   final StaleDeviceRefreshPort _staleDeviceRefresh;
   final TimeSource _clock;
   final JitterSource _jitter;
+  final PostInboxCommitWorkPort? _postInboxCommitWork;
   final SyncRetryPolicy retryPolicy;
   final SyncEngineLimits limits;
 
@@ -140,6 +143,7 @@ final class DurableSyncEngine {
       return Result.failure(failure);
     }
     inspected += (existingInbox as Success<_InboxProgress>).value.inspected;
+    await _runPostInboxWork();
 
     final existingAcks = await _flushAcknowledgements();
     if (existingAcks case FailureResult(failure: final failure)) {
@@ -169,6 +173,7 @@ final class DurableSyncEngine {
       }
       final inboxProgress = (inbox as Success<_InboxProgress>).value;
       inspected += inboxProgress.inspected;
+      await _runPostInboxWork();
 
       final acks = await _flushAcknowledgements();
       if (acks case FailureResult(failure: final failure)) {
@@ -283,6 +288,15 @@ final class DurableSyncEngine {
         deferred: deferred,
       ),
     );
+  }
+
+  Future<void> _runPostInboxWork() async {
+    try {
+      await _postInboxCommitWork?.run();
+    } on Object {
+      // Delivery receipts are best effort and remain in their durable local
+      // work table. They never block acknowledgement of an applied envelope.
+    }
   }
 
   Future<Result<_InboxProgress>> _processInbox() async {

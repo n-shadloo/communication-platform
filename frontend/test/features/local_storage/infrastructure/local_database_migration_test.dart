@@ -102,8 +102,9 @@ void main() {
         ..execute('ALTER TABLE sync_checkpoint DROP COLUMN reconnect_at')
         ..execute(
           'ALTER TABLE sync_checkpoint DROP COLUMN last_successful_sync_at',
-        )
-        ..execute('PRAGMA user_version = 1');
+        );
+      _dropPieceFourteenSchema(versionOne);
+      versionOne.execute('PRAGMA user_version = 1');
       versionOne.close();
 
       final upgraded = LocalDatabase(NativeDatabase(databaseFile));
@@ -182,8 +183,9 @@ void main() {
         )
         ..execute(
           'ALTER TABLE pairwise_sessions DROP COLUMN last_authenticated_at',
-        )
-        ..execute('PRAGMA user_version = 3');
+        );
+      _dropPieceFourteenSchema(versionThree);
+      versionThree.execute('PRAGMA user_version = 3');
       versionThree.close();
 
       final upgraded = LocalDatabase(NativeDatabase(databaseFile));
@@ -258,6 +260,42 @@ void main() {
       expect(version, 0);
     },
   );
+}
+
+void _dropPieceFourteenSchema(Database database) {
+  for (final table in const [
+    'application_events',
+    'unsupported_application_events',
+    'application_sender_counters',
+    'message_reactions',
+    'pending_application_receipts',
+  ]) {
+    database.execute('DROP TABLE $table');
+  }
+  for (final column in const [
+    'peer_user_id',
+    'last_activity_event_id',
+    'unread_count',
+    'muted_until',
+    'draft_ciphertext',
+  ]) {
+    database.execute('ALTER TABLE conversations DROP COLUMN $column');
+  }
+  for (final column in const [
+    'sender_user_id',
+    'sender_device_id',
+    'reply_to_message_id',
+    'quote_fallback_ciphertext',
+    'ordering_ms',
+    'ordering_event_id',
+    'timestamp_state',
+    'deleted_for_everyone',
+    'deleted_for_me',
+    'pinned',
+    'unread',
+  ]) {
+    database.execute('ALTER TABLE messages DROP COLUMN $column');
+  }
 }
 
 final class _FailAfterSchemaCreation extends StorageMigrationHooks {

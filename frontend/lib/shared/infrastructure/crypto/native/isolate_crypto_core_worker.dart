@@ -11,6 +11,8 @@ import 'package:communication_platform/core/protocol/pairwise_crypto_model.dart'
 import 'package:communication_platform/core/result/failure.dart';
 import 'package:communication_platform/core/result/result.dart';
 import 'package:communication_platform/shared/infrastructure/crypto/crypto_core_runtime.dart';
+import 'package:communication_platform/shared/infrastructure/crypto/native/application_protocol_ffi.dart';
+import 'package:communication_platform/shared/infrastructure/crypto/native/application_protocol_native_session.dart';
 import 'package:communication_platform/shared/infrastructure/crypto/native/crypto_core_ffi.dart';
 import 'package:communication_platform/shared/infrastructure/crypto/native/crypto_core_native_session.dart';
 import 'package:communication_platform/shared/infrastructure/crypto/native/enrollment_crypto_ffi.dart';
@@ -39,6 +41,7 @@ const int _operationSafetyFingerprint = 14;
 const int _operationAttestPeerMaster = 15;
 const int _operationVerifyUserAttestation = 16;
 const int _operationPairwise = 17;
+const int _operationApplicationProtocol = 18;
 const int _replySuccess = 0;
 const int _replyFailure = 1;
 const int _failureCryptoCore = 1;
@@ -51,7 +54,8 @@ final class IsolateCryptoCoreWorker
         CryptoCoreWorker,
         EnrollmentCryptoWorker,
         IdentityCryptoWorker,
-        PairwiseCryptoWorker {
+        PairwiseCryptoWorker,
+        ApplicationProtocolWorker {
   bool _closed = false;
   Future<_CryptoWorkerState?>? _stateFuture;
   Future<void>? _closeFuture;
@@ -371,6 +375,18 @@ final class IsolateCryptoCoreWorker
     return _decodePairwiseReply(reply, operation);
   });
 
+  @override
+  Future<Result<Uint8List>> applicationOperation({
+    required int operation,
+    required Uint8List payload,
+  }) => _guarded(() async {
+    final reply = await _request(_operationApplicationProtocol, <Object?>[
+      operation,
+      payload,
+    ]);
+    return _decodeBytesReply(reply);
+  });
+
   Future<Result<T>> _guarded<T>(Future<Result<T>> Function() operation) {
     if (_closed) {
       return Future<Result<T>>.value(
@@ -511,6 +527,7 @@ Future<void> _runCryptoCoreWorker(SendPort bootstrapPort) async {
   late final EnrollmentCryptoNativeSession enrollmentSession;
   late final IdentityCryptoNativeSession identitySession;
   late final PairwiseCryptoNativeSession pairwiseSession;
+  late final ApplicationProtocolNativeSession applicationSession;
   try {
     session = CryptoCoreNativeSession(
       api: DynamicCryptoCoreNativeApi.openAndroid(),
@@ -523,6 +540,9 @@ Future<void> _runCryptoCoreWorker(SendPort bootstrapPort) async {
     );
     pairwiseSession = PairwiseCryptoNativeSession(
       api: DynamicPairwiseCryptoNativeApi.openAndroid(),
+    );
+    applicationSession = ApplicationProtocolNativeSession(
+      api: DynamicApplicationProtocolNativeApi.openAndroid(),
     );
   } on Object {
     bootstrapPort.send(const <Object?>[_handshakeFailed]);
@@ -654,6 +674,13 @@ Future<void> _runCryptoCoreWorker(SendPort bootstrapPort) async {
           case _operationPairwise:
             replyPort.send(
               _encodePairwiseReply(_pairwiseInWorker(pairwiseSession, message)),
+            );
+            continue;
+          case _operationApplicationProtocol:
+            replyPort.send(
+              _encodeBytesReply(
+                _applicationInWorker(applicationSession, message),
+              ),
             );
             continue;
           case _operationClose:
@@ -931,6 +958,19 @@ Result<PairwiseCryptoResponse> _pairwiseInWorker(
     }
   }
   if (operation == null) {
+    return const Result.failure(
+      UnsupportedProtocolFailure(UnsupportedProtocolFailureKind.version),
+    );
+  }
+  return session.operation(operation, _bytesArgument(message, 3));
+}
+
+Result<Uint8List> _applicationInWorker(
+  ApplicationProtocolNativeSession session,
+  List<Object?> message,
+) {
+  final operation = message.length > 2 ? message[2] : null;
+  if (operation is! int || operation < 1 || operation > 5) {
     return const Result.failure(
       UnsupportedProtocolFailure(UnsupportedProtocolFailureKind.version),
     );

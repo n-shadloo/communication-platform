@@ -1,6 +1,8 @@
+import 'package:communication_platform/core/protocol/application_message_model.dart';
 import 'package:communication_platform/core/result/failure.dart';
 import 'package:communication_platform/core/result/result.dart';
 import 'package:communication_platform/features/local_storage/infrastructure/database/local_database.dart';
+import 'package:communication_platform/features/messaging/domain/conversation_model.dart';
 import 'package:communication_platform/features/pairwise/domain/pairwise_model.dart';
 import 'package:communication_platform/features/pairwise/infrastructure/drift_pairwise_transport_store.dart';
 import 'package:communication_platform/features/synchronization/domain/sync_model.dart';
@@ -64,6 +66,42 @@ void main() {
         await database.select(database.pairwiseSessions).get(),
         hasLength(2),
       );
+    },
+  );
+
+  test(
+    'optimistic transport state never turns relay acceptance into delivery',
+    () async {
+      final application = applicationCommit(
+        eventNumber: 12,
+        senderUserNumber: 1000,
+        senderDeviceNumber: 900,
+        localOrigin: true,
+        peerUserNumber: 1001,
+      );
+      final committed = await store.commitPreparedSend(
+        sendCommit(targets: [12], applicationEvent: application),
+      );
+      expect(committed, isA<Success<void>>());
+      var message = await database.select(database.messages).getSingle();
+      expect(message.status, MessageTransportState.queued.index);
+
+      final sync = DriftSyncStore(database);
+      final batchResult = await sync.beginNextOutboxBatch(
+        now: DateTime.utc(2026, 7, 29),
+      );
+      final batch = (batchResult as Success<OutboxBatch?>).value!;
+      message = await database.select(database.messages).getSingle();
+      expect(message.status, MessageTransportState.sending.index);
+
+      await sync.recordOutboxAcceptance(
+        batch: batch,
+        acceptance: OutboxAcceptance(accepted: 1, staleDeviceIds: {}),
+        now: DateTime.utc(2026, 7, 29, 0, 1),
+      );
+      message = await database.select(database.messages).getSingle();
+      expect(message.status, MessageTransportState.relayAccepted.index);
+      expect(await database.select(database.receipts).get(), isEmpty);
     },
   );
 
@@ -313,6 +351,50 @@ void main() {
   );
 
   test(
+    'application projection fault rolls back event marker and ratchet together',
+    () async {
+      final sync = DriftSyncStore(database);
+      await inspectEnvelope(sync, 75);
+      await database.customStatement(
+        "CREATE TRIGGER fail_application_message BEFORE INSERT ON messages "
+        "BEGIN SELECT RAISE(ABORT, 'fault'); END",
+      );
+      final application = applicationCommit(
+        eventNumber: 75,
+        senderUserNumber: 1001,
+        senderDeviceNumber: 500,
+      );
+
+      final result = await store.commitPreparedReceive(
+        receiveCommit(
+          envelopeNumber: 75,
+          stateMarker: 7,
+          replayMarker: bytes(32, 7),
+          senderUserId: uuid(1001),
+          applicationEvent: application,
+        ),
+      );
+
+      expect(result, isA<FailureResult<bool>>());
+      expect(await database.select(database.pairwiseSessions).get(), isEmpty);
+      expect(
+        await database.select(database.pairwiseReplayMarkers).get(),
+        isEmpty,
+      );
+      expect(
+        await database.select(database.storedApplicationEvents).get(),
+        isEmpty,
+      );
+      expect(await database.select(database.conversations).get(), isEmpty);
+      expect(
+        (await database.select(database.inboxEnvelopes).getSingle())
+            .processingState,
+        InboxProcessingState.inspecting.index,
+      );
+    },
+  );
+
+  test(
     'simultaneous initiation retains one alternate until primary traffic',
     () async {
       await store.commitPreparedSend(sendCommit(targets: [80]));
@@ -379,9 +461,9 @@ void main() {
               sessionId: Value(sessionId(500)),
               opaqueCryptoStateHandle: bytes(32, 5),
               stateVersion: 3,
-        repairState: Value(
-          PairwiseRepairState.authenticatedRequestPending.index,
-        ),
+              repairState: Value(
+                PairwiseRepairState.authenticatedRequestPending.index,
+              ),
             ),
           );
       final sync = DriftSyncStore(database);
@@ -488,21 +570,24 @@ PairwiseSendCommit sendCommit({
   required List<int> targets,
   int ciphertextOffset = 0,
   int skippedKeyCount = 0,
+  ApplicationEventCommit? applicationEvent,
 }) => PairwiseSendCommit(
   operationId: 'pairwise-operation',
-  eventId: 'pairwise-event',
+  eventId: applicationEvent == null
+      ? 'pairwise-event'
+      : protocolBytesToHex(applicationEvent.event.eventId),
   currentDeviceId: uuid(900),
   expectedDeviceStateVersion: 1,
-  openedLocalPayload: bytes(16, 4),
+  openedLocalPayload: applicationEvent?.canonicalBytes ?? bytes(16, 4),
   targets: [
     for (final number in targets)
       PreparedPairwiseSendTarget(
-        recipientUserId: 'peer-user',
+        recipientUserId: applicationEvent?.peerUserId ?? 'peer-user',
         recipientDeviceId: uuid(number),
         exactCiphertext: envelope(number + ciphertextOffset),
         sessionTransition: PairwiseSessionTransition(
           localDeviceId: uuid(900),
-          remoteUserId: 'peer-user',
+          remoteUserId: applicationEvent?.peerUserId ?? 'peer-user',
           remoteDeviceId: uuid(number),
           sessionId: sessionId(number),
           nextOpaqueState: bytes(32, number),
@@ -514,6 +599,7 @@ PairwiseSendCommit sendCommit({
         ),
       ),
   ],
+  applicationEvent: applicationEvent,
 );
 
 PairwiseReceiveCommit receiveCommit({
@@ -529,13 +615,15 @@ PairwiseReceiveCommit receiveCommit({
   int? signedPrekeyId,
   int? pqSignedPrekeyId,
   Uint8List? replacedSessionId,
+  ApplicationEventCommit? applicationEvent,
 }) => PairwiseReceiveCommit(
   envelopeId: uuid(envelopeNumber),
   opaqueEventId: 'opaque-event-$envelopeNumber',
   senderUserId: senderUserId,
   senderDeviceId: uuid(remoteDeviceNumber),
   replayMarker: replayMarker,
-  openedOpaquePayload: bytes(16, envelopeNumber),
+  openedOpaquePayload:
+      applicationEvent?.canonicalBytes ?? bytes(16, envelopeNumber),
   signedPrekeyId: signedPrekeyId,
   pqSignedPrekeyId: pqSignedPrekeyId,
   replacedSessionId: replacedSessionId,
@@ -553,7 +641,45 @@ PairwiseReceiveCommit receiveCommit({
   ),
   deviceStateTransition: deviceState,
   consumedOneTimePrekeys: consumed,
+  applicationEvent: applicationEvent,
 );
+
+ApplicationEventCommit applicationCommit({
+  required int eventNumber,
+  required int senderUserNumber,
+  required int senderDeviceNumber,
+  bool localOrigin = false,
+  int peerUserNumber = 1001,
+}) {
+  final event = ApplicationEventRecord(
+    version: 1,
+    eventId: bytes(16, eventNumber),
+    conversationId: bytes(32, 90),
+    kindValue: ApplicationEventKind.messageCreate.wireValue,
+    senderUserId: protocolUuidBytes(uuid(senderUserNumber)),
+    senderDeviceId: protocolUuidBytes(uuid(senderDeviceNumber)),
+    senderCounter: 1,
+    createdMs: 1700000000000,
+    references: const [],
+    body: MessageCreateBody(
+      messageId: bytes(16, eventNumber),
+      text: 'authenticated projection',
+    ),
+  );
+  return ApplicationEventCommit(
+    event: event,
+    canonicalBytes: bytes(128, eventNumber),
+    currentUserId: uuid(1000),
+    currentDeviceId: uuid(900),
+    conversationKind: ConversationKind.direct.index,
+    peerUserId: uuid(peerUserNumber),
+    localOrigin: localOrigin,
+    authenticatedAt: DateTime.fromMillisecondsSinceEpoch(
+      1700000001000,
+      isUtc: true,
+    ),
+  );
+}
 
 Future<void> inspectEnvelope(DriftSyncStore sync, int number) async {
   await sync.persistDrainPage(

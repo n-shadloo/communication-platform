@@ -7,10 +7,11 @@ scaffold, architecture skeleton, app-owned design system, responsive routed shel
 guarded bootstrap, secure local storage, and typed REST/authentication/WebSocket
 transport foundation. Later capabilities remain pending. Piece 07 now provides the
 shared Rust primitive foundation and Android FFI/isolate adapter; Web/Wasm crypto is
-post-v1, explicitly deferred, and remains fail-closed. Completion and test evidence are
-recorded below only after verification. Piece 12 now provides the crash-safe opaque
-inbox/outbox synchronization engine and lifecycle foundation without implementing
-message encryption or domain-event application.
+post-v1, explicitly deferred, and remains fail-closed. Piece 12 provides the crash-safe
+opaque inbox/outbox synchronization engine and lifecycle foundation, piece 13 provides
+the pairwise transport, and piece 14 now provides the application-message protocol,
+conversation domain, and local projections. Completion and test evidence are recorded
+below only after verification.
 
 Legend: **Ready** = implemented backend contract; **Client protocol** = intentionally
 opaque/client-owned; **Pending** = Flutter implementation not started.
@@ -47,19 +48,19 @@ opaque/client-owned; **Pending** = Flutter implementation not started.
 
 | Capability | Backend | Flutter |
 |---|---|---|
-| Per-device durable envelope queue | Ready | Piece 12 durable Drift inbox/outbox journals, opaque event deduplication, bounded queues, and process-death recovery complete; crypto/domain application remains later work |
+| Per-device durable envelope queue | Ready | Piece 12 durable Drift inbox/outbox journals, opaque event deduplication, bounded queues, and process-death recovery plus piece 14 atomic application-event markers/projections complete |
 | Batched fan-out/stale devices | Ready | Piece 12 UUID-byte-sorted <=256 target batches, exact-ciphertext retry, partial progress, stale terminal state/session invalidation, and durable refresh requests complete |
 | Drain/ack | Ready | Piece 12 authoritative REST paging, duplicate/reorder handling, post-commit idempotent ack, and durable contiguous checkpoint complete |
 | Seven-day TTL / `pruned_through` gaps | Ready signal | Piece 12 pre-processing comparison, blocking queue-gap/group recovery state, retained MLS-dependent opaque envelopes, and recovered loss-baseline transition complete; fresh Welcome production flow remains gated on MLS pieces |
 | WebSocket live delivery | Ready | Piece 06 authenticated gateway/close-code mapping plus piece 12 lifecycle supervisor complete; socket envelopes are wake-up hints only and always trigger authoritative REST drain |
-| DM identity/session | Client protocol | Pending hybrid PQXDH/Double Ratchet |
-| Text messages | Client protocol | Pending |
-| Replies/edits/deletes | Client protocol | Pending |
-| Reactions/pins/receipts | Client protocol | Pending |
-| Typing/presence meaning | Volatile relay ready | Pending encrypted semantics |
+| DM identity/session | Client protocol | Piece 13 hybrid PQXDH/Double Ratchet transport and exact pairwise fan-out/outbox integration complete |
+| Text messages | Client protocol | Piece 14 deterministic-CBOR text events, typed projections, honest optimistic transport state, and Riverpod streams complete; final timeline is piece 15 |
+| Replies/edits/deletes | Client protocol | Piece 14 reply references, deterministic revision winner, authorization, local tombstone, best-effort remote-delete, and attachment-cache cleanup complete |
+| Reactions/pins/receipts | Client protocol | Piece 14 idempotent set projections, participant/role authorization, per-device receipt provenance, durable delivered work, and privacy-gated read sends complete |
+| Typing/presence meaning | Volatile relay ready | Piece 14 bounded volatile typing expiry, conservative socket presence, disconnect clearing, and typed Riverpod streams complete; signals never enter durable projections |
 | Private contact blocking | No server ACL by design | Protocol specified; implementation pending |
-| Multi-device self-sync/history | Envelope primitives ready; no history API | Pending authorized device-to-device transfer |
-| Saved Messages | Client protocol | Pending |
+| Multi-device self-sync/history | Envelope primitives ready; no history API | Piece 14 ordinary event fan-out to own live devices uses the same event ID; authorized history transfer remains pending |
+| Saved Messages | Client protocol | Piece 14 domain-separated local conversation, own-account authorization, unread-free/local-only behavior, and no remote-delete/receipt policy complete |
 | Local search | No plaintext server search by design | Pending Android encrypted index |
 
 ## Groups
@@ -132,8 +133,10 @@ opaque/client-owned; **Pending** = Flutter implementation not started.
 - [x] Piece 07 shared Rust primitive core, stable native ABI, Android packaging,
   isolate lifecycle, redaction, malformed-input, boundary, and packaged-device smoke
   checks pass for the Android-only version-1 target.
-- [ ] Deterministic-CBOR CDDL, `EnvelopeV1` encoders, and Android golden byte/error
-  fixtures are generated from one versioned protocol package.
+- [x] Deterministic-CBOR application-event CDDL, encoders/decoders, and Android
+  golden byte/error fixtures are generated from one versioned protocol package
+  (Piece 14: unknown-kind structural validation, future-version opaque retention,
+  native property/golden tests, and Android smoke fixture verified on 2026-07-30).
 - [x] Piece 08 canonical device-signature encoders/verifiers reproduce every
   backend `cross_sig`, `master_sig`, `spk_sig`, and `pq_spk_sig` vector byte-for-byte,
   reject required mutations, and pass through the packaged Android FFI/isolate smoke
@@ -164,8 +167,16 @@ opaque/client-owned; **Pending** = Flutter implementation not started.
   lifecycle/network/socket-close handling, offline restart, bounded queues, transaction
   fault injection, and redaction pass the full Flutter suite, fatal analysis,
   development/production Android APK builds, and preserved fail-closed Web build on
-  2026-07-29. Concrete Android WorkManager registration/Doze validation and all message
-  crypto/domain application remain later gates.
+  2026-07-29. Piece 13 pairwise crypto and piece 14 application-domain integration
+  now build on this durable foundation; concrete Android WorkManager registration/
+  Doze validation remains pending.
+- [x] Piece 14 deterministic-CBOR application events, typed conversation/message
+  projections, authorization and tombstone rules, duplicate/replay/counter conflict
+  handling, unsupported-event retention, receipt/typing/presence semantics, drafts,
+  unread/mute/Saved Messages behavior, event-order permutations, transaction-failure
+  injection, redaction, strict Rust/Clippy, full Flutter tests/analyze, three-ABI
+  native packaging, and development Android APK/integration fixture builds verified
+  on 2026-07-30. The final chat timeline remains piece 15.
 - [x] Android reproduces the backend `cross_sig`, `master_sig`, `spk_sig`, and
   `pq_spk_sig` golden vectors, including optional fields and the 64-byte `ik_pub` layout
   (Piece 08: Rust vectors, strict Clippy, Flutter tests, three-ABI native package build,

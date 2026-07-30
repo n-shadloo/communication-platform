@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:communication_platform/core/application/ports/port.dart';
+import 'package:communication_platform/core/protocol/application_message_model.dart';
 import 'package:communication_platform/core/result/result.dart';
 import 'package:communication_platform/features/pairwise/domain/pairwise_model.dart';
 
@@ -22,6 +23,14 @@ abstract interface class PairwiseTransportStore implements RepositoryPort {
   );
 
   Future<Result<void>> commitPreparedSend(PairwiseSendCommit commit);
+
+  Future<Result<void>> commitLocalApplication({
+    required String operationId,
+    required String eventId,
+    required String currentDeviceId,
+    required Uint8List openedLocalPayload,
+    required ApplicationEventCommit applicationEvent,
+  });
 
   /// Returns true only when the application event deduplication row was new.
   Future<Result<bool>> commitPreparedReceive(PairwiseReceiveCommit commit);

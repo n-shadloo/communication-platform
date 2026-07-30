@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:communication_platform/app/config/app_environment.dart';
+import 'package:communication_platform/core/application/ports/application_protocol_port.dart';
 import 'package:communication_platform/core/application/ports/crypto_core_port.dart';
 import 'package:communication_platform/core/application/ports/enrollment_crypto_port.dart';
 import 'package:communication_platform/core/application/ports/identity_crypto_port.dart';
@@ -67,6 +68,13 @@ final pairwiseCryptoProvider = Provider<PairwiseCryptoPort>((ref) {
 final pairwiseSessionCryptoProvider = Provider<PairwiseSessionCryptoPort>(
   (ref) => NativePairwiseSessionCrypto(ref.watch(pairwiseCryptoProvider)),
 );
+
+final applicationProtocolProvider = Provider<ApplicationProtocolPort>((ref) {
+  final cryptoCore = ref.watch(cryptoCoreProvider);
+  return cryptoCore is ApplicationProtocolPort
+      ? cryptoCore as ApplicationProtocolPort
+      : const UnsupportedCryptoCore();
+});
 
 final class UnsupportedIdentityCrypto implements IdentityCryptoPort {
   const UnsupportedIdentityCrypto();

@@ -129,6 +129,13 @@ int32_t cp_crypto_v1_pairwise_operation(
     uint8_t* output,
     uintptr_t output_len,
     uintptr_t* written);
+int32_t cp_crypto_v1_application_operation(
+    uint32_t operation,
+    const uint8_t* input,
+    uintptr_t input_len,
+    uint8_t* output,
+    uintptr_t output_len,
+    uintptr_t* written);
 int32_t cp_crypto_v1_attest_peer_master(
     const uint8_t* identity_package,
     uintptr_t identity_package_len,

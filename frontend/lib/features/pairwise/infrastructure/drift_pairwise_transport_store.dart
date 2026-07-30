@@ -1,6 +1,8 @@
+import 'package:communication_platform/core/protocol/application_message_model.dart';
 import 'package:communication_platform/core/result/failure.dart';
 import 'package:communication_platform/core/result/result.dart';
 import 'package:communication_platform/features/local_storage/infrastructure/database/local_database.dart';
+import 'package:communication_platform/features/messaging/infrastructure/drift_application_event_projector.dart';
 import 'package:communication_platform/features/pairwise/application/ports/pairwise_transport_store.dart';
 import 'package:communication_platform/features/pairwise/domain/pairwise_model.dart';
 import 'package:communication_platform/features/synchronization/domain/sync_model.dart';
@@ -172,9 +174,7 @@ final class DriftPairwiseTransportStore implements PairwiseTransportStore {
       if (rows.isEmpty && local == null) {
         return const Result.success(null);
       }
-      if (rows.isEmpty ||
-          local == null ||
-          rows.any((row) => row.eventId != local.eventId)) {
+      if (local == null || rows.any((row) => row.eventId != local.eventId)) {
         return const Result.failure(
           SecurityFailure(SecurityFailureKind.integrityCheckFailed),
         );
@@ -282,6 +282,19 @@ final class DriftPairwiseTransportStore implements PairwiseTransportStore {
                 ),
               );
         }
+        final applicationEvent = commit.applicationEvent;
+        if (applicationEvent != null) {
+          await DriftApplicationEventProjector(
+            database,
+          ).applyInsideTransaction(applicationEvent);
+          await (database.update(
+            database.pairwiseLocalApplications,
+          )..where((row) => row.operationId.equals(commit.operationId))).write(
+            const PairwiseLocalApplicationsCompanion(
+              applicationApplied: Value(true),
+            ),
+          );
+        }
       });
       return const Result.success(null);
     } on _PairwiseConflict {
@@ -291,6 +304,68 @@ final class DriftPairwiseTransportStore implements PairwiseTransportStore {
     } on _PairwiseCapacity {
       return const Result.failure(
         StorageFailure(StorageFailureKind.capacityExceeded),
+      );
+    } on Object {
+      return const Result.failure(
+        StorageFailure(StorageFailureKind.unavailable),
+      );
+    }
+  }
+
+  @override
+  Future<Result<void>> commitLocalApplication({
+    required String operationId,
+    required String eventId,
+    required String currentDeviceId,
+    required Uint8List openedLocalPayload,
+    required ApplicationEventCommit applicationEvent,
+  }) async {
+    if (operationId.isEmpty ||
+        eventId.isEmpty ||
+        !_isUuid(currentDeviceId) ||
+        openedLocalPayload.isEmpty ||
+        openedLocalPayload.length > 262144 ||
+        eventId != protocolBytesToHex(applicationEvent.event.eventId) ||
+        !applicationEvent.localOrigin ||
+        protocolUuidString(applicationEvent.event.senderDeviceId) !=
+            currentDeviceId.toLowerCase()) {
+      return const Result.failure(
+        ValidationFailure(ValidationFailureKind.invalidInput),
+      );
+    }
+    try {
+      await database.writeTransaction(() async {
+        final existing =
+            await (database.select(database.pairwiseLocalApplications)
+                  ..where((row) => row.operationId.equals(operationId)))
+                .getSingleOrNull();
+        if (existing != null) {
+          if (existing.eventId != eventId ||
+              existing.localDeviceId != currentDeviceId.toLowerCase() ||
+              !_bytesEqual(existing.openedOpaquePayload, openedLocalPayload)) {
+            throw const _PairwiseConflict();
+          }
+          return;
+        }
+        await database
+            .into(database.pairwiseLocalApplications)
+            .insert(
+              PairwiseLocalApplicationsCompanion.insert(
+                operationId: operationId,
+                eventId: eventId,
+                localDeviceId: currentDeviceId.toLowerCase(),
+                openedOpaquePayload: openedLocalPayload,
+                applicationApplied: const Value(true),
+              ),
+            );
+        await DriftApplicationEventProjector(
+          database,
+        ).applyInsideTransaction(applicationEvent);
+      });
+      return const Result.success(null);
+    } on _PairwiseConflict {
+      return const Result.failure(
+        ValidationFailure(ValidationFailureKind.conflict),
       );
     } on Object {
       return const Result.failure(
@@ -446,8 +521,21 @@ final class DriftPairwiseTransportStore implements PairwiseTransportStore {
                 sessionId: commit.sessionTransition.sessionId,
                 replayMarker: commit.replayMarker,
                 openedOpaquePayload: commit.openedOpaquePayload,
+                applicationApplied: const Value(true),
               ),
             );
+        final applicationEvent = commit.applicationEvent;
+        if (applicationEvent != null) {
+          await DriftApplicationEventProjector(
+            database,
+          ).applyInsideTransaction(applicationEvent);
+        }
+        final unsupported = commit.unsupportedApplicationEvent;
+        if (unsupported != null) {
+          await DriftApplicationEventProjector(
+            database,
+          ).retainUnsupportedInsideTransaction(unsupported);
+        }
         await (database.update(
           database.inboxEnvelopes,
         )..where((row) => row.envelopeId.equals(commit.envelopeId))).write(
@@ -1082,7 +1170,15 @@ SELECT
         commit.expectedDeviceStateVersion <= 0 ||
         commit.openedLocalPayload.isEmpty ||
         commit.openedLocalPayload.length > 262144 ||
-        sorted.isEmpty) {
+        (sorted.isEmpty && commit.applicationEvent == null)) {
+      return false;
+    }
+    final applicationEvent = commit.applicationEvent;
+    if (applicationEvent != null &&
+        (commit.eventId != protocolBytesToHex(applicationEvent.event.eventId) ||
+            !applicationEvent.localOrigin ||
+            protocolUuidString(applicationEvent.event.senderDeviceId) !=
+                commit.currentDeviceId.toLowerCase())) {
       return false;
     }
     final ids = <String>{};
@@ -1113,6 +1209,8 @@ SELECT
   bool _validReceive(PairwiseReceiveCommit commit) {
     final transition = commit.sessionTransition;
     final consumed = <String>{};
+    final application = commit.applicationEvent;
+    final unsupported = commit.unsupportedApplicationEvent;
     return _isUuid(commit.envelopeId) &&
         commit.opaqueEventId.isNotEmpty &&
         commit.senderUserId.isNotEmpty &&
@@ -1120,6 +1218,17 @@ SELECT
         commit.replayMarker.length == 32 &&
         commit.openedOpaquePayload.isNotEmpty &&
         commit.openedOpaquePayload.length <= 262144 &&
+        !(application != null && unsupported != null) &&
+        (application == null ||
+            (!application.localOrigin &&
+                protocolUuidString(application.event.senderUserId) ==
+                    commit.senderUserId.toLowerCase() &&
+                protocolUuidString(application.event.senderDeviceId) ==
+                    commit.senderDeviceId.toLowerCase())) &&
+        (unsupported == null ||
+            (unsupported.senderUserId == commit.senderUserId.toLowerCase() &&
+                unsupported.senderDeviceId ==
+                    commit.senderDeviceId.toLowerCase())) &&
         transition.remoteUserId == commit.senderUserId &&
         transition.remoteDeviceId.toLowerCase() ==
             commit.senderDeviceId.toLowerCase() &&

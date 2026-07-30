@@ -1,5 +1,7 @@
 import 'dart:typed_data';
 
+import 'package:communication_platform/core/protocol/application_message_model.dart';
+
 /// Durable role assigned by the deterministic simultaneous-initiation rule.
 enum PairwiseSessionDisposition { primaryBidirectional, alternateReceiveOnly }
 
@@ -176,6 +178,7 @@ final class PairwiseSendCommit {
     required this.expectedDeviceStateVersion,
     required Uint8List openedLocalPayload,
     required List<PreparedPairwiseSendTarget> targets,
+    this.applicationEvent,
   }) : openedLocalPayload = Uint8List.fromList(openedLocalPayload),
        targets = List.unmodifiable(targets);
 
@@ -185,6 +188,7 @@ final class PairwiseSendCommit {
   final int expectedDeviceStateVersion;
   final Uint8List openedLocalPayload;
   final List<PreparedPairwiseSendTarget> targets;
+  final ApplicationEventCommit? applicationEvent;
 }
 
 final class PairwiseReceiveCommit {
@@ -202,6 +206,8 @@ final class PairwiseReceiveCommit {
     this.pqSignedPrekeyId,
     this.deviceStateTransition,
     List<ConsumedPairwiseOneTimePrekey> consumedOneTimePrekeys = const [],
+    this.applicationEvent,
+    this.unsupportedApplicationEvent,
   }) : replayMarker = Uint8List.fromList(replayMarker),
        openedOpaquePayload = Uint8List.fromList(openedOpaquePayload),
        replacedSessionId = replacedSessionId == null
@@ -224,6 +230,8 @@ final class PairwiseReceiveCommit {
   final int? pqSignedPrekeyId;
   final PairwiseDeviceStateTransition? deviceStateTransition;
   final List<ConsumedPairwiseOneTimePrekey> consumedOneTimePrekeys;
+  final ApplicationEventCommit? applicationEvent;
+  final UnsupportedApplicationCommit? unsupportedApplicationEvent;
 }
 
 final class DurablePairwiseOperation {

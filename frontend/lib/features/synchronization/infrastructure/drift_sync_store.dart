@@ -1,6 +1,7 @@
 import 'package:communication_platform/core/result/failure.dart';
 import 'package:communication_platform/core/result/result.dart';
 import 'package:communication_platform/features/local_storage/infrastructure/database/local_database.dart';
+import 'package:communication_platform/features/messaging/infrastructure/drift_application_event_projector.dart';
 import 'package:communication_platform/features/pairwise/domain/pairwise_model.dart';
 import 'package:communication_platform/features/pairwise/infrastructure/drift_pairwise_transport_store.dart';
 import 'package:communication_platform/features/synchronization/application/ports/sync_ports.dart';
@@ -442,6 +443,8 @@ WHERE c.singleton_id = 1
                 keyId: key.keyId,
               ),
           ],
+          applicationEvent: pairwise.applicationEvent,
+          unsupportedApplicationEvent: pairwise.unsupportedApplicationEvent,
         ),
       );
     }
@@ -774,6 +777,9 @@ WHERE c.singleton_id = 1
                 lastAttemptAt: Value(now),
               ),
             );
+        await DriftApplicationEventProjector(
+          database,
+        ).refreshTransportForEventInsideTransaction(first.eventId);
         return OutboxBatch(
           operationId: first.operationId,
           eventId: first.eventId,
@@ -845,6 +851,9 @@ WHERE c.singleton_id = 1
             mode: InsertMode.insertOrIgnore,
           );
     }
+    await DriftApplicationEventProjector(
+      database,
+    ).refreshTransportForEventInsideTransaction(batch.eventId);
   });
 
   @override
@@ -1103,6 +1112,9 @@ WHERE c.singleton_id = 1
               row.recipientDeviceId.isIn(ids),
         ))
         .write(companion);
+    await DriftApplicationEventProjector(
+      database,
+    ).refreshTransportForEventInsideTransaction(batch.eventId);
   });
 
   Future<Result<void>> _write(Future<void> Function() operation) async {

@@ -7269,6 +7269,64 @@ class $ConversationsTable extends Conversations
     ),
     defaultValue: const Constant(false),
   );
+  static const VerificationMeta _peerUserIdMeta = const VerificationMeta(
+    'peerUserId',
+  );
+  @override
+  late final GeneratedColumn<String> peerUserId = GeneratedColumn<String>(
+    'peer_user_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _lastActivityEventIdMeta =
+      const VerificationMeta('lastActivityEventId');
+  @override
+  late final GeneratedColumn<String> lastActivityEventId =
+      GeneratedColumn<String>(
+        'last_activity_event_id',
+        aliasedName,
+        true,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _unreadCountMeta = const VerificationMeta(
+    'unreadCount',
+  );
+  @override
+  late final GeneratedColumn<int> unreadCount = GeneratedColumn<int>(
+    'unread_count',
+    aliasedName,
+    false,
+    check: () => ComparableExpr(unreadCount).isBiggerOrEqualValue(0),
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _mutedUntilMeta = const VerificationMeta(
+    'mutedUntil',
+  );
+  @override
+  late final GeneratedColumn<DateTime> mutedUntil = GeneratedColumn<DateTime>(
+    'muted_until',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _draftCiphertextMeta = const VerificationMeta(
+    'draftCiphertext',
+  );
+  @override
+  late final GeneratedColumn<Uint8List> draftCiphertext =
+      GeneratedColumn<Uint8List>(
+        'draft_ciphertext',
+        aliasedName,
+        true,
+        type: DriftSqlType.blob,
+        requiredDuringInsert: false,
+      );
   @override
   List<GeneratedColumn> get $columns => [
     conversationId,
@@ -7276,6 +7334,11 @@ class $ConversationsTable extends Conversations
     listProjectionCiphertext,
     sortKey,
     tombstoned,
+    peerUserId,
+    lastActivityEventId,
+    unreadCount,
+    mutedUntil,
+    draftCiphertext,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -7333,6 +7396,48 @@ class $ConversationsTable extends Conversations
         tombstoned.isAcceptableOrUnknown(data['tombstoned']!, _tombstonedMeta),
       );
     }
+    if (data.containsKey('peer_user_id')) {
+      context.handle(
+        _peerUserIdMeta,
+        peerUserId.isAcceptableOrUnknown(
+          data['peer_user_id']!,
+          _peerUserIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('last_activity_event_id')) {
+      context.handle(
+        _lastActivityEventIdMeta,
+        lastActivityEventId.isAcceptableOrUnknown(
+          data['last_activity_event_id']!,
+          _lastActivityEventIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('unread_count')) {
+      context.handle(
+        _unreadCountMeta,
+        unreadCount.isAcceptableOrUnknown(
+          data['unread_count']!,
+          _unreadCountMeta,
+        ),
+      );
+    }
+    if (data.containsKey('muted_until')) {
+      context.handle(
+        _mutedUntilMeta,
+        mutedUntil.isAcceptableOrUnknown(data['muted_until']!, _mutedUntilMeta),
+      );
+    }
+    if (data.containsKey('draft_ciphertext')) {
+      context.handle(
+        _draftCiphertextMeta,
+        draftCiphertext.isAcceptableOrUnknown(
+          data['draft_ciphertext']!,
+          _draftCiphertextMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -7362,6 +7467,26 @@ class $ConversationsTable extends Conversations
         DriftSqlType.bool,
         data['${effectivePrefix}tombstoned'],
       )!,
+      peerUserId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}peer_user_id'],
+      ),
+      lastActivityEventId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}last_activity_event_id'],
+      ),
+      unreadCount: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}unread_count'],
+      )!,
+      mutedUntil: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}muted_until'],
+      ),
+      draftCiphertext: attachedDatabase.typeMapping.read(
+        DriftSqlType.blob,
+        data['${effectivePrefix}draft_ciphertext'],
+      ),
     );
   }
 
@@ -7377,12 +7502,22 @@ class Conversation extends DataClass implements Insertable<Conversation> {
   final Uint8List listProjectionCiphertext;
   final int sortKey;
   final bool tombstoned;
+  final String? peerUserId;
+  final String? lastActivityEventId;
+  final int unreadCount;
+  final DateTime? mutedUntil;
+  final Uint8List? draftCiphertext;
   const Conversation({
     required this.conversationId,
     required this.kind,
     required this.listProjectionCiphertext,
     required this.sortKey,
     required this.tombstoned,
+    this.peerUserId,
+    this.lastActivityEventId,
+    required this.unreadCount,
+    this.mutedUntil,
+    this.draftCiphertext,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -7394,6 +7529,19 @@ class Conversation extends DataClass implements Insertable<Conversation> {
     );
     map['sort_key'] = Variable<int>(sortKey);
     map['tombstoned'] = Variable<bool>(tombstoned);
+    if (!nullToAbsent || peerUserId != null) {
+      map['peer_user_id'] = Variable<String>(peerUserId);
+    }
+    if (!nullToAbsent || lastActivityEventId != null) {
+      map['last_activity_event_id'] = Variable<String>(lastActivityEventId);
+    }
+    map['unread_count'] = Variable<int>(unreadCount);
+    if (!nullToAbsent || mutedUntil != null) {
+      map['muted_until'] = Variable<DateTime>(mutedUntil);
+    }
+    if (!nullToAbsent || draftCiphertext != null) {
+      map['draft_ciphertext'] = Variable<Uint8List>(draftCiphertext);
+    }
     return map;
   }
 
@@ -7404,6 +7552,19 @@ class Conversation extends DataClass implements Insertable<Conversation> {
       listProjectionCiphertext: Value(listProjectionCiphertext),
       sortKey: Value(sortKey),
       tombstoned: Value(tombstoned),
+      peerUserId: peerUserId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(peerUserId),
+      lastActivityEventId: lastActivityEventId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(lastActivityEventId),
+      unreadCount: Value(unreadCount),
+      mutedUntil: mutedUntil == null && nullToAbsent
+          ? const Value.absent()
+          : Value(mutedUntil),
+      draftCiphertext: draftCiphertext == null && nullToAbsent
+          ? const Value.absent()
+          : Value(draftCiphertext),
     );
   }
 
@@ -7420,6 +7581,13 @@ class Conversation extends DataClass implements Insertable<Conversation> {
       ),
       sortKey: serializer.fromJson<int>(json['sortKey']),
       tombstoned: serializer.fromJson<bool>(json['tombstoned']),
+      peerUserId: serializer.fromJson<String?>(json['peerUserId']),
+      lastActivityEventId: serializer.fromJson<String?>(
+        json['lastActivityEventId'],
+      ),
+      unreadCount: serializer.fromJson<int>(json['unreadCount']),
+      mutedUntil: serializer.fromJson<DateTime?>(json['mutedUntil']),
+      draftCiphertext: serializer.fromJson<Uint8List?>(json['draftCiphertext']),
     );
   }
   @override
@@ -7433,6 +7601,11 @@ class Conversation extends DataClass implements Insertable<Conversation> {
       ),
       'sortKey': serializer.toJson<int>(sortKey),
       'tombstoned': serializer.toJson<bool>(tombstoned),
+      'peerUserId': serializer.toJson<String?>(peerUserId),
+      'lastActivityEventId': serializer.toJson<String?>(lastActivityEventId),
+      'unreadCount': serializer.toJson<int>(unreadCount),
+      'mutedUntil': serializer.toJson<DateTime?>(mutedUntil),
+      'draftCiphertext': serializer.toJson<Uint8List?>(draftCiphertext),
     };
   }
 
@@ -7442,6 +7615,11 @@ class Conversation extends DataClass implements Insertable<Conversation> {
     Uint8List? listProjectionCiphertext,
     int? sortKey,
     bool? tombstoned,
+    Value<String?> peerUserId = const Value.absent(),
+    Value<String?> lastActivityEventId = const Value.absent(),
+    int? unreadCount,
+    Value<DateTime?> mutedUntil = const Value.absent(),
+    Value<Uint8List?> draftCiphertext = const Value.absent(),
   }) => Conversation(
     conversationId: conversationId ?? this.conversationId,
     kind: kind ?? this.kind,
@@ -7449,6 +7627,15 @@ class Conversation extends DataClass implements Insertable<Conversation> {
         listProjectionCiphertext ?? this.listProjectionCiphertext,
     sortKey: sortKey ?? this.sortKey,
     tombstoned: tombstoned ?? this.tombstoned,
+    peerUserId: peerUserId.present ? peerUserId.value : this.peerUserId,
+    lastActivityEventId: lastActivityEventId.present
+        ? lastActivityEventId.value
+        : this.lastActivityEventId,
+    unreadCount: unreadCount ?? this.unreadCount,
+    mutedUntil: mutedUntil.present ? mutedUntil.value : this.mutedUntil,
+    draftCiphertext: draftCiphertext.present
+        ? draftCiphertext.value
+        : this.draftCiphertext,
   );
   Conversation copyWithCompanion(ConversationsCompanion data) {
     return Conversation(
@@ -7463,6 +7650,21 @@ class Conversation extends DataClass implements Insertable<Conversation> {
       tombstoned: data.tombstoned.present
           ? data.tombstoned.value
           : this.tombstoned,
+      peerUserId: data.peerUserId.present
+          ? data.peerUserId.value
+          : this.peerUserId,
+      lastActivityEventId: data.lastActivityEventId.present
+          ? data.lastActivityEventId.value
+          : this.lastActivityEventId,
+      unreadCount: data.unreadCount.present
+          ? data.unreadCount.value
+          : this.unreadCount,
+      mutedUntil: data.mutedUntil.present
+          ? data.mutedUntil.value
+          : this.mutedUntil,
+      draftCiphertext: data.draftCiphertext.present
+          ? data.draftCiphertext.value
+          : this.draftCiphertext,
     );
   }
 
@@ -7473,7 +7675,12 @@ class Conversation extends DataClass implements Insertable<Conversation> {
           ..write('kind: $kind, ')
           ..write('listProjectionCiphertext: $listProjectionCiphertext, ')
           ..write('sortKey: $sortKey, ')
-          ..write('tombstoned: $tombstoned')
+          ..write('tombstoned: $tombstoned, ')
+          ..write('peerUserId: $peerUserId, ')
+          ..write('lastActivityEventId: $lastActivityEventId, ')
+          ..write('unreadCount: $unreadCount, ')
+          ..write('mutedUntil: $mutedUntil, ')
+          ..write('draftCiphertext: $draftCiphertext')
           ..write(')'))
         .toString();
   }
@@ -7485,6 +7692,11 @@ class Conversation extends DataClass implements Insertable<Conversation> {
     $driftBlobEquality.hash(listProjectionCiphertext),
     sortKey,
     tombstoned,
+    peerUserId,
+    lastActivityEventId,
+    unreadCount,
+    mutedUntil,
+    $driftBlobEquality.hash(draftCiphertext),
   );
   @override
   bool operator ==(Object other) =>
@@ -7497,7 +7709,15 @@ class Conversation extends DataClass implements Insertable<Conversation> {
             this.listProjectionCiphertext,
           ) &&
           other.sortKey == this.sortKey &&
-          other.tombstoned == this.tombstoned);
+          other.tombstoned == this.tombstoned &&
+          other.peerUserId == this.peerUserId &&
+          other.lastActivityEventId == this.lastActivityEventId &&
+          other.unreadCount == this.unreadCount &&
+          other.mutedUntil == this.mutedUntil &&
+          $driftBlobEquality.equals(
+            other.draftCiphertext,
+            this.draftCiphertext,
+          ));
 }
 
 class ConversationsCompanion extends UpdateCompanion<Conversation> {
@@ -7506,6 +7726,11 @@ class ConversationsCompanion extends UpdateCompanion<Conversation> {
   final Value<Uint8List> listProjectionCiphertext;
   final Value<int> sortKey;
   final Value<bool> tombstoned;
+  final Value<String?> peerUserId;
+  final Value<String?> lastActivityEventId;
+  final Value<int> unreadCount;
+  final Value<DateTime?> mutedUntil;
+  final Value<Uint8List?> draftCiphertext;
   final Value<int> rowid;
   const ConversationsCompanion({
     this.conversationId = const Value.absent(),
@@ -7513,6 +7738,11 @@ class ConversationsCompanion extends UpdateCompanion<Conversation> {
     this.listProjectionCiphertext = const Value.absent(),
     this.sortKey = const Value.absent(),
     this.tombstoned = const Value.absent(),
+    this.peerUserId = const Value.absent(),
+    this.lastActivityEventId = const Value.absent(),
+    this.unreadCount = const Value.absent(),
+    this.mutedUntil = const Value.absent(),
+    this.draftCiphertext = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   ConversationsCompanion.insert({
@@ -7521,6 +7751,11 @@ class ConversationsCompanion extends UpdateCompanion<Conversation> {
     required Uint8List listProjectionCiphertext,
     required int sortKey,
     this.tombstoned = const Value.absent(),
+    this.peerUserId = const Value.absent(),
+    this.lastActivityEventId = const Value.absent(),
+    this.unreadCount = const Value.absent(),
+    this.mutedUntil = const Value.absent(),
+    this.draftCiphertext = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : conversationId = Value(conversationId),
        kind = Value(kind),
@@ -7532,6 +7767,11 @@ class ConversationsCompanion extends UpdateCompanion<Conversation> {
     Expression<Uint8List>? listProjectionCiphertext,
     Expression<int>? sortKey,
     Expression<bool>? tombstoned,
+    Expression<String>? peerUserId,
+    Expression<String>? lastActivityEventId,
+    Expression<int>? unreadCount,
+    Expression<DateTime>? mutedUntil,
+    Expression<Uint8List>? draftCiphertext,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -7541,6 +7781,12 @@ class ConversationsCompanion extends UpdateCompanion<Conversation> {
         'list_projection_ciphertext': listProjectionCiphertext,
       if (sortKey != null) 'sort_key': sortKey,
       if (tombstoned != null) 'tombstoned': tombstoned,
+      if (peerUserId != null) 'peer_user_id': peerUserId,
+      if (lastActivityEventId != null)
+        'last_activity_event_id': lastActivityEventId,
+      if (unreadCount != null) 'unread_count': unreadCount,
+      if (mutedUntil != null) 'muted_until': mutedUntil,
+      if (draftCiphertext != null) 'draft_ciphertext': draftCiphertext,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -7551,6 +7797,11 @@ class ConversationsCompanion extends UpdateCompanion<Conversation> {
     Value<Uint8List>? listProjectionCiphertext,
     Value<int>? sortKey,
     Value<bool>? tombstoned,
+    Value<String?>? peerUserId,
+    Value<String?>? lastActivityEventId,
+    Value<int>? unreadCount,
+    Value<DateTime?>? mutedUntil,
+    Value<Uint8List?>? draftCiphertext,
     Value<int>? rowid,
   }) {
     return ConversationsCompanion(
@@ -7560,6 +7811,11 @@ class ConversationsCompanion extends UpdateCompanion<Conversation> {
           listProjectionCiphertext ?? this.listProjectionCiphertext,
       sortKey: sortKey ?? this.sortKey,
       tombstoned: tombstoned ?? this.tombstoned,
+      peerUserId: peerUserId ?? this.peerUserId,
+      lastActivityEventId: lastActivityEventId ?? this.lastActivityEventId,
+      unreadCount: unreadCount ?? this.unreadCount,
+      mutedUntil: mutedUntil ?? this.mutedUntil,
+      draftCiphertext: draftCiphertext ?? this.draftCiphertext,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -7584,6 +7840,23 @@ class ConversationsCompanion extends UpdateCompanion<Conversation> {
     if (tombstoned.present) {
       map['tombstoned'] = Variable<bool>(tombstoned.value);
     }
+    if (peerUserId.present) {
+      map['peer_user_id'] = Variable<String>(peerUserId.value);
+    }
+    if (lastActivityEventId.present) {
+      map['last_activity_event_id'] = Variable<String>(
+        lastActivityEventId.value,
+      );
+    }
+    if (unreadCount.present) {
+      map['unread_count'] = Variable<int>(unreadCount.value);
+    }
+    if (mutedUntil.present) {
+      map['muted_until'] = Variable<DateTime>(mutedUntil.value);
+    }
+    if (draftCiphertext.present) {
+      map['draft_ciphertext'] = Variable<Uint8List>(draftCiphertext.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -7598,6 +7871,11 @@ class ConversationsCompanion extends UpdateCompanion<Conversation> {
           ..write('listProjectionCiphertext: $listProjectionCiphertext, ')
           ..write('sortKey: $sortKey, ')
           ..write('tombstoned: $tombstoned, ')
+          ..write('peerUserId: $peerUserId, ')
+          ..write('lastActivityEventId: $lastActivityEventId, ')
+          ..write('unreadCount: $unreadCount, ')
+          ..write('mutedUntil: $mutedUntil, ')
+          ..write('draftCiphertext: $draftCiphertext, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -7999,6 +8277,144 @@ class $MessagesTable extends Messages with TableInfo<$MessagesTable, Message> {
     type: DriftSqlType.dateTime,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _senderUserIdMeta = const VerificationMeta(
+    'senderUserId',
+  );
+  @override
+  late final GeneratedColumn<String> senderUserId = GeneratedColumn<String>(
+    'sender_user_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
+  static const VerificationMeta _senderDeviceIdMeta = const VerificationMeta(
+    'senderDeviceId',
+  );
+  @override
+  late final GeneratedColumn<String> senderDeviceId = GeneratedColumn<String>(
+    'sender_device_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
+  static const VerificationMeta _replyToMessageIdMeta = const VerificationMeta(
+    'replyToMessageId',
+  );
+  @override
+  late final GeneratedColumn<String> replyToMessageId = GeneratedColumn<String>(
+    'reply_to_message_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _quoteFallbackCiphertextMeta =
+      const VerificationMeta('quoteFallbackCiphertext');
+  @override
+  late final GeneratedColumn<Uint8List> quoteFallbackCiphertext =
+      GeneratedColumn<Uint8List>(
+        'quote_fallback_ciphertext',
+        aliasedName,
+        true,
+        type: DriftSqlType.blob,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _orderingMsMeta = const VerificationMeta(
+    'orderingMs',
+  );
+  @override
+  late final GeneratedColumn<int> orderingMs = GeneratedColumn<int>(
+    'ordering_ms',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _orderingEventIdMeta = const VerificationMeta(
+    'orderingEventId',
+  );
+  @override
+  late final GeneratedColumn<String> orderingEventId = GeneratedColumn<String>(
+    'ordering_event_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
+  static const VerificationMeta _timestampStateMeta = const VerificationMeta(
+    'timestampState',
+  );
+  @override
+  late final GeneratedColumn<int> timestampState = GeneratedColumn<int>(
+    'timestamp_state',
+    aliasedName,
+    false,
+    check: () => ComparableExpr(timestampState).isBetweenValues(0, 1),
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _deletedForEveryoneMeta =
+      const VerificationMeta('deletedForEveryone');
+  @override
+  late final GeneratedColumn<bool> deletedForEveryone = GeneratedColumn<bool>(
+    'deleted_for_everyone',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("deleted_for_everyone" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _deletedForMeMeta = const VerificationMeta(
+    'deletedForMe',
+  );
+  @override
+  late final GeneratedColumn<bool> deletedForMe = GeneratedColumn<bool>(
+    'deleted_for_me',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("deleted_for_me" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _pinnedMeta = const VerificationMeta('pinned');
+  @override
+  late final GeneratedColumn<bool> pinned = GeneratedColumn<bool>(
+    'pinned',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("pinned" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _unreadMeta = const VerificationMeta('unread');
+  @override
+  late final GeneratedColumn<bool> unread = GeneratedColumn<bool>(
+    'unread',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("unread" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     messageId,
@@ -8008,6 +8424,17 @@ class $MessagesTable extends Messages with TableInfo<$MessagesTable, Message> {
     status,
     revision,
     createdAt,
+    senderUserId,
+    senderDeviceId,
+    replyToMessageId,
+    quoteFallbackCiphertext,
+    orderingMs,
+    orderingEventId,
+    timestampState,
+    deletedForEveryone,
+    deletedForMe,
+    pinned,
+    unread,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -8086,6 +8513,96 @@ class $MessagesTable extends Messages with TableInfo<$MessagesTable, Message> {
     } else if (isInserting) {
       context.missing(_createdAtMeta);
     }
+    if (data.containsKey('sender_user_id')) {
+      context.handle(
+        _senderUserIdMeta,
+        senderUserId.isAcceptableOrUnknown(
+          data['sender_user_id']!,
+          _senderUserIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('sender_device_id')) {
+      context.handle(
+        _senderDeviceIdMeta,
+        senderDeviceId.isAcceptableOrUnknown(
+          data['sender_device_id']!,
+          _senderDeviceIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('reply_to_message_id')) {
+      context.handle(
+        _replyToMessageIdMeta,
+        replyToMessageId.isAcceptableOrUnknown(
+          data['reply_to_message_id']!,
+          _replyToMessageIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('quote_fallback_ciphertext')) {
+      context.handle(
+        _quoteFallbackCiphertextMeta,
+        quoteFallbackCiphertext.isAcceptableOrUnknown(
+          data['quote_fallback_ciphertext']!,
+          _quoteFallbackCiphertextMeta,
+        ),
+      );
+    }
+    if (data.containsKey('ordering_ms')) {
+      context.handle(
+        _orderingMsMeta,
+        orderingMs.isAcceptableOrUnknown(data['ordering_ms']!, _orderingMsMeta),
+      );
+    }
+    if (data.containsKey('ordering_event_id')) {
+      context.handle(
+        _orderingEventIdMeta,
+        orderingEventId.isAcceptableOrUnknown(
+          data['ordering_event_id']!,
+          _orderingEventIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('timestamp_state')) {
+      context.handle(
+        _timestampStateMeta,
+        timestampState.isAcceptableOrUnknown(
+          data['timestamp_state']!,
+          _timestampStateMeta,
+        ),
+      );
+    }
+    if (data.containsKey('deleted_for_everyone')) {
+      context.handle(
+        _deletedForEveryoneMeta,
+        deletedForEveryone.isAcceptableOrUnknown(
+          data['deleted_for_everyone']!,
+          _deletedForEveryoneMeta,
+        ),
+      );
+    }
+    if (data.containsKey('deleted_for_me')) {
+      context.handle(
+        _deletedForMeMeta,
+        deletedForMe.isAcceptableOrUnknown(
+          data['deleted_for_me']!,
+          _deletedForMeMeta,
+        ),
+      );
+    }
+    if (data.containsKey('pinned')) {
+      context.handle(
+        _pinnedMeta,
+        pinned.isAcceptableOrUnknown(data['pinned']!, _pinnedMeta),
+      );
+    }
+    if (data.containsKey('unread')) {
+      context.handle(
+        _unreadMeta,
+        unread.isAcceptableOrUnknown(data['unread']!, _unreadMeta),
+      );
+    }
     return context;
   }
 
@@ -8123,6 +8640,50 @@ class $MessagesTable extends Messages with TableInfo<$MessagesTable, Message> {
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
       )!,
+      senderUserId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}sender_user_id'],
+      )!,
+      senderDeviceId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}sender_device_id'],
+      )!,
+      replyToMessageId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}reply_to_message_id'],
+      ),
+      quoteFallbackCiphertext: attachedDatabase.typeMapping.read(
+        DriftSqlType.blob,
+        data['${effectivePrefix}quote_fallback_ciphertext'],
+      ),
+      orderingMs: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}ordering_ms'],
+      )!,
+      orderingEventId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}ordering_event_id'],
+      )!,
+      timestampState: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}timestamp_state'],
+      )!,
+      deletedForEveryone: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}deleted_for_everyone'],
+      )!,
+      deletedForMe: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}deleted_for_me'],
+      )!,
+      pinned: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}pinned'],
+      )!,
+      unread: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}unread'],
+      )!,
     );
   }
 
@@ -8140,6 +8701,17 @@ class Message extends DataClass implements Insertable<Message> {
   final int status;
   final int revision;
   final DateTime createdAt;
+  final String senderUserId;
+  final String senderDeviceId;
+  final String? replyToMessageId;
+  final Uint8List? quoteFallbackCiphertext;
+  final int orderingMs;
+  final String orderingEventId;
+  final int timestampState;
+  final bool deletedForEveryone;
+  final bool deletedForMe;
+  final bool pinned;
+  final bool unread;
   const Message({
     required this.messageId,
     required this.conversationId,
@@ -8148,6 +8720,17 @@ class Message extends DataClass implements Insertable<Message> {
     required this.status,
     required this.revision,
     required this.createdAt,
+    required this.senderUserId,
+    required this.senderDeviceId,
+    this.replyToMessageId,
+    this.quoteFallbackCiphertext,
+    required this.orderingMs,
+    required this.orderingEventId,
+    required this.timestampState,
+    required this.deletedForEveryone,
+    required this.deletedForMe,
+    required this.pinned,
+    required this.unread,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -8159,6 +8742,23 @@ class Message extends DataClass implements Insertable<Message> {
     map['status'] = Variable<int>(status);
     map['revision'] = Variable<int>(revision);
     map['created_at'] = Variable<DateTime>(createdAt);
+    map['sender_user_id'] = Variable<String>(senderUserId);
+    map['sender_device_id'] = Variable<String>(senderDeviceId);
+    if (!nullToAbsent || replyToMessageId != null) {
+      map['reply_to_message_id'] = Variable<String>(replyToMessageId);
+    }
+    if (!nullToAbsent || quoteFallbackCiphertext != null) {
+      map['quote_fallback_ciphertext'] = Variable<Uint8List>(
+        quoteFallbackCiphertext,
+      );
+    }
+    map['ordering_ms'] = Variable<int>(orderingMs);
+    map['ordering_event_id'] = Variable<String>(orderingEventId);
+    map['timestamp_state'] = Variable<int>(timestampState);
+    map['deleted_for_everyone'] = Variable<bool>(deletedForEveryone);
+    map['deleted_for_me'] = Variable<bool>(deletedForMe);
+    map['pinned'] = Variable<bool>(pinned);
+    map['unread'] = Variable<bool>(unread);
     return map;
   }
 
@@ -8171,6 +8771,21 @@ class Message extends DataClass implements Insertable<Message> {
       status: Value(status),
       revision: Value(revision),
       createdAt: Value(createdAt),
+      senderUserId: Value(senderUserId),
+      senderDeviceId: Value(senderDeviceId),
+      replyToMessageId: replyToMessageId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(replyToMessageId),
+      quoteFallbackCiphertext: quoteFallbackCiphertext == null && nullToAbsent
+          ? const Value.absent()
+          : Value(quoteFallbackCiphertext),
+      orderingMs: Value(orderingMs),
+      orderingEventId: Value(orderingEventId),
+      timestampState: Value(timestampState),
+      deletedForEveryone: Value(deletedForEveryone),
+      deletedForMe: Value(deletedForMe),
+      pinned: Value(pinned),
+      unread: Value(unread),
     );
   }
 
@@ -8189,6 +8804,19 @@ class Message extends DataClass implements Insertable<Message> {
       status: serializer.fromJson<int>(json['status']),
       revision: serializer.fromJson<int>(json['revision']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      senderUserId: serializer.fromJson<String>(json['senderUserId']),
+      senderDeviceId: serializer.fromJson<String>(json['senderDeviceId']),
+      replyToMessageId: serializer.fromJson<String?>(json['replyToMessageId']),
+      quoteFallbackCiphertext: serializer.fromJson<Uint8List?>(
+        json['quoteFallbackCiphertext'],
+      ),
+      orderingMs: serializer.fromJson<int>(json['orderingMs']),
+      orderingEventId: serializer.fromJson<String>(json['orderingEventId']),
+      timestampState: serializer.fromJson<int>(json['timestampState']),
+      deletedForEveryone: serializer.fromJson<bool>(json['deletedForEveryone']),
+      deletedForMe: serializer.fromJson<bool>(json['deletedForMe']),
+      pinned: serializer.fromJson<bool>(json['pinned']),
+      unread: serializer.fromJson<bool>(json['unread']),
     );
   }
   @override
@@ -8204,6 +8832,19 @@ class Message extends DataClass implements Insertable<Message> {
       'status': serializer.toJson<int>(status),
       'revision': serializer.toJson<int>(revision),
       'createdAt': serializer.toJson<DateTime>(createdAt),
+      'senderUserId': serializer.toJson<String>(senderUserId),
+      'senderDeviceId': serializer.toJson<String>(senderDeviceId),
+      'replyToMessageId': serializer.toJson<String?>(replyToMessageId),
+      'quoteFallbackCiphertext': serializer.toJson<Uint8List?>(
+        quoteFallbackCiphertext,
+      ),
+      'orderingMs': serializer.toJson<int>(orderingMs),
+      'orderingEventId': serializer.toJson<String>(orderingEventId),
+      'timestampState': serializer.toJson<int>(timestampState),
+      'deletedForEveryone': serializer.toJson<bool>(deletedForEveryone),
+      'deletedForMe': serializer.toJson<bool>(deletedForMe),
+      'pinned': serializer.toJson<bool>(pinned),
+      'unread': serializer.toJson<bool>(unread),
     };
   }
 
@@ -8215,6 +8856,17 @@ class Message extends DataClass implements Insertable<Message> {
     int? status,
     int? revision,
     DateTime? createdAt,
+    String? senderUserId,
+    String? senderDeviceId,
+    Value<String?> replyToMessageId = const Value.absent(),
+    Value<Uint8List?> quoteFallbackCiphertext = const Value.absent(),
+    int? orderingMs,
+    String? orderingEventId,
+    int? timestampState,
+    bool? deletedForEveryone,
+    bool? deletedForMe,
+    bool? pinned,
+    bool? unread,
   }) => Message(
     messageId: messageId ?? this.messageId,
     conversationId: conversationId ?? this.conversationId,
@@ -8223,6 +8875,21 @@ class Message extends DataClass implements Insertable<Message> {
     status: status ?? this.status,
     revision: revision ?? this.revision,
     createdAt: createdAt ?? this.createdAt,
+    senderUserId: senderUserId ?? this.senderUserId,
+    senderDeviceId: senderDeviceId ?? this.senderDeviceId,
+    replyToMessageId: replyToMessageId.present
+        ? replyToMessageId.value
+        : this.replyToMessageId,
+    quoteFallbackCiphertext: quoteFallbackCiphertext.present
+        ? quoteFallbackCiphertext.value
+        : this.quoteFallbackCiphertext,
+    orderingMs: orderingMs ?? this.orderingMs,
+    orderingEventId: orderingEventId ?? this.orderingEventId,
+    timestampState: timestampState ?? this.timestampState,
+    deletedForEveryone: deletedForEveryone ?? this.deletedForEveryone,
+    deletedForMe: deletedForMe ?? this.deletedForMe,
+    pinned: pinned ?? this.pinned,
+    unread: unread ?? this.unread,
   );
   Message copyWithCompanion(MessagesCompanion data) {
     return Message(
@@ -8239,6 +8906,35 @@ class Message extends DataClass implements Insertable<Message> {
       status: data.status.present ? data.status.value : this.status,
       revision: data.revision.present ? data.revision.value : this.revision,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      senderUserId: data.senderUserId.present
+          ? data.senderUserId.value
+          : this.senderUserId,
+      senderDeviceId: data.senderDeviceId.present
+          ? data.senderDeviceId.value
+          : this.senderDeviceId,
+      replyToMessageId: data.replyToMessageId.present
+          ? data.replyToMessageId.value
+          : this.replyToMessageId,
+      quoteFallbackCiphertext: data.quoteFallbackCiphertext.present
+          ? data.quoteFallbackCiphertext.value
+          : this.quoteFallbackCiphertext,
+      orderingMs: data.orderingMs.present
+          ? data.orderingMs.value
+          : this.orderingMs,
+      orderingEventId: data.orderingEventId.present
+          ? data.orderingEventId.value
+          : this.orderingEventId,
+      timestampState: data.timestampState.present
+          ? data.timestampState.value
+          : this.timestampState,
+      deletedForEveryone: data.deletedForEveryone.present
+          ? data.deletedForEveryone.value
+          : this.deletedForEveryone,
+      deletedForMe: data.deletedForMe.present
+          ? data.deletedForMe.value
+          : this.deletedForMe,
+      pinned: data.pinned.present ? data.pinned.value : this.pinned,
+      unread: data.unread.present ? data.unread.value : this.unread,
     );
   }
 
@@ -8251,7 +8947,18 @@ class Message extends DataClass implements Insertable<Message> {
           ..write('projectionCiphertext: $projectionCiphertext, ')
           ..write('status: $status, ')
           ..write('revision: $revision, ')
-          ..write('createdAt: $createdAt')
+          ..write('createdAt: $createdAt, ')
+          ..write('senderUserId: $senderUserId, ')
+          ..write('senderDeviceId: $senderDeviceId, ')
+          ..write('replyToMessageId: $replyToMessageId, ')
+          ..write('quoteFallbackCiphertext: $quoteFallbackCiphertext, ')
+          ..write('orderingMs: $orderingMs, ')
+          ..write('orderingEventId: $orderingEventId, ')
+          ..write('timestampState: $timestampState, ')
+          ..write('deletedForEveryone: $deletedForEveryone, ')
+          ..write('deletedForMe: $deletedForMe, ')
+          ..write('pinned: $pinned, ')
+          ..write('unread: $unread')
           ..write(')'))
         .toString();
   }
@@ -8265,6 +8972,17 @@ class Message extends DataClass implements Insertable<Message> {
     status,
     revision,
     createdAt,
+    senderUserId,
+    senderDeviceId,
+    replyToMessageId,
+    $driftBlobEquality.hash(quoteFallbackCiphertext),
+    orderingMs,
+    orderingEventId,
+    timestampState,
+    deletedForEveryone,
+    deletedForMe,
+    pinned,
+    unread,
   );
   @override
   bool operator ==(Object other) =>
@@ -8279,7 +8997,21 @@ class Message extends DataClass implements Insertable<Message> {
           ) &&
           other.status == this.status &&
           other.revision == this.revision &&
-          other.createdAt == this.createdAt);
+          other.createdAt == this.createdAt &&
+          other.senderUserId == this.senderUserId &&
+          other.senderDeviceId == this.senderDeviceId &&
+          other.replyToMessageId == this.replyToMessageId &&
+          $driftBlobEquality.equals(
+            other.quoteFallbackCiphertext,
+            this.quoteFallbackCiphertext,
+          ) &&
+          other.orderingMs == this.orderingMs &&
+          other.orderingEventId == this.orderingEventId &&
+          other.timestampState == this.timestampState &&
+          other.deletedForEveryone == this.deletedForEveryone &&
+          other.deletedForMe == this.deletedForMe &&
+          other.pinned == this.pinned &&
+          other.unread == this.unread);
 }
 
 class MessagesCompanion extends UpdateCompanion<Message> {
@@ -8290,6 +9022,17 @@ class MessagesCompanion extends UpdateCompanion<Message> {
   final Value<int> status;
   final Value<int> revision;
   final Value<DateTime> createdAt;
+  final Value<String> senderUserId;
+  final Value<String> senderDeviceId;
+  final Value<String?> replyToMessageId;
+  final Value<Uint8List?> quoteFallbackCiphertext;
+  final Value<int> orderingMs;
+  final Value<String> orderingEventId;
+  final Value<int> timestampState;
+  final Value<bool> deletedForEveryone;
+  final Value<bool> deletedForMe;
+  final Value<bool> pinned;
+  final Value<bool> unread;
   final Value<int> rowid;
   const MessagesCompanion({
     this.messageId = const Value.absent(),
@@ -8299,6 +9042,17 @@ class MessagesCompanion extends UpdateCompanion<Message> {
     this.status = const Value.absent(),
     this.revision = const Value.absent(),
     this.createdAt = const Value.absent(),
+    this.senderUserId = const Value.absent(),
+    this.senderDeviceId = const Value.absent(),
+    this.replyToMessageId = const Value.absent(),
+    this.quoteFallbackCiphertext = const Value.absent(),
+    this.orderingMs = const Value.absent(),
+    this.orderingEventId = const Value.absent(),
+    this.timestampState = const Value.absent(),
+    this.deletedForEveryone = const Value.absent(),
+    this.deletedForMe = const Value.absent(),
+    this.pinned = const Value.absent(),
+    this.unread = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   MessagesCompanion.insert({
@@ -8309,6 +9063,17 @@ class MessagesCompanion extends UpdateCompanion<Message> {
     required int status,
     required int revision,
     required DateTime createdAt,
+    this.senderUserId = const Value.absent(),
+    this.senderDeviceId = const Value.absent(),
+    this.replyToMessageId = const Value.absent(),
+    this.quoteFallbackCiphertext = const Value.absent(),
+    this.orderingMs = const Value.absent(),
+    this.orderingEventId = const Value.absent(),
+    this.timestampState = const Value.absent(),
+    this.deletedForEveryone = const Value.absent(),
+    this.deletedForMe = const Value.absent(),
+    this.pinned = const Value.absent(),
+    this.unread = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : messageId = Value(messageId),
        conversationId = Value(conversationId),
@@ -8325,6 +9090,17 @@ class MessagesCompanion extends UpdateCompanion<Message> {
     Expression<int>? status,
     Expression<int>? revision,
     Expression<DateTime>? createdAt,
+    Expression<String>? senderUserId,
+    Expression<String>? senderDeviceId,
+    Expression<String>? replyToMessageId,
+    Expression<Uint8List>? quoteFallbackCiphertext,
+    Expression<int>? orderingMs,
+    Expression<String>? orderingEventId,
+    Expression<int>? timestampState,
+    Expression<bool>? deletedForEveryone,
+    Expression<bool>? deletedForMe,
+    Expression<bool>? pinned,
+    Expression<bool>? unread,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -8336,6 +9112,19 @@ class MessagesCompanion extends UpdateCompanion<Message> {
       if (status != null) 'status': status,
       if (revision != null) 'revision': revision,
       if (createdAt != null) 'created_at': createdAt,
+      if (senderUserId != null) 'sender_user_id': senderUserId,
+      if (senderDeviceId != null) 'sender_device_id': senderDeviceId,
+      if (replyToMessageId != null) 'reply_to_message_id': replyToMessageId,
+      if (quoteFallbackCiphertext != null)
+        'quote_fallback_ciphertext': quoteFallbackCiphertext,
+      if (orderingMs != null) 'ordering_ms': orderingMs,
+      if (orderingEventId != null) 'ordering_event_id': orderingEventId,
+      if (timestampState != null) 'timestamp_state': timestampState,
+      if (deletedForEveryone != null)
+        'deleted_for_everyone': deletedForEveryone,
+      if (deletedForMe != null) 'deleted_for_me': deletedForMe,
+      if (pinned != null) 'pinned': pinned,
+      if (unread != null) 'unread': unread,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -8348,6 +9137,17 @@ class MessagesCompanion extends UpdateCompanion<Message> {
     Value<int>? status,
     Value<int>? revision,
     Value<DateTime>? createdAt,
+    Value<String>? senderUserId,
+    Value<String>? senderDeviceId,
+    Value<String?>? replyToMessageId,
+    Value<Uint8List?>? quoteFallbackCiphertext,
+    Value<int>? orderingMs,
+    Value<String>? orderingEventId,
+    Value<int>? timestampState,
+    Value<bool>? deletedForEveryone,
+    Value<bool>? deletedForMe,
+    Value<bool>? pinned,
+    Value<bool>? unread,
     Value<int>? rowid,
   }) {
     return MessagesCompanion(
@@ -8358,6 +9158,18 @@ class MessagesCompanion extends UpdateCompanion<Message> {
       status: status ?? this.status,
       revision: revision ?? this.revision,
       createdAt: createdAt ?? this.createdAt,
+      senderUserId: senderUserId ?? this.senderUserId,
+      senderDeviceId: senderDeviceId ?? this.senderDeviceId,
+      replyToMessageId: replyToMessageId ?? this.replyToMessageId,
+      quoteFallbackCiphertext:
+          quoteFallbackCiphertext ?? this.quoteFallbackCiphertext,
+      orderingMs: orderingMs ?? this.orderingMs,
+      orderingEventId: orderingEventId ?? this.orderingEventId,
+      timestampState: timestampState ?? this.timestampState,
+      deletedForEveryone: deletedForEveryone ?? this.deletedForEveryone,
+      deletedForMe: deletedForMe ?? this.deletedForMe,
+      pinned: pinned ?? this.pinned,
+      unread: unread ?? this.unread,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -8388,6 +9200,41 @@ class MessagesCompanion extends UpdateCompanion<Message> {
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
+    if (senderUserId.present) {
+      map['sender_user_id'] = Variable<String>(senderUserId.value);
+    }
+    if (senderDeviceId.present) {
+      map['sender_device_id'] = Variable<String>(senderDeviceId.value);
+    }
+    if (replyToMessageId.present) {
+      map['reply_to_message_id'] = Variable<String>(replyToMessageId.value);
+    }
+    if (quoteFallbackCiphertext.present) {
+      map['quote_fallback_ciphertext'] = Variable<Uint8List>(
+        quoteFallbackCiphertext.value,
+      );
+    }
+    if (orderingMs.present) {
+      map['ordering_ms'] = Variable<int>(orderingMs.value);
+    }
+    if (orderingEventId.present) {
+      map['ordering_event_id'] = Variable<String>(orderingEventId.value);
+    }
+    if (timestampState.present) {
+      map['timestamp_state'] = Variable<int>(timestampState.value);
+    }
+    if (deletedForEveryone.present) {
+      map['deleted_for_everyone'] = Variable<bool>(deletedForEveryone.value);
+    }
+    if (deletedForMe.present) {
+      map['deleted_for_me'] = Variable<bool>(deletedForMe.value);
+    }
+    if (pinned.present) {
+      map['pinned'] = Variable<bool>(pinned.value);
+    }
+    if (unread.present) {
+      map['unread'] = Variable<bool>(unread.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -8404,6 +9251,17 @@ class MessagesCompanion extends UpdateCompanion<Message> {
           ..write('status: $status, ')
           ..write('revision: $revision, ')
           ..write('createdAt: $createdAt, ')
+          ..write('senderUserId: $senderUserId, ')
+          ..write('senderDeviceId: $senderDeviceId, ')
+          ..write('replyToMessageId: $replyToMessageId, ')
+          ..write('quoteFallbackCiphertext: $quoteFallbackCiphertext, ')
+          ..write('orderingMs: $orderingMs, ')
+          ..write('orderingEventId: $orderingEventId, ')
+          ..write('timestampState: $timestampState, ')
+          ..write('deletedForEveryone: $deletedForEveryone, ')
+          ..write('deletedForMe: $deletedForMe, ')
+          ..write('pinned: $pinned, ')
+          ..write('unread: $unread, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -8853,6 +9711,2272 @@ class MessageEventsCompanion extends UpdateCompanion<MessageEvent> {
           ..write('eventKind: $eventKind, ')
           ..write('authenticatedCiphertext: $authenticatedCiphertext, ')
           ..write('createdAt: $createdAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $StoredApplicationEventsTable extends StoredApplicationEvents
+    with TableInfo<$StoredApplicationEventsTable, StoredApplicationEvent> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $StoredApplicationEventsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _eventIdMeta = const VerificationMeta(
+    'eventId',
+  );
+  @override
+  late final GeneratedColumn<String> eventId = GeneratedColumn<String>(
+    'event_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _conversationIdMeta = const VerificationMeta(
+    'conversationId',
+  );
+  @override
+  late final GeneratedColumn<String> conversationId = GeneratedColumn<String>(
+    'conversation_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _kindMeta = const VerificationMeta('kind');
+  @override
+  late final GeneratedColumn<int> kind = GeneratedColumn<int>(
+    'kind',
+    aliasedName,
+    false,
+    check: () => ComparableExpr(kind).isBetweenValues(1, 65535),
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _senderUserIdMeta = const VerificationMeta(
+    'senderUserId',
+  );
+  @override
+  late final GeneratedColumn<String> senderUserId = GeneratedColumn<String>(
+    'sender_user_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _senderDeviceIdMeta = const VerificationMeta(
+    'senderDeviceId',
+  );
+  @override
+  late final GeneratedColumn<String> senderDeviceId = GeneratedColumn<String>(
+    'sender_device_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _senderCounterMeta = const VerificationMeta(
+    'senderCounter',
+  );
+  @override
+  late final GeneratedColumn<int> senderCounter = GeneratedColumn<int>(
+    'sender_counter',
+    aliasedName,
+    false,
+    check: () => ComparableExpr(senderCounter).isBiggerThanValue(0),
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _createdMsMeta = const VerificationMeta(
+    'createdMs',
+  );
+  @override
+  late final GeneratedColumn<int> createdMs = GeneratedColumn<int>(
+    'created_ms',
+    aliasedName,
+    false,
+    check: () => ComparableExpr(createdMs).isBiggerOrEqualValue(0),
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _orderingMsMeta = const VerificationMeta(
+    'orderingMs',
+  );
+  @override
+  late final GeneratedColumn<int> orderingMs = GeneratedColumn<int>(
+    'ordering_ms',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _canonicalEventMeta = const VerificationMeta(
+    'canonicalEvent',
+  );
+  @override
+  late final GeneratedColumn<Uint8List> canonicalEvent =
+      GeneratedColumn<Uint8List>(
+        'canonical_event',
+        aliasedName,
+        false,
+        type: DriftSqlType.blob,
+        requiredDuringInsert: true,
+      );
+  static const VerificationMeta _bodyProjectionMeta = const VerificationMeta(
+    'bodyProjection',
+  );
+  @override
+  late final GeneratedColumn<Uint8List> bodyProjection =
+      GeneratedColumn<Uint8List>(
+        'body_projection',
+        aliasedName,
+        false,
+        type: DriftSqlType.blob,
+        requiredDuringInsert: true,
+      );
+  static const VerificationMeta _applyStateMeta = const VerificationMeta(
+    'applyState',
+  );
+  @override
+  late final GeneratedColumn<int> applyState = GeneratedColumn<int>(
+    'apply_state',
+    aliasedName,
+    false,
+    check: () => ComparableExpr(applyState).isBetweenValues(0, 5),
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _localOriginMeta = const VerificationMeta(
+    'localOrigin',
+  );
+  @override
+  late final GeneratedColumn<bool> localOrigin = GeneratedColumn<bool>(
+    'local_origin',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("local_origin" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _localDeviceIdMeta = const VerificationMeta(
+    'localDeviceId',
+  );
+  @override
+  late final GeneratedColumn<String> localDeviceId = GeneratedColumn<String>(
+    'local_device_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
+  static const VerificationMeta _targetMessageIdMeta = const VerificationMeta(
+    'targetMessageId',
+  );
+  @override
+  late final GeneratedColumn<String> targetMessageId = GeneratedColumn<String>(
+    'target_message_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _revisionMeta = const VerificationMeta(
+    'revision',
+  );
+  @override
+  late final GeneratedColumn<int> revision = GeneratedColumn<int>(
+    'revision',
+    aliasedName,
+    true,
+    check: () =>
+        revision.isNull() | ComparableExpr(revision).isBiggerThanValue(0),
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _authenticatedAtMeta = const VerificationMeta(
+    'authenticatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> authenticatedAt =
+      GeneratedColumn<DateTime>(
+        'authenticated_at',
+        aliasedName,
+        false,
+        type: DriftSqlType.dateTime,
+        requiredDuringInsert: false,
+        defaultValue: currentDateAndTime,
+      );
+  @override
+  List<GeneratedColumn> get $columns => [
+    eventId,
+    conversationId,
+    kind,
+    senderUserId,
+    senderDeviceId,
+    senderCounter,
+    createdMs,
+    orderingMs,
+    canonicalEvent,
+    bodyProjection,
+    applyState,
+    localOrigin,
+    localDeviceId,
+    targetMessageId,
+    revision,
+    authenticatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'application_events';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<StoredApplicationEvent> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('event_id')) {
+      context.handle(
+        _eventIdMeta,
+        eventId.isAcceptableOrUnknown(data['event_id']!, _eventIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_eventIdMeta);
+    }
+    if (data.containsKey('conversation_id')) {
+      context.handle(
+        _conversationIdMeta,
+        conversationId.isAcceptableOrUnknown(
+          data['conversation_id']!,
+          _conversationIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_conversationIdMeta);
+    }
+    if (data.containsKey('kind')) {
+      context.handle(
+        _kindMeta,
+        kind.isAcceptableOrUnknown(data['kind']!, _kindMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_kindMeta);
+    }
+    if (data.containsKey('sender_user_id')) {
+      context.handle(
+        _senderUserIdMeta,
+        senderUserId.isAcceptableOrUnknown(
+          data['sender_user_id']!,
+          _senderUserIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_senderUserIdMeta);
+    }
+    if (data.containsKey('sender_device_id')) {
+      context.handle(
+        _senderDeviceIdMeta,
+        senderDeviceId.isAcceptableOrUnknown(
+          data['sender_device_id']!,
+          _senderDeviceIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_senderDeviceIdMeta);
+    }
+    if (data.containsKey('sender_counter')) {
+      context.handle(
+        _senderCounterMeta,
+        senderCounter.isAcceptableOrUnknown(
+          data['sender_counter']!,
+          _senderCounterMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_senderCounterMeta);
+    }
+    if (data.containsKey('created_ms')) {
+      context.handle(
+        _createdMsMeta,
+        createdMs.isAcceptableOrUnknown(data['created_ms']!, _createdMsMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdMsMeta);
+    }
+    if (data.containsKey('ordering_ms')) {
+      context.handle(
+        _orderingMsMeta,
+        orderingMs.isAcceptableOrUnknown(data['ordering_ms']!, _orderingMsMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_orderingMsMeta);
+    }
+    if (data.containsKey('canonical_event')) {
+      context.handle(
+        _canonicalEventMeta,
+        canonicalEvent.isAcceptableOrUnknown(
+          data['canonical_event']!,
+          _canonicalEventMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_canonicalEventMeta);
+    }
+    if (data.containsKey('body_projection')) {
+      context.handle(
+        _bodyProjectionMeta,
+        bodyProjection.isAcceptableOrUnknown(
+          data['body_projection']!,
+          _bodyProjectionMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_bodyProjectionMeta);
+    }
+    if (data.containsKey('apply_state')) {
+      context.handle(
+        _applyStateMeta,
+        applyState.isAcceptableOrUnknown(data['apply_state']!, _applyStateMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_applyStateMeta);
+    }
+    if (data.containsKey('local_origin')) {
+      context.handle(
+        _localOriginMeta,
+        localOrigin.isAcceptableOrUnknown(
+          data['local_origin']!,
+          _localOriginMeta,
+        ),
+      );
+    }
+    if (data.containsKey('local_device_id')) {
+      context.handle(
+        _localDeviceIdMeta,
+        localDeviceId.isAcceptableOrUnknown(
+          data['local_device_id']!,
+          _localDeviceIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('target_message_id')) {
+      context.handle(
+        _targetMessageIdMeta,
+        targetMessageId.isAcceptableOrUnknown(
+          data['target_message_id']!,
+          _targetMessageIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('revision')) {
+      context.handle(
+        _revisionMeta,
+        revision.isAcceptableOrUnknown(data['revision']!, _revisionMeta),
+      );
+    }
+    if (data.containsKey('authenticated_at')) {
+      context.handle(
+        _authenticatedAtMeta,
+        authenticatedAt.isAcceptableOrUnknown(
+          data['authenticated_at']!,
+          _authenticatedAtMeta,
+        ),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {eventId};
+  @override
+  StoredApplicationEvent map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return StoredApplicationEvent(
+      eventId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}event_id'],
+      )!,
+      conversationId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}conversation_id'],
+      )!,
+      kind: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}kind'],
+      )!,
+      senderUserId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}sender_user_id'],
+      )!,
+      senderDeviceId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}sender_device_id'],
+      )!,
+      senderCounter: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}sender_counter'],
+      )!,
+      createdMs: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}created_ms'],
+      )!,
+      orderingMs: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}ordering_ms'],
+      )!,
+      canonicalEvent: attachedDatabase.typeMapping.read(
+        DriftSqlType.blob,
+        data['${effectivePrefix}canonical_event'],
+      )!,
+      bodyProjection: attachedDatabase.typeMapping.read(
+        DriftSqlType.blob,
+        data['${effectivePrefix}body_projection'],
+      )!,
+      applyState: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}apply_state'],
+      )!,
+      localOrigin: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}local_origin'],
+      )!,
+      localDeviceId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}local_device_id'],
+      )!,
+      targetMessageId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}target_message_id'],
+      ),
+      revision: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}revision'],
+      ),
+      authenticatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}authenticated_at'],
+      )!,
+    );
+  }
+
+  @override
+  $StoredApplicationEventsTable createAlias(String alias) {
+    return $StoredApplicationEventsTable(attachedDatabase, alias);
+  }
+}
+
+class StoredApplicationEvent extends DataClass
+    implements Insertable<StoredApplicationEvent> {
+  final String eventId;
+  final String conversationId;
+  final int kind;
+  final String senderUserId;
+  final String senderDeviceId;
+  final int senderCounter;
+  final int createdMs;
+  final int orderingMs;
+  final Uint8List canonicalEvent;
+  final Uint8List bodyProjection;
+  final int applyState;
+  final bool localOrigin;
+  final String localDeviceId;
+  final String? targetMessageId;
+  final int? revision;
+  final DateTime authenticatedAt;
+  const StoredApplicationEvent({
+    required this.eventId,
+    required this.conversationId,
+    required this.kind,
+    required this.senderUserId,
+    required this.senderDeviceId,
+    required this.senderCounter,
+    required this.createdMs,
+    required this.orderingMs,
+    required this.canonicalEvent,
+    required this.bodyProjection,
+    required this.applyState,
+    required this.localOrigin,
+    required this.localDeviceId,
+    this.targetMessageId,
+    this.revision,
+    required this.authenticatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['event_id'] = Variable<String>(eventId);
+    map['conversation_id'] = Variable<String>(conversationId);
+    map['kind'] = Variable<int>(kind);
+    map['sender_user_id'] = Variable<String>(senderUserId);
+    map['sender_device_id'] = Variable<String>(senderDeviceId);
+    map['sender_counter'] = Variable<int>(senderCounter);
+    map['created_ms'] = Variable<int>(createdMs);
+    map['ordering_ms'] = Variable<int>(orderingMs);
+    map['canonical_event'] = Variable<Uint8List>(canonicalEvent);
+    map['body_projection'] = Variable<Uint8List>(bodyProjection);
+    map['apply_state'] = Variable<int>(applyState);
+    map['local_origin'] = Variable<bool>(localOrigin);
+    map['local_device_id'] = Variable<String>(localDeviceId);
+    if (!nullToAbsent || targetMessageId != null) {
+      map['target_message_id'] = Variable<String>(targetMessageId);
+    }
+    if (!nullToAbsent || revision != null) {
+      map['revision'] = Variable<int>(revision);
+    }
+    map['authenticated_at'] = Variable<DateTime>(authenticatedAt);
+    return map;
+  }
+
+  StoredApplicationEventsCompanion toCompanion(bool nullToAbsent) {
+    return StoredApplicationEventsCompanion(
+      eventId: Value(eventId),
+      conversationId: Value(conversationId),
+      kind: Value(kind),
+      senderUserId: Value(senderUserId),
+      senderDeviceId: Value(senderDeviceId),
+      senderCounter: Value(senderCounter),
+      createdMs: Value(createdMs),
+      orderingMs: Value(orderingMs),
+      canonicalEvent: Value(canonicalEvent),
+      bodyProjection: Value(bodyProjection),
+      applyState: Value(applyState),
+      localOrigin: Value(localOrigin),
+      localDeviceId: Value(localDeviceId),
+      targetMessageId: targetMessageId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(targetMessageId),
+      revision: revision == null && nullToAbsent
+          ? const Value.absent()
+          : Value(revision),
+      authenticatedAt: Value(authenticatedAt),
+    );
+  }
+
+  factory StoredApplicationEvent.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return StoredApplicationEvent(
+      eventId: serializer.fromJson<String>(json['eventId']),
+      conversationId: serializer.fromJson<String>(json['conversationId']),
+      kind: serializer.fromJson<int>(json['kind']),
+      senderUserId: serializer.fromJson<String>(json['senderUserId']),
+      senderDeviceId: serializer.fromJson<String>(json['senderDeviceId']),
+      senderCounter: serializer.fromJson<int>(json['senderCounter']),
+      createdMs: serializer.fromJson<int>(json['createdMs']),
+      orderingMs: serializer.fromJson<int>(json['orderingMs']),
+      canonicalEvent: serializer.fromJson<Uint8List>(json['canonicalEvent']),
+      bodyProjection: serializer.fromJson<Uint8List>(json['bodyProjection']),
+      applyState: serializer.fromJson<int>(json['applyState']),
+      localOrigin: serializer.fromJson<bool>(json['localOrigin']),
+      localDeviceId: serializer.fromJson<String>(json['localDeviceId']),
+      targetMessageId: serializer.fromJson<String?>(json['targetMessageId']),
+      revision: serializer.fromJson<int?>(json['revision']),
+      authenticatedAt: serializer.fromJson<DateTime>(json['authenticatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'eventId': serializer.toJson<String>(eventId),
+      'conversationId': serializer.toJson<String>(conversationId),
+      'kind': serializer.toJson<int>(kind),
+      'senderUserId': serializer.toJson<String>(senderUserId),
+      'senderDeviceId': serializer.toJson<String>(senderDeviceId),
+      'senderCounter': serializer.toJson<int>(senderCounter),
+      'createdMs': serializer.toJson<int>(createdMs),
+      'orderingMs': serializer.toJson<int>(orderingMs),
+      'canonicalEvent': serializer.toJson<Uint8List>(canonicalEvent),
+      'bodyProjection': serializer.toJson<Uint8List>(bodyProjection),
+      'applyState': serializer.toJson<int>(applyState),
+      'localOrigin': serializer.toJson<bool>(localOrigin),
+      'localDeviceId': serializer.toJson<String>(localDeviceId),
+      'targetMessageId': serializer.toJson<String?>(targetMessageId),
+      'revision': serializer.toJson<int?>(revision),
+      'authenticatedAt': serializer.toJson<DateTime>(authenticatedAt),
+    };
+  }
+
+  StoredApplicationEvent copyWith({
+    String? eventId,
+    String? conversationId,
+    int? kind,
+    String? senderUserId,
+    String? senderDeviceId,
+    int? senderCounter,
+    int? createdMs,
+    int? orderingMs,
+    Uint8List? canonicalEvent,
+    Uint8List? bodyProjection,
+    int? applyState,
+    bool? localOrigin,
+    String? localDeviceId,
+    Value<String?> targetMessageId = const Value.absent(),
+    Value<int?> revision = const Value.absent(),
+    DateTime? authenticatedAt,
+  }) => StoredApplicationEvent(
+    eventId: eventId ?? this.eventId,
+    conversationId: conversationId ?? this.conversationId,
+    kind: kind ?? this.kind,
+    senderUserId: senderUserId ?? this.senderUserId,
+    senderDeviceId: senderDeviceId ?? this.senderDeviceId,
+    senderCounter: senderCounter ?? this.senderCounter,
+    createdMs: createdMs ?? this.createdMs,
+    orderingMs: orderingMs ?? this.orderingMs,
+    canonicalEvent: canonicalEvent ?? this.canonicalEvent,
+    bodyProjection: bodyProjection ?? this.bodyProjection,
+    applyState: applyState ?? this.applyState,
+    localOrigin: localOrigin ?? this.localOrigin,
+    localDeviceId: localDeviceId ?? this.localDeviceId,
+    targetMessageId: targetMessageId.present
+        ? targetMessageId.value
+        : this.targetMessageId,
+    revision: revision.present ? revision.value : this.revision,
+    authenticatedAt: authenticatedAt ?? this.authenticatedAt,
+  );
+  StoredApplicationEvent copyWithCompanion(
+    StoredApplicationEventsCompanion data,
+  ) {
+    return StoredApplicationEvent(
+      eventId: data.eventId.present ? data.eventId.value : this.eventId,
+      conversationId: data.conversationId.present
+          ? data.conversationId.value
+          : this.conversationId,
+      kind: data.kind.present ? data.kind.value : this.kind,
+      senderUserId: data.senderUserId.present
+          ? data.senderUserId.value
+          : this.senderUserId,
+      senderDeviceId: data.senderDeviceId.present
+          ? data.senderDeviceId.value
+          : this.senderDeviceId,
+      senderCounter: data.senderCounter.present
+          ? data.senderCounter.value
+          : this.senderCounter,
+      createdMs: data.createdMs.present ? data.createdMs.value : this.createdMs,
+      orderingMs: data.orderingMs.present
+          ? data.orderingMs.value
+          : this.orderingMs,
+      canonicalEvent: data.canonicalEvent.present
+          ? data.canonicalEvent.value
+          : this.canonicalEvent,
+      bodyProjection: data.bodyProjection.present
+          ? data.bodyProjection.value
+          : this.bodyProjection,
+      applyState: data.applyState.present
+          ? data.applyState.value
+          : this.applyState,
+      localOrigin: data.localOrigin.present
+          ? data.localOrigin.value
+          : this.localOrigin,
+      localDeviceId: data.localDeviceId.present
+          ? data.localDeviceId.value
+          : this.localDeviceId,
+      targetMessageId: data.targetMessageId.present
+          ? data.targetMessageId.value
+          : this.targetMessageId,
+      revision: data.revision.present ? data.revision.value : this.revision,
+      authenticatedAt: data.authenticatedAt.present
+          ? data.authenticatedAt.value
+          : this.authenticatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('StoredApplicationEvent(')
+          ..write('eventId: $eventId, ')
+          ..write('conversationId: $conversationId, ')
+          ..write('kind: $kind, ')
+          ..write('senderUserId: $senderUserId, ')
+          ..write('senderDeviceId: $senderDeviceId, ')
+          ..write('senderCounter: $senderCounter, ')
+          ..write('createdMs: $createdMs, ')
+          ..write('orderingMs: $orderingMs, ')
+          ..write('canonicalEvent: $canonicalEvent, ')
+          ..write('bodyProjection: $bodyProjection, ')
+          ..write('applyState: $applyState, ')
+          ..write('localOrigin: $localOrigin, ')
+          ..write('localDeviceId: $localDeviceId, ')
+          ..write('targetMessageId: $targetMessageId, ')
+          ..write('revision: $revision, ')
+          ..write('authenticatedAt: $authenticatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    eventId,
+    conversationId,
+    kind,
+    senderUserId,
+    senderDeviceId,
+    senderCounter,
+    createdMs,
+    orderingMs,
+    $driftBlobEquality.hash(canonicalEvent),
+    $driftBlobEquality.hash(bodyProjection),
+    applyState,
+    localOrigin,
+    localDeviceId,
+    targetMessageId,
+    revision,
+    authenticatedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is StoredApplicationEvent &&
+          other.eventId == this.eventId &&
+          other.conversationId == this.conversationId &&
+          other.kind == this.kind &&
+          other.senderUserId == this.senderUserId &&
+          other.senderDeviceId == this.senderDeviceId &&
+          other.senderCounter == this.senderCounter &&
+          other.createdMs == this.createdMs &&
+          other.orderingMs == this.orderingMs &&
+          $driftBlobEquality.equals(
+            other.canonicalEvent,
+            this.canonicalEvent,
+          ) &&
+          $driftBlobEquality.equals(
+            other.bodyProjection,
+            this.bodyProjection,
+          ) &&
+          other.applyState == this.applyState &&
+          other.localOrigin == this.localOrigin &&
+          other.localDeviceId == this.localDeviceId &&
+          other.targetMessageId == this.targetMessageId &&
+          other.revision == this.revision &&
+          other.authenticatedAt == this.authenticatedAt);
+}
+
+class StoredApplicationEventsCompanion
+    extends UpdateCompanion<StoredApplicationEvent> {
+  final Value<String> eventId;
+  final Value<String> conversationId;
+  final Value<int> kind;
+  final Value<String> senderUserId;
+  final Value<String> senderDeviceId;
+  final Value<int> senderCounter;
+  final Value<int> createdMs;
+  final Value<int> orderingMs;
+  final Value<Uint8List> canonicalEvent;
+  final Value<Uint8List> bodyProjection;
+  final Value<int> applyState;
+  final Value<bool> localOrigin;
+  final Value<String> localDeviceId;
+  final Value<String?> targetMessageId;
+  final Value<int?> revision;
+  final Value<DateTime> authenticatedAt;
+  final Value<int> rowid;
+  const StoredApplicationEventsCompanion({
+    this.eventId = const Value.absent(),
+    this.conversationId = const Value.absent(),
+    this.kind = const Value.absent(),
+    this.senderUserId = const Value.absent(),
+    this.senderDeviceId = const Value.absent(),
+    this.senderCounter = const Value.absent(),
+    this.createdMs = const Value.absent(),
+    this.orderingMs = const Value.absent(),
+    this.canonicalEvent = const Value.absent(),
+    this.bodyProjection = const Value.absent(),
+    this.applyState = const Value.absent(),
+    this.localOrigin = const Value.absent(),
+    this.localDeviceId = const Value.absent(),
+    this.targetMessageId = const Value.absent(),
+    this.revision = const Value.absent(),
+    this.authenticatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  StoredApplicationEventsCompanion.insert({
+    required String eventId,
+    required String conversationId,
+    required int kind,
+    required String senderUserId,
+    required String senderDeviceId,
+    required int senderCounter,
+    required int createdMs,
+    required int orderingMs,
+    required Uint8List canonicalEvent,
+    required Uint8List bodyProjection,
+    required int applyState,
+    this.localOrigin = const Value.absent(),
+    this.localDeviceId = const Value.absent(),
+    this.targetMessageId = const Value.absent(),
+    this.revision = const Value.absent(),
+    this.authenticatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : eventId = Value(eventId),
+       conversationId = Value(conversationId),
+       kind = Value(kind),
+       senderUserId = Value(senderUserId),
+       senderDeviceId = Value(senderDeviceId),
+       senderCounter = Value(senderCounter),
+       createdMs = Value(createdMs),
+       orderingMs = Value(orderingMs),
+       canonicalEvent = Value(canonicalEvent),
+       bodyProjection = Value(bodyProjection),
+       applyState = Value(applyState);
+  static Insertable<StoredApplicationEvent> custom({
+    Expression<String>? eventId,
+    Expression<String>? conversationId,
+    Expression<int>? kind,
+    Expression<String>? senderUserId,
+    Expression<String>? senderDeviceId,
+    Expression<int>? senderCounter,
+    Expression<int>? createdMs,
+    Expression<int>? orderingMs,
+    Expression<Uint8List>? canonicalEvent,
+    Expression<Uint8List>? bodyProjection,
+    Expression<int>? applyState,
+    Expression<bool>? localOrigin,
+    Expression<String>? localDeviceId,
+    Expression<String>? targetMessageId,
+    Expression<int>? revision,
+    Expression<DateTime>? authenticatedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (eventId != null) 'event_id': eventId,
+      if (conversationId != null) 'conversation_id': conversationId,
+      if (kind != null) 'kind': kind,
+      if (senderUserId != null) 'sender_user_id': senderUserId,
+      if (senderDeviceId != null) 'sender_device_id': senderDeviceId,
+      if (senderCounter != null) 'sender_counter': senderCounter,
+      if (createdMs != null) 'created_ms': createdMs,
+      if (orderingMs != null) 'ordering_ms': orderingMs,
+      if (canonicalEvent != null) 'canonical_event': canonicalEvent,
+      if (bodyProjection != null) 'body_projection': bodyProjection,
+      if (applyState != null) 'apply_state': applyState,
+      if (localOrigin != null) 'local_origin': localOrigin,
+      if (localDeviceId != null) 'local_device_id': localDeviceId,
+      if (targetMessageId != null) 'target_message_id': targetMessageId,
+      if (revision != null) 'revision': revision,
+      if (authenticatedAt != null) 'authenticated_at': authenticatedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  StoredApplicationEventsCompanion copyWith({
+    Value<String>? eventId,
+    Value<String>? conversationId,
+    Value<int>? kind,
+    Value<String>? senderUserId,
+    Value<String>? senderDeviceId,
+    Value<int>? senderCounter,
+    Value<int>? createdMs,
+    Value<int>? orderingMs,
+    Value<Uint8List>? canonicalEvent,
+    Value<Uint8List>? bodyProjection,
+    Value<int>? applyState,
+    Value<bool>? localOrigin,
+    Value<String>? localDeviceId,
+    Value<String?>? targetMessageId,
+    Value<int?>? revision,
+    Value<DateTime>? authenticatedAt,
+    Value<int>? rowid,
+  }) {
+    return StoredApplicationEventsCompanion(
+      eventId: eventId ?? this.eventId,
+      conversationId: conversationId ?? this.conversationId,
+      kind: kind ?? this.kind,
+      senderUserId: senderUserId ?? this.senderUserId,
+      senderDeviceId: senderDeviceId ?? this.senderDeviceId,
+      senderCounter: senderCounter ?? this.senderCounter,
+      createdMs: createdMs ?? this.createdMs,
+      orderingMs: orderingMs ?? this.orderingMs,
+      canonicalEvent: canonicalEvent ?? this.canonicalEvent,
+      bodyProjection: bodyProjection ?? this.bodyProjection,
+      applyState: applyState ?? this.applyState,
+      localOrigin: localOrigin ?? this.localOrigin,
+      localDeviceId: localDeviceId ?? this.localDeviceId,
+      targetMessageId: targetMessageId ?? this.targetMessageId,
+      revision: revision ?? this.revision,
+      authenticatedAt: authenticatedAt ?? this.authenticatedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (eventId.present) {
+      map['event_id'] = Variable<String>(eventId.value);
+    }
+    if (conversationId.present) {
+      map['conversation_id'] = Variable<String>(conversationId.value);
+    }
+    if (kind.present) {
+      map['kind'] = Variable<int>(kind.value);
+    }
+    if (senderUserId.present) {
+      map['sender_user_id'] = Variable<String>(senderUserId.value);
+    }
+    if (senderDeviceId.present) {
+      map['sender_device_id'] = Variable<String>(senderDeviceId.value);
+    }
+    if (senderCounter.present) {
+      map['sender_counter'] = Variable<int>(senderCounter.value);
+    }
+    if (createdMs.present) {
+      map['created_ms'] = Variable<int>(createdMs.value);
+    }
+    if (orderingMs.present) {
+      map['ordering_ms'] = Variable<int>(orderingMs.value);
+    }
+    if (canonicalEvent.present) {
+      map['canonical_event'] = Variable<Uint8List>(canonicalEvent.value);
+    }
+    if (bodyProjection.present) {
+      map['body_projection'] = Variable<Uint8List>(bodyProjection.value);
+    }
+    if (applyState.present) {
+      map['apply_state'] = Variable<int>(applyState.value);
+    }
+    if (localOrigin.present) {
+      map['local_origin'] = Variable<bool>(localOrigin.value);
+    }
+    if (localDeviceId.present) {
+      map['local_device_id'] = Variable<String>(localDeviceId.value);
+    }
+    if (targetMessageId.present) {
+      map['target_message_id'] = Variable<String>(targetMessageId.value);
+    }
+    if (revision.present) {
+      map['revision'] = Variable<int>(revision.value);
+    }
+    if (authenticatedAt.present) {
+      map['authenticated_at'] = Variable<DateTime>(authenticatedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('StoredApplicationEventsCompanion(')
+          ..write('eventId: $eventId, ')
+          ..write('conversationId: $conversationId, ')
+          ..write('kind: $kind, ')
+          ..write('senderUserId: $senderUserId, ')
+          ..write('senderDeviceId: $senderDeviceId, ')
+          ..write('senderCounter: $senderCounter, ')
+          ..write('createdMs: $createdMs, ')
+          ..write('orderingMs: $orderingMs, ')
+          ..write('canonicalEvent: $canonicalEvent, ')
+          ..write('bodyProjection: $bodyProjection, ')
+          ..write('applyState: $applyState, ')
+          ..write('localOrigin: $localOrigin, ')
+          ..write('localDeviceId: $localDeviceId, ')
+          ..write('targetMessageId: $targetMessageId, ')
+          ..write('revision: $revision, ')
+          ..write('authenticatedAt: $authenticatedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $UnsupportedApplicationEventsTable extends UnsupportedApplicationEvents
+    with
+        TableInfo<
+          $UnsupportedApplicationEventsTable,
+          UnsupportedApplicationEvent
+        > {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $UnsupportedApplicationEventsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _recordKeyMeta = const VerificationMeta(
+    'recordKey',
+  );
+  @override
+  late final GeneratedColumn<String> recordKey = GeneratedColumn<String>(
+    'record_key',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _eventIdMeta = const VerificationMeta(
+    'eventId',
+  );
+  @override
+  late final GeneratedColumn<String> eventId = GeneratedColumn<String>(
+    'event_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways('UNIQUE'),
+  );
+  static const VerificationMeta _conversationIdMeta = const VerificationMeta(
+    'conversationId',
+  );
+  @override
+  late final GeneratedColumn<String> conversationId = GeneratedColumn<String>(
+    'conversation_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _versionMeta = const VerificationMeta(
+    'version',
+  );
+  @override
+  late final GeneratedColumn<int> version = GeneratedColumn<int>(
+    'version',
+    aliasedName,
+    false,
+    check: () => ComparableExpr(version).isBetweenValues(0, 255),
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _kindMeta = const VerificationMeta('kind');
+  @override
+  late final GeneratedColumn<int> kind = GeneratedColumn<int>(
+    'kind',
+    aliasedName,
+    true,
+    check: () => kind.isNull() | ComparableExpr(kind).isBetweenValues(0, 65535),
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _senderUserIdMeta = const VerificationMeta(
+    'senderUserId',
+  );
+  @override
+  late final GeneratedColumn<String> senderUserId = GeneratedColumn<String>(
+    'sender_user_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _senderDeviceIdMeta = const VerificationMeta(
+    'senderDeviceId',
+  );
+  @override
+  late final GeneratedColumn<String> senderDeviceId = GeneratedColumn<String>(
+    'sender_device_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _senderCounterMeta = const VerificationMeta(
+    'senderCounter',
+  );
+  @override
+  late final GeneratedColumn<int> senderCounter = GeneratedColumn<int>(
+    'sender_counter',
+    aliasedName,
+    true,
+    check: () =>
+        senderCounter.isNull() |
+        ComparableExpr(senderCounter).isBiggerThanValue(0),
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _applyStateMeta = const VerificationMeta(
+    'applyState',
+  );
+  @override
+  late final GeneratedColumn<int> applyState = GeneratedColumn<int>(
+    'apply_state',
+    aliasedName,
+    false,
+    check: () => ComparableExpr(applyState).isBetweenValues(0, 2),
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _retainedPayloadMeta = const VerificationMeta(
+    'retainedPayload',
+  );
+  @override
+  late final GeneratedColumn<Uint8List> retainedPayload =
+      GeneratedColumn<Uint8List>(
+        'retained_payload',
+        aliasedName,
+        false,
+        type: DriftSqlType.blob,
+        requiredDuringInsert: true,
+      );
+  static const VerificationMeta _authenticatedAtMeta = const VerificationMeta(
+    'authenticatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> authenticatedAt =
+      GeneratedColumn<DateTime>(
+        'authenticated_at',
+        aliasedName,
+        false,
+        type: DriftSqlType.dateTime,
+        requiredDuringInsert: false,
+        defaultValue: currentDateAndTime,
+      );
+  @override
+  List<GeneratedColumn> get $columns => [
+    recordKey,
+    eventId,
+    conversationId,
+    version,
+    kind,
+    senderUserId,
+    senderDeviceId,
+    senderCounter,
+    applyState,
+    retainedPayload,
+    authenticatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'unsupported_application_events';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<UnsupportedApplicationEvent> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('record_key')) {
+      context.handle(
+        _recordKeyMeta,
+        recordKey.isAcceptableOrUnknown(data['record_key']!, _recordKeyMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_recordKeyMeta);
+    }
+    if (data.containsKey('event_id')) {
+      context.handle(
+        _eventIdMeta,
+        eventId.isAcceptableOrUnknown(data['event_id']!, _eventIdMeta),
+      );
+    }
+    if (data.containsKey('conversation_id')) {
+      context.handle(
+        _conversationIdMeta,
+        conversationId.isAcceptableOrUnknown(
+          data['conversation_id']!,
+          _conversationIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('version')) {
+      context.handle(
+        _versionMeta,
+        version.isAcceptableOrUnknown(data['version']!, _versionMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_versionMeta);
+    }
+    if (data.containsKey('kind')) {
+      context.handle(
+        _kindMeta,
+        kind.isAcceptableOrUnknown(data['kind']!, _kindMeta),
+      );
+    }
+    if (data.containsKey('sender_user_id')) {
+      context.handle(
+        _senderUserIdMeta,
+        senderUserId.isAcceptableOrUnknown(
+          data['sender_user_id']!,
+          _senderUserIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_senderUserIdMeta);
+    }
+    if (data.containsKey('sender_device_id')) {
+      context.handle(
+        _senderDeviceIdMeta,
+        senderDeviceId.isAcceptableOrUnknown(
+          data['sender_device_id']!,
+          _senderDeviceIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_senderDeviceIdMeta);
+    }
+    if (data.containsKey('sender_counter')) {
+      context.handle(
+        _senderCounterMeta,
+        senderCounter.isAcceptableOrUnknown(
+          data['sender_counter']!,
+          _senderCounterMeta,
+        ),
+      );
+    }
+    if (data.containsKey('apply_state')) {
+      context.handle(
+        _applyStateMeta,
+        applyState.isAcceptableOrUnknown(data['apply_state']!, _applyStateMeta),
+      );
+    }
+    if (data.containsKey('retained_payload')) {
+      context.handle(
+        _retainedPayloadMeta,
+        retainedPayload.isAcceptableOrUnknown(
+          data['retained_payload']!,
+          _retainedPayloadMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_retainedPayloadMeta);
+    }
+    if (data.containsKey('authenticated_at')) {
+      context.handle(
+        _authenticatedAtMeta,
+        authenticatedAt.isAcceptableOrUnknown(
+          data['authenticated_at']!,
+          _authenticatedAtMeta,
+        ),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {recordKey};
+  @override
+  UnsupportedApplicationEvent map(
+    Map<String, dynamic> data, {
+    String? tablePrefix,
+  }) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return UnsupportedApplicationEvent(
+      recordKey: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}record_key'],
+      )!,
+      eventId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}event_id'],
+      ),
+      conversationId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}conversation_id'],
+      ),
+      version: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}version'],
+      )!,
+      kind: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}kind'],
+      ),
+      senderUserId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}sender_user_id'],
+      )!,
+      senderDeviceId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}sender_device_id'],
+      )!,
+      senderCounter: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}sender_counter'],
+      ),
+      applyState: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}apply_state'],
+      )!,
+      retainedPayload: attachedDatabase.typeMapping.read(
+        DriftSqlType.blob,
+        data['${effectivePrefix}retained_payload'],
+      )!,
+      authenticatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}authenticated_at'],
+      )!,
+    );
+  }
+
+  @override
+  $UnsupportedApplicationEventsTable createAlias(String alias) {
+    return $UnsupportedApplicationEventsTable(attachedDatabase, alias);
+  }
+}
+
+class UnsupportedApplicationEvent extends DataClass
+    implements Insertable<UnsupportedApplicationEvent> {
+  final String recordKey;
+  final String? eventId;
+  final String? conversationId;
+  final int version;
+  final int? kind;
+  final String senderUserId;
+  final String senderDeviceId;
+  final int? senderCounter;
+  final int applyState;
+  final Uint8List retainedPayload;
+  final DateTime authenticatedAt;
+  const UnsupportedApplicationEvent({
+    required this.recordKey,
+    this.eventId,
+    this.conversationId,
+    required this.version,
+    this.kind,
+    required this.senderUserId,
+    required this.senderDeviceId,
+    this.senderCounter,
+    required this.applyState,
+    required this.retainedPayload,
+    required this.authenticatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['record_key'] = Variable<String>(recordKey);
+    if (!nullToAbsent || eventId != null) {
+      map['event_id'] = Variable<String>(eventId);
+    }
+    if (!nullToAbsent || conversationId != null) {
+      map['conversation_id'] = Variable<String>(conversationId);
+    }
+    map['version'] = Variable<int>(version);
+    if (!nullToAbsent || kind != null) {
+      map['kind'] = Variable<int>(kind);
+    }
+    map['sender_user_id'] = Variable<String>(senderUserId);
+    map['sender_device_id'] = Variable<String>(senderDeviceId);
+    if (!nullToAbsent || senderCounter != null) {
+      map['sender_counter'] = Variable<int>(senderCounter);
+    }
+    map['apply_state'] = Variable<int>(applyState);
+    map['retained_payload'] = Variable<Uint8List>(retainedPayload);
+    map['authenticated_at'] = Variable<DateTime>(authenticatedAt);
+    return map;
+  }
+
+  UnsupportedApplicationEventsCompanion toCompanion(bool nullToAbsent) {
+    return UnsupportedApplicationEventsCompanion(
+      recordKey: Value(recordKey),
+      eventId: eventId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(eventId),
+      conversationId: conversationId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(conversationId),
+      version: Value(version),
+      kind: kind == null && nullToAbsent ? const Value.absent() : Value(kind),
+      senderUserId: Value(senderUserId),
+      senderDeviceId: Value(senderDeviceId),
+      senderCounter: senderCounter == null && nullToAbsent
+          ? const Value.absent()
+          : Value(senderCounter),
+      applyState: Value(applyState),
+      retainedPayload: Value(retainedPayload),
+      authenticatedAt: Value(authenticatedAt),
+    );
+  }
+
+  factory UnsupportedApplicationEvent.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return UnsupportedApplicationEvent(
+      recordKey: serializer.fromJson<String>(json['recordKey']),
+      eventId: serializer.fromJson<String?>(json['eventId']),
+      conversationId: serializer.fromJson<String?>(json['conversationId']),
+      version: serializer.fromJson<int>(json['version']),
+      kind: serializer.fromJson<int?>(json['kind']),
+      senderUserId: serializer.fromJson<String>(json['senderUserId']),
+      senderDeviceId: serializer.fromJson<String>(json['senderDeviceId']),
+      senderCounter: serializer.fromJson<int?>(json['senderCounter']),
+      applyState: serializer.fromJson<int>(json['applyState']),
+      retainedPayload: serializer.fromJson<Uint8List>(json['retainedPayload']),
+      authenticatedAt: serializer.fromJson<DateTime>(json['authenticatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'recordKey': serializer.toJson<String>(recordKey),
+      'eventId': serializer.toJson<String?>(eventId),
+      'conversationId': serializer.toJson<String?>(conversationId),
+      'version': serializer.toJson<int>(version),
+      'kind': serializer.toJson<int?>(kind),
+      'senderUserId': serializer.toJson<String>(senderUserId),
+      'senderDeviceId': serializer.toJson<String>(senderDeviceId),
+      'senderCounter': serializer.toJson<int?>(senderCounter),
+      'applyState': serializer.toJson<int>(applyState),
+      'retainedPayload': serializer.toJson<Uint8List>(retainedPayload),
+      'authenticatedAt': serializer.toJson<DateTime>(authenticatedAt),
+    };
+  }
+
+  UnsupportedApplicationEvent copyWith({
+    String? recordKey,
+    Value<String?> eventId = const Value.absent(),
+    Value<String?> conversationId = const Value.absent(),
+    int? version,
+    Value<int?> kind = const Value.absent(),
+    String? senderUserId,
+    String? senderDeviceId,
+    Value<int?> senderCounter = const Value.absent(),
+    int? applyState,
+    Uint8List? retainedPayload,
+    DateTime? authenticatedAt,
+  }) => UnsupportedApplicationEvent(
+    recordKey: recordKey ?? this.recordKey,
+    eventId: eventId.present ? eventId.value : this.eventId,
+    conversationId: conversationId.present
+        ? conversationId.value
+        : this.conversationId,
+    version: version ?? this.version,
+    kind: kind.present ? kind.value : this.kind,
+    senderUserId: senderUserId ?? this.senderUserId,
+    senderDeviceId: senderDeviceId ?? this.senderDeviceId,
+    senderCounter: senderCounter.present
+        ? senderCounter.value
+        : this.senderCounter,
+    applyState: applyState ?? this.applyState,
+    retainedPayload: retainedPayload ?? this.retainedPayload,
+    authenticatedAt: authenticatedAt ?? this.authenticatedAt,
+  );
+  UnsupportedApplicationEvent copyWithCompanion(
+    UnsupportedApplicationEventsCompanion data,
+  ) {
+    return UnsupportedApplicationEvent(
+      recordKey: data.recordKey.present ? data.recordKey.value : this.recordKey,
+      eventId: data.eventId.present ? data.eventId.value : this.eventId,
+      conversationId: data.conversationId.present
+          ? data.conversationId.value
+          : this.conversationId,
+      version: data.version.present ? data.version.value : this.version,
+      kind: data.kind.present ? data.kind.value : this.kind,
+      senderUserId: data.senderUserId.present
+          ? data.senderUserId.value
+          : this.senderUserId,
+      senderDeviceId: data.senderDeviceId.present
+          ? data.senderDeviceId.value
+          : this.senderDeviceId,
+      senderCounter: data.senderCounter.present
+          ? data.senderCounter.value
+          : this.senderCounter,
+      applyState: data.applyState.present
+          ? data.applyState.value
+          : this.applyState,
+      retainedPayload: data.retainedPayload.present
+          ? data.retainedPayload.value
+          : this.retainedPayload,
+      authenticatedAt: data.authenticatedAt.present
+          ? data.authenticatedAt.value
+          : this.authenticatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('UnsupportedApplicationEvent(')
+          ..write('recordKey: $recordKey, ')
+          ..write('eventId: $eventId, ')
+          ..write('conversationId: $conversationId, ')
+          ..write('version: $version, ')
+          ..write('kind: $kind, ')
+          ..write('senderUserId: $senderUserId, ')
+          ..write('senderDeviceId: $senderDeviceId, ')
+          ..write('senderCounter: $senderCounter, ')
+          ..write('applyState: $applyState, ')
+          ..write('retainedPayload: $retainedPayload, ')
+          ..write('authenticatedAt: $authenticatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    recordKey,
+    eventId,
+    conversationId,
+    version,
+    kind,
+    senderUserId,
+    senderDeviceId,
+    senderCounter,
+    applyState,
+    $driftBlobEquality.hash(retainedPayload),
+    authenticatedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is UnsupportedApplicationEvent &&
+          other.recordKey == this.recordKey &&
+          other.eventId == this.eventId &&
+          other.conversationId == this.conversationId &&
+          other.version == this.version &&
+          other.kind == this.kind &&
+          other.senderUserId == this.senderUserId &&
+          other.senderDeviceId == this.senderDeviceId &&
+          other.senderCounter == this.senderCounter &&
+          other.applyState == this.applyState &&
+          $driftBlobEquality.equals(
+            other.retainedPayload,
+            this.retainedPayload,
+          ) &&
+          other.authenticatedAt == this.authenticatedAt);
+}
+
+class UnsupportedApplicationEventsCompanion
+    extends UpdateCompanion<UnsupportedApplicationEvent> {
+  final Value<String> recordKey;
+  final Value<String?> eventId;
+  final Value<String?> conversationId;
+  final Value<int> version;
+  final Value<int?> kind;
+  final Value<String> senderUserId;
+  final Value<String> senderDeviceId;
+  final Value<int?> senderCounter;
+  final Value<int> applyState;
+  final Value<Uint8List> retainedPayload;
+  final Value<DateTime> authenticatedAt;
+  final Value<int> rowid;
+  const UnsupportedApplicationEventsCompanion({
+    this.recordKey = const Value.absent(),
+    this.eventId = const Value.absent(),
+    this.conversationId = const Value.absent(),
+    this.version = const Value.absent(),
+    this.kind = const Value.absent(),
+    this.senderUserId = const Value.absent(),
+    this.senderDeviceId = const Value.absent(),
+    this.senderCounter = const Value.absent(),
+    this.applyState = const Value.absent(),
+    this.retainedPayload = const Value.absent(),
+    this.authenticatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  UnsupportedApplicationEventsCompanion.insert({
+    required String recordKey,
+    this.eventId = const Value.absent(),
+    this.conversationId = const Value.absent(),
+    required int version,
+    this.kind = const Value.absent(),
+    required String senderUserId,
+    required String senderDeviceId,
+    this.senderCounter = const Value.absent(),
+    this.applyState = const Value.absent(),
+    required Uint8List retainedPayload,
+    this.authenticatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : recordKey = Value(recordKey),
+       version = Value(version),
+       senderUserId = Value(senderUserId),
+       senderDeviceId = Value(senderDeviceId),
+       retainedPayload = Value(retainedPayload);
+  static Insertable<UnsupportedApplicationEvent> custom({
+    Expression<String>? recordKey,
+    Expression<String>? eventId,
+    Expression<String>? conversationId,
+    Expression<int>? version,
+    Expression<int>? kind,
+    Expression<String>? senderUserId,
+    Expression<String>? senderDeviceId,
+    Expression<int>? senderCounter,
+    Expression<int>? applyState,
+    Expression<Uint8List>? retainedPayload,
+    Expression<DateTime>? authenticatedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (recordKey != null) 'record_key': recordKey,
+      if (eventId != null) 'event_id': eventId,
+      if (conversationId != null) 'conversation_id': conversationId,
+      if (version != null) 'version': version,
+      if (kind != null) 'kind': kind,
+      if (senderUserId != null) 'sender_user_id': senderUserId,
+      if (senderDeviceId != null) 'sender_device_id': senderDeviceId,
+      if (senderCounter != null) 'sender_counter': senderCounter,
+      if (applyState != null) 'apply_state': applyState,
+      if (retainedPayload != null) 'retained_payload': retainedPayload,
+      if (authenticatedAt != null) 'authenticated_at': authenticatedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  UnsupportedApplicationEventsCompanion copyWith({
+    Value<String>? recordKey,
+    Value<String?>? eventId,
+    Value<String?>? conversationId,
+    Value<int>? version,
+    Value<int?>? kind,
+    Value<String>? senderUserId,
+    Value<String>? senderDeviceId,
+    Value<int?>? senderCounter,
+    Value<int>? applyState,
+    Value<Uint8List>? retainedPayload,
+    Value<DateTime>? authenticatedAt,
+    Value<int>? rowid,
+  }) {
+    return UnsupportedApplicationEventsCompanion(
+      recordKey: recordKey ?? this.recordKey,
+      eventId: eventId ?? this.eventId,
+      conversationId: conversationId ?? this.conversationId,
+      version: version ?? this.version,
+      kind: kind ?? this.kind,
+      senderUserId: senderUserId ?? this.senderUserId,
+      senderDeviceId: senderDeviceId ?? this.senderDeviceId,
+      senderCounter: senderCounter ?? this.senderCounter,
+      applyState: applyState ?? this.applyState,
+      retainedPayload: retainedPayload ?? this.retainedPayload,
+      authenticatedAt: authenticatedAt ?? this.authenticatedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (recordKey.present) {
+      map['record_key'] = Variable<String>(recordKey.value);
+    }
+    if (eventId.present) {
+      map['event_id'] = Variable<String>(eventId.value);
+    }
+    if (conversationId.present) {
+      map['conversation_id'] = Variable<String>(conversationId.value);
+    }
+    if (version.present) {
+      map['version'] = Variable<int>(version.value);
+    }
+    if (kind.present) {
+      map['kind'] = Variable<int>(kind.value);
+    }
+    if (senderUserId.present) {
+      map['sender_user_id'] = Variable<String>(senderUserId.value);
+    }
+    if (senderDeviceId.present) {
+      map['sender_device_id'] = Variable<String>(senderDeviceId.value);
+    }
+    if (senderCounter.present) {
+      map['sender_counter'] = Variable<int>(senderCounter.value);
+    }
+    if (applyState.present) {
+      map['apply_state'] = Variable<int>(applyState.value);
+    }
+    if (retainedPayload.present) {
+      map['retained_payload'] = Variable<Uint8List>(retainedPayload.value);
+    }
+    if (authenticatedAt.present) {
+      map['authenticated_at'] = Variable<DateTime>(authenticatedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('UnsupportedApplicationEventsCompanion(')
+          ..write('recordKey: $recordKey, ')
+          ..write('eventId: $eventId, ')
+          ..write('conversationId: $conversationId, ')
+          ..write('version: $version, ')
+          ..write('kind: $kind, ')
+          ..write('senderUserId: $senderUserId, ')
+          ..write('senderDeviceId: $senderDeviceId, ')
+          ..write('senderCounter: $senderCounter, ')
+          ..write('applyState: $applyState, ')
+          ..write('retainedPayload: $retainedPayload, ')
+          ..write('authenticatedAt: $authenticatedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $ApplicationSenderCountersTable extends ApplicationSenderCounters
+    with TableInfo<$ApplicationSenderCountersTable, ApplicationSenderCounter> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $ApplicationSenderCountersTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _deviceIdMeta = const VerificationMeta(
+    'deviceId',
+  );
+  @override
+  late final GeneratedColumn<String> deviceId = GeneratedColumn<String>(
+    'device_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _lastCounterMeta = const VerificationMeta(
+    'lastCounter',
+  );
+  @override
+  late final GeneratedColumn<int> lastCounter = GeneratedColumn<int>(
+    'last_counter',
+    aliasedName,
+    false,
+    check: () => ComparableExpr(lastCounter).isBiggerOrEqualValue(0),
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  @override
+  List<GeneratedColumn> get $columns => [deviceId, lastCounter];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'application_sender_counters';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<ApplicationSenderCounter> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('device_id')) {
+      context.handle(
+        _deviceIdMeta,
+        deviceId.isAcceptableOrUnknown(data['device_id']!, _deviceIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_deviceIdMeta);
+    }
+    if (data.containsKey('last_counter')) {
+      context.handle(
+        _lastCounterMeta,
+        lastCounter.isAcceptableOrUnknown(
+          data['last_counter']!,
+          _lastCounterMeta,
+        ),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {deviceId};
+  @override
+  ApplicationSenderCounter map(
+    Map<String, dynamic> data, {
+    String? tablePrefix,
+  }) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return ApplicationSenderCounter(
+      deviceId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}device_id'],
+      )!,
+      lastCounter: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}last_counter'],
+      )!,
+    );
+  }
+
+  @override
+  $ApplicationSenderCountersTable createAlias(String alias) {
+    return $ApplicationSenderCountersTable(attachedDatabase, alias);
+  }
+}
+
+class ApplicationSenderCounter extends DataClass
+    implements Insertable<ApplicationSenderCounter> {
+  final String deviceId;
+  final int lastCounter;
+  const ApplicationSenderCounter({
+    required this.deviceId,
+    required this.lastCounter,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['device_id'] = Variable<String>(deviceId);
+    map['last_counter'] = Variable<int>(lastCounter);
+    return map;
+  }
+
+  ApplicationSenderCountersCompanion toCompanion(bool nullToAbsent) {
+    return ApplicationSenderCountersCompanion(
+      deviceId: Value(deviceId),
+      lastCounter: Value(lastCounter),
+    );
+  }
+
+  factory ApplicationSenderCounter.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return ApplicationSenderCounter(
+      deviceId: serializer.fromJson<String>(json['deviceId']),
+      lastCounter: serializer.fromJson<int>(json['lastCounter']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'deviceId': serializer.toJson<String>(deviceId),
+      'lastCounter': serializer.toJson<int>(lastCounter),
+    };
+  }
+
+  ApplicationSenderCounter copyWith({String? deviceId, int? lastCounter}) =>
+      ApplicationSenderCounter(
+        deviceId: deviceId ?? this.deviceId,
+        lastCounter: lastCounter ?? this.lastCounter,
+      );
+  ApplicationSenderCounter copyWithCompanion(
+    ApplicationSenderCountersCompanion data,
+  ) {
+    return ApplicationSenderCounter(
+      deviceId: data.deviceId.present ? data.deviceId.value : this.deviceId,
+      lastCounter: data.lastCounter.present
+          ? data.lastCounter.value
+          : this.lastCounter,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ApplicationSenderCounter(')
+          ..write('deviceId: $deviceId, ')
+          ..write('lastCounter: $lastCounter')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(deviceId, lastCounter);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is ApplicationSenderCounter &&
+          other.deviceId == this.deviceId &&
+          other.lastCounter == this.lastCounter);
+}
+
+class ApplicationSenderCountersCompanion
+    extends UpdateCompanion<ApplicationSenderCounter> {
+  final Value<String> deviceId;
+  final Value<int> lastCounter;
+  final Value<int> rowid;
+  const ApplicationSenderCountersCompanion({
+    this.deviceId = const Value.absent(),
+    this.lastCounter = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  ApplicationSenderCountersCompanion.insert({
+    required String deviceId,
+    this.lastCounter = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : deviceId = Value(deviceId);
+  static Insertable<ApplicationSenderCounter> custom({
+    Expression<String>? deviceId,
+    Expression<int>? lastCounter,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (deviceId != null) 'device_id': deviceId,
+      if (lastCounter != null) 'last_counter': lastCounter,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  ApplicationSenderCountersCompanion copyWith({
+    Value<String>? deviceId,
+    Value<int>? lastCounter,
+    Value<int>? rowid,
+  }) {
+    return ApplicationSenderCountersCompanion(
+      deviceId: deviceId ?? this.deviceId,
+      lastCounter: lastCounter ?? this.lastCounter,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (deviceId.present) {
+      map['device_id'] = Variable<String>(deviceId.value);
+    }
+    if (lastCounter.present) {
+      map['last_counter'] = Variable<int>(lastCounter.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ApplicationSenderCountersCompanion(')
+          ..write('deviceId: $deviceId, ')
+          ..write('lastCounter: $lastCounter, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $MessageReactionsTable extends MessageReactions
+    with TableInfo<$MessageReactionsTable, MessageReaction> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $MessageReactionsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _messageIdMeta = const VerificationMeta(
+    'messageId',
+  );
+  @override
+  late final GeneratedColumn<String> messageId = GeneratedColumn<String>(
+    'message_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES messages (message_id) ON DELETE CASCADE',
+    ),
+  );
+  static const VerificationMeta _reactingUserIdMeta = const VerificationMeta(
+    'reactingUserId',
+  );
+  @override
+  late final GeneratedColumn<String> reactingUserId = GeneratedColumn<String>(
+    'reacting_user_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _eventIdMeta = const VerificationMeta(
+    'eventId',
+  );
+  @override
+  late final GeneratedColumn<String> eventId = GeneratedColumn<String>(
+    'event_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _emojiCiphertextMeta = const VerificationMeta(
+    'emojiCiphertext',
+  );
+  @override
+  late final GeneratedColumn<Uint8List> emojiCiphertext =
+      GeneratedColumn<Uint8List>(
+        'emoji_ciphertext',
+        aliasedName,
+        true,
+        type: DriftSqlType.blob,
+        requiredDuringInsert: false,
+      );
+  @override
+  List<GeneratedColumn> get $columns => [
+    messageId,
+    reactingUserId,
+    eventId,
+    emojiCiphertext,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'message_reactions';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<MessageReaction> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('message_id')) {
+      context.handle(
+        _messageIdMeta,
+        messageId.isAcceptableOrUnknown(data['message_id']!, _messageIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_messageIdMeta);
+    }
+    if (data.containsKey('reacting_user_id')) {
+      context.handle(
+        _reactingUserIdMeta,
+        reactingUserId.isAcceptableOrUnknown(
+          data['reacting_user_id']!,
+          _reactingUserIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_reactingUserIdMeta);
+    }
+    if (data.containsKey('event_id')) {
+      context.handle(
+        _eventIdMeta,
+        eventId.isAcceptableOrUnknown(data['event_id']!, _eventIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_eventIdMeta);
+    }
+    if (data.containsKey('emoji_ciphertext')) {
+      context.handle(
+        _emojiCiphertextMeta,
+        emojiCiphertext.isAcceptableOrUnknown(
+          data['emoji_ciphertext']!,
+          _emojiCiphertextMeta,
+        ),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {messageId, reactingUserId};
+  @override
+  MessageReaction map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return MessageReaction(
+      messageId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}message_id'],
+      )!,
+      reactingUserId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}reacting_user_id'],
+      )!,
+      eventId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}event_id'],
+      )!,
+      emojiCiphertext: attachedDatabase.typeMapping.read(
+        DriftSqlType.blob,
+        data['${effectivePrefix}emoji_ciphertext'],
+      ),
+    );
+  }
+
+  @override
+  $MessageReactionsTable createAlias(String alias) {
+    return $MessageReactionsTable(attachedDatabase, alias);
+  }
+}
+
+class MessageReaction extends DataClass implements Insertable<MessageReaction> {
+  final String messageId;
+  final String reactingUserId;
+  final String eventId;
+  final Uint8List? emojiCiphertext;
+  const MessageReaction({
+    required this.messageId,
+    required this.reactingUserId,
+    required this.eventId,
+    this.emojiCiphertext,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['message_id'] = Variable<String>(messageId);
+    map['reacting_user_id'] = Variable<String>(reactingUserId);
+    map['event_id'] = Variable<String>(eventId);
+    if (!nullToAbsent || emojiCiphertext != null) {
+      map['emoji_ciphertext'] = Variable<Uint8List>(emojiCiphertext);
+    }
+    return map;
+  }
+
+  MessageReactionsCompanion toCompanion(bool nullToAbsent) {
+    return MessageReactionsCompanion(
+      messageId: Value(messageId),
+      reactingUserId: Value(reactingUserId),
+      eventId: Value(eventId),
+      emojiCiphertext: emojiCiphertext == null && nullToAbsent
+          ? const Value.absent()
+          : Value(emojiCiphertext),
+    );
+  }
+
+  factory MessageReaction.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return MessageReaction(
+      messageId: serializer.fromJson<String>(json['messageId']),
+      reactingUserId: serializer.fromJson<String>(json['reactingUserId']),
+      eventId: serializer.fromJson<String>(json['eventId']),
+      emojiCiphertext: serializer.fromJson<Uint8List?>(json['emojiCiphertext']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'messageId': serializer.toJson<String>(messageId),
+      'reactingUserId': serializer.toJson<String>(reactingUserId),
+      'eventId': serializer.toJson<String>(eventId),
+      'emojiCiphertext': serializer.toJson<Uint8List?>(emojiCiphertext),
+    };
+  }
+
+  MessageReaction copyWith({
+    String? messageId,
+    String? reactingUserId,
+    String? eventId,
+    Value<Uint8List?> emojiCiphertext = const Value.absent(),
+  }) => MessageReaction(
+    messageId: messageId ?? this.messageId,
+    reactingUserId: reactingUserId ?? this.reactingUserId,
+    eventId: eventId ?? this.eventId,
+    emojiCiphertext: emojiCiphertext.present
+        ? emojiCiphertext.value
+        : this.emojiCiphertext,
+  );
+  MessageReaction copyWithCompanion(MessageReactionsCompanion data) {
+    return MessageReaction(
+      messageId: data.messageId.present ? data.messageId.value : this.messageId,
+      reactingUserId: data.reactingUserId.present
+          ? data.reactingUserId.value
+          : this.reactingUserId,
+      eventId: data.eventId.present ? data.eventId.value : this.eventId,
+      emojiCiphertext: data.emojiCiphertext.present
+          ? data.emojiCiphertext.value
+          : this.emojiCiphertext,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('MessageReaction(')
+          ..write('messageId: $messageId, ')
+          ..write('reactingUserId: $reactingUserId, ')
+          ..write('eventId: $eventId, ')
+          ..write('emojiCiphertext: $emojiCiphertext')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    messageId,
+    reactingUserId,
+    eventId,
+    $driftBlobEquality.hash(emojiCiphertext),
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is MessageReaction &&
+          other.messageId == this.messageId &&
+          other.reactingUserId == this.reactingUserId &&
+          other.eventId == this.eventId &&
+          $driftBlobEquality.equals(
+            other.emojiCiphertext,
+            this.emojiCiphertext,
+          ));
+}
+
+class MessageReactionsCompanion extends UpdateCompanion<MessageReaction> {
+  final Value<String> messageId;
+  final Value<String> reactingUserId;
+  final Value<String> eventId;
+  final Value<Uint8List?> emojiCiphertext;
+  final Value<int> rowid;
+  const MessageReactionsCompanion({
+    this.messageId = const Value.absent(),
+    this.reactingUserId = const Value.absent(),
+    this.eventId = const Value.absent(),
+    this.emojiCiphertext = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  MessageReactionsCompanion.insert({
+    required String messageId,
+    required String reactingUserId,
+    required String eventId,
+    this.emojiCiphertext = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : messageId = Value(messageId),
+       reactingUserId = Value(reactingUserId),
+       eventId = Value(eventId);
+  static Insertable<MessageReaction> custom({
+    Expression<String>? messageId,
+    Expression<String>? reactingUserId,
+    Expression<String>? eventId,
+    Expression<Uint8List>? emojiCiphertext,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (messageId != null) 'message_id': messageId,
+      if (reactingUserId != null) 'reacting_user_id': reactingUserId,
+      if (eventId != null) 'event_id': eventId,
+      if (emojiCiphertext != null) 'emoji_ciphertext': emojiCiphertext,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  MessageReactionsCompanion copyWith({
+    Value<String>? messageId,
+    Value<String>? reactingUserId,
+    Value<String>? eventId,
+    Value<Uint8List?>? emojiCiphertext,
+    Value<int>? rowid,
+  }) {
+    return MessageReactionsCompanion(
+      messageId: messageId ?? this.messageId,
+      reactingUserId: reactingUserId ?? this.reactingUserId,
+      eventId: eventId ?? this.eventId,
+      emojiCiphertext: emojiCiphertext ?? this.emojiCiphertext,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (messageId.present) {
+      map['message_id'] = Variable<String>(messageId.value);
+    }
+    if (reactingUserId.present) {
+      map['reacting_user_id'] = Variable<String>(reactingUserId.value);
+    }
+    if (eventId.present) {
+      map['event_id'] = Variable<String>(eventId.value);
+    }
+    if (emojiCiphertext.present) {
+      map['emoji_ciphertext'] = Variable<Uint8List>(emojiCiphertext.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('MessageReactionsCompanion(')
+          ..write('messageId: $messageId, ')
+          ..write('reactingUserId: $reactingUserId, ')
+          ..write('eventId: $eventId, ')
+          ..write('emojiCiphertext: $emojiCiphertext, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -13739,6 +16863,403 @@ class ReceiptsCompanion extends UpdateCompanion<Receipt> {
   }
 }
 
+class $PendingApplicationReceiptsTable extends PendingApplicationReceipts
+    with
+        TableInfo<$PendingApplicationReceiptsTable, PendingApplicationReceipt> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $PendingApplicationReceiptsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _messageIdMeta = const VerificationMeta(
+    'messageId',
+  );
+  @override
+  late final GeneratedColumn<String> messageId = GeneratedColumn<String>(
+    'message_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES messages (message_id) ON DELETE CASCADE',
+    ),
+  );
+  static const VerificationMeta _conversationIdMeta = const VerificationMeta(
+    'conversationId',
+  );
+  @override
+  late final GeneratedColumn<String> conversationId = GeneratedColumn<String>(
+    'conversation_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _targetUserIdMeta = const VerificationMeta(
+    'targetUserId',
+  );
+  @override
+  late final GeneratedColumn<String> targetUserId = GeneratedColumn<String>(
+    'target_user_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _localDeviceIdMeta = const VerificationMeta(
+    'localDeviceId',
+  );
+  @override
+  late final GeneratedColumn<String> localDeviceId = GeneratedColumn<String>(
+    'local_device_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    messageId,
+    conversationId,
+    targetUserId,
+    localDeviceId,
+    createdAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'pending_application_receipts';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<PendingApplicationReceipt> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('message_id')) {
+      context.handle(
+        _messageIdMeta,
+        messageId.isAcceptableOrUnknown(data['message_id']!, _messageIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_messageIdMeta);
+    }
+    if (data.containsKey('conversation_id')) {
+      context.handle(
+        _conversationIdMeta,
+        conversationId.isAcceptableOrUnknown(
+          data['conversation_id']!,
+          _conversationIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_conversationIdMeta);
+    }
+    if (data.containsKey('target_user_id')) {
+      context.handle(
+        _targetUserIdMeta,
+        targetUserId.isAcceptableOrUnknown(
+          data['target_user_id']!,
+          _targetUserIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_targetUserIdMeta);
+    }
+    if (data.containsKey('local_device_id')) {
+      context.handle(
+        _localDeviceIdMeta,
+        localDeviceId.isAcceptableOrUnknown(
+          data['local_device_id']!,
+          _localDeviceIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_localDeviceIdMeta);
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {messageId, localDeviceId};
+  @override
+  PendingApplicationReceipt map(
+    Map<String, dynamic> data, {
+    String? tablePrefix,
+  }) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return PendingApplicationReceipt(
+      messageId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}message_id'],
+      )!,
+      conversationId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}conversation_id'],
+      )!,
+      targetUserId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}target_user_id'],
+      )!,
+      localDeviceId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}local_device_id'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+    );
+  }
+
+  @override
+  $PendingApplicationReceiptsTable createAlias(String alias) {
+    return $PendingApplicationReceiptsTable(attachedDatabase, alias);
+  }
+}
+
+class PendingApplicationReceipt extends DataClass
+    implements Insertable<PendingApplicationReceipt> {
+  final String messageId;
+  final String conversationId;
+  final String targetUserId;
+  final String localDeviceId;
+  final DateTime createdAt;
+  const PendingApplicationReceipt({
+    required this.messageId,
+    required this.conversationId,
+    required this.targetUserId,
+    required this.localDeviceId,
+    required this.createdAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['message_id'] = Variable<String>(messageId);
+    map['conversation_id'] = Variable<String>(conversationId);
+    map['target_user_id'] = Variable<String>(targetUserId);
+    map['local_device_id'] = Variable<String>(localDeviceId);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    return map;
+  }
+
+  PendingApplicationReceiptsCompanion toCompanion(bool nullToAbsent) {
+    return PendingApplicationReceiptsCompanion(
+      messageId: Value(messageId),
+      conversationId: Value(conversationId),
+      targetUserId: Value(targetUserId),
+      localDeviceId: Value(localDeviceId),
+      createdAt: Value(createdAt),
+    );
+  }
+
+  factory PendingApplicationReceipt.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return PendingApplicationReceipt(
+      messageId: serializer.fromJson<String>(json['messageId']),
+      conversationId: serializer.fromJson<String>(json['conversationId']),
+      targetUserId: serializer.fromJson<String>(json['targetUserId']),
+      localDeviceId: serializer.fromJson<String>(json['localDeviceId']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'messageId': serializer.toJson<String>(messageId),
+      'conversationId': serializer.toJson<String>(conversationId),
+      'targetUserId': serializer.toJson<String>(targetUserId),
+      'localDeviceId': serializer.toJson<String>(localDeviceId),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+    };
+  }
+
+  PendingApplicationReceipt copyWith({
+    String? messageId,
+    String? conversationId,
+    String? targetUserId,
+    String? localDeviceId,
+    DateTime? createdAt,
+  }) => PendingApplicationReceipt(
+    messageId: messageId ?? this.messageId,
+    conversationId: conversationId ?? this.conversationId,
+    targetUserId: targetUserId ?? this.targetUserId,
+    localDeviceId: localDeviceId ?? this.localDeviceId,
+    createdAt: createdAt ?? this.createdAt,
+  );
+  PendingApplicationReceipt copyWithCompanion(
+    PendingApplicationReceiptsCompanion data,
+  ) {
+    return PendingApplicationReceipt(
+      messageId: data.messageId.present ? data.messageId.value : this.messageId,
+      conversationId: data.conversationId.present
+          ? data.conversationId.value
+          : this.conversationId,
+      targetUserId: data.targetUserId.present
+          ? data.targetUserId.value
+          : this.targetUserId,
+      localDeviceId: data.localDeviceId.present
+          ? data.localDeviceId.value
+          : this.localDeviceId,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('PendingApplicationReceipt(')
+          ..write('messageId: $messageId, ')
+          ..write('conversationId: $conversationId, ')
+          ..write('targetUserId: $targetUserId, ')
+          ..write('localDeviceId: $localDeviceId, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    messageId,
+    conversationId,
+    targetUserId,
+    localDeviceId,
+    createdAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is PendingApplicationReceipt &&
+          other.messageId == this.messageId &&
+          other.conversationId == this.conversationId &&
+          other.targetUserId == this.targetUserId &&
+          other.localDeviceId == this.localDeviceId &&
+          other.createdAt == this.createdAt);
+}
+
+class PendingApplicationReceiptsCompanion
+    extends UpdateCompanion<PendingApplicationReceipt> {
+  final Value<String> messageId;
+  final Value<String> conversationId;
+  final Value<String> targetUserId;
+  final Value<String> localDeviceId;
+  final Value<DateTime> createdAt;
+  final Value<int> rowid;
+  const PendingApplicationReceiptsCompanion({
+    this.messageId = const Value.absent(),
+    this.conversationId = const Value.absent(),
+    this.targetUserId = const Value.absent(),
+    this.localDeviceId = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  PendingApplicationReceiptsCompanion.insert({
+    required String messageId,
+    required String conversationId,
+    required String targetUserId,
+    required String localDeviceId,
+    this.createdAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : messageId = Value(messageId),
+       conversationId = Value(conversationId),
+       targetUserId = Value(targetUserId),
+       localDeviceId = Value(localDeviceId);
+  static Insertable<PendingApplicationReceipt> custom({
+    Expression<String>? messageId,
+    Expression<String>? conversationId,
+    Expression<String>? targetUserId,
+    Expression<String>? localDeviceId,
+    Expression<DateTime>? createdAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (messageId != null) 'message_id': messageId,
+      if (conversationId != null) 'conversation_id': conversationId,
+      if (targetUserId != null) 'target_user_id': targetUserId,
+      if (localDeviceId != null) 'local_device_id': localDeviceId,
+      if (createdAt != null) 'created_at': createdAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  PendingApplicationReceiptsCompanion copyWith({
+    Value<String>? messageId,
+    Value<String>? conversationId,
+    Value<String>? targetUserId,
+    Value<String>? localDeviceId,
+    Value<DateTime>? createdAt,
+    Value<int>? rowid,
+  }) {
+    return PendingApplicationReceiptsCompanion(
+      messageId: messageId ?? this.messageId,
+      conversationId: conversationId ?? this.conversationId,
+      targetUserId: targetUserId ?? this.targetUserId,
+      localDeviceId: localDeviceId ?? this.localDeviceId,
+      createdAt: createdAt ?? this.createdAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (messageId.present) {
+      map['message_id'] = Variable<String>(messageId.value);
+    }
+    if (conversationId.present) {
+      map['conversation_id'] = Variable<String>(conversationId.value);
+    }
+    if (targetUserId.present) {
+      map['target_user_id'] = Variable<String>(targetUserId.value);
+    }
+    if (localDeviceId.present) {
+      map['local_device_id'] = Variable<String>(localDeviceId.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('PendingApplicationReceiptsCompanion(')
+          ..write('messageId: $messageId, ')
+          ..write('conversationId: $conversationId, ')
+          ..write('targetUserId: $targetUserId, ')
+          ..write('localDeviceId: $localDeviceId, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 class $VoiceRoomsTable extends VoiceRooms
     with TableInfo<$VoiceRoomsTable, VoiceRoom> {
   @override
@@ -15878,6 +19399,15 @@ abstract class _$LocalDatabase extends GeneratedDatabase {
   late final $MembershipsTable memberships = $MembershipsTable(this);
   late final $MessagesTable messages = $MessagesTable(this);
   late final $MessageEventsTable messageEvents = $MessageEventsTable(this);
+  late final $StoredApplicationEventsTable storedApplicationEvents =
+      $StoredApplicationEventsTable(this);
+  late final $UnsupportedApplicationEventsTable unsupportedApplicationEvents =
+      $UnsupportedApplicationEventsTable(this);
+  late final $ApplicationSenderCountersTable applicationSenderCounters =
+      $ApplicationSenderCountersTable(this);
+  late final $MessageReactionsTable messageReactions = $MessageReactionsTable(
+    this,
+  );
   late final $AttachmentsTable attachments = $AttachmentsTable(this);
   late final $InboxEnvelopesTable inboxEnvelopes = $InboxEnvelopesTable(this);
   late final $OutboxOperationsTable outboxOperations = $OutboxOperationsTable(
@@ -15896,6 +19426,8 @@ abstract class _$LocalDatabase extends GeneratedDatabase {
   late final $StaleDeviceRefreshRequestsTable staleDeviceRefreshRequests =
       $StaleDeviceRefreshRequestsTable(this);
   late final $ReceiptsTable receipts = $ReceiptsTable(this);
+  late final $PendingApplicationReceiptsTable pendingApplicationReceipts =
+      $PendingApplicationReceiptsTable(this);
   late final $VoiceRoomsTable voiceRooms = $VoiceRoomsTable(this);
   late final $HistoryTransfersTable historyTransfers = $HistoryTransfersTable(
     this,
@@ -15930,6 +19462,10 @@ abstract class _$LocalDatabase extends GeneratedDatabase {
     memberships,
     messages,
     messageEvents,
+    storedApplicationEvents,
+    unsupportedApplicationEvents,
+    applicationSenderCounters,
+    messageReactions,
     attachments,
     inboxEnvelopes,
     outboxOperations,
@@ -15940,6 +19476,7 @@ abstract class _$LocalDatabase extends GeneratedDatabase {
     pairwiseConsumedPrekeys,
     staleDeviceRefreshRequests,
     receipts,
+    pendingApplicationReceipts,
     voiceRooms,
     historyTransfers,
     syncCheckpoints,
@@ -16002,6 +19539,13 @@ abstract class _$LocalDatabase extends GeneratedDatabase {
         'messages',
         limitUpdateKind: UpdateKind.delete,
       ),
+      result: [TableUpdate('message_reactions', kind: UpdateKind.delete)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'messages',
+        limitUpdateKind: UpdateKind.delete,
+      ),
       result: [TableUpdate('attachments', kind: UpdateKind.delete)],
     ),
     WritePropagation(
@@ -16010,6 +19554,15 @@ abstract class _$LocalDatabase extends GeneratedDatabase {
         limitUpdateKind: UpdateKind.delete,
       ),
       result: [TableUpdate('receipts', kind: UpdateKind.delete)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'messages',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [
+        TableUpdate('pending_application_receipts', kind: UpdateKind.delete),
+      ],
     ),
   ]);
 }
@@ -20250,6 +23803,11 @@ typedef $$ConversationsTableCreateCompanionBuilder =
       required Uint8List listProjectionCiphertext,
       required int sortKey,
       Value<bool> tombstoned,
+      Value<String?> peerUserId,
+      Value<String?> lastActivityEventId,
+      Value<int> unreadCount,
+      Value<DateTime?> mutedUntil,
+      Value<Uint8List?> draftCiphertext,
       Value<int> rowid,
     });
 typedef $$ConversationsTableUpdateCompanionBuilder =
@@ -20259,6 +23817,11 @@ typedef $$ConversationsTableUpdateCompanionBuilder =
       Value<Uint8List> listProjectionCiphertext,
       Value<int> sortKey,
       Value<bool> tombstoned,
+      Value<String?> peerUserId,
+      Value<String?> lastActivityEventId,
+      Value<int> unreadCount,
+      Value<DateTime?> mutedUntil,
+      Value<Uint8List?> draftCiphertext,
       Value<int> rowid,
     });
 
@@ -20363,6 +23926,31 @@ class $$ConversationsTableFilterComposer
 
   ColumnFilters<bool> get tombstoned => $composableBuilder(
     column: $table.tombstoned,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get peerUserId => $composableBuilder(
+    column: $table.peerUserId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get lastActivityEventId => $composableBuilder(
+    column: $table.lastActivityEventId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get unreadCount => $composableBuilder(
+    column: $table.unreadCount,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get mutedUntil => $composableBuilder(
+    column: $table.mutedUntil,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<Uint8List> get draftCiphertext => $composableBuilder(
+    column: $table.draftCiphertext,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -20475,6 +24063,31 @@ class $$ConversationsTableOrderingComposer
     column: $table.tombstoned,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<String> get peerUserId => $composableBuilder(
+    column: $table.peerUserId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get lastActivityEventId => $composableBuilder(
+    column: $table.lastActivityEventId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get unreadCount => $composableBuilder(
+    column: $table.unreadCount,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get mutedUntil => $composableBuilder(
+    column: $table.mutedUntil,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<Uint8List> get draftCiphertext => $composableBuilder(
+    column: $table.draftCiphertext,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$ConversationsTableAnnotationComposer
@@ -20504,6 +24117,31 @@ class $$ConversationsTableAnnotationComposer
 
   GeneratedColumn<bool> get tombstoned => $composableBuilder(
     column: $table.tombstoned,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get peerUserId => $composableBuilder(
+    column: $table.peerUserId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get lastActivityEventId => $composableBuilder(
+    column: $table.lastActivityEventId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get unreadCount => $composableBuilder(
+    column: $table.unreadCount,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get mutedUntil => $composableBuilder(
+    column: $table.mutedUntil,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<Uint8List> get draftCiphertext => $composableBuilder(
+    column: $table.draftCiphertext,
     builder: (column) => column,
   );
 
@@ -20623,6 +24261,11 @@ class $$ConversationsTableTableManager
                     const Value.absent(),
                 Value<int> sortKey = const Value.absent(),
                 Value<bool> tombstoned = const Value.absent(),
+                Value<String?> peerUserId = const Value.absent(),
+                Value<String?> lastActivityEventId = const Value.absent(),
+                Value<int> unreadCount = const Value.absent(),
+                Value<DateTime?> mutedUntil = const Value.absent(),
+                Value<Uint8List?> draftCiphertext = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => ConversationsCompanion(
                 conversationId: conversationId,
@@ -20630,6 +24273,11 @@ class $$ConversationsTableTableManager
                 listProjectionCiphertext: listProjectionCiphertext,
                 sortKey: sortKey,
                 tombstoned: tombstoned,
+                peerUserId: peerUserId,
+                lastActivityEventId: lastActivityEventId,
+                unreadCount: unreadCount,
+                mutedUntil: mutedUntil,
+                draftCiphertext: draftCiphertext,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -20639,6 +24287,11 @@ class $$ConversationsTableTableManager
                 required Uint8List listProjectionCiphertext,
                 required int sortKey,
                 Value<bool> tombstoned = const Value.absent(),
+                Value<String?> peerUserId = const Value.absent(),
+                Value<String?> lastActivityEventId = const Value.absent(),
+                Value<int> unreadCount = const Value.absent(),
+                Value<DateTime?> mutedUntil = const Value.absent(),
+                Value<Uint8List?> draftCiphertext = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => ConversationsCompanion.insert(
                 conversationId: conversationId,
@@ -20646,6 +24299,11 @@ class $$ConversationsTableTableManager
                 listProjectionCiphertext: listProjectionCiphertext,
                 sortKey: sortKey,
                 tombstoned: tombstoned,
+                peerUserId: peerUserId,
+                lastActivityEventId: lastActivityEventId,
+                unreadCount: unreadCount,
+                mutedUntil: mutedUntil,
+                draftCiphertext: draftCiphertext,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
@@ -21143,6 +24801,17 @@ typedef $$MessagesTableCreateCompanionBuilder =
       required int status,
       required int revision,
       required DateTime createdAt,
+      Value<String> senderUserId,
+      Value<String> senderDeviceId,
+      Value<String?> replyToMessageId,
+      Value<Uint8List?> quoteFallbackCiphertext,
+      Value<int> orderingMs,
+      Value<String> orderingEventId,
+      Value<int> timestampState,
+      Value<bool> deletedForEveryone,
+      Value<bool> deletedForMe,
+      Value<bool> pinned,
+      Value<bool> unread,
       Value<int> rowid,
     });
 typedef $$MessagesTableUpdateCompanionBuilder =
@@ -21154,6 +24823,17 @@ typedef $$MessagesTableUpdateCompanionBuilder =
       Value<int> status,
       Value<int> revision,
       Value<DateTime> createdAt,
+      Value<String> senderUserId,
+      Value<String> senderDeviceId,
+      Value<String?> replyToMessageId,
+      Value<Uint8List?> quoteFallbackCiphertext,
+      Value<int> orderingMs,
+      Value<String> orderingEventId,
+      Value<int> timestampState,
+      Value<bool> deletedForEveryone,
+      Value<bool> deletedForMe,
+      Value<bool> pinned,
+      Value<bool> unread,
       Value<int> rowid,
     });
 
@@ -21176,6 +24856,29 @@ final class $$MessagesTableReferences
     if (item == null) return manager;
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static MultiTypedResultKey<$MessageReactionsTable, List<MessageReaction>>
+  _messageReactionsRefsTable(_$LocalDatabase db) =>
+      MultiTypedResultKey.fromTable(
+        db.messageReactions,
+        aliasName: 'messages__message_id__message_reactions__message_id',
+      );
+
+  $$MessageReactionsTableProcessedTableManager get messageReactionsRefs {
+    final manager =
+        $$MessageReactionsTableTableManager($_db, $_db.messageReactions).filter(
+          (f) => f.messageId.messageId.sqlEquals(
+            $_itemColumn<String>('message_id')!,
+          ),
+        );
+
+    final cache = $_typedResult.readTableOrNull(
+      _messageReactionsRefsTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
     );
   }
 
@@ -21213,6 +24916,37 @@ final class $$MessagesTableReferences
     );
 
     final cache = $_typedResult.readTableOrNull(_receiptsRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<
+    $PendingApplicationReceiptsTable,
+    List<PendingApplicationReceipt>
+  >
+  _pendingApplicationReceiptsRefsTable(_$LocalDatabase db) =>
+      MultiTypedResultKey.fromTable(
+        db.pendingApplicationReceipts,
+        aliasName:
+            'messages__message_id__pending_application_receipts__message_id',
+      );
+
+  $$PendingApplicationReceiptsTableProcessedTableManager
+  get pendingApplicationReceiptsRefs {
+    final manager =
+        $$PendingApplicationReceiptsTableTableManager(
+          $_db,
+          $_db.pendingApplicationReceipts,
+        ).filter(
+          (f) => f.messageId.messageId.sqlEquals(
+            $_itemColumn<String>('message_id')!,
+          ),
+        );
+
+    final cache = $_typedResult.readTableOrNull(
+      _pendingApplicationReceiptsRefsTable($_db),
+    );
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: cache),
     );
@@ -21258,6 +24992,61 @@ class $$MessagesTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
+  ColumnFilters<String> get senderUserId => $composableBuilder(
+    column: $table.senderUserId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get senderDeviceId => $composableBuilder(
+    column: $table.senderDeviceId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get replyToMessageId => $composableBuilder(
+    column: $table.replyToMessageId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<Uint8List> get quoteFallbackCiphertext => $composableBuilder(
+    column: $table.quoteFallbackCiphertext,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get orderingMs => $composableBuilder(
+    column: $table.orderingMs,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get orderingEventId => $composableBuilder(
+    column: $table.orderingEventId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get timestampState => $composableBuilder(
+    column: $table.timestampState,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get deletedForEveryone => $composableBuilder(
+    column: $table.deletedForEveryone,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get deletedForMe => $composableBuilder(
+    column: $table.deletedForMe,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get pinned => $composableBuilder(
+    column: $table.pinned,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get unread => $composableBuilder(
+    column: $table.unread,
+    builder: (column) => ColumnFilters(column),
+  );
+
   $$ConversationsTableFilterComposer get conversationId {
     final $$ConversationsTableFilterComposer composer = $composerBuilder(
       composer: this,
@@ -21279,6 +25068,31 @@ class $$MessagesTableFilterComposer
           ),
     );
     return composer;
+  }
+
+  Expression<bool> messageReactionsRefs(
+    Expression<bool> Function($$MessageReactionsTableFilterComposer f) f,
+  ) {
+    final $$MessageReactionsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.messageId,
+      referencedTable: $db.messageReactions,
+      getReferencedColumn: (t) => t.messageId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$MessageReactionsTableFilterComposer(
+            $db: $db,
+            $table: $db.messageReactions,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
   }
 
   Expression<bool> attachmentsRefs(
@@ -21330,6 +25144,33 @@ class $$MessagesTableFilterComposer
     );
     return f(composer);
   }
+
+  Expression<bool> pendingApplicationReceiptsRefs(
+    Expression<bool> Function($$PendingApplicationReceiptsTableFilterComposer f)
+    f,
+  ) {
+    final $$PendingApplicationReceiptsTableFilterComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.messageId,
+          referencedTable: $db.pendingApplicationReceipts,
+          getReferencedColumn: (t) => t.messageId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$PendingApplicationReceiptsTableFilterComposer(
+                $db: $db,
+                $table: $db.pendingApplicationReceipts,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
 }
 
 class $$MessagesTableOrderingComposer
@@ -21368,6 +25209,61 @@ class $$MessagesTableOrderingComposer
 
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get senderUserId => $composableBuilder(
+    column: $table.senderUserId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get senderDeviceId => $composableBuilder(
+    column: $table.senderDeviceId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get replyToMessageId => $composableBuilder(
+    column: $table.replyToMessageId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<Uint8List> get quoteFallbackCiphertext => $composableBuilder(
+    column: $table.quoteFallbackCiphertext,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get orderingMs => $composableBuilder(
+    column: $table.orderingMs,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get orderingEventId => $composableBuilder(
+    column: $table.orderingEventId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get timestampState => $composableBuilder(
+    column: $table.timestampState,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get deletedForEveryone => $composableBuilder(
+    column: $table.deletedForEveryone,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get deletedForMe => $composableBuilder(
+    column: $table.deletedForMe,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get pinned => $composableBuilder(
+    column: $table.pinned,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get unread => $composableBuilder(
+    column: $table.unread,
     builder: (column) => ColumnOrderings(column),
   );
 
@@ -21426,6 +25322,57 @@ class $$MessagesTableAnnotationComposer
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
 
+  GeneratedColumn<String> get senderUserId => $composableBuilder(
+    column: $table.senderUserId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get senderDeviceId => $composableBuilder(
+    column: $table.senderDeviceId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get replyToMessageId => $composableBuilder(
+    column: $table.replyToMessageId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<Uint8List> get quoteFallbackCiphertext => $composableBuilder(
+    column: $table.quoteFallbackCiphertext,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get orderingMs => $composableBuilder(
+    column: $table.orderingMs,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get orderingEventId => $composableBuilder(
+    column: $table.orderingEventId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get timestampState => $composableBuilder(
+    column: $table.timestampState,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get deletedForEveryone => $composableBuilder(
+    column: $table.deletedForEveryone,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get deletedForMe => $composableBuilder(
+    column: $table.deletedForMe,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get pinned =>
+      $composableBuilder(column: $table.pinned, builder: (column) => column);
+
+  GeneratedColumn<bool> get unread =>
+      $composableBuilder(column: $table.unread, builder: (column) => column);
+
   $$ConversationsTableAnnotationComposer get conversationId {
     final $$ConversationsTableAnnotationComposer composer = $composerBuilder(
       composer: this,
@@ -21447,6 +25394,31 @@ class $$MessagesTableAnnotationComposer
           ),
     );
     return composer;
+  }
+
+  Expression<T> messageReactionsRefs<T extends Object>(
+    Expression<T> Function($$MessageReactionsTableAnnotationComposer a) f,
+  ) {
+    final $$MessageReactionsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.messageId,
+      referencedTable: $db.messageReactions,
+      getReferencedColumn: (t) => t.messageId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$MessageReactionsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.messageReactions,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
   }
 
   Expression<T> attachmentsRefs<T extends Object>(
@@ -21498,6 +25470,35 @@ class $$MessagesTableAnnotationComposer
     );
     return f(composer);
   }
+
+  Expression<T> pendingApplicationReceiptsRefs<T extends Object>(
+    Expression<T> Function(
+      $$PendingApplicationReceiptsTableAnnotationComposer a,
+    )
+    f,
+  ) {
+    final $$PendingApplicationReceiptsTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.messageId,
+          referencedTable: $db.pendingApplicationReceipts,
+          getReferencedColumn: (t) => t.messageId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$PendingApplicationReceiptsTableAnnotationComposer(
+                $db: $db,
+                $table: $db.pendingApplicationReceipts,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
 }
 
 class $$MessagesTableTableManager
@@ -21515,8 +25516,10 @@ class $$MessagesTableTableManager
           Message,
           PrefetchHooks Function({
             bool conversationId,
+            bool messageReactionsRefs,
             bool attachmentsRefs,
             bool receiptsRefs,
+            bool pendingApplicationReceiptsRefs,
           })
         > {
   $$MessagesTableTableManager(_$LocalDatabase db, $MessagesTable table)
@@ -21539,6 +25542,18 @@ class $$MessagesTableTableManager
                 Value<int> status = const Value.absent(),
                 Value<int> revision = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
+                Value<String> senderUserId = const Value.absent(),
+                Value<String> senderDeviceId = const Value.absent(),
+                Value<String?> replyToMessageId = const Value.absent(),
+                Value<Uint8List?> quoteFallbackCiphertext =
+                    const Value.absent(),
+                Value<int> orderingMs = const Value.absent(),
+                Value<String> orderingEventId = const Value.absent(),
+                Value<int> timestampState = const Value.absent(),
+                Value<bool> deletedForEveryone = const Value.absent(),
+                Value<bool> deletedForMe = const Value.absent(),
+                Value<bool> pinned = const Value.absent(),
+                Value<bool> unread = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => MessagesCompanion(
                 messageId: messageId,
@@ -21548,6 +25563,17 @@ class $$MessagesTableTableManager
                 status: status,
                 revision: revision,
                 createdAt: createdAt,
+                senderUserId: senderUserId,
+                senderDeviceId: senderDeviceId,
+                replyToMessageId: replyToMessageId,
+                quoteFallbackCiphertext: quoteFallbackCiphertext,
+                orderingMs: orderingMs,
+                orderingEventId: orderingEventId,
+                timestampState: timestampState,
+                deletedForEveryone: deletedForEveryone,
+                deletedForMe: deletedForMe,
+                pinned: pinned,
+                unread: unread,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -21559,6 +25585,18 @@ class $$MessagesTableTableManager
                 required int status,
                 required int revision,
                 required DateTime createdAt,
+                Value<String> senderUserId = const Value.absent(),
+                Value<String> senderDeviceId = const Value.absent(),
+                Value<String?> replyToMessageId = const Value.absent(),
+                Value<Uint8List?> quoteFallbackCiphertext =
+                    const Value.absent(),
+                Value<int> orderingMs = const Value.absent(),
+                Value<String> orderingEventId = const Value.absent(),
+                Value<int> timestampState = const Value.absent(),
+                Value<bool> deletedForEveryone = const Value.absent(),
+                Value<bool> deletedForMe = const Value.absent(),
+                Value<bool> pinned = const Value.absent(),
+                Value<bool> unread = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => MessagesCompanion.insert(
                 messageId: messageId,
@@ -21568,6 +25606,17 @@ class $$MessagesTableTableManager
                 status: status,
                 revision: revision,
                 createdAt: createdAt,
+                senderUserId: senderUserId,
+                senderDeviceId: senderDeviceId,
+                replyToMessageId: replyToMessageId,
+                quoteFallbackCiphertext: quoteFallbackCiphertext,
+                orderingMs: orderingMs,
+                orderingEventId: orderingEventId,
+                timestampState: timestampState,
+                deletedForEveryone: deletedForEveryone,
+                deletedForMe: deletedForMe,
+                pinned: pinned,
+                unread: unread,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
@@ -21581,14 +25630,19 @@ class $$MessagesTableTableManager
           prefetchHooksCallback:
               ({
                 conversationId = false,
+                messageReactionsRefs = false,
                 attachmentsRefs = false,
                 receiptsRefs = false,
+                pendingApplicationReceiptsRefs = false,
               }) {
                 return PrefetchHooks(
                   db: db,
                   explicitlyWatchedTables: [
+                    if (messageReactionsRefs) db.messageReactions,
                     if (attachmentsRefs) db.attachments,
                     if (receiptsRefs) db.receipts,
+                    if (pendingApplicationReceiptsRefs)
+                      db.pendingApplicationReceipts,
                   ],
                   addJoins:
                       <
@@ -21624,6 +25678,27 @@ class $$MessagesTableTableManager
                       },
                   getPrefetchedDataCallback: (items) async {
                     return [
+                      if (messageReactionsRefs)
+                        await $_getPrefetchedData<
+                          Message,
+                          $MessagesTable,
+                          MessageReaction
+                        >(
+                          currentTable: table,
+                          referencedTable: $$MessagesTableReferences
+                              ._messageReactionsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$MessagesTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).messageReactionsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.messageId == item.messageId,
+                              ),
+                          typedResults: items,
+                        ),
                       if (attachmentsRefs)
                         await $_getPrefetchedData<
                           Message,
@@ -21666,6 +25741,27 @@ class $$MessagesTableTableManager
                               ),
                           typedResults: items,
                         ),
+                      if (pendingApplicationReceiptsRefs)
+                        await $_getPrefetchedData<
+                          Message,
+                          $MessagesTable,
+                          PendingApplicationReceipt
+                        >(
+                          currentTable: table,
+                          referencedTable: $$MessagesTableReferences
+                              ._pendingApplicationReceiptsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$MessagesTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).pendingApplicationReceiptsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.messageId == item.messageId,
+                              ),
+                          typedResults: items,
+                        ),
                     ];
                   },
                 );
@@ -21688,8 +25784,10 @@ typedef $$MessagesTableProcessedTableManager =
       Message,
       PrefetchHooks Function({
         bool conversationId,
+        bool messageReactionsRefs,
         bool attachmentsRefs,
         bool receiptsRefs,
+        bool pendingApplicationReceiptsRefs,
       })
     >;
 typedef $$MessageEventsTableCreateCompanionBuilder =
@@ -22037,6 +26135,1284 @@ typedef $$MessageEventsTableProcessedTableManager =
       (MessageEvent, $$MessageEventsTableReferences),
       MessageEvent,
       PrefetchHooks Function({bool conversationId})
+    >;
+typedef $$StoredApplicationEventsTableCreateCompanionBuilder =
+    StoredApplicationEventsCompanion Function({
+      required String eventId,
+      required String conversationId,
+      required int kind,
+      required String senderUserId,
+      required String senderDeviceId,
+      required int senderCounter,
+      required int createdMs,
+      required int orderingMs,
+      required Uint8List canonicalEvent,
+      required Uint8List bodyProjection,
+      required int applyState,
+      Value<bool> localOrigin,
+      Value<String> localDeviceId,
+      Value<String?> targetMessageId,
+      Value<int?> revision,
+      Value<DateTime> authenticatedAt,
+      Value<int> rowid,
+    });
+typedef $$StoredApplicationEventsTableUpdateCompanionBuilder =
+    StoredApplicationEventsCompanion Function({
+      Value<String> eventId,
+      Value<String> conversationId,
+      Value<int> kind,
+      Value<String> senderUserId,
+      Value<String> senderDeviceId,
+      Value<int> senderCounter,
+      Value<int> createdMs,
+      Value<int> orderingMs,
+      Value<Uint8List> canonicalEvent,
+      Value<Uint8List> bodyProjection,
+      Value<int> applyState,
+      Value<bool> localOrigin,
+      Value<String> localDeviceId,
+      Value<String?> targetMessageId,
+      Value<int?> revision,
+      Value<DateTime> authenticatedAt,
+      Value<int> rowid,
+    });
+
+class $$StoredApplicationEventsTableFilterComposer
+    extends Composer<_$LocalDatabase, $StoredApplicationEventsTable> {
+  $$StoredApplicationEventsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get eventId => $composableBuilder(
+    column: $table.eventId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get conversationId => $composableBuilder(
+    column: $table.conversationId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get kind => $composableBuilder(
+    column: $table.kind,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get senderUserId => $composableBuilder(
+    column: $table.senderUserId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get senderDeviceId => $composableBuilder(
+    column: $table.senderDeviceId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get senderCounter => $composableBuilder(
+    column: $table.senderCounter,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get createdMs => $composableBuilder(
+    column: $table.createdMs,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get orderingMs => $composableBuilder(
+    column: $table.orderingMs,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<Uint8List> get canonicalEvent => $composableBuilder(
+    column: $table.canonicalEvent,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<Uint8List> get bodyProjection => $composableBuilder(
+    column: $table.bodyProjection,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get applyState => $composableBuilder(
+    column: $table.applyState,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get localOrigin => $composableBuilder(
+    column: $table.localOrigin,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get localDeviceId => $composableBuilder(
+    column: $table.localDeviceId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get targetMessageId => $composableBuilder(
+    column: $table.targetMessageId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get revision => $composableBuilder(
+    column: $table.revision,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get authenticatedAt => $composableBuilder(
+    column: $table.authenticatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$StoredApplicationEventsTableOrderingComposer
+    extends Composer<_$LocalDatabase, $StoredApplicationEventsTable> {
+  $$StoredApplicationEventsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get eventId => $composableBuilder(
+    column: $table.eventId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get conversationId => $composableBuilder(
+    column: $table.conversationId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get kind => $composableBuilder(
+    column: $table.kind,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get senderUserId => $composableBuilder(
+    column: $table.senderUserId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get senderDeviceId => $composableBuilder(
+    column: $table.senderDeviceId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get senderCounter => $composableBuilder(
+    column: $table.senderCounter,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get createdMs => $composableBuilder(
+    column: $table.createdMs,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get orderingMs => $composableBuilder(
+    column: $table.orderingMs,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<Uint8List> get canonicalEvent => $composableBuilder(
+    column: $table.canonicalEvent,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<Uint8List> get bodyProjection => $composableBuilder(
+    column: $table.bodyProjection,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get applyState => $composableBuilder(
+    column: $table.applyState,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get localOrigin => $composableBuilder(
+    column: $table.localOrigin,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get localDeviceId => $composableBuilder(
+    column: $table.localDeviceId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get targetMessageId => $composableBuilder(
+    column: $table.targetMessageId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get revision => $composableBuilder(
+    column: $table.revision,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get authenticatedAt => $composableBuilder(
+    column: $table.authenticatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$StoredApplicationEventsTableAnnotationComposer
+    extends Composer<_$LocalDatabase, $StoredApplicationEventsTable> {
+  $$StoredApplicationEventsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get eventId =>
+      $composableBuilder(column: $table.eventId, builder: (column) => column);
+
+  GeneratedColumn<String> get conversationId => $composableBuilder(
+    column: $table.conversationId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get kind =>
+      $composableBuilder(column: $table.kind, builder: (column) => column);
+
+  GeneratedColumn<String> get senderUserId => $composableBuilder(
+    column: $table.senderUserId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get senderDeviceId => $composableBuilder(
+    column: $table.senderDeviceId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get senderCounter => $composableBuilder(
+    column: $table.senderCounter,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get createdMs =>
+      $composableBuilder(column: $table.createdMs, builder: (column) => column);
+
+  GeneratedColumn<int> get orderingMs => $composableBuilder(
+    column: $table.orderingMs,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<Uint8List> get canonicalEvent => $composableBuilder(
+    column: $table.canonicalEvent,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<Uint8List> get bodyProjection => $composableBuilder(
+    column: $table.bodyProjection,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get applyState => $composableBuilder(
+    column: $table.applyState,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get localOrigin => $composableBuilder(
+    column: $table.localOrigin,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get localDeviceId => $composableBuilder(
+    column: $table.localDeviceId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get targetMessageId => $composableBuilder(
+    column: $table.targetMessageId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get revision =>
+      $composableBuilder(column: $table.revision, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get authenticatedAt => $composableBuilder(
+    column: $table.authenticatedAt,
+    builder: (column) => column,
+  );
+}
+
+class $$StoredApplicationEventsTableTableManager
+    extends
+        RootTableManager<
+          _$LocalDatabase,
+          $StoredApplicationEventsTable,
+          StoredApplicationEvent,
+          $$StoredApplicationEventsTableFilterComposer,
+          $$StoredApplicationEventsTableOrderingComposer,
+          $$StoredApplicationEventsTableAnnotationComposer,
+          $$StoredApplicationEventsTableCreateCompanionBuilder,
+          $$StoredApplicationEventsTableUpdateCompanionBuilder,
+          (
+            StoredApplicationEvent,
+            BaseReferences<
+              _$LocalDatabase,
+              $StoredApplicationEventsTable,
+              StoredApplicationEvent
+            >,
+          ),
+          StoredApplicationEvent,
+          PrefetchHooks Function()
+        > {
+  $$StoredApplicationEventsTableTableManager(
+    _$LocalDatabase db,
+    $StoredApplicationEventsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$StoredApplicationEventsTableFilterComposer(
+                $db: db,
+                $table: table,
+              ),
+          createOrderingComposer: () =>
+              $$StoredApplicationEventsTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$StoredApplicationEventsTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> eventId = const Value.absent(),
+                Value<String> conversationId = const Value.absent(),
+                Value<int> kind = const Value.absent(),
+                Value<String> senderUserId = const Value.absent(),
+                Value<String> senderDeviceId = const Value.absent(),
+                Value<int> senderCounter = const Value.absent(),
+                Value<int> createdMs = const Value.absent(),
+                Value<int> orderingMs = const Value.absent(),
+                Value<Uint8List> canonicalEvent = const Value.absent(),
+                Value<Uint8List> bodyProjection = const Value.absent(),
+                Value<int> applyState = const Value.absent(),
+                Value<bool> localOrigin = const Value.absent(),
+                Value<String> localDeviceId = const Value.absent(),
+                Value<String?> targetMessageId = const Value.absent(),
+                Value<int?> revision = const Value.absent(),
+                Value<DateTime> authenticatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => StoredApplicationEventsCompanion(
+                eventId: eventId,
+                conversationId: conversationId,
+                kind: kind,
+                senderUserId: senderUserId,
+                senderDeviceId: senderDeviceId,
+                senderCounter: senderCounter,
+                createdMs: createdMs,
+                orderingMs: orderingMs,
+                canonicalEvent: canonicalEvent,
+                bodyProjection: bodyProjection,
+                applyState: applyState,
+                localOrigin: localOrigin,
+                localDeviceId: localDeviceId,
+                targetMessageId: targetMessageId,
+                revision: revision,
+                authenticatedAt: authenticatedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String eventId,
+                required String conversationId,
+                required int kind,
+                required String senderUserId,
+                required String senderDeviceId,
+                required int senderCounter,
+                required int createdMs,
+                required int orderingMs,
+                required Uint8List canonicalEvent,
+                required Uint8List bodyProjection,
+                required int applyState,
+                Value<bool> localOrigin = const Value.absent(),
+                Value<String> localDeviceId = const Value.absent(),
+                Value<String?> targetMessageId = const Value.absent(),
+                Value<int?> revision = const Value.absent(),
+                Value<DateTime> authenticatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => StoredApplicationEventsCompanion.insert(
+                eventId: eventId,
+                conversationId: conversationId,
+                kind: kind,
+                senderUserId: senderUserId,
+                senderDeviceId: senderDeviceId,
+                senderCounter: senderCounter,
+                createdMs: createdMs,
+                orderingMs: orderingMs,
+                canonicalEvent: canonicalEvent,
+                bodyProjection: bodyProjection,
+                applyState: applyState,
+                localOrigin: localOrigin,
+                localDeviceId: localDeviceId,
+                targetMessageId: targetMessageId,
+                revision: revision,
+                authenticatedAt: authenticatedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$StoredApplicationEventsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$LocalDatabase,
+      $StoredApplicationEventsTable,
+      StoredApplicationEvent,
+      $$StoredApplicationEventsTableFilterComposer,
+      $$StoredApplicationEventsTableOrderingComposer,
+      $$StoredApplicationEventsTableAnnotationComposer,
+      $$StoredApplicationEventsTableCreateCompanionBuilder,
+      $$StoredApplicationEventsTableUpdateCompanionBuilder,
+      (
+        StoredApplicationEvent,
+        BaseReferences<
+          _$LocalDatabase,
+          $StoredApplicationEventsTable,
+          StoredApplicationEvent
+        >,
+      ),
+      StoredApplicationEvent,
+      PrefetchHooks Function()
+    >;
+typedef $$UnsupportedApplicationEventsTableCreateCompanionBuilder =
+    UnsupportedApplicationEventsCompanion Function({
+      required String recordKey,
+      Value<String?> eventId,
+      Value<String?> conversationId,
+      required int version,
+      Value<int?> kind,
+      required String senderUserId,
+      required String senderDeviceId,
+      Value<int?> senderCounter,
+      Value<int> applyState,
+      required Uint8List retainedPayload,
+      Value<DateTime> authenticatedAt,
+      Value<int> rowid,
+    });
+typedef $$UnsupportedApplicationEventsTableUpdateCompanionBuilder =
+    UnsupportedApplicationEventsCompanion Function({
+      Value<String> recordKey,
+      Value<String?> eventId,
+      Value<String?> conversationId,
+      Value<int> version,
+      Value<int?> kind,
+      Value<String> senderUserId,
+      Value<String> senderDeviceId,
+      Value<int?> senderCounter,
+      Value<int> applyState,
+      Value<Uint8List> retainedPayload,
+      Value<DateTime> authenticatedAt,
+      Value<int> rowid,
+    });
+
+class $$UnsupportedApplicationEventsTableFilterComposer
+    extends Composer<_$LocalDatabase, $UnsupportedApplicationEventsTable> {
+  $$UnsupportedApplicationEventsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get recordKey => $composableBuilder(
+    column: $table.recordKey,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get eventId => $composableBuilder(
+    column: $table.eventId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get conversationId => $composableBuilder(
+    column: $table.conversationId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get version => $composableBuilder(
+    column: $table.version,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get kind => $composableBuilder(
+    column: $table.kind,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get senderUserId => $composableBuilder(
+    column: $table.senderUserId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get senderDeviceId => $composableBuilder(
+    column: $table.senderDeviceId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get senderCounter => $composableBuilder(
+    column: $table.senderCounter,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get applyState => $composableBuilder(
+    column: $table.applyState,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<Uint8List> get retainedPayload => $composableBuilder(
+    column: $table.retainedPayload,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get authenticatedAt => $composableBuilder(
+    column: $table.authenticatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$UnsupportedApplicationEventsTableOrderingComposer
+    extends Composer<_$LocalDatabase, $UnsupportedApplicationEventsTable> {
+  $$UnsupportedApplicationEventsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get recordKey => $composableBuilder(
+    column: $table.recordKey,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get eventId => $composableBuilder(
+    column: $table.eventId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get conversationId => $composableBuilder(
+    column: $table.conversationId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get version => $composableBuilder(
+    column: $table.version,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get kind => $composableBuilder(
+    column: $table.kind,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get senderUserId => $composableBuilder(
+    column: $table.senderUserId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get senderDeviceId => $composableBuilder(
+    column: $table.senderDeviceId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get senderCounter => $composableBuilder(
+    column: $table.senderCounter,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get applyState => $composableBuilder(
+    column: $table.applyState,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<Uint8List> get retainedPayload => $composableBuilder(
+    column: $table.retainedPayload,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get authenticatedAt => $composableBuilder(
+    column: $table.authenticatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$UnsupportedApplicationEventsTableAnnotationComposer
+    extends Composer<_$LocalDatabase, $UnsupportedApplicationEventsTable> {
+  $$UnsupportedApplicationEventsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get recordKey =>
+      $composableBuilder(column: $table.recordKey, builder: (column) => column);
+
+  GeneratedColumn<String> get eventId =>
+      $composableBuilder(column: $table.eventId, builder: (column) => column);
+
+  GeneratedColumn<String> get conversationId => $composableBuilder(
+    column: $table.conversationId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get version =>
+      $composableBuilder(column: $table.version, builder: (column) => column);
+
+  GeneratedColumn<int> get kind =>
+      $composableBuilder(column: $table.kind, builder: (column) => column);
+
+  GeneratedColumn<String> get senderUserId => $composableBuilder(
+    column: $table.senderUserId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get senderDeviceId => $composableBuilder(
+    column: $table.senderDeviceId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get senderCounter => $composableBuilder(
+    column: $table.senderCounter,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get applyState => $composableBuilder(
+    column: $table.applyState,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<Uint8List> get retainedPayload => $composableBuilder(
+    column: $table.retainedPayload,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get authenticatedAt => $composableBuilder(
+    column: $table.authenticatedAt,
+    builder: (column) => column,
+  );
+}
+
+class $$UnsupportedApplicationEventsTableTableManager
+    extends
+        RootTableManager<
+          _$LocalDatabase,
+          $UnsupportedApplicationEventsTable,
+          UnsupportedApplicationEvent,
+          $$UnsupportedApplicationEventsTableFilterComposer,
+          $$UnsupportedApplicationEventsTableOrderingComposer,
+          $$UnsupportedApplicationEventsTableAnnotationComposer,
+          $$UnsupportedApplicationEventsTableCreateCompanionBuilder,
+          $$UnsupportedApplicationEventsTableUpdateCompanionBuilder,
+          (
+            UnsupportedApplicationEvent,
+            BaseReferences<
+              _$LocalDatabase,
+              $UnsupportedApplicationEventsTable,
+              UnsupportedApplicationEvent
+            >,
+          ),
+          UnsupportedApplicationEvent,
+          PrefetchHooks Function()
+        > {
+  $$UnsupportedApplicationEventsTableTableManager(
+    _$LocalDatabase db,
+    $UnsupportedApplicationEventsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$UnsupportedApplicationEventsTableFilterComposer(
+                $db: db,
+                $table: table,
+              ),
+          createOrderingComposer: () =>
+              $$UnsupportedApplicationEventsTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$UnsupportedApplicationEventsTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> recordKey = const Value.absent(),
+                Value<String?> eventId = const Value.absent(),
+                Value<String?> conversationId = const Value.absent(),
+                Value<int> version = const Value.absent(),
+                Value<int?> kind = const Value.absent(),
+                Value<String> senderUserId = const Value.absent(),
+                Value<String> senderDeviceId = const Value.absent(),
+                Value<int?> senderCounter = const Value.absent(),
+                Value<int> applyState = const Value.absent(),
+                Value<Uint8List> retainedPayload = const Value.absent(),
+                Value<DateTime> authenticatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => UnsupportedApplicationEventsCompanion(
+                recordKey: recordKey,
+                eventId: eventId,
+                conversationId: conversationId,
+                version: version,
+                kind: kind,
+                senderUserId: senderUserId,
+                senderDeviceId: senderDeviceId,
+                senderCounter: senderCounter,
+                applyState: applyState,
+                retainedPayload: retainedPayload,
+                authenticatedAt: authenticatedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String recordKey,
+                Value<String?> eventId = const Value.absent(),
+                Value<String?> conversationId = const Value.absent(),
+                required int version,
+                Value<int?> kind = const Value.absent(),
+                required String senderUserId,
+                required String senderDeviceId,
+                Value<int?> senderCounter = const Value.absent(),
+                Value<int> applyState = const Value.absent(),
+                required Uint8List retainedPayload,
+                Value<DateTime> authenticatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => UnsupportedApplicationEventsCompanion.insert(
+                recordKey: recordKey,
+                eventId: eventId,
+                conversationId: conversationId,
+                version: version,
+                kind: kind,
+                senderUserId: senderUserId,
+                senderDeviceId: senderDeviceId,
+                senderCounter: senderCounter,
+                applyState: applyState,
+                retainedPayload: retainedPayload,
+                authenticatedAt: authenticatedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$UnsupportedApplicationEventsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$LocalDatabase,
+      $UnsupportedApplicationEventsTable,
+      UnsupportedApplicationEvent,
+      $$UnsupportedApplicationEventsTableFilterComposer,
+      $$UnsupportedApplicationEventsTableOrderingComposer,
+      $$UnsupportedApplicationEventsTableAnnotationComposer,
+      $$UnsupportedApplicationEventsTableCreateCompanionBuilder,
+      $$UnsupportedApplicationEventsTableUpdateCompanionBuilder,
+      (
+        UnsupportedApplicationEvent,
+        BaseReferences<
+          _$LocalDatabase,
+          $UnsupportedApplicationEventsTable,
+          UnsupportedApplicationEvent
+        >,
+      ),
+      UnsupportedApplicationEvent,
+      PrefetchHooks Function()
+    >;
+typedef $$ApplicationSenderCountersTableCreateCompanionBuilder =
+    ApplicationSenderCountersCompanion Function({
+      required String deviceId,
+      Value<int> lastCounter,
+      Value<int> rowid,
+    });
+typedef $$ApplicationSenderCountersTableUpdateCompanionBuilder =
+    ApplicationSenderCountersCompanion Function({
+      Value<String> deviceId,
+      Value<int> lastCounter,
+      Value<int> rowid,
+    });
+
+class $$ApplicationSenderCountersTableFilterComposer
+    extends Composer<_$LocalDatabase, $ApplicationSenderCountersTable> {
+  $$ApplicationSenderCountersTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get deviceId => $composableBuilder(
+    column: $table.deviceId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get lastCounter => $composableBuilder(
+    column: $table.lastCounter,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$ApplicationSenderCountersTableOrderingComposer
+    extends Composer<_$LocalDatabase, $ApplicationSenderCountersTable> {
+  $$ApplicationSenderCountersTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get deviceId => $composableBuilder(
+    column: $table.deviceId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get lastCounter => $composableBuilder(
+    column: $table.lastCounter,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$ApplicationSenderCountersTableAnnotationComposer
+    extends Composer<_$LocalDatabase, $ApplicationSenderCountersTable> {
+  $$ApplicationSenderCountersTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get deviceId =>
+      $composableBuilder(column: $table.deviceId, builder: (column) => column);
+
+  GeneratedColumn<int> get lastCounter => $composableBuilder(
+    column: $table.lastCounter,
+    builder: (column) => column,
+  );
+}
+
+class $$ApplicationSenderCountersTableTableManager
+    extends
+        RootTableManager<
+          _$LocalDatabase,
+          $ApplicationSenderCountersTable,
+          ApplicationSenderCounter,
+          $$ApplicationSenderCountersTableFilterComposer,
+          $$ApplicationSenderCountersTableOrderingComposer,
+          $$ApplicationSenderCountersTableAnnotationComposer,
+          $$ApplicationSenderCountersTableCreateCompanionBuilder,
+          $$ApplicationSenderCountersTableUpdateCompanionBuilder,
+          (
+            ApplicationSenderCounter,
+            BaseReferences<
+              _$LocalDatabase,
+              $ApplicationSenderCountersTable,
+              ApplicationSenderCounter
+            >,
+          ),
+          ApplicationSenderCounter,
+          PrefetchHooks Function()
+        > {
+  $$ApplicationSenderCountersTableTableManager(
+    _$LocalDatabase db,
+    $ApplicationSenderCountersTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$ApplicationSenderCountersTableFilterComposer(
+                $db: db,
+                $table: table,
+              ),
+          createOrderingComposer: () =>
+              $$ApplicationSenderCountersTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$ApplicationSenderCountersTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> deviceId = const Value.absent(),
+                Value<int> lastCounter = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => ApplicationSenderCountersCompanion(
+                deviceId: deviceId,
+                lastCounter: lastCounter,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String deviceId,
+                Value<int> lastCounter = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => ApplicationSenderCountersCompanion.insert(
+                deviceId: deviceId,
+                lastCounter: lastCounter,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$ApplicationSenderCountersTableProcessedTableManager =
+    ProcessedTableManager<
+      _$LocalDatabase,
+      $ApplicationSenderCountersTable,
+      ApplicationSenderCounter,
+      $$ApplicationSenderCountersTableFilterComposer,
+      $$ApplicationSenderCountersTableOrderingComposer,
+      $$ApplicationSenderCountersTableAnnotationComposer,
+      $$ApplicationSenderCountersTableCreateCompanionBuilder,
+      $$ApplicationSenderCountersTableUpdateCompanionBuilder,
+      (
+        ApplicationSenderCounter,
+        BaseReferences<
+          _$LocalDatabase,
+          $ApplicationSenderCountersTable,
+          ApplicationSenderCounter
+        >,
+      ),
+      ApplicationSenderCounter,
+      PrefetchHooks Function()
+    >;
+typedef $$MessageReactionsTableCreateCompanionBuilder =
+    MessageReactionsCompanion Function({
+      required String messageId,
+      required String reactingUserId,
+      required String eventId,
+      Value<Uint8List?> emojiCiphertext,
+      Value<int> rowid,
+    });
+typedef $$MessageReactionsTableUpdateCompanionBuilder =
+    MessageReactionsCompanion Function({
+      Value<String> messageId,
+      Value<String> reactingUserId,
+      Value<String> eventId,
+      Value<Uint8List?> emojiCiphertext,
+      Value<int> rowid,
+    });
+
+final class $$MessageReactionsTableReferences
+    extends
+        BaseReferences<
+          _$LocalDatabase,
+          $MessageReactionsTable,
+          MessageReaction
+        > {
+  $$MessageReactionsTableReferences(
+    super.$_db,
+    super.$_table,
+    super.$_typedResult,
+  );
+
+  static $MessagesTable _messageIdTable(_$LocalDatabase db) => db.messages
+      .createAlias('message_reactions__message_id__messages__message_id');
+
+  $$MessagesTableProcessedTableManager get messageId {
+    final $_column = $_itemColumn<String>('message_id')!;
+
+    final manager = $$MessagesTableTableManager(
+      $_db,
+      $_db.messages,
+    ).filter((f) => f.messageId.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_messageIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+}
+
+class $$MessageReactionsTableFilterComposer
+    extends Composer<_$LocalDatabase, $MessageReactionsTable> {
+  $$MessageReactionsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get reactingUserId => $composableBuilder(
+    column: $table.reactingUserId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get eventId => $composableBuilder(
+    column: $table.eventId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<Uint8List> get emojiCiphertext => $composableBuilder(
+    column: $table.emojiCiphertext,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$MessagesTableFilterComposer get messageId {
+    final $$MessagesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.messageId,
+      referencedTable: $db.messages,
+      getReferencedColumn: (t) => t.messageId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$MessagesTableFilterComposer(
+            $db: $db,
+            $table: $db.messages,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$MessageReactionsTableOrderingComposer
+    extends Composer<_$LocalDatabase, $MessageReactionsTable> {
+  $$MessageReactionsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get reactingUserId => $composableBuilder(
+    column: $table.reactingUserId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get eventId => $composableBuilder(
+    column: $table.eventId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<Uint8List> get emojiCiphertext => $composableBuilder(
+    column: $table.emojiCiphertext,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$MessagesTableOrderingComposer get messageId {
+    final $$MessagesTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.messageId,
+      referencedTable: $db.messages,
+      getReferencedColumn: (t) => t.messageId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$MessagesTableOrderingComposer(
+            $db: $db,
+            $table: $db.messages,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$MessageReactionsTableAnnotationComposer
+    extends Composer<_$LocalDatabase, $MessageReactionsTable> {
+  $$MessageReactionsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get reactingUserId => $composableBuilder(
+    column: $table.reactingUserId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get eventId =>
+      $composableBuilder(column: $table.eventId, builder: (column) => column);
+
+  GeneratedColumn<Uint8List> get emojiCiphertext => $composableBuilder(
+    column: $table.emojiCiphertext,
+    builder: (column) => column,
+  );
+
+  $$MessagesTableAnnotationComposer get messageId {
+    final $$MessagesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.messageId,
+      referencedTable: $db.messages,
+      getReferencedColumn: (t) => t.messageId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$MessagesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.messages,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$MessageReactionsTableTableManager
+    extends
+        RootTableManager<
+          _$LocalDatabase,
+          $MessageReactionsTable,
+          MessageReaction,
+          $$MessageReactionsTableFilterComposer,
+          $$MessageReactionsTableOrderingComposer,
+          $$MessageReactionsTableAnnotationComposer,
+          $$MessageReactionsTableCreateCompanionBuilder,
+          $$MessageReactionsTableUpdateCompanionBuilder,
+          (MessageReaction, $$MessageReactionsTableReferences),
+          MessageReaction,
+          PrefetchHooks Function({bool messageId})
+        > {
+  $$MessageReactionsTableTableManager(
+    _$LocalDatabase db,
+    $MessageReactionsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$MessageReactionsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$MessageReactionsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$MessageReactionsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> messageId = const Value.absent(),
+                Value<String> reactingUserId = const Value.absent(),
+                Value<String> eventId = const Value.absent(),
+                Value<Uint8List?> emojiCiphertext = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => MessageReactionsCompanion(
+                messageId: messageId,
+                reactingUserId: reactingUserId,
+                eventId: eventId,
+                emojiCiphertext: emojiCiphertext,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String messageId,
+                required String reactingUserId,
+                required String eventId,
+                Value<Uint8List?> emojiCiphertext = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => MessageReactionsCompanion.insert(
+                messageId: messageId,
+                reactingUserId: reactingUserId,
+                eventId: eventId,
+                emojiCiphertext: emojiCiphertext,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$MessageReactionsTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: ({messageId = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [],
+              addJoins:
+                  <
+                    T extends TableManagerState<
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic
+                    >
+                  >(state) {
+                    if (messageId) {
+                      state =
+                          state.withJoin(
+                                currentTable: table,
+                                currentColumn: table.messageId,
+                                referencedTable:
+                                    $$MessageReactionsTableReferences
+                                        ._messageIdTable(db),
+                                referencedColumn:
+                                    $$MessageReactionsTableReferences
+                                        ._messageIdTable(db)
+                                        .messageId,
+                              )
+                              as T;
+                    }
+
+                    return state;
+                  },
+              getPrefetchedDataCallback: (items) async {
+                return [];
+              },
+            );
+          },
+        ),
+      );
+}
+
+typedef $$MessageReactionsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$LocalDatabase,
+      $MessageReactionsTable,
+      MessageReaction,
+      $$MessageReactionsTableFilterComposer,
+      $$MessageReactionsTableOrderingComposer,
+      $$MessageReactionsTableAnnotationComposer,
+      $$MessageReactionsTableCreateCompanionBuilder,
+      $$MessageReactionsTableUpdateCompanionBuilder,
+      (MessageReaction, $$MessageReactionsTableReferences),
+      MessageReaction,
+      PrefetchHooks Function({bool messageId})
     >;
 typedef $$AttachmentsTableCreateCompanionBuilder =
     AttachmentsCompanion Function({
@@ -24818,6 +30194,356 @@ typedef $$ReceiptsTableProcessedTableManager =
       Receipt,
       PrefetchHooks Function({bool messageId})
     >;
+typedef $$PendingApplicationReceiptsTableCreateCompanionBuilder =
+    PendingApplicationReceiptsCompanion Function({
+      required String messageId,
+      required String conversationId,
+      required String targetUserId,
+      required String localDeviceId,
+      Value<DateTime> createdAt,
+      Value<int> rowid,
+    });
+typedef $$PendingApplicationReceiptsTableUpdateCompanionBuilder =
+    PendingApplicationReceiptsCompanion Function({
+      Value<String> messageId,
+      Value<String> conversationId,
+      Value<String> targetUserId,
+      Value<String> localDeviceId,
+      Value<DateTime> createdAt,
+      Value<int> rowid,
+    });
+
+final class $$PendingApplicationReceiptsTableReferences
+    extends
+        BaseReferences<
+          _$LocalDatabase,
+          $PendingApplicationReceiptsTable,
+          PendingApplicationReceipt
+        > {
+  $$PendingApplicationReceiptsTableReferences(
+    super.$_db,
+    super.$_table,
+    super.$_typedResult,
+  );
+
+  static $MessagesTable _messageIdTable(_$LocalDatabase db) =>
+      db.messages.createAlias(
+        'pending_application_receipts__message_id__messages__message_id',
+      );
+
+  $$MessagesTableProcessedTableManager get messageId {
+    final $_column = $_itemColumn<String>('message_id')!;
+
+    final manager = $$MessagesTableTableManager(
+      $_db,
+      $_db.messages,
+    ).filter((f) => f.messageId.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_messageIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+}
+
+class $$PendingApplicationReceiptsTableFilterComposer
+    extends Composer<_$LocalDatabase, $PendingApplicationReceiptsTable> {
+  $$PendingApplicationReceiptsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get conversationId => $composableBuilder(
+    column: $table.conversationId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get targetUserId => $composableBuilder(
+    column: $table.targetUserId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get localDeviceId => $composableBuilder(
+    column: $table.localDeviceId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$MessagesTableFilterComposer get messageId {
+    final $$MessagesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.messageId,
+      referencedTable: $db.messages,
+      getReferencedColumn: (t) => t.messageId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$MessagesTableFilterComposer(
+            $db: $db,
+            $table: $db.messages,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$PendingApplicationReceiptsTableOrderingComposer
+    extends Composer<_$LocalDatabase, $PendingApplicationReceiptsTable> {
+  $$PendingApplicationReceiptsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get conversationId => $composableBuilder(
+    column: $table.conversationId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get targetUserId => $composableBuilder(
+    column: $table.targetUserId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get localDeviceId => $composableBuilder(
+    column: $table.localDeviceId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$MessagesTableOrderingComposer get messageId {
+    final $$MessagesTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.messageId,
+      referencedTable: $db.messages,
+      getReferencedColumn: (t) => t.messageId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$MessagesTableOrderingComposer(
+            $db: $db,
+            $table: $db.messages,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$PendingApplicationReceiptsTableAnnotationComposer
+    extends Composer<_$LocalDatabase, $PendingApplicationReceiptsTable> {
+  $$PendingApplicationReceiptsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get conversationId => $composableBuilder(
+    column: $table.conversationId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get targetUserId => $composableBuilder(
+    column: $table.targetUserId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get localDeviceId => $composableBuilder(
+    column: $table.localDeviceId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  $$MessagesTableAnnotationComposer get messageId {
+    final $$MessagesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.messageId,
+      referencedTable: $db.messages,
+      getReferencedColumn: (t) => t.messageId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$MessagesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.messages,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$PendingApplicationReceiptsTableTableManager
+    extends
+        RootTableManager<
+          _$LocalDatabase,
+          $PendingApplicationReceiptsTable,
+          PendingApplicationReceipt,
+          $$PendingApplicationReceiptsTableFilterComposer,
+          $$PendingApplicationReceiptsTableOrderingComposer,
+          $$PendingApplicationReceiptsTableAnnotationComposer,
+          $$PendingApplicationReceiptsTableCreateCompanionBuilder,
+          $$PendingApplicationReceiptsTableUpdateCompanionBuilder,
+          (
+            PendingApplicationReceipt,
+            $$PendingApplicationReceiptsTableReferences,
+          ),
+          PendingApplicationReceipt,
+          PrefetchHooks Function({bool messageId})
+        > {
+  $$PendingApplicationReceiptsTableTableManager(
+    _$LocalDatabase db,
+    $PendingApplicationReceiptsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$PendingApplicationReceiptsTableFilterComposer(
+                $db: db,
+                $table: table,
+              ),
+          createOrderingComposer: () =>
+              $$PendingApplicationReceiptsTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$PendingApplicationReceiptsTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> messageId = const Value.absent(),
+                Value<String> conversationId = const Value.absent(),
+                Value<String> targetUserId = const Value.absent(),
+                Value<String> localDeviceId = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => PendingApplicationReceiptsCompanion(
+                messageId: messageId,
+                conversationId: conversationId,
+                targetUserId: targetUserId,
+                localDeviceId: localDeviceId,
+                createdAt: createdAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String messageId,
+                required String conversationId,
+                required String targetUserId,
+                required String localDeviceId,
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => PendingApplicationReceiptsCompanion.insert(
+                messageId: messageId,
+                conversationId: conversationId,
+                targetUserId: targetUserId,
+                localDeviceId: localDeviceId,
+                createdAt: createdAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$PendingApplicationReceiptsTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: ({messageId = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [],
+              addJoins:
+                  <
+                    T extends TableManagerState<
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic
+                    >
+                  >(state) {
+                    if (messageId) {
+                      state =
+                          state.withJoin(
+                                currentTable: table,
+                                currentColumn: table.messageId,
+                                referencedTable:
+                                    $$PendingApplicationReceiptsTableReferences
+                                        ._messageIdTable(db),
+                                referencedColumn:
+                                    $$PendingApplicationReceiptsTableReferences
+                                        ._messageIdTable(db)
+                                        .messageId,
+                              )
+                              as T;
+                    }
+
+                    return state;
+                  },
+              getPrefetchedDataCallback: (items) async {
+                return [];
+              },
+            );
+          },
+        ),
+      );
+}
+
+typedef $$PendingApplicationReceiptsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$LocalDatabase,
+      $PendingApplicationReceiptsTable,
+      PendingApplicationReceipt,
+      $$PendingApplicationReceiptsTableFilterComposer,
+      $$PendingApplicationReceiptsTableOrderingComposer,
+      $$PendingApplicationReceiptsTableAnnotationComposer,
+      $$PendingApplicationReceiptsTableCreateCompanionBuilder,
+      $$PendingApplicationReceiptsTableUpdateCompanionBuilder,
+      (PendingApplicationReceipt, $$PendingApplicationReceiptsTableReferences),
+      PendingApplicationReceipt,
+      PrefetchHooks Function({bool messageId})
+    >;
 typedef $$VoiceRoomsTableCreateCompanionBuilder =
     VoiceRoomsCompanion Function({
       required String localRoomId,
@@ -25976,6 +31702,24 @@ class $LocalDatabaseManager {
       $$MessagesTableTableManager(_db, _db.messages);
   $$MessageEventsTableTableManager get messageEvents =>
       $$MessageEventsTableTableManager(_db, _db.messageEvents);
+  $$StoredApplicationEventsTableTableManager get storedApplicationEvents =>
+      $$StoredApplicationEventsTableTableManager(
+        _db,
+        _db.storedApplicationEvents,
+      );
+  $$UnsupportedApplicationEventsTableTableManager
+  get unsupportedApplicationEvents =>
+      $$UnsupportedApplicationEventsTableTableManager(
+        _db,
+        _db.unsupportedApplicationEvents,
+      );
+  $$ApplicationSenderCountersTableTableManager get applicationSenderCounters =>
+      $$ApplicationSenderCountersTableTableManager(
+        _db,
+        _db.applicationSenderCounters,
+      );
+  $$MessageReactionsTableTableManager get messageReactions =>
+      $$MessageReactionsTableTableManager(_db, _db.messageReactions);
   $$AttachmentsTableTableManager get attachments =>
       $$AttachmentsTableTableManager(_db, _db.attachments);
   $$InboxEnvelopesTableTableManager get inboxEnvelopes =>
@@ -26012,6 +31756,12 @@ class $LocalDatabaseManager {
       );
   $$ReceiptsTableTableManager get receipts =>
       $$ReceiptsTableTableManager(_db, _db.receipts);
+  $$PendingApplicationReceiptsTableTableManager
+  get pendingApplicationReceipts =>
+      $$PendingApplicationReceiptsTableTableManager(
+        _db,
+        _db.pendingApplicationReceipts,
+      );
   $$VoiceRoomsTableTableManager get voiceRooms =>
       $$VoiceRoomsTableTableManager(_db, _db.voiceRooms);
   $$HistoryTransfersTableTableManager get historyTransfers =>

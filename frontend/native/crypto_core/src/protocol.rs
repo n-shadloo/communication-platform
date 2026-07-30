@@ -59,6 +59,10 @@ impl<'a> Reader<'a> {
         Ok(u32::from_be_bytes(self.array()?))
     }
 
+    pub(crate) fn u64(&mut self) -> CryptoResult<u64> {
+        Ok(u64::from_be_bytes(self.array()?))
+    }
+
     pub(crate) fn framed(&mut self) -> CryptoResult<&'a [u8]> {
         let length = usize::try_from(self.u32()?).map_err(|_| CryptoError::MalformedInput)?;
         if length > MAX_INPUT_BYTES {
@@ -81,6 +85,10 @@ pub(crate) fn push_u16(output: &mut Vec<u8>, value: u16) {
 }
 
 pub(crate) fn push_u32(output: &mut Vec<u8>, value: u32) {
+    output.extend_from_slice(&value.to_be_bytes());
+}
+
+pub(crate) fn push_u64(output: &mut Vec<u8>, value: u64) {
     output.extend_from_slice(&value.to_be_bytes());
 }
 

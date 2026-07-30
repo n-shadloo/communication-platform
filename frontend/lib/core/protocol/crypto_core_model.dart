@@ -26,7 +26,12 @@ abstract final class CryptoCoreProtocolV1 {
     CryptoCoreCapability.doubleRatchetV1,
   };
 
-  static const int knownFeatureBits = (1 << 14) - 1;
+  static const Set<CryptoCoreCapability> requiredApplicationCapabilities = {
+    CryptoCoreCapability.deterministicCbor,
+    CryptoCoreCapability.applicationMessagesV1,
+  };
+
+  static const int knownFeatureBits = (1 << 15) - 1;
 }
 
 enum CryptoCoreCapability {
@@ -43,7 +48,8 @@ enum CryptoCoreCapability {
   zeroizingSecrets(1 << 10),
   panicContainment(1 << 11),
   hybridPqxdhV1(1 << 12),
-  doubleRatchetV1(1 << 13);
+  doubleRatchetV1(1 << 13),
+  applicationMessagesV1(1 << 14);
 
   const CryptoCoreCapability(this.featureBit);
 
@@ -76,6 +82,10 @@ final class CryptoCoreCapabilities {
 
   bool get supportsPairwiseTransportV1 => capabilities.containsAll(
     CryptoCoreProtocolV1.requiredPairwiseCapabilities,
+  );
+
+  bool get supportsApplicationMessagesV1 => capabilities.containsAll(
+    CryptoCoreProtocolV1.requiredApplicationCapabilities,
   );
 
   int get unknownFeatureBits =>

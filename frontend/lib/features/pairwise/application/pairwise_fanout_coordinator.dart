@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:communication_platform/core/application/ports/time_source.dart';
+import 'package:communication_platform/core/protocol/application_message_model.dart';
 import 'package:communication_platform/core/result/failure.dart';
 import 'package:communication_platform/core/result/result.dart';
 import 'package:communication_platform/features/pairwise/application/ports/pairwise_orchestration_ports.dart';
@@ -30,11 +31,11 @@ final class PairwiseFanoutCoordinator {
     required String currentDeviceId,
     required String peerUserId,
     required Uint8List openedOpaquePayload,
+    ApplicationEventCommit? applicationEvent,
   }) async {
     if (!_isUuid(currentUserId) ||
         !_isUuid(currentDeviceId) ||
-        !_isUuid(peerUserId) ||
-        currentUserId == peerUserId) {
+        !_isUuid(peerUserId)) {
       return const Result.failure(
         ValidationFailure(ValidationFailureKind.invalidInput),
       );
@@ -49,6 +50,9 @@ final class PairwiseFanoutCoordinator {
       if (existing.eventId != eventId ||
           existing.currentDeviceId != currentDeviceId.toLowerCase() ||
           !_bytesEqual(existing.openedLocalPayload, openedOpaquePayload) ||
+          (applicationEvent != null &&
+              existing.eventId !=
+                  protocolBytesToHex(applicationEvent.event.eventId)) ||
           !_matchesRequestedAudience(
             existing,
             currentUserId: currentUserId,
@@ -128,6 +132,32 @@ final class PairwiseFanoutCoordinator {
     final deviceStateVersions = contexts.values
         .map((context) => context.deviceState.stateVersion)
         .toSet();
+    if (targets.isEmpty) {
+      if (applicationEvent == null || currentUserId != peerUserId) {
+        return const Result.failure(
+          ValidationFailure(ValidationFailureKind.invalidInput),
+        );
+      }
+      final localCommit = await store.commitLocalApplication(
+        operationId: operationId,
+        eventId: eventId,
+        currentDeviceId: currentDeviceId,
+        openedLocalPayload: openedOpaquePayload,
+        applicationEvent: applicationEvent,
+      );
+      if (localCommit case FailureResult(failure: final failure)) {
+        return Result.failure(failure);
+      }
+      return Result.success(
+        DurablePairwiseOperation(
+          operationId: operationId,
+          eventId: eventId,
+          currentDeviceId: currentDeviceId.toLowerCase(),
+          openedLocalPayload: openedOpaquePayload,
+          targets: const [],
+        ),
+      );
+    }
     if (deviceStateVersions.length != 1) {
       return const Result.failure(
         ValidationFailure(ValidationFailureKind.conflict),
@@ -223,6 +253,7 @@ final class PairwiseFanoutCoordinator {
         expectedDeviceStateVersion: deviceStateVersions.single,
         openedLocalPayload: openedOpaquePayload,
         targets: preparedTargets,
+        applicationEvent: applicationEvent,
       ),
     );
     if (commit case FailureResult(failure: final failure)) {
@@ -257,7 +288,8 @@ final class PairwiseFanoutCoordinator {
         return false;
       }
     }
-    return hasPeer;
+    return hasPeer ||
+        (operation.targets.isEmpty && peerUserId == currentUserId);
   }
 
   Result<List<VerifiedPairwiseLiveDevice>> _canonicalTargets({
@@ -270,7 +302,6 @@ final class PairwiseFanoutCoordinator {
     if (!_isUuid(currentUserId) ||
         !_isUuid(currentDeviceId) ||
         !_isUuid(peerUserId) ||
-        currentUserId == peerUserId ||
         peerDevices.isEmpty) {
       return const Result.failure(
         ValidationFailure(ValidationFailureKind.invalidInput),
@@ -299,7 +330,7 @@ final class PairwiseFanoutCoordinator {
 
     for (final device in peerDevices) {
       if (device.userId != peerUserId ||
-          !add(peerUserId, device, allowCurrent: false)) {
+          !add(peerUserId, device, allowCurrent: peerUserId == currentUserId)) {
         return const Result.failure(
           SecurityFailure(SecurityFailureKind.unauthenticatedInput),
         );
@@ -323,11 +354,7 @@ final class PairwiseFanoutCoordinator {
     }
     final targets = byDevice.values.toList(growable: false)
       ..sort((left, right) => _compareUuidBytes(left.deviceId, right.deviceId));
-    return targets.isEmpty
-        ? const Result.failure(
-            ValidationFailure(ValidationFailureKind.invalidInput),
-          )
-        : Result.success(List.unmodifiable(targets));
+    return Result.success(List.unmodifiable(targets));
   }
 }
 

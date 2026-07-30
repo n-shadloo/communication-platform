@@ -1,13 +1,17 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:communication_platform/core/application/ports/application_protocol_port.dart';
 import 'package:communication_platform/core/application/ports/pairwise_session_crypto_port.dart';
 import 'package:communication_platform/core/application/ports/time_source.dart';
+import 'package:communication_platform/core/protocol/application_message_model.dart';
 import 'package:communication_platform/core/protocol/pairwise_crypto_model.dart'
     as native;
 import 'package:communication_platform/core/protocol/pairwise_sync_model.dart';
 import 'package:communication_platform/core/result/failure.dart';
 import 'package:communication_platform/core/result/result.dart';
+import 'package:communication_platform/features/messaging/application/ports/conversation_ports.dart';
+import 'package:communication_platform/features/messaging/domain/conversation_model.dart';
 import 'package:communication_platform/features/pairwise/application/ports/pairwise_orchestration_ports.dart';
 import 'package:communication_platform/features/pairwise/application/ports/pairwise_transport_store.dart';
 import 'package:communication_platform/features/pairwise/domain/pairwise_model.dart';
@@ -22,6 +26,9 @@ final class PairwiseOpaqueEnvelopeInspector implements OpaqueEnvelopeInspector {
     required this.store,
     required this.liveDevices,
     required this.crypto,
+    required this.applicationProtocol,
+    required this.conversationResolver,
+    required this.currentUserId,
     required this.clock,
   });
 
@@ -29,6 +36,9 @@ final class PairwiseOpaqueEnvelopeInspector implements OpaqueEnvelopeInspector {
   final PairwiseTransportStore store;
   final PairwiseLiveDeviceResolverPort liveDevices;
   final PairwiseSessionCryptoPort crypto;
+  final ApplicationProtocolPort applicationProtocol;
+  final ApplicationConversationResolverPort conversationResolver;
+  final String currentUserId;
   final TimeSource clock;
 
   @override
@@ -144,13 +154,31 @@ final class PairwiseOpaqueEnvelopeInspector implements OpaqueEnvelopeInspector {
       repairAuthorization = authorization.authorization;
     }
 
+    final preparedResult =
+        opened.payloadKind ==
+            native.PairwiseOpenedPayloadKind.authenticatedRepairControl
+        ? Result<_PreparedApplication>.success(
+            _PreparedApplication(
+              opaqueEventId: 'pairwise-repair-control:$envelopeId',
+            ),
+          )
+        : await _prepareApplication(
+            envelopeId: envelopeId,
+            senderUserId: session.remoteUserId,
+            senderDeviceId: session.remoteDeviceId,
+            openedPayload: opened.openedPayload,
+          );
+    if (preparedResult case FailureResult(failure: final failure)) {
+      return Result.failure(failure);
+    }
+    final prepared = (preparedResult as Success<_PreparedApplication>).value;
     return Result.success(
       OpaqueEnvelopeInspection(
-        opaqueEventId: 'pairwise:$envelopeId',
+        opaqueEventId: prepared.opaqueEventId,
         dependency: EnvelopeDependency.directOrLocal,
         pairwiseCommit: PairwiseSyncReceiveCommit(
           envelopeId: envelopeId,
-          opaqueEventId: 'pairwise:$envelopeId',
+          opaqueEventId: prepared.opaqueEventId,
           senderUserId: session.remoteUserId,
           senderDeviceId: session.remoteDeviceId,
           replayMarker: opened.replayMarker,
@@ -162,6 +190,8 @@ final class PairwiseOpaqueEnvelopeInspector implements OpaqueEnvelopeInspector {
             repairState: repairState,
             repairAuthorization: repairAuthorization,
           ),
+          applicationEvent: prepared.applicationEvent,
+          unsupportedApplicationEvent: prepared.unsupportedApplicationEvent,
         ),
       ),
     );
@@ -314,13 +344,29 @@ final class PairwiseOpaqueEnvelopeInspector implements OpaqueEnvelopeInspector {
       if (accepted.consumedPqOneTimePrekeyId case final id?)
         PairwiseSyncConsumedPrekey(algorithm: 1, keyId: id),
     ];
+    final preparedResult = probe.isRepairReplacement
+        ? Result<_PreparedApplication>.success(
+            _PreparedApplication(
+              opaqueEventId: 'pairwise-repair-replacement:$envelopeId',
+            ),
+          )
+        : await _prepareApplication(
+            envelopeId: envelopeId,
+            senderUserId: senderUserId,
+            senderDeviceId: senderDeviceId,
+            openedPayload: accepted.openedPayload,
+          );
+    if (preparedResult case FailureResult(failure: final failure)) {
+      return Result.failure(failure);
+    }
+    final prepared = (preparedResult as Success<_PreparedApplication>).value;
     return Result.success(
       OpaqueEnvelopeInspection(
-        opaqueEventId: 'pairwise:$envelopeId',
+        opaqueEventId: prepared.opaqueEventId,
         dependency: EnvelopeDependency.directOrLocal,
         pairwiseCommit: PairwiseSyncReceiveCommit(
           envelopeId: envelopeId,
-          opaqueEventId: 'pairwise:$envelopeId',
+          opaqueEventId: prepared.opaqueEventId,
           senderUserId: senderUserId,
           senderDeviceId: senderDeviceId,
           replayMarker: accepted.replayMarker,
@@ -347,6 +393,92 @@ final class PairwiseOpaqueEnvelopeInspector implements OpaqueEnvelopeInspector {
             nextStateVersion: preparation.deviceState.stateVersion + 1,
           ),
           consumedOneTimePrekeys: consumed,
+          applicationEvent: prepared.applicationEvent,
+          unsupportedApplicationEvent: prepared.unsupportedApplicationEvent,
+        ),
+      ),
+    );
+  }
+
+  Future<Result<_PreparedApplication>> _prepareApplication({
+    required String envelopeId,
+    required String senderUserId,
+    required String senderDeviceId,
+    required Uint8List openedPayload,
+  }) async {
+    final decodedResult = await applicationProtocol.decode(openedPayload);
+    if (decodedResult case FailureResult(failure: final failure)) {
+      return Result.failure(failure);
+    }
+    final decoded = (decodedResult as Success<DecodedApplicationEvent>).value;
+    if (decoded is UnsupportedApplicationEvent) {
+      final header = decoded.header;
+      if (header != null &&
+          (protocolUuidString(header.senderUserId) !=
+                  senderUserId.toLowerCase() ||
+              protocolUuidString(header.senderDeviceId) !=
+                  senderDeviceId.toLowerCase())) {
+        return const Result.failure(
+          SecurityFailure(SecurityFailureKind.unauthenticatedInput),
+        );
+      }
+      final eventId = header == null
+          ? null
+          : protocolBytesToHex(header.eventId);
+      final recordKey = eventId == null
+          ? 'unsupported-envelope:$envelopeId'
+          : 'unsupported-event:$eventId';
+      return Result.success(
+        _PreparedApplication(
+          opaqueEventId: recordKey,
+          unsupportedApplicationEvent: UnsupportedApplicationCommit(
+            recordKey: recordKey,
+            version: decoded.version,
+            kindValue: decoded.kindValue,
+            senderUserId: senderUserId,
+            senderDeviceId: senderDeviceId,
+            eventId: header?.eventId,
+            conversationId: header?.conversationId,
+            senderCounter: header?.senderCounter,
+            currentUserId: currentUserId.toLowerCase(),
+            retainedBytes: decoded.retainedBytes,
+            authenticatedAt: clock.now().toUtc(),
+          ),
+        ),
+      );
+    }
+    final supported = decoded as SupportedApplicationEvent;
+    final event = supported.event;
+    if (protocolUuidString(event.senderUserId) != senderUserId.toLowerCase() ||
+        protocolUuidString(event.senderDeviceId) !=
+            senderDeviceId.toLowerCase() ||
+        event.kind == ApplicationEventKind.typingSet) {
+      return const Result.failure(
+        SecurityFailure(SecurityFailureKind.unauthenticatedInput),
+      );
+    }
+    final conversationResult = await conversationResolver.resolve(
+      event: event,
+      currentUserId: currentUserId,
+    );
+    if (conversationResult case FailureResult(failure: final failure)) {
+      return Result.failure(failure);
+    }
+    final conversation =
+        (conversationResult as Success<ResolvedApplicationConversation>).value;
+    final eventId = protocolBytesToHex(event.eventId);
+    return Result.success(
+      _PreparedApplication(
+        opaqueEventId: 'application:$eventId',
+        applicationEvent: ApplicationEventCommit(
+          event: event,
+          canonicalBytes: supported.canonicalBytes,
+          currentUserId: currentUserId.toLowerCase(),
+          currentDeviceId: localDeviceId.toLowerCase(),
+          conversationKind: conversation.kind.index,
+          peerUserId: conversation.peerUserId,
+          localOrigin: false,
+          authenticatedAt: clock.now().toUtc(),
         ),
       ),
     );
@@ -499,3 +631,15 @@ bool _isUuid(String value) => _uuid.hasMatch(value);
 final RegExp _uuid = RegExp(
   r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$',
 );
+
+final class _PreparedApplication {
+  const _PreparedApplication({
+    required this.opaqueEventId,
+    this.applicationEvent,
+    this.unsupportedApplicationEvent,
+  });
+
+  final String opaqueEventId;
+  final ApplicationEventCommit? applicationEvent;
+  final UnsupportedApplicationCommit? unsupportedApplicationEvent;
+}

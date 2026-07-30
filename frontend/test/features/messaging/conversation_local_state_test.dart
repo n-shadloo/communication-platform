@@ -1,0 +1,142 @@
+import 'package:communication_platform/core/result/result.dart';
+import 'package:communication_platform/features/local_storage/infrastructure/database/local_database.dart';
+import 'package:communication_platform/features/messaging/domain/conversation_model.dart';
+import 'package:communication_platform/features/messaging/infrastructure/drift_conversation_domain_repository.dart';
+import 'package:communication_platform/features/messaging/infrastructure/memory_volatile_conversation_state.dart';
+import 'package:drift/drift.dart' hide isNull;
+import 'package:drift/native.dart';
+import 'package:flutter_test/flutter_test.dart';
+
+void main() {
+  test(
+    'draft, mute, unread, and delete-for-me remain local projections',
+    () async {
+      final database = LocalDatabase(NativeDatabase.memory());
+      addTearDown(database.close);
+      final repository = DriftConversationDomainRepository(database);
+      await database
+          .into(database.conversations)
+          .insert(
+            ConversationsCompanion.insert(
+              conversationId: 'conversation',
+              kind: ConversationKind.direct.index,
+              peerUserId: const Value('peer'),
+              listProjectionCiphertext: Uint8List.fromList('preview'.codeUnits),
+              sortKey: 10,
+              unreadCount: const Value(1),
+            ),
+          );
+      await database
+          .into(database.messages)
+          .insert(
+            MessagesCompanion.insert(
+              messageId: 'message',
+              conversationId: 'conversation',
+              currentEventId: 'event',
+              projectionCiphertext: Uint8List.fromList('content'.codeUnits),
+              status: MessageTransportState.received.index,
+              revision: 0,
+              createdAt: DateTime.utc(2026, 7, 29),
+              senderUserId: const Value('peer'),
+              senderDeviceId: const Value('peer-device'),
+              orderingMs: const Value(10),
+              orderingEventId: const Value('event'),
+              unread: const Value(true),
+            ),
+          );
+      await database
+          .into(database.attachments)
+          .insert(
+            AttachmentsCompanion.insert(
+              attachmentId: 'attachment',
+              messageId: 'message',
+              encryptedDescriptor: Uint8List.fromList([1]),
+              transferState: 1,
+              boundedCacheHandleCiphertext: Value(Uint8List.fromList([2])),
+              cacheExpiresAt: Value(DateTime.utc(2026, 8)),
+            ),
+          );
+      final mutedUntil = DateTime.utc(2026, 8, 1);
+
+      expect(
+        await repository.saveDraft(
+          conversationId: 'conversation',
+          text: 'draft',
+        ),
+        isA<Success<void>>(),
+      );
+      expect(
+        await repository.setMutedUntil(
+          conversationId: 'conversation',
+          mutedUntil: mutedUntil,
+        ),
+        isA<Success<void>>(),
+      );
+      expect(await repository.deleteForMe('message'), isA<Success<void>>());
+
+      final summary =
+          (await repository.watchConversations('current').first).single;
+      final message =
+          (await repository
+                  .watchMessages(
+                    currentUserId: 'current',
+                    conversationId: 'conversation',
+                  )
+                  .first)
+              .single;
+      final attachment = await database
+          .select(database.attachments)
+          .getSingle();
+      expect(summary.draft, 'draft');
+      expect(summary.mutedUntil, mutedUntil);
+      expect(summary.unreadCount, 0);
+      expect(message.deletedForMe, isTrue);
+      expect(message.unread, isFalse);
+      expect(attachment.boundedCacheHandleCiphertext, isNull);
+      expect(attachment.cacheExpiresAt, isNull);
+    },
+  );
+
+  test(
+    'typing expires conservatively and presence means socket count only',
+    () async {
+      final state = MemoryVolatileConversationState();
+      addTearDown(state.dispose);
+      final now = DateTime.now().toUtc();
+
+      state.applyTyping(
+        conversationId: 'conversation',
+        userId: 'USER',
+        deviceId: 'DEVICE',
+        isTyping: true,
+        expiresAt: now.add(const Duration(seconds: 10)),
+        authenticatedAt: now,
+      );
+      var typing = await state.watchTyping('conversation').first;
+      expect(typing, hasLength(1));
+      expect(typing.single.userId, 'user');
+
+      state.applyTyping(
+        conversationId: 'conversation',
+        userId: 'user',
+        deviceId: 'other-device',
+        isTyping: true,
+        expiresAt: now.add(const Duration(minutes: 1)),
+        authenticatedAt: now,
+      );
+      typing = await state.watchTyping('conversation').first;
+      expect(typing, hasLength(1), reason: 'overlong signals are ignored');
+
+      state.applyPresence(userId: 'USER', deviceId: 'one', socketOnline: true);
+      state.applyPresence(userId: 'USER', deviceId: 'two', socketOnline: true);
+      var presence = await state.watchPresence('user').first;
+      expect(presence.meaning, PresenceMeaning.socketOnline);
+      expect(presence.onlineDeviceCount, 2);
+
+      state.clearDisconnected();
+      expect(await state.watchTyping('conversation').first, isEmpty);
+      presence = await state.watchPresence('user').first;
+      expect(presence.meaning, PresenceMeaning.offline);
+    },
+  );
+}

@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:communication_platform/core/application/ports/time_source.dart';
+import 'package:communication_platform/core/protocol/application_message_model.dart';
 import 'package:communication_platform/core/protocol/identity_protocol_model.dart';
 import 'package:communication_platform/core/result/failure.dart';
 import 'package:communication_platform/core/result/result.dart';
@@ -167,13 +168,100 @@ void main() {
       expect(store.commits, isEmpty);
     },
   );
+
+  test(
+    'Saved Messages commits locally with no fabricated delivery target',
+    () async {
+      final currentUserId = uuid(currentUserNumber);
+      final currentDeviceId = uuid(currentDeviceNumber);
+      resolver.devices[currentUserId] = [
+        live(currentUserNumber, currentDeviceNumber),
+      ];
+      final event = ApplicationEventRecord(
+        version: 1,
+        eventId: bytes(16, 70),
+        conversationId: bytes(32, 71),
+        kindValue: ApplicationEventKind.messageCreate.wireValue,
+        senderUserId: protocolUuidBytes(currentUserId),
+        senderDeviceId: protocolUuidBytes(currentDeviceId),
+        senderCounter: 1,
+        createdMs: 1700000000000,
+        references: const [],
+        body: MessageCreateBody(messageId: bytes(16, 72), text: 'saved'),
+      );
+      final encoded = bytes(64, 73);
+      final eventId = protocolBytesToHex(event.eventId);
+      final commit = ApplicationEventCommit(
+        event: event,
+        canonicalBytes: encoded,
+        currentUserId: currentUserId,
+        currentDeviceId: currentDeviceId,
+        conversationKind: 2,
+        peerUserId: null,
+        localOrigin: true,
+        authenticatedAt: DateTime.fromMillisecondsSinceEpoch(
+          1700000001000,
+          isUtc: true,
+        ),
+      );
+
+      final first = await coordinator.prepareAndQueue(
+        operationId: 'application:$eventId',
+        eventId: eventId,
+        currentUserId: currentUserId,
+        currentDeviceId: currentDeviceId,
+        peerUserId: currentUserId,
+        openedOpaquePayload: encoded,
+        applicationEvent: commit,
+      );
+      final retry = await coordinator.prepareAndQueue(
+        operationId: 'application:$eventId',
+        eventId: eventId,
+        currentUserId: currentUserId,
+        currentDeviceId: currentDeviceId,
+        peerUserId: currentUserId,
+        openedOpaquePayload: encoded,
+        applicationEvent: commit,
+      );
+
+      expect(first, isA<Success<DurablePairwiseOperation>>());
+      expect(retry, isA<Success<DurablePairwiseOperation>>());
+      expect(
+        (first as Success<DurablePairwiseOperation>).value.targets,
+        isEmpty,
+      );
+      expect(store.localCommits, hasLength(1));
+      expect(store.commits, isEmpty);
+      expect(crypto.calls, isEmpty);
+    },
+  );
 }
 
 final class FakePairwiseStore implements PairwiseTransportStore {
   final Map<String, PairwisePreparationContext> contexts = {};
   final Map<String, DurablePairwiseOperation> durable = {};
   final List<PairwiseSendCommit> commits = [];
+  final List<ApplicationEventCommit> localCommits = [];
   final List<(String, Set<String>)> reconciliations = [];
+
+  @override
+  Future<Result<void>> commitLocalApplication({
+    required String operationId,
+    required String eventId,
+    required String currentDeviceId,
+    required Uint8List openedLocalPayload,
+    required ApplicationEventCommit applicationEvent,
+  }) async {
+    localCommits.add(applicationEvent);
+    durable[operationId] = DurablePairwiseOperation(
+      operationId: operationId,
+      eventId: eventId,
+      currentDeviceId: currentDeviceId,
+      openedLocalPayload: openedLocalPayload,
+      targets: const [],
+    );
+    return const Result.success(null);
+  }
 
   @override
   Future<Result<PairwisePreparationContext>> readPreparationContext({

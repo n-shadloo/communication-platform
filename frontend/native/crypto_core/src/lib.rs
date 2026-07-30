@@ -1,5 +1,6 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
+mod application;
 mod bounds;
 mod cbor;
 pub mod device_signatures;
@@ -45,6 +46,7 @@ pub const CAP_ZEROIZING_SECRETS: u64 = 1 << 10;
 pub const CAP_PANIC_CONTAINMENT: u64 = 1 << 11;
 pub const CAP_HYBRID_PQXDH_V1: u64 = 1 << 12;
 pub const CAP_DOUBLE_RATCHET_V1: u64 = 1 << 13;
+pub const CAP_APPLICATION_MESSAGES_V1: u64 = 1 << 14;
 
 #[repr(C)]
 pub struct CpCryptoCapabilitiesV1 {
@@ -74,7 +76,8 @@ const CAPABILITIES: CpCryptoCapabilitiesV1 = CpCryptoCapabilitiesV1 {
         | CAP_ZEROIZING_SECRETS
         | CAP_PANIC_CONTAINMENT
         | CAP_HYBRID_PQXDH_V1
-        | CAP_DOUBLE_RATCHET_V1,
+        | CAP_DOUBLE_RATCHET_V1
+        | CAP_APPLICATION_MESSAGES_V1,
     max_input_bytes: MAX_INPUT_BYTES,
     max_cbor_depth: bounds::MAX_CBOR_DEPTH,
     max_cbor_items: bounds::MAX_CBOR_ITEMS,
@@ -464,6 +467,34 @@ pub unsafe extern "C" fn cp_crypto_v1_pairwise_operation(
 }
 
 #[unsafe(no_mangle)]
+/// Runs one bounded deterministic-CBOR application-protocol operation.
+///
+/// The operation-specific projection frames contain authenticated application
+/// plaintext but no secret key material. They are still cleared by the Dart FFI
+/// adapter after every call.
+///
+/// # Safety
+///
+/// Pointer requirements are identical to [`cp_crypto_v1_prepare_device`].
+pub unsafe extern "C" fn cp_crypto_v1_application_operation(
+    operation: u32,
+    input: *const u8,
+    input_len: usize,
+    output: *mut u8,
+    output_len: usize,
+    written: *mut usize,
+) -> i32 {
+    guard(|| {
+        // SAFETY: upheld by this function's caller contract.
+        let input =
+            unsafe { ffi_input_bounded(input, input_len, application::APPLICATION_MAX_IO_BYTES)? };
+        let value = application::operation(operation, input)?;
+        // SAFETY: upheld by this function's caller contract.
+        unsafe { ffi_output(&value, output, output_len, written) }
+    })
+}
+
+#[unsafe(no_mangle)]
 /// Signs the exact peer master-key attestation with the local user-signing key.
 ///
 /// # Safety
@@ -559,11 +590,11 @@ mod tests {
     use std::{mem, ptr};
 
     use super::{
-        ABI_VERSION, CAP_ARGON2ID, CAP_DETERMINISTIC_CBOR, CAP_DOUBLE_RATCHET_V1, CAP_ED25519,
-        CAP_HKDF, CAP_HYBRID_PQXDH_V1, CAP_MLKEM768, CAP_PANIC_CONTAINMENT, CAP_SECRETSTREAM,
-        CAP_SECURE_RANDOM, CAP_SHA2, CAP_X25519, CAP_XCHACHA20POLY1305, CAP_ZEROIZING_SECRETS,
-        CAPABILITIES_SIZE, CpCryptoCapabilitiesV1, cp_crypto_v1_abi_version,
-        cp_crypto_v1_capabilities, cp_crypto_v1_self_test, guard,
+        ABI_VERSION, CAP_APPLICATION_MESSAGES_V1, CAP_ARGON2ID, CAP_DETERMINISTIC_CBOR,
+        CAP_DOUBLE_RATCHET_V1, CAP_ED25519, CAP_HKDF, CAP_HYBRID_PQXDH_V1, CAP_MLKEM768,
+        CAP_PANIC_CONTAINMENT, CAP_SECRETSTREAM, CAP_SECURE_RANDOM, CAP_SHA2, CAP_X25519,
+        CAP_XCHACHA20POLY1305, CAP_ZEROIZING_SECRETS, CAPABILITIES_SIZE, CpCryptoCapabilitiesV1,
+        cp_crypto_v1_abi_version, cp_crypto_v1_capabilities, cp_crypto_v1_self_test, guard,
     };
     use crate::error::CryptoError;
 
@@ -615,6 +646,7 @@ mod tests {
                 | CAP_PANIC_CONTAINMENT
                 | CAP_HYBRID_PQXDH_V1
                 | CAP_DOUBLE_RATCHET_V1
+                | CAP_APPLICATION_MESSAGES_V1
         );
 
         let mut unaligned_storage =

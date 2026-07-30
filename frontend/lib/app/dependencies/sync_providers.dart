@@ -1,6 +1,10 @@
 import 'package:communication_platform/app/dependencies/contact_providers.dart';
 import 'package:communication_platform/app/dependencies/core_providers.dart';
 import 'package:communication_platform/app/dependencies/local_storage_providers.dart';
+import 'package:communication_platform/app/dependencies/messaging_providers.dart';
+import 'package:communication_platform/features/messaging/application/conversation_use_cases.dart';
+import 'package:communication_platform/features/messaging/infrastructure/drift_application_conversation_resolver.dart';
+import 'package:communication_platform/features/messaging/infrastructure/pending_receipt_post_inbox_work.dart';
 import 'package:communication_platform/features/pairwise/infrastructure/contact_selective_pairwise_claim_adapter.dart';
 import 'package:communication_platform/features/pairwise/infrastructure/drift_pairwise_transport_store.dart';
 import 'package:communication_platform/features/synchronization/application/durable_sync_engine.dart';
@@ -41,6 +45,12 @@ final durableSyncEngineProvider =
         peerAuthenticationServiceProvider.future,
       );
       final store = DriftSyncStore(database);
+      final sender = await ref.watch(
+        sendConversationEventsProvider((
+          userId: scope.userId,
+          deviceId: scope.deviceId,
+        )).future,
+      );
       final inspector = PairwiseOpaqueEnvelopeInspector(
         localDeviceId: scope.deviceId,
         store: DriftPairwiseTransportStore(database),
@@ -49,6 +59,12 @@ final durableSyncEngineProvider =
           currentUserId: scope.userId,
         ),
         crypto: NativePairwiseSessionCrypto(ref.watch(pairwiseCryptoProvider)),
+        applicationProtocol: ref.watch(applicationProtocolProvider),
+        conversationResolver: DriftApplicationConversationResolver(
+          database: database,
+          protocol: ref.watch(applicationProtocolProvider),
+        ),
+        currentUserId: scope.userId,
         clock: ref.watch(timeSourceProvider),
       );
       return DurableSyncEngine(
@@ -58,5 +74,12 @@ final durableSyncEngineProvider =
         staleDeviceRefresh: ContactStaleDeviceRefreshAdapter(authentication),
         clock: ref.watch(timeSourceProvider),
         jitter: FullJitterSource(),
+        postInboxCommitWork: PendingReceiptPostInboxWork(
+          FlushPendingDeliveredReceipts(
+            repository: await ref.watch(conversationRepositoryProvider.future),
+            sender: sender,
+            currentUserId: scope.userId,
+          ),
+        ),
       );
     });

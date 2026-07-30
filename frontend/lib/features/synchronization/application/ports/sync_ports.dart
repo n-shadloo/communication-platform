@@ -126,6 +126,11 @@ abstract interface class StaleDeviceRefreshPort implements Port {
   Future<Result<void>> refreshUserDevices(String userId);
 }
 
+/// Best-effort application work triggered only after inbox commits complete.
+abstract interface class PostInboxCommitWorkPort implements Port {
+  Future<void> run();
+}
+
 abstract interface class JitterSource implements Port {
   int nextInt(int upperBoundExclusive);
 }

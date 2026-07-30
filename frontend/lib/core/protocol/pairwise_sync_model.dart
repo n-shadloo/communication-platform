@@ -1,5 +1,7 @@
 import 'dart:typed_data';
 
+import 'package:communication_platform/core/protocol/application_message_model.dart';
+
 /// Primitive-only prepared transition crossing from pairwise crypto into sync.
 /// All byte fields remain opaque to Dart and are committed by Drift under CAS.
 final class PairwiseSyncSessionTransition {
@@ -72,6 +74,8 @@ final class PairwiseSyncReceiveCommit {
     this.pqSignedPrekeyId,
     this.deviceStateTransition,
     List<PairwiseSyncConsumedPrekey> consumedOneTimePrekeys = const [],
+    this.applicationEvent,
+    this.unsupportedApplicationEvent,
   }) : replayMarker = Uint8List.fromList(replayMarker),
        openedOpaquePayload = Uint8List.fromList(openedOpaquePayload),
        replacedSessionId = replacedSessionId == null
@@ -92,4 +96,6 @@ final class PairwiseSyncReceiveCommit {
   final int? pqSignedPrekeyId;
   final PairwiseSyncDeviceStateTransition? deviceStateTransition;
   final List<PairwiseSyncConsumedPrekey> consumedOneTimePrekeys;
+  final ApplicationEventCommit? applicationEvent;
+  final UnsupportedApplicationCommit? unsupportedApplicationEvent;
 }
