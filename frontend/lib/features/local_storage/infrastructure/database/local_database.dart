@@ -292,6 +292,7 @@ class Conversations extends Table {
   BlobColumn get listProjectionCiphertext => blob()();
   IntColumn get sortKey => integer()();
   BoolColumn get tombstoned => boolean().withDefault(const Constant(false))();
+  BoolColumn get pinned => boolean().withDefault(const Constant(false))();
   TextColumn get peerUserId => text().nullable()();
   TextColumn get lastActivityEventId => text().nullable()();
   IntColumn get unreadCount => integer()
@@ -349,6 +350,7 @@ class Messages extends Table {
       boolean().withDefault(const Constant(false))();
   BoolColumn get deletedForMe => boolean().withDefault(const Constant(false))();
   BoolColumn get pinned => boolean().withDefault(const Constant(false))();
+  BoolColumn get starred => boolean().withDefault(const Constant(false))();
   BoolColumn get unread => boolean().withDefault(const Constant(false))();
 
   @override
@@ -809,7 +811,7 @@ final class LocalDatabase extends _$LocalDatabase {
   LocalDatabase(super.executor, {StorageMigrationHooks? migrationHooks})
     : _migrationHooks = migrationHooks ?? const StorageMigrationHooks();
 
-  static const currentSchemaVersion = 5;
+  static const currentSchemaVersion = 6;
   final StorageMigrationHooks _migrationHooks;
 
   @override
@@ -959,6 +961,10 @@ final class LocalDatabase extends _$LocalDatabase {
           await migrator.createTable(applicationSenderCounters);
           await migrator.createTable(messageReactions);
           await migrator.createTable(pendingApplicationReceipts);
+        }
+        if (from < 6) {
+          await migrator.addColumn(conversations, conversations.pinned);
+          await migrator.addColumn(messages, messages.starred);
         }
         await _migrationHooks.afterUpgrade(from, to);
       });

@@ -129,13 +129,19 @@ architecture boundaries and the recognized layer names inside every feature.
 ## UI boundary
 
 Forui supplies tokens and application-shell primitives behind app-owned components.
-Flyer Chat supplies the virtualized message surface. Custom builders own the exclusive
-visual design for bubbles, grouping, replies, status, attachments, system events, and
-composer.
+Flyer Chat may supply the virtualized message surface only through the timeline adapter.
+Custom builders own the exclusive visual design for bubbles, grouping, replies, status,
+attachments, system events, and composer.
 
 Flyer models/controllers are adapters, not domain models or the source of truth. If the
 required pagination, anchoring, RTL, accessibility, or media performance spike fails,
 only the timeline adapter is replaced with a custom sliver implementation.
+
+Piece 15 exercised that replacement clause: the pinned Flyer 2.11.1 update path requires
+a mutable `ChatController`, so the production `ChatTimelineAdapter` is an app-owned
+reversed sliver with explicit reading-anchor restoration. Drift-backed projections
+remain the source of truth. The adapter and all builders receive immutable view models
+and emit typed intents; they cannot reach cryptography, APIs, Drift, or synchronization.
 
 ## Platform boundary
 

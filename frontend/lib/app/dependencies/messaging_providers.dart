@@ -1,6 +1,8 @@
 import 'package:communication_platform/app/dependencies/contact_providers.dart';
 import 'package:communication_platform/app/dependencies/core_providers.dart';
 import 'package:communication_platform/app/dependencies/local_storage_providers.dart';
+import 'package:communication_platform/core/protocol/application_message_model.dart';
+import 'package:communication_platform/core/result/result.dart';
 import 'package:communication_platform/features/messaging/application/conversation_use_cases.dart';
 import 'package:communication_platform/features/messaging/application/ports/conversation_ports.dart';
 import 'package:communication_platform/features/messaging/domain/conversation_model.dart';
@@ -18,6 +20,41 @@ typedef ConversationMessagesRequest = ({
   String currentUserId,
   String conversationId,
 });
+typedef ConversationIdentityRequest = ({
+  String currentUserId,
+  String? peerUserId,
+  bool savedMessages,
+});
+
+final currentMessagingDeviceIdProvider = FutureProvider<String>((ref) async {
+  final local = await ref.watch(contactLocalProvider.future);
+  final result = await local.readLocalIdentity();
+  return switch (result) {
+    Success(:final value) => value.deviceId,
+    FailureResult(:final failure) => throw StateError(
+      'Messaging identity is unavailable: ${failure.runtimeType}',
+    ),
+  };
+});
+
+final conversationIdentityProvider = FutureProvider.autoDispose
+    .family<String, ConversationIdentityRequest>((ref, request) async {
+      final protocol = ref.watch(applicationProtocolProvider);
+      final result = request.savedMessages
+          ? await protocol.deriveSavedConversationId(
+              protocolUuidBytes(request.currentUserId),
+            )
+          : await protocol.deriveDirectConversationId(
+              firstUserId: protocolUuidBytes(request.currentUserId),
+              secondUserId: protocolUuidBytes(request.peerUserId!),
+            );
+      return switch (result) {
+        Success(:final value) => protocolBytesToHex(value),
+        FailureResult(:final failure) => throw StateError(
+          'Conversation identity is unavailable: ${failure.runtimeType}',
+        ),
+      };
+    });
 
 final conversationRepositoryProvider =
     FutureProvider<ConversationRepositoryPort>((ref) async {

@@ -296,6 +296,10 @@ final class _Repository implements ConversationRepositoryPort {
       const Result.success(null);
 
   @override
+  Future<Result<void>> deleteConversationForMe(String conversationId) async =>
+      const Result.success(null);
+
+  @override
   Future<Result<List<String>>> markConversationRead(
     String conversationId,
   ) async {
@@ -303,6 +307,12 @@ final class _Repository implements ConversationRepositoryPort {
     unreadIds = [];
     return Result.success(result);
   }
+
+  @override
+  Future<Result<void>> markConversationUnread({
+    required String conversationId,
+    required String currentUserId,
+  }) async => const Result.success(null);
 
   @override
   Future<Result<int>> nextEditRevision({
@@ -344,6 +354,18 @@ final class _Repository implements ConversationRepositoryPort {
   Future<Result<void>> setMutedUntil({
     required String conversationId,
     required DateTime? mutedUntil,
+  }) async => const Result.success(null);
+
+  @override
+  Future<Result<void>> setConversationPinned({
+    required String conversationId,
+    required bool pinned,
+  }) async => const Result.success(null);
+
+  @override
+  Future<Result<void>> setStar({
+    required String messageId,
+    required bool starred,
   }) async => const Result.success(null);
 
   @override

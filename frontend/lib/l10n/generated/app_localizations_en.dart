@@ -586,4 +586,342 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get safetyConfirmationRequired =>
       'Out-of-band comparison is required before confirmation.';
+
+  @override
+  String get chatsTitle => 'Chats';
+
+  @override
+  String get chatsSearchAction => 'Search chats';
+
+  @override
+  String get chatsSearchHint => 'Search chats and messages on this device';
+
+  @override
+  String get chatsClearSearchAction => 'Clear search';
+
+  @override
+  String get chatsLoadingTitle => 'Loading chats';
+
+  @override
+  String get chatsErrorTitle => 'Chats are unavailable';
+
+  @override
+  String get chatsErrorMessage =>
+      'The encrypted local conversation list could not be opened.';
+
+  @override
+  String get chatsEmptyTitle => 'No chats yet';
+
+  @override
+  String get chatsEmptyMessage =>
+      'Start a verified direct message. Conversations will remain readable offline on this device.';
+
+  @override
+  String get chatsStartAction => 'Start a chat';
+
+  @override
+  String get chatsNoSearchResultsTitle => 'No local results';
+
+  @override
+  String get chatsDeviceSearchScopeNotice =>
+      'Search covers only decrypted history stored on this device. The server never indexes messages.';
+
+  @override
+  String get chatsOfflineCachedNotice =>
+      'Offline — showing cached conversations. New messages will queue locally.';
+
+  @override
+  String get chatsNoMessagesPreview => 'No messages yet';
+
+  @override
+  String get chatsConversationActionsLabel => 'Conversation actions';
+
+  @override
+  String get chatsMuteAction => 'Mute for 8 hours';
+
+  @override
+  String get chatsUnmuteAction => 'Unmute';
+
+  @override
+  String get chatsMarkReadAction => 'Mark as read';
+
+  @override
+  String get chatsMarkUnreadAction => 'Mark as unread';
+
+  @override
+  String get chatsDeleteAction => 'Delete chat';
+
+  @override
+  String get chatsDeleteTitle => 'Delete this chat?';
+
+  @override
+  String get chatsDeleteLocalOnlyMessage =>
+      'Clearing a chat removes this device\'s local view only. It does not delete content already received by other devices.';
+
+  @override
+  String get chatsPinViaMessageNotice =>
+      'Conversation pinning is unavailable in the current local schema. No state was changed.';
+
+  @override
+  String chatsItemSemantics(String title, String preview, int unreadCount) {
+    return '$title. $preview. $unreadCount unread messages.';
+  }
+
+  @override
+  String get chatTitle => 'Conversation';
+
+  @override
+  String get savedMessagesTitle => 'Saved Messages';
+
+  @override
+  String get savedMessagesEmptyTitle => 'Nothing saved yet';
+
+  @override
+  String get savedMessagesEmptyMessage =>
+      'Messages here are local to your encrypted self-conversation and never show peer presence or receipts.';
+
+  @override
+  String get savedMessagesComposerHint => 'Write a note to yourself';
+
+  @override
+  String get chatHistoryLoading => 'Loading encrypted history';
+
+  @override
+  String get chatHistoryErrorTitle => 'History is unavailable';
+
+  @override
+  String get chatHistoryErrorMessage =>
+      'The encrypted local history could not be read. No server copy exists.';
+
+  @override
+  String get chatEmptyTitle => 'Start the conversation';
+
+  @override
+  String get chatEmptyMessage =>
+      'Messages are encrypted on this device before they enter the delivery queue.';
+
+  @override
+  String chatTimelineSemantics(String title) {
+    return 'Message timeline for $title';
+  }
+
+  @override
+  String chatMessageSemantics(String author, String message, String state) {
+    return '$author: $message. State: $state.';
+  }
+
+  @override
+  String get chatMessageActionsLabel => 'Message actions';
+
+  @override
+  String get chatReplyAction => 'Reply';
+
+  @override
+  String get chatReactAction => 'React';
+
+  @override
+  String get chatEditAction => 'Edit';
+
+  @override
+  String get chatForwardAction => 'Forward';
+
+  @override
+  String get chatCopyAction => 'Copy';
+
+  @override
+  String get chatStarAction => 'Star on this device';
+
+  @override
+  String get chatUnstarAction => 'Remove star';
+
+  @override
+  String get chatPinAction => 'Pin';
+
+  @override
+  String get chatUnpinAction => 'Unpin';
+
+  @override
+  String get chatDeleteAction => 'Delete';
+
+  @override
+  String get chatDeleteTitle => 'Delete message?';
+
+  @override
+  String get chatDeleteHonestMessage =>
+      'Delete for me removes this device\'s local copy. Delete for everyone is best-effort and cannot force another device to forget content it already received and decrypted.';
+
+  @override
+  String get chatDeleteForMeAction => 'Delete for me';
+
+  @override
+  String get chatDeleteForEveryoneAction => 'Delete for everyone';
+
+  @override
+  String get chatCancelAction => 'Cancel';
+
+  @override
+  String get chatDeletedMessage => 'Message deleted';
+
+  @override
+  String get chatUnsupportedMessage =>
+      'This message needs a newer supported protocol. Its encrypted record was retained.';
+
+  @override
+  String get chatSystemMessage => 'Conversation update';
+
+  @override
+  String get chatEditedLabel => 'edited';
+
+  @override
+  String get chatTimestampSkewed =>
+      'The sender\'s clock appears inaccurate; this time is display-only.';
+
+  @override
+  String get chatReplyQuote => 'Replied message';
+
+  @override
+  String chatReactionSemantics(String emoji, int count) {
+    return '$emoji reaction, $count people';
+  }
+
+  @override
+  String get chatRetrySendAction => 'Retry as a new encrypted send';
+
+  @override
+  String get chatUnreadDivider => 'Unread messages';
+
+  @override
+  String get chatLoadingOlder => 'Loading older messages';
+
+  @override
+  String get chatLoadOlderAction => 'Load older messages';
+
+  @override
+  String get chatOlderErrorAction => 'Older messages could not load — retry';
+
+  @override
+  String get chatBeginningOfHistory => 'Beginning of local history';
+
+  @override
+  String get chatJumpToLatestAction => 'Jump to latest message';
+
+  @override
+  String get chatComposerHint => 'Message';
+
+  @override
+  String get chatAttachAction => 'Attach';
+
+  @override
+  String get chatEmojiAction => 'Insert emoji';
+
+  @override
+  String get chatSendAction => 'Send encrypted message';
+
+  @override
+  String get chatSaveEditAction => 'Save encrypted edit';
+
+  @override
+  String get chatCancelContextAction => 'Cancel reply or edit';
+
+  @override
+  String get chatEditingMessage => 'Editing message';
+
+  @override
+  String chatReplyingTo(String author) {
+    return 'Replying to $author';
+  }
+
+  @override
+  String get chatOfflineQueueNotice =>
+      'Offline — sending stores encrypted queue work locally until this server is reachable.';
+
+  @override
+  String get chatWithheldUnverifiedIdentity =>
+      'Messaging withheld: verify this identity out of band before sending.';
+
+  @override
+  String get chatWithheldUnverifiedDevice =>
+      'Messaging withheld: an unsigned or invalid device cannot receive messages.';
+
+  @override
+  String get chatWithheldMasterChanged =>
+      'Messaging withheld: the contact\'s master key changed and must be verified again.';
+
+  @override
+  String get chatWithheldLogFork =>
+      'Messaging withheld: a device-log fork indicates possible server equivocation.';
+
+  @override
+  String get chatWithheldPq =>
+      'Messaging withheld: required ML-KEM post-quantum key material is unavailable. The app will not downgrade.';
+
+  @override
+  String chatPinnedBanner(int count) {
+    return '$count pinned messages';
+  }
+
+  @override
+  String get chatPinnedExpandAction => 'View all';
+
+  @override
+  String get chatPinnedMessagesTitle => 'Pinned messages';
+
+  @override
+  String get chatTypingStatus => 'typing… encrypted signal may lag';
+
+  @override
+  String get chatSocketOnlineStatus => 'online via a subscribed device';
+
+  @override
+  String get chatOfflinePresenceStatus => 'offline';
+
+  @override
+  String get chatSearchAction => 'Search in chat';
+
+  @override
+  String get chatSearchInputLabel => 'Search local messages';
+
+  @override
+  String get chatSearchEmptyQueryTitle => 'Search this device\'s history';
+
+  @override
+  String get chatMoreAction => 'More conversation actions';
+
+  @override
+  String get chatYouAuthor => 'You';
+
+  @override
+  String get chatAttachmentsUnavailable =>
+      'Encrypted attachments are not available in this interface piece yet.';
+
+  @override
+  String get chatActionFailedMessage =>
+      'That action could not be completed. No security guarantee was weakened.';
+
+  @override
+  String get chatStateLocalOnly => 'saved locally only';
+
+  @override
+  String get chatStateQueued => 'queued offline';
+
+  @override
+  String get chatStateEncrypting => 'encrypting';
+
+  @override
+  String get chatStateSending => 'sending to server';
+
+  @override
+  String get chatStateAccepted => 'accepted by server relay';
+
+  @override
+  String get chatStateDelivered => 'durably delivered to a recipient device';
+
+  @override
+  String get chatStateRead => 'read receipt received';
+
+  @override
+  String get chatStateFailed => 'send failed';
+
+  @override
+  String get chatStateReceived => 'received';
 }

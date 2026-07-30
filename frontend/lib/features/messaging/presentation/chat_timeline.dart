@@ -1,0 +1,1519 @@
+import 'dart:async';
+import 'dart:math' as math;
+
+import 'package:communication_platform/app/design_system/app_components.dart';
+import 'package:communication_platform/app/design_system/app_icons.dart';
+import 'package:communication_platform/app/design_system/app_tokens.dart';
+import 'package:communication_platform/features/messaging/presentation/chat_view_models.dart';
+import 'package:communication_platform/l10n/generated/app_localizations.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
+import 'package:flutter/services.dart';
+
+typedef ChatIntentCallback = void Function(ChatIntent intent);
+
+/// Replaceable timeline boundary.
+///
+/// This adapter deliberately uses a custom reversed sliver surface rather than keeping
+/// messages in a Flyer controller. Reversed stable indices make upward pagination an
+/// append at the far edge, preserving the current reading anchor. Every builder below
+/// receives only immutable application view models and emits typed intents.
+class ChatTimelineAdapter extends StatefulWidget {
+  const ChatTimelineAdapter({
+    required this.model,
+    required this.onIntent,
+    this.initialPageSize = 80,
+    this.pageSize = 60,
+    super.key,
+  });
+
+  final ChatTimelineViewModel model;
+  final ChatIntentCallback onIntent;
+  final int initialPageSize;
+  final int pageSize;
+
+  @override
+  State<ChatTimelineAdapter> createState() => _ChatTimelineAdapterState();
+}
+
+class _ChatTimelineAdapterState extends State<ChatTimelineAdapter> {
+  final ScrollController _scrollController = ScrollController();
+  final ValueNotifier<double> _distanceFromBottom = ValueNotifier(0);
+  final Map<String, GlobalKey> _messageKeys = {};
+  var _visibleMessageCount = 0;
+  var _loadRequestSent = false;
+  _ReadingAnchor? _pendingAnchor;
+  _ReadingAnchor? _lastReadingAnchor;
+  var _anchorSnapshotScheduled = false;
+  var _dependenciesInitialized = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _visibleMessageCount = math.min(
+      widget.initialPageSize,
+      widget.model.messages.length,
+    );
+    _scrollController.addListener(_onScroll);
+    _scrollController.addListener(_updateDistanceFromBottom);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _jumpIfRequested(widget.model.highlightedMessageId, animate: false);
+    });
+  }
+
+  @override
+  void didUpdateWidget(covariant ChatTimelineAdapter oldWidget) {
+    _pendingAnchor = _captureReadingAnchor();
+    super.didUpdateWidget(oldWidget);
+    final delta =
+        widget.model.messages.length - oldWidget.model.messages.length;
+    if (delta > 0 && _visibleMessageCount >= oldWidget.model.messages.length) {
+      _visibleMessageCount = math.min(
+        widget.model.messages.length,
+        _visibleMessageCount + delta,
+      );
+    }
+    if (!widget.model.loadingBefore) {
+      _loadRequestSent = false;
+    }
+    if (widget.model.highlightedMessageId !=
+        oldWidget.model.highlightedMessageId) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _jumpIfRequested(widget.model.highlightedMessageId);
+      });
+    } else {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _restoreReadingAnchor();
+      });
+    }
+  }
+
+  @override
+  void didChangeDependencies() {
+    if (_dependenciesInitialized) {
+      _pendingAnchor = _captureReadingAnchor();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _restoreReadingAnchor();
+      });
+    }
+    _dependenciesInitialized = true;
+    super.didChangeDependencies();
+  }
+
+  @override
+  void dispose() {
+    _scrollController
+      ..removeListener(_onScroll)
+      ..removeListener(_updateDistanceFromBottom)
+      ..dispose();
+    _distanceFromBottom.dispose();
+    super.dispose();
+  }
+
+  void _updateDistanceFromBottom() {
+    if (_scrollController.hasClients) {
+      _distanceFromBottom.value = _scrollController.position.pixels;
+      _scheduleAnchorSnapshot();
+    }
+  }
+
+  void _scheduleAnchorSnapshot() {
+    if (_anchorSnapshotScheduled) return;
+    _anchorSnapshotScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _anchorSnapshotScheduled = false;
+      if (mounted) {
+        _lastReadingAnchor = _captureReadingAnchor();
+      }
+    });
+  }
+
+  void _onScroll() {
+    if (!_scrollController.hasClients) return;
+    if (_scrollController.position.pixels >=
+        _scrollController.position.maxScrollExtent - 240) {
+      _loadOlder();
+    }
+  }
+
+  void _loadOlder() {
+    if (_visibleMessageCount < widget.model.messages.length) {
+      _pendingAnchor = _captureReadingAnchor();
+      setState(() {
+        _visibleMessageCount = math.min(
+          widget.model.messages.length,
+          _visibleMessageCount + widget.pageSize,
+        );
+      });
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _restoreReadingAnchor();
+      });
+      return;
+    }
+    if (widget.model.hasMoreBefore &&
+        !widget.model.loadingBefore &&
+        !_loadRequestSent) {
+      _loadRequestSent = true;
+      widget.onIntent(const LoadOlderMessagesIntent());
+    }
+  }
+
+  _ReadingAnchor? _captureReadingAnchor() {
+    if (!_scrollController.hasClients ||
+        _scrollController.position.pixels <= 1) {
+      return null;
+    }
+    final viewport = context.findRenderObject();
+    if (viewport is! RenderBox || !viewport.attached) return null;
+    final viewportTop = viewport.localToGlobal(Offset.zero).dy;
+    final viewportBottom = viewportTop + viewport.size.height;
+    _ReadingAnchor? best;
+    for (final entry in _messageKeys.entries) {
+      final render = entry.value.currentContext?.findRenderObject();
+      if (render is! RenderBox || !render.attached) continue;
+      final top = render.localToGlobal(Offset.zero).dy;
+      final bottom = top + render.size.height;
+      if (bottom <= viewportTop || top >= viewportBottom) continue;
+      if (best == null || top < best.globalTop) {
+        best = _ReadingAnchor(entry.key, top);
+      }
+    }
+    return best;
+  }
+
+  void _restoreReadingAnchor() {
+    final anchor = _pendingAnchor;
+    _pendingAnchor = null;
+    if (anchor == null || !_scrollController.hasClients) return;
+    final render = _messageKeys[anchor.messageId]?.currentContext
+        ?.findRenderObject();
+    if (render is! RenderBox || !render.attached) return;
+    final newTop = render.localToGlobal(Offset.zero).dy;
+    final delta = newTop - anchor.globalTop;
+    if (delta.abs() < .5) return;
+    final position = _scrollController.position;
+    // In a reversed viewport, increasing the scroll offset moves the rendered
+    // anchor in the same screen direction as a positive layout delta. Apply the
+    // inverse correction so edits, reactions, media sizing, and width changes
+    // leave the reader on the same visual line.
+    final corrected = (position.pixels - delta).clamp(
+      position.minScrollExtent,
+      position.maxScrollExtent,
+    );
+    position.jumpTo(corrected);
+  }
+
+  void _jumpIfRequested(String? messageId, {bool animate = true}) {
+    if (messageId == null) return;
+    final sourceIndex = widget.model.messages.indexWhere(
+      (message) => message.id == messageId,
+    );
+    if (sourceIndex < 0) return;
+    final needed = widget.model.messages.length - sourceIndex;
+    if (needed > _visibleMessageCount) {
+      setState(() => _visibleMessageCount = needed);
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_scrollController.hasClients) return;
+      final reverseIndex = widget.model.messages.length - 1 - sourceIndex;
+      final target = (reverseIndex * 88.0).clamp(
+        0.0,
+        _scrollController.position.maxScrollExtent,
+      );
+      if (animate && !MediaQuery.disableAnimationsOf(context)) {
+        unawaited(
+          _scrollController.animateTo(
+            target,
+            duration: AppMotion.route,
+            curve: AppMotion.enter,
+          ),
+        );
+      } else {
+        _scrollController.jumpTo(target);
+      }
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final targetContext = _messageKeys[messageId]?.currentContext;
+        if (targetContext != null) {
+          unawaited(
+            Scrollable.ensureVisible(
+              targetContext,
+              alignment: 0.5,
+              duration: MediaQuery.disableAnimationsOf(context)
+                  ? Duration.zero
+                  : AppMotion.state,
+            ),
+          );
+        }
+      });
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final strings = AppLocalizations.of(context);
+    return switch (widget.model.state) {
+      ChatTimelineLoadState.loading => AppStatePanel.loading(
+        title: strings.chatHistoryLoading,
+      ),
+      ChatTimelineLoadState.error => AppStatePanel.error(
+        title: strings.chatHistoryErrorTitle,
+        message: strings.chatHistoryErrorMessage,
+        actionLabel: strings.retryAction,
+        onAction: () => widget.onIntent(const LoadOlderMessagesIntent()),
+      ),
+      ChatTimelineLoadState.empty => AppStatePanel.empty(
+        title: widget.model.savedMessages
+            ? strings.savedMessagesEmptyTitle
+            : strings.chatEmptyTitle,
+        message: widget.model.savedMessages
+            ? strings.savedMessagesEmptyMessage
+            : strings.chatEmptyMessage,
+      ),
+      ChatTimelineLoadState.data => _timeline(context),
+    };
+  }
+
+  Widget _timeline(BuildContext context) {
+    _scheduleAnchorSnapshot();
+    final start = math.max(
+      0,
+      widget.model.messages.length - _visibleMessageCount,
+    );
+    final messages = widget.model.messages.sublist(start);
+    final rows = _buildRows(messages);
+    final strings = AppLocalizations.of(context);
+    return Stack(
+      children: [
+        Semantics(
+          container: true,
+          label: strings.chatTimelineSemantics(widget.model.title),
+          explicitChildNodes: true,
+          child: NotificationListener<SizeChangedLayoutNotification>(
+            onNotification: (_) {
+              _pendingAnchor ??= _lastReadingAnchor;
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                _restoreReadingAnchor();
+                _scheduleAnchorSnapshot();
+              });
+              return false;
+            },
+            child: ListView.builder(
+              key: const PageStorageKey('chat-timeline'),
+              controller: _scrollController,
+              reverse: true,
+              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.x3,
+                AppSpacing.x8,
+                AppSpacing.x3,
+                AppSpacing.x4,
+              ),
+              itemCount: rows.length + 1,
+              itemBuilder: (context, reverseIndex) {
+                if (reverseIndex == rows.length) {
+                  return _PaginationMarker(
+                    hasMore: start > 0 || widget.model.hasMoreBefore,
+                    loading: widget.model.loadingBefore,
+                    failed: widget.model.olderLoadFailed,
+                    onLoad: _loadOlder,
+                  );
+                }
+                final row = rows[rows.length - 1 - reverseIndex];
+                return switch (row) {
+                  _MessageRow(:final message) => SizeChangedLayoutNotifier(
+                    child: KeyedSubtree(
+                      key: _messageKeys.putIfAbsent(message.id, GlobalKey.new),
+                      child: ChatMessageBuilder(
+                        message: message,
+                        highlighted:
+                            widget.model.highlightedMessageId == message.id,
+                        onIntent: widget.onIntent,
+                        onJumpToReply: (id) {
+                          widget.onIntent(JumpToMessageIntent(id));
+                          _jumpIfRequested(id);
+                        },
+                      ),
+                    ),
+                  ),
+                  _DateRow(:final date) => _DateSeparator(date: date),
+                  _UnreadRow() => const _UnreadDivider(),
+                };
+              },
+            ),
+          ),
+        ),
+        PositionedDirectional(
+          end: AppSpacing.x3,
+          bottom: AppSpacing.x3,
+          child: ValueListenableBuilder<double>(
+            valueListenable: _distanceFromBottom,
+            builder: (context, distance, child) => AnimatedScale(
+              duration: AppMotion.effective(context, AppMotion.state),
+              scale: distance > 420 ? 1 : 0,
+              child: child,
+            ),
+            child: AppIconButton(
+              icon: AppIcons.jumpDown,
+              semanticLabel: AppLocalizations.of(
+                context,
+              ).chatJumpToLatestAction,
+              onPressed: () => _scrollController.animateTo(
+                0,
+                duration: AppMotion.effective(context, AppMotion.route),
+                curve: AppMotion.enter,
+              ),
+              kind: AppButtonKind.secondary,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  List<_TimelineRow> _buildRows(List<ChatMessageViewModel> messages) {
+    final rows = <_TimelineRow>[];
+    DateTime? previousDay;
+    var unreadInserted = false;
+    for (final message in messages) {
+      final day = DateTime(
+        message.timestamp.year,
+        message.timestamp.month,
+        message.timestamp.day,
+      );
+      if (day != previousDay) {
+        rows.add(_DateRow(day));
+        previousDay = day;
+      }
+      if (!unreadInserted && message.unread) {
+        rows.add(const _UnreadRow());
+        unreadInserted = true;
+      }
+      rows.add(_MessageRow(message));
+    }
+    return rows;
+  }
+}
+
+sealed class _TimelineRow {
+  const _TimelineRow();
+}
+
+final class _MessageRow extends _TimelineRow {
+  const _MessageRow(this.message);
+
+  final ChatMessageViewModel message;
+}
+
+final class _DateRow extends _TimelineRow {
+  const _DateRow(this.date);
+
+  final DateTime date;
+}
+
+final class _UnreadRow extends _TimelineRow {
+  const _UnreadRow();
+}
+
+final class _ReadingAnchor {
+  const _ReadingAnchor(this.messageId, this.globalTop);
+
+  final String messageId;
+  final double globalTop;
+}
+
+class ChatMessageBuilder extends StatelessWidget {
+  const ChatMessageBuilder({
+    required this.message,
+    required this.highlighted,
+    required this.onIntent,
+    required this.onJumpToReply,
+    super.key,
+  });
+
+  final ChatMessageViewModel message;
+  final bool highlighted;
+  final ChatIntentCallback onIntent;
+  final ValueChanged<String> onJumpToReply;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.tokens.colors;
+    final strings = AppLocalizations.of(context);
+    final stateLabel = _deliveryLabel(strings, message.delivery);
+    final semanticLabel = strings.chatMessageSemantics(
+      message.authorName,
+      message.deleted
+          ? strings.chatDeletedMessage
+          : message.kind == ChatTimelineContentKind.unsupported
+          ? strings.chatUnsupportedMessage
+          : message.text ?? '',
+      stateLabel,
+    );
+    final bubble = Semantics(
+      container: true,
+      button: true,
+      label: semanticLabel,
+      customSemanticsActions: {
+        CustomSemanticsAction(label: strings.chatReplyAction): () =>
+            onIntent(ReplyToMessageIntent(message)),
+        CustomSemanticsAction(label: strings.chatMessageActionsLabel): () =>
+            _showActions(context),
+      },
+      child: FocusableActionDetector(
+        shortcuts: const {
+          SingleActivator(LogicalKeyboardKey.enter): ActivateIntent(),
+          SingleActivator(LogicalKeyboardKey.f10, shift: true):
+              _OpenMessageMenuIntent(),
+        },
+        actions: {
+          ActivateIntent: CallbackAction<ActivateIntent>(
+            onInvoke: (_) {
+              unawaited(_showActions(context));
+              return null;
+            },
+          ),
+          _OpenMessageMenuIntent: CallbackAction<_OpenMessageMenuIntent>(
+            onInvoke: (_) {
+              unawaited(_showActions(context));
+              return null;
+            },
+          ),
+        },
+        child: GestureDetector(
+          onLongPress: () => unawaited(_showActions(context)),
+          onSecondaryTapUp: (_) => unawaited(_showActions(context)),
+          child: AnimatedContainer(
+            key: ValueKey('message-${message.id}'),
+            duration: AppMotion.effective(context, AppMotion.state),
+            curve: AppMotion.enter,
+            margin: EdgeInsetsDirectional.only(
+              start: message.outgoing ? AppSpacing.x12 : 0,
+              end: message.outgoing ? 0 : AppSpacing.x12,
+              top: message.firstInAuthorGroup ? AppSpacing.x3 : AppSpacing.x1,
+              bottom: message.lastInAuthorGroup ? AppSpacing.x2 : AppSpacing.x1,
+            ),
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.x3,
+              vertical: AppSpacing.x2,
+            ),
+            decoration: BoxDecoration(
+              color: message.outgoing ? colors.accentSoft : colors.surface,
+              border: Border.all(
+                color: highlighted
+                    ? colors.accent
+                    : message.delivery == ChatDeliveryViewState.failed
+                    ? colors.danger
+                    : colors.border,
+                width: highlighted ? 3 : 1,
+              ),
+              borderRadius: _bubbleRadius(message),
+            ),
+            child: _content(context),
+          ),
+        ),
+      ),
+    );
+    return Align(
+      alignment: message.outgoing
+          ? AlignmentDirectional.centerEnd
+          : AlignmentDirectional.centerStart,
+      child: FractionallySizedBox(
+        widthFactor:
+            AppBreakpoints.of(MediaQuery.sizeOf(context).width) ==
+                AppWidthClass.narrow
+            ? 0.82
+            : 0.70,
+        child: bubble,
+      ),
+    );
+  }
+
+  Widget _content(BuildContext context) {
+    final strings = AppLocalizations.of(context);
+    final colors = context.tokens.colors;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (message.firstInAuthorGroup && !message.outgoing)
+          Padding(
+            padding: const EdgeInsets.only(bottom: AppSpacing.x1),
+            child: Text(
+              message.authorName,
+              style: context.tokens.typography.label.copyWith(
+                color: colors.accent,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        if (message.replyQuote != null)
+          InkWell(
+            onTap: message.replyToMessageId == null
+                ? null
+                : () => onJumpToReply(message.replyToMessageId!),
+            child: Container(
+              margin: const EdgeInsets.only(bottom: AppSpacing.x2),
+              padding: const EdgeInsetsDirectional.only(
+                start: AppSpacing.x2,
+                top: AppSpacing.x1,
+                bottom: AppSpacing.x1,
+              ),
+              decoration: BoxDecoration(
+                border: BorderDirectional(
+                  start: BorderSide(color: colors.accent, width: 3),
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    message.replyAuthor ?? strings.chatReplyQuote,
+                    style: context.tokens.typography.label.copyWith(
+                      color: colors.accent,
+                    ),
+                  ),
+                  Text(
+                    message.replyQuote!,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: context.tokens.typography.compact,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        switch (message.kind) {
+          ChatTimelineContentKind.text => Text(
+            message.deleted ? strings.chatDeletedMessage : message.text ?? '',
+            textDirection: _contentDirection(message.text),
+            style: context.tokens.typography.body.copyWith(
+              color: message.deleted ? colors.textMuted : colors.textPrimary,
+              fontStyle: message.deleted ? FontStyle.italic : FontStyle.normal,
+            ),
+          ),
+          ChatTimelineContentKind.system => _SystemMessageContent(
+            text: message.text ?? strings.chatSystemMessage,
+          ),
+          ChatTimelineContentKind.unsupported =>
+            const _UnsupportedMessageContent(),
+        },
+        if (message.reactions.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: AppSpacing.x2),
+            child: Wrap(
+              spacing: AppSpacing.x1,
+              runSpacing: AppSpacing.x1,
+              children: [
+                for (final reaction in message.reactions)
+                  _ReactionChip(
+                    reaction: reaction,
+                    onPressed: () => onIntent(
+                      SetReactionIntent(
+                        messageId: message.id,
+                        emoji: reaction.selectedByCurrentUser
+                            ? null
+                            : reaction.emoji,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        const SizedBox(height: AppSpacing.x1),
+        Wrap(
+          alignment: WrapAlignment.end,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          spacing: AppSpacing.x1,
+          children: [
+            if (message.pinned)
+              AppIcon(AppIcons.pin, color: colors.textMuted, size: 14),
+            if (message.starred)
+              AppIcon(AppIcons.star, color: colors.warning, size: 14),
+            if (message.edited)
+              Text(
+                strings.chatEditedLabel,
+                style: context.tokens.typography.label.copyWith(
+                  color: colors.textMuted,
+                ),
+              ),
+            if (message.timestampSkewed)
+              Tooltip(
+                message: strings.chatTimestampSkewed,
+                child: AppIcon(
+                  AppIcons.warning,
+                  color: colors.warning,
+                  size: 14,
+                ),
+              ),
+            Text(
+              MaterialLocalizations.of(
+                context,
+              ).formatTimeOfDay(TimeOfDay.fromDateTime(message.timestamp)),
+              style: context.tokens.typography.label.copyWith(
+                color: colors.textMuted,
+              ),
+            ),
+            _DeliveryIndicator(state: message.delivery),
+          ],
+        ),
+        if (message.delivery == ChatDeliveryViewState.failed)
+          Align(
+            alignment: AlignmentDirectional.centerEnd,
+            child: TextButton.icon(
+              onPressed: () => onIntent(RetryMessageIntent(message)),
+              icon: AppIcon(AppIcons.retry, color: colors.danger, size: 16),
+              label: Text(strings.chatRetrySendAction),
+              style: TextButton.styleFrom(foregroundColor: colors.danger),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Future<void> _showActions(BuildContext context) async {
+    final strings = AppLocalizations.of(context);
+    await showAppSheet<void>(
+      context: context,
+      semanticLabel: strings.chatMessageActionsLabel,
+      child: SafeArea(
+        top: false,
+        child: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _MessageAction(
+                label: strings.chatReplyAction,
+                icon: AppIcons.reply,
+                onPressed: () {
+                  Navigator.pop(context);
+                  onIntent(ReplyToMessageIntent(message));
+                },
+              ),
+              _MessageAction(
+                label: strings.chatReactAction,
+                icon: AppIcons.emoji,
+                onPressed: () {
+                  Navigator.pop(context);
+                  onIntent(
+                    SetReactionIntent(messageId: message.id, emoji: '👍'),
+                  );
+                },
+              ),
+              if (message.canEdit)
+                _MessageAction(
+                  label: strings.chatEditAction,
+                  icon: AppIcons.edit,
+                  onPressed: () {
+                    Navigator.pop(context);
+                    onIntent(BeginEditMessageIntent(message));
+                  },
+                ),
+              if (!message.deleted && message.text?.trim().isNotEmpty == true)
+                _MessageAction(
+                  label: strings.chatForwardAction,
+                  icon: AppIcons.forward,
+                  onPressed: () {
+                    Navigator.pop(context);
+                    onIntent(ForwardMessageIntent(message));
+                  },
+                ),
+              if (!message.deleted && message.text != null)
+                _MessageAction(
+                  label: strings.chatCopyAction,
+                  icon: AppIcons.copy,
+                  onPressed: () {
+                    Navigator.pop(context);
+                    onIntent(CopyMessageIntent(message.text!));
+                  },
+                ),
+              _MessageAction(
+                label: message.starred
+                    ? strings.chatUnstarAction
+                    : strings.chatStarAction,
+                icon: AppIcons.star,
+                onPressed: () {
+                  Navigator.pop(context);
+                  onIntent(
+                    SetStarIntent(
+                      messageId: message.id,
+                      starred: !message.starred,
+                    ),
+                  );
+                },
+              ),
+              _MessageAction(
+                label: message.pinned
+                    ? strings.chatUnpinAction
+                    : strings.chatPinAction,
+                icon: AppIcons.pin,
+                onPressed: () {
+                  Navigator.pop(context);
+                  onIntent(
+                    SetPinIntent(
+                      messageId: message.id,
+                      pinned: !message.pinned,
+                    ),
+                  );
+                },
+              ),
+              _MessageAction(
+                label: strings.chatDeleteAction,
+                icon: AppIcons.delete,
+                danger: true,
+                onPressed: () {
+                  Navigator.pop(context);
+                  unawaited(_showDeleteDialog(context));
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showDeleteDialog(BuildContext context) async {
+    final strings = AppLocalizations.of(context);
+    await showAppDialog<void>(
+      context: context,
+      title: strings.chatDeleteTitle,
+      body: strings.chatDeleteHonestMessage,
+      actions: [
+        AppButton(
+          label: strings.chatCancelAction,
+          kind: AppButtonKind.ghost,
+          onPressed: () => Navigator.pop(context),
+        ),
+        AppButton(
+          label: strings.chatDeleteForMeAction,
+          kind: AppButtonKind.outline,
+          onPressed: () {
+            Navigator.pop(context);
+            onIntent(DeleteForMeIntent(message.id));
+          },
+        ),
+        if (message.canDeleteForEveryone)
+          AppButton(
+            label: strings.chatDeleteForEveryoneAction,
+            kind: AppButtonKind.danger,
+            onPressed: () {
+              Navigator.pop(context);
+              onIntent(DeleteForEveryoneIntent(message.id));
+            },
+          ),
+      ],
+    );
+  }
+}
+
+class ChatComposerBuilder extends StatefulWidget {
+  const ChatComposerBuilder({
+    required this.securityGate,
+    required this.offline,
+    required this.savedMessages,
+    required this.onIntent,
+    this.initialDraft,
+    super.key,
+  });
+
+  final ChatSecurityGate securityGate;
+  final bool offline;
+  final bool savedMessages;
+  final String? initialDraft;
+  final ChatIntentCallback onIntent;
+
+  @override
+  State<ChatComposerBuilder> createState() => ChatComposerBuilderState();
+}
+
+class ChatComposerBuilderState extends State<ChatComposerBuilder> {
+  late final TextEditingController _controller;
+  final FocusNode _focusNode = FocusNode();
+  ChatComposerMode _mode = ChatComposerMode.compose;
+  ChatMessageViewModel? _contextMessage;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.initialDraft)
+      ..addListener(_onTextChanged);
+  }
+
+  @override
+  void dispose() {
+    _controller
+      ..removeListener(_onTextChanged)
+      ..dispose();
+    _focusNode.dispose();
+    super.dispose();
+  }
+
+  void handleIntent(ChatIntent intent) {
+    switch (intent) {
+      case ReplyToMessageIntent(:final message):
+        setState(() {
+          _mode = ChatComposerMode.reply;
+          _contextMessage = message;
+        });
+        _focusNode.requestFocus();
+      case BeginEditMessageIntent(:final message):
+        setState(() {
+          _mode = ChatComposerMode.edit;
+          _contextMessage = message;
+          _controller.text = message.text ?? '';
+          _controller.selection = TextSelection.collapsed(
+            offset: _controller.text.length,
+          );
+        });
+        _focusNode.requestFocus();
+      default:
+        break;
+    }
+  }
+
+  void _onTextChanged() {
+    if (mounted) setState(() {});
+    widget.onIntent(
+      SaveDraftIntent(
+        _controller.text.trim().isEmpty ? null : _controller.text,
+      ),
+    );
+  }
+
+  void _cancelContext() {
+    setState(() {
+      _mode = ChatComposerMode.compose;
+      _contextMessage = null;
+      _controller.clear();
+    });
+  }
+
+  void _submit() {
+    final text = _controller.text.trim();
+    if (text.isEmpty || widget.securityGate != ChatSecurityGate.ready) return;
+    final contextMessage = _contextMessage;
+    if (_mode == ChatComposerMode.edit && contextMessage != null) {
+      widget.onIntent(
+        EditMessageIntent(messageId: contextMessage.id, text: text),
+      );
+    } else {
+      widget.onIntent(
+        SendTextIntent(
+          text: text,
+          replyToMessageId: _mode == ChatComposerMode.reply
+              ? contextMessage?.id
+              : null,
+          quoteFallback: _mode == ChatComposerMode.reply
+              ? contextMessage?.text
+              : null,
+        ),
+      );
+    }
+    setState(() {
+      _controller.clear();
+      _mode = ChatComposerMode.compose;
+      _contextMessage = null;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final strings = AppLocalizations.of(context);
+    if (widget.securityGate != ChatSecurityGate.ready) {
+      return _WithheldComposer(gate: widget.securityGate);
+    }
+    return Material(
+      color: context.tokens.colors.surface,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          border: Border(top: BorderSide(color: context.tokens.colors.border)),
+        ),
+        child: SafeArea(
+          top: false,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (widget.offline)
+                Semantics(
+                  liveRegion: true,
+                  child: Container(
+                    width: double.infinity,
+                    color: context.tokens.colors.warning.withValues(
+                      alpha: 0.14,
+                    ),
+                    padding: const EdgeInsets.all(AppSpacing.x2),
+                    child: Text(
+                      strings.chatOfflineQueueNotice,
+                      style: context.tokens.typography.compact,
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                ),
+              if (_contextMessage != null)
+                _ComposerContextStrip(
+                  mode: _mode,
+                  message: _contextMessage!,
+                  onCancel: _cancelContext,
+                ),
+              Padding(
+                padding: const EdgeInsets.all(AppSpacing.x2),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    AppIconButton(
+                      icon: AppIcons.attach,
+                      semanticLabel: strings.chatAttachAction,
+                      onPressed: () =>
+                          widget.onIntent(const OpenAttachmentIntent()),
+                      kind: AppButtonKind.ghost,
+                    ),
+                    Expanded(
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxHeight: 144),
+                        child: TextField(
+                          key: const ValueKey('chat-composer-field'),
+                          controller: _controller,
+                          focusNode: _focusNode,
+                          minLines: 1,
+                          maxLines: 6,
+                          textInputAction: TextInputAction.newline,
+                          keyboardType: TextInputType.multiline,
+                          maxLength: 16384,
+                          buildCounter:
+                              (
+                                context, {
+                                required currentLength,
+                                required isFocused,
+                                maxLength,
+                              }) => currentLength > 15000
+                              ? Text(
+                                  '$currentLength / $maxLength',
+                                  style: context.tokens.typography.label,
+                                )
+                              : null,
+                          decoration: InputDecoration(
+                            hintText: widget.savedMessages
+                                ? strings.savedMessagesComposerHint
+                                : strings.chatComposerHint,
+                            filled: true,
+                            fillColor: context.tokens.colors.surfaceRaised,
+                            border: const OutlineInputBorder(
+                              borderRadius: AppRadii.control,
+                              borderSide: BorderSide.none,
+                            ),
+                          ),
+                          onSubmitted: (_) {
+                            if (HardwareKeyboard.instance.isControlPressed) {
+                              _submit();
+                            }
+                          },
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: AppSpacing.x1),
+                    if (_controller.text.trim().isEmpty)
+                      AppIconButton(
+                        icon: AppIcons.emoji,
+                        semanticLabel: strings.chatEmojiAction,
+                        onPressed: _insertEmoji,
+                        kind: AppButtonKind.ghost,
+                      )
+                    else
+                      AppIconButton(
+                        icon: AppIcons.send,
+                        semanticLabel: _mode == ChatComposerMode.edit
+                            ? strings.chatSaveEditAction
+                            : strings.chatSendAction,
+                        onPressed: _submit,
+                        kind: AppButtonKind.primary,
+                      ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _insertEmoji() {
+    final selection = _controller.selection;
+    final offset = selection.isValid
+        ? selection.start
+        : _controller.text.length;
+    final next = _controller.text.replaceRange(offset, offset, '🙂');
+    _controller.value = TextEditingValue(
+      text: next,
+      selection: TextSelection.collapsed(offset: offset + 2),
+    );
+  }
+}
+
+class _OpenMessageMenuIntent extends Intent {
+  const _OpenMessageMenuIntent();
+}
+
+class _MessageAction extends StatelessWidget {
+  const _MessageAction({
+    required this.label,
+    required this.icon,
+    required this.onPressed,
+    this.danger = false,
+  });
+
+  final String label;
+  final AppIconData icon;
+  final VoidCallback onPressed;
+  final bool danger;
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    button: true,
+    label: label,
+    child: ListTile(
+      minTileHeight: AppFocus.minimumTarget,
+      leading: AppIcon(
+        icon,
+        color: danger
+            ? context.tokens.colors.danger
+            : context.tokens.colors.textPrimary,
+      ),
+      title: Text(
+        label,
+        style: context.tokens.typography.body.copyWith(
+          color: danger
+              ? context.tokens.colors.danger
+              : context.tokens.colors.textPrimary,
+        ),
+      ),
+      onTap: onPressed,
+    ),
+  );
+}
+
+class _ReactionChip extends StatelessWidget {
+  const _ReactionChip({required this.reaction, required this.onPressed});
+
+  final ChatReactionViewModel reaction;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    button: true,
+    selected: reaction.selectedByCurrentUser,
+    label: AppLocalizations.of(
+      context,
+    ).chatReactionSemantics(reaction.emoji, reaction.count),
+    child: Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onPressed,
+        borderRadius: AppRadii.pill,
+        child: Container(
+          constraints: const BoxConstraints(minHeight: 32, minWidth: 40),
+          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.x2),
+          decoration: BoxDecoration(
+            color: reaction.selectedByCurrentUser
+                ? context.tokens.colors.accentSoft
+                : context.tokens.colors.surfaceRaised,
+            border: Border.all(
+              color: reaction.selectedByCurrentUser
+                  ? context.tokens.colors.accent
+                  : context.tokens.colors.border,
+            ),
+            borderRadius: AppRadii.pill,
+          ),
+          alignment: Alignment.center,
+          child: Text('${reaction.emoji} ${reaction.count}'),
+        ),
+      ),
+    ),
+  );
+}
+
+class _DeliveryIndicator extends StatelessWidget {
+  const _DeliveryIndicator({required this.state});
+
+  final ChatDeliveryViewState state;
+
+  @override
+  Widget build(BuildContext context) {
+    if (state == ChatDeliveryViewState.received) {
+      return const SizedBox.shrink();
+    }
+    final strings = AppLocalizations.of(context);
+    final (icon, color) = switch (state) {
+      ChatDeliveryViewState.localOnly => (
+        AppIcons.saved,
+        context.tokens.colors.textMuted,
+      ),
+      ChatDeliveryViewState.queued => (
+        AppIcons.offlineQueue,
+        context.tokens.colors.warning,
+      ),
+      ChatDeliveryViewState.encrypting => (
+        AppIcons.security,
+        context.tokens.colors.warning,
+      ),
+      ChatDeliveryViewState.sending => (
+        AppIcons.clock,
+        context.tokens.colors.textMuted,
+      ),
+      ChatDeliveryViewState.accepted => (
+        AppIcons.accepted,
+        context.tokens.colors.textMuted,
+      ),
+      ChatDeliveryViewState.delivered => (
+        AppIcons.delivered,
+        context.tokens.colors.success,
+      ),
+      ChatDeliveryViewState.read => (
+        AppIcons.delivered,
+        context.tokens.colors.accent,
+      ),
+      ChatDeliveryViewState.failed => (
+        AppIcons.error,
+        context.tokens.colors.danger,
+      ),
+      ChatDeliveryViewState.received => (
+        AppIcons.info,
+        context.tokens.colors.textMuted,
+      ),
+    };
+    final label = _deliveryLabel(strings, state);
+    return Tooltip(
+      message: label,
+      child: AppIcon(
+        icon,
+        color: color,
+        size: 15,
+        decorative: false,
+        semanticLabel: label,
+      ),
+    );
+  }
+}
+
+class _DateSeparator extends StatelessWidget {
+  const _DateSeparator({required this.date});
+
+  final DateTime date;
+
+  @override
+  Widget build(BuildContext context) {
+    final label = MaterialLocalizations.of(context).formatMediumDate(date);
+    return Semantics(
+      header: true,
+      label: label,
+      child: Center(
+        child: Container(
+          margin: const EdgeInsets.symmetric(vertical: AppSpacing.x3),
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.x3,
+            vertical: AppSpacing.x1,
+          ),
+          decoration: BoxDecoration(
+            color: context.tokens.colors.surfaceRaised,
+            borderRadius: AppRadii.pill,
+          ),
+          child: Text(label, style: context.tokens.typography.label),
+        ),
+      ),
+    );
+  }
+}
+
+class _UnreadDivider extends StatelessWidget {
+  const _UnreadDivider();
+
+  @override
+  Widget build(BuildContext context) {
+    final label = AppLocalizations.of(context).chatUnreadDivider;
+    return Semantics(
+      header: true,
+      liveRegion: true,
+      label: label,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: AppSpacing.x3),
+        child: Row(
+          children: [
+            Expanded(child: Divider(color: context.tokens.colors.accent)),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.x2),
+              child: Text(
+                label,
+                style: context.tokens.typography.label.copyWith(
+                  color: context.tokens.colors.accent,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            Expanded(child: Divider(color: context.tokens.colors.accent)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PaginationMarker extends StatelessWidget {
+  const _PaginationMarker({
+    required this.hasMore,
+    required this.loading,
+    required this.failed,
+    required this.onLoad,
+  });
+
+  final bool hasMore;
+  final bool loading;
+  final bool failed;
+  final VoidCallback onLoad;
+
+  @override
+  Widget build(BuildContext context) {
+    final strings = AppLocalizations.of(context);
+    if (loading) {
+      return Padding(
+        padding: const EdgeInsets.all(AppSpacing.x4),
+        child: Center(
+          child: Semantics(
+            label: strings.chatLoadingOlder,
+            child: const SizedBox.square(
+              dimension: 24,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+          ),
+        ),
+      );
+    }
+    if (failed) {
+      return Padding(
+        padding: const EdgeInsets.all(AppSpacing.x4),
+        child: AppButton(
+          label: strings.chatOlderErrorAction,
+          onPressed: onLoad,
+          leading: AppIcons.retry,
+          kind: AppButtonKind.outline,
+        ),
+      );
+    }
+    if (!hasMore) {
+      return Semantics(
+        label: strings.chatBeginningOfHistory,
+        child: const SizedBox(height: AppSpacing.x4),
+      );
+    }
+    return Padding(
+      padding: const EdgeInsets.all(AppSpacing.x2),
+      child: TextButton(
+        onPressed: onLoad,
+        child: Text(strings.chatLoadOlderAction),
+      ),
+    );
+  }
+}
+
+class _ComposerContextStrip extends StatelessWidget {
+  const _ComposerContextStrip({
+    required this.mode,
+    required this.message,
+    required this.onCancel,
+  });
+
+  final ChatComposerMode mode;
+  final ChatMessageViewModel message;
+  final VoidCallback onCancel;
+
+  @override
+  Widget build(BuildContext context) {
+    final strings = AppLocalizations.of(context);
+    final label = mode == ChatComposerMode.edit
+        ? strings.chatEditingMessage
+        : strings.chatReplyingTo(message.authorName);
+    return Semantics(
+      container: true,
+      label: label,
+      child: Container(
+        width: double.infinity,
+        color: context.tokens.colors.surfaceRaised,
+        padding: const EdgeInsetsDirectional.only(
+          start: AppSpacing.x4,
+          top: AppSpacing.x2,
+          bottom: AppSpacing.x2,
+        ),
+        child: Row(
+          children: [
+            AppIcon(
+              mode == ChatComposerMode.edit ? AppIcons.edit : AppIcons.reply,
+              color: context.tokens.colors.accent,
+              size: 18,
+            ),
+            const SizedBox(width: AppSpacing.x2),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    label,
+                    style: context.tokens.typography.label.copyWith(
+                      color: context.tokens.colors.accent,
+                    ),
+                  ),
+                  Text(
+                    message.text ?? strings.chatDeletedMessage,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: context.tokens.typography.compact,
+                  ),
+                ],
+              ),
+            ),
+            AppIconButton(
+              icon: AppIcons.close,
+              semanticLabel: strings.chatCancelContextAction,
+              onPressed: onCancel,
+              kind: AppButtonKind.ghost,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _WithheldComposer extends StatelessWidget {
+  const _WithheldComposer({required this.gate});
+
+  final ChatSecurityGate gate;
+
+  @override
+  Widget build(BuildContext context) {
+    final strings = AppLocalizations.of(context);
+    final message = switch (gate) {
+      ChatSecurityGate.ready => '',
+      ChatSecurityGate.unverifiedIdentity =>
+        strings.chatWithheldUnverifiedIdentity,
+      ChatSecurityGate.unverifiedDevice => strings.chatWithheldUnverifiedDevice,
+      ChatSecurityGate.masterKeyChanged => strings.chatWithheldMasterChanged,
+      ChatSecurityGate.deviceLogFork => strings.chatWithheldLogFork,
+      ChatSecurityGate.postQuantumUnavailable => strings.chatWithheldPq,
+    };
+    return Semantics(
+      container: true,
+      liveRegion: true,
+      label: message,
+      child: Material(
+        color: context.tokens.colors.surface,
+        child: SafeArea(
+          top: false,
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(AppSpacing.x4),
+            decoration: BoxDecoration(
+              border: Border(
+                top: BorderSide(color: context.tokens.colors.danger),
+              ),
+            ),
+            child: Row(
+              children: [
+                AppIcon(AppIcons.security, color: context.tokens.colors.danger),
+                const SizedBox(width: AppSpacing.x3),
+                Expanded(
+                  child: Text(
+                    message,
+                    style: context.tokens.typography.compact.copyWith(
+                      color: context.tokens.colors.danger,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SystemMessageContent extends StatelessWidget {
+  const _SystemMessageContent({required this.text});
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) => Row(
+    mainAxisAlignment: MainAxisAlignment.center,
+    children: [
+      AppIcon(AppIcons.info, color: context.tokens.colors.textMuted, size: 16),
+      const SizedBox(width: AppSpacing.x2),
+      Flexible(
+        child: Text(
+          text,
+          textAlign: TextAlign.center,
+          style: context.tokens.typography.compact.copyWith(
+            color: context.tokens.colors.textMuted,
+          ),
+        ),
+      ),
+    ],
+  );
+}
+
+class _UnsupportedMessageContent extends StatelessWidget {
+  const _UnsupportedMessageContent();
+
+  @override
+  Widget build(BuildContext context) {
+    final label = AppLocalizations.of(context).chatUnsupportedMessage;
+    return Row(
+      children: [
+        AppIcon(AppIcons.unsupported, color: context.tokens.colors.warning),
+        const SizedBox(width: AppSpacing.x2),
+        Expanded(child: Text(label, style: context.tokens.typography.compact)),
+      ],
+    );
+  }
+}
+
+BorderRadius _bubbleRadius(ChatMessageViewModel message) {
+  const regular = Radius.circular(20);
+  const grouped = Radius.circular(8);
+  if (!message.lastInAuthorGroup) return AppRadii.message;
+  return message.outgoing
+      ? const BorderRadius.only(
+          topLeft: regular,
+          topRight: regular,
+          bottomLeft: regular,
+          bottomRight: grouped,
+        )
+      : const BorderRadius.only(
+          topLeft: regular,
+          topRight: regular,
+          bottomLeft: grouped,
+          bottomRight: regular,
+        );
+}
+
+TextDirection? _contentDirection(String? text) {
+  if (text == null || text.isEmpty) return null;
+  final firstStrong = RegExp(
+    r'[\u0590-\u08ff]|[A-Za-z]',
+  ).firstMatch(text)?.group(0);
+  if (firstStrong == null) return null;
+  return RegExp(r'[\u0590-\u08ff]').hasMatch(firstStrong)
+      ? TextDirection.rtl
+      : TextDirection.ltr;
+}
+
+String _deliveryLabel(AppLocalizations strings, ChatDeliveryViewState state) =>
+    switch (state) {
+      ChatDeliveryViewState.localOnly => strings.chatStateLocalOnly,
+      ChatDeliveryViewState.queued => strings.chatStateQueued,
+      ChatDeliveryViewState.encrypting => strings.chatStateEncrypting,
+      ChatDeliveryViewState.sending => strings.chatStateSending,
+      ChatDeliveryViewState.accepted => strings.chatStateAccepted,
+      ChatDeliveryViewState.delivered => strings.chatStateDelivered,
+      ChatDeliveryViewState.read => strings.chatStateRead,
+      ChatDeliveryViewState.failed => strings.chatStateFailed,
+      ChatDeliveryViewState.received => strings.chatStateReceived,
+    };

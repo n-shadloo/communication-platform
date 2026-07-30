@@ -53,7 +53,7 @@ preserves the selected conversation, scroll anchor, draft, and active modal inte
 - Sensitive images/text never appear in blurred app-switcher/notification previews when
   privacy mode is enabled.
 
-## Flyer Chat customization
+## Timeline customization and Flyer boundary
 
 Use `ChatTheme` for shared baseline tokens, default-widget parameters for small changes,
 and builders for:
@@ -69,6 +69,22 @@ and builders for:
 Builders are pure presentation. They receive mapped immutable view models and dispatch
 typed intents. They do not decrypt, call APIs, write Drift, or contain synchronization
 logic.
+
+Piece 15 tested the pinned `flutter_chat_ui` 2.11.1 surface on 2026-07-30. Its
+`Chat`/`ChatAnimatedList` update path requires a mutable `ChatController`, which would
+duplicate application state, and did not provide an app-owned proof for anchor
+restoration after arbitrary row-size and accessibility changes. Under the documented
+replacement rule, only `ChatTimelineAdapter` uses the custom reversed sliver
+implementation. Flyer remains isolated behind that replaceable boundary; no Flyer model
+or controller owns domain state. App builders consume immutable
+`ChatTimelineViewModel`/`ChatMessageViewModel` values and dispatch typed `ChatIntent`
+values.
+
+The replacement adapter is verified for upward pagination, jump-to-message, dynamic
+edit/reaction/viewport sizing, mixed directionality, keyboard and screen-reader
+semantics, reduced motion, and a 50,000-message fixture with a bounded mounted-widget
+count. Attachment/media builders may be added in piece 16 without changing this
+boundary; the size-notification anchor path is shared by every row builder.
 
 ## Screen checklist
 

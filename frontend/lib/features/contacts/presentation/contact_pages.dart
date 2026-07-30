@@ -164,7 +164,7 @@ class _ContactsNewPageState extends ConsumerState<ContactsNewPage> {
               for (final contact in shown)
                 _ContactRow(
                   contact: contact,
-                  onTap: () => context.push('/contacts/${contact.userId}'),
+                  onTap: () => context.push('/chats/direct/${contact.userId}'),
                 ),
               if (shown.length < filtered.length)
                 Padding(

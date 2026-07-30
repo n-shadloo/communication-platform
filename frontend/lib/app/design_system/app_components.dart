@@ -307,9 +307,12 @@ Future<T?> showAppSheet<T>({
         color: context.tokens.colors.surface,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(18)),
       ),
-      child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.x6),
-        child: child,
+      child: Material(
+        type: MaterialType.transparency,
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpacing.x6),
+          child: child,
+        ),
       ),
     ),
   ),
@@ -359,49 +362,62 @@ class AppStatePanel extends StatelessWidget {
     return Semantics(
       container: true,
       liveRegion: kind != AppStateKind.empty,
-      child: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 440),
-          child: Padding(
-            padding: const EdgeInsets.all(AppSpacing.x6),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (kind == AppStateKind.loading)
-                  FCircularProgress(
-                    size: FCircularProgressSizeVariant.xl,
-                    semanticsLabel: title,
-                  )
-                else
-                  AppIcon(icon!, color: color, size: 32),
-                const SizedBox(height: AppSpacing.x4),
-                Text(
-                  title,
-                  style: context.tokens.typography.section,
-                  textAlign: TextAlign.center,
+      child: LayoutBuilder(
+        builder: (context, constraints) => SingleChildScrollView(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              minHeight: constraints.hasBoundedHeight
+                  ? constraints.maxHeight
+                  : 0,
+            ),
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 440),
+                child: Padding(
+                  padding: const EdgeInsets.all(AppSpacing.x6),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (kind == AppStateKind.loading)
+                        FCircularProgress(
+                          size: FCircularProgressSizeVariant.xl,
+                          semanticsLabel: title,
+                        )
+                      else
+                        AppIcon(icon!, color: color, size: 32),
+                      const SizedBox(height: AppSpacing.x4),
+                      Text(
+                        title,
+                        style: context.tokens.typography.section,
+                        textAlign: TextAlign.center,
+                      ),
+                      if (message != null) ...[
+                        const SizedBox(height: AppSpacing.x2),
+                        Text(
+                          message!,
+                          style: context.tokens.typography.body.copyWith(
+                            color: context.tokens.colors.textMuted,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      ],
+                      if (actionLabel != null && onAction != null) ...[
+                        const SizedBox(height: AppSpacing.x6),
+                        AppButton(
+                          label: actionLabel!,
+                          onPressed: onAction,
+                          kind: kind == AppStateKind.error
+                              ? AppButtonKind.outline
+                              : AppButtonKind.primary,
+                          leading: kind == AppStateKind.error
+                              ? AppIcons.retry
+                              : null,
+                        ),
+                      ],
+                    ],
+                  ),
                 ),
-                if (message != null) ...[
-                  const SizedBox(height: AppSpacing.x2),
-                  Text(
-                    message!,
-                    style: context.tokens.typography.body.copyWith(
-                      color: context.tokens.colors.textMuted,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                ],
-                if (actionLabel != null && onAction != null) ...[
-                  const SizedBox(height: AppSpacing.x6),
-                  AppButton(
-                    label: actionLabel!,
-                    onPressed: onAction,
-                    kind: kind == AppStateKind.error
-                        ? AppButtonKind.outline
-                        : AppButtonKind.primary,
-                    leading: kind == AppStateKind.error ? AppIcons.retry : null,
-                  ),
-                ],
-              ],
+              ),
             ),
           ),
         ),

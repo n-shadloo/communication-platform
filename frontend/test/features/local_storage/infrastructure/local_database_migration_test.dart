@@ -260,6 +260,45 @@ void main() {
       expect(version, 0);
     },
   );
+
+  test('version-five upgrade adds piece-fifteen local flags safely', () async {
+    final current = LocalDatabase(NativeDatabase(databaseFile));
+    await current.customSelect('SELECT 1').getSingle();
+    await current.customStatement(
+      "INSERT INTO conversations "
+      "(conversation_id, kind, list_projection_ciphertext, sort_key) "
+      "VALUES ('conversation', 0, X'01', 1)",
+    );
+    await current.customStatement(
+      "INSERT INTO messages "
+      "(message_id, conversation_id, current_event_id, "
+      "projection_ciphertext, status, revision, created_at) "
+      "VALUES ('message', 'conversation', 'event', X'01', 0, 0, 0)",
+    );
+    await current.close();
+
+    final versionFive = sqlite3.open(databaseFile.path)
+      ..execute('ALTER TABLE conversations DROP COLUMN pinned')
+      ..execute('ALTER TABLE messages DROP COLUMN starred')
+      ..execute('PRAGMA user_version = 5');
+    versionFive.close();
+
+    final upgraded = LocalDatabase(NativeDatabase(databaseFile));
+    final row = await upgraded
+        .customSelect(
+          "SELECT starred FROM messages WHERE message_id = 'message'",
+        )
+        .getSingle();
+    expect(row.read<int>('starred'), 0);
+    final conversation = await upgraded
+        .customSelect(
+          "SELECT pinned FROM conversations "
+          "WHERE conversation_id = 'conversation'",
+        )
+        .getSingle();
+    expect(conversation.read<int>('pinned'), 0);
+    await upgraded.close();
+  });
 }
 
 void _dropPieceFourteenSchema(Database database) {
@@ -278,6 +317,7 @@ void _dropPieceFourteenSchema(Database database) {
     'unread_count',
     'muted_until',
     'draft_ciphertext',
+    'pinned',
   ]) {
     database.execute('ALTER TABLE conversations DROP COLUMN $column');
   }
@@ -292,6 +332,7 @@ void _dropPieceFourteenSchema(Database database) {
     'deleted_for_everyone',
     'deleted_for_me',
     'pinned',
+    'starred',
     'unread',
   ]) {
     database.execute('ALTER TABLE messages DROP COLUMN $column');

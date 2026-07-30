@@ -1111,6 +1111,618 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Out-of-band comparison is required before confirmation.'**
   String get safetyConfirmationRequired;
+
+  /// No description provided for @chatsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Chats'**
+  String get chatsTitle;
+
+  /// No description provided for @chatsSearchAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Search chats'**
+  String get chatsSearchAction;
+
+  /// No description provided for @chatsSearchHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Search chats and messages on this device'**
+  String get chatsSearchHint;
+
+  /// No description provided for @chatsClearSearchAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear search'**
+  String get chatsClearSearchAction;
+
+  /// No description provided for @chatsLoadingTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Loading chats'**
+  String get chatsLoadingTitle;
+
+  /// No description provided for @chatsErrorTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Chats are unavailable'**
+  String get chatsErrorTitle;
+
+  /// No description provided for @chatsErrorMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'The encrypted local conversation list could not be opened.'**
+  String get chatsErrorMessage;
+
+  /// No description provided for @chatsEmptyTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'No chats yet'**
+  String get chatsEmptyTitle;
+
+  /// No description provided for @chatsEmptyMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Start a verified direct message. Conversations will remain readable offline on this device.'**
+  String get chatsEmptyMessage;
+
+  /// No description provided for @chatsStartAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Start a chat'**
+  String get chatsStartAction;
+
+  /// No description provided for @chatsNoSearchResultsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'No local results'**
+  String get chatsNoSearchResultsTitle;
+
+  /// No description provided for @chatsDeviceSearchScopeNotice.
+  ///
+  /// In en, this message translates to:
+  /// **'Search covers only decrypted history stored on this device. The server never indexes messages.'**
+  String get chatsDeviceSearchScopeNotice;
+
+  /// No description provided for @chatsOfflineCachedNotice.
+  ///
+  /// In en, this message translates to:
+  /// **'Offline — showing cached conversations. New messages will queue locally.'**
+  String get chatsOfflineCachedNotice;
+
+  /// No description provided for @chatsNoMessagesPreview.
+  ///
+  /// In en, this message translates to:
+  /// **'No messages yet'**
+  String get chatsNoMessagesPreview;
+
+  /// No description provided for @chatsConversationActionsLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Conversation actions'**
+  String get chatsConversationActionsLabel;
+
+  /// No description provided for @chatsMuteAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Mute for 8 hours'**
+  String get chatsMuteAction;
+
+  /// No description provided for @chatsUnmuteAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Unmute'**
+  String get chatsUnmuteAction;
+
+  /// No description provided for @chatsMarkReadAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Mark as read'**
+  String get chatsMarkReadAction;
+
+  /// No description provided for @chatsMarkUnreadAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Mark as unread'**
+  String get chatsMarkUnreadAction;
+
+  /// No description provided for @chatsDeleteAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete chat'**
+  String get chatsDeleteAction;
+
+  /// No description provided for @chatsDeleteTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete this chat?'**
+  String get chatsDeleteTitle;
+
+  /// No description provided for @chatsDeleteLocalOnlyMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Clearing a chat removes this device\'s local view only. It does not delete content already received by other devices.'**
+  String get chatsDeleteLocalOnlyMessage;
+
+  /// No description provided for @chatsPinViaMessageNotice.
+  ///
+  /// In en, this message translates to:
+  /// **'Conversation pinning is unavailable in the current local schema. No state was changed.'**
+  String get chatsPinViaMessageNotice;
+
+  /// No description provided for @chatsItemSemantics.
+  ///
+  /// In en, this message translates to:
+  /// **'{title}. {preview}. {unreadCount} unread messages.'**
+  String chatsItemSemantics(String title, String preview, int unreadCount);
+
+  /// No description provided for @chatTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Conversation'**
+  String get chatTitle;
+
+  /// No description provided for @savedMessagesTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Saved Messages'**
+  String get savedMessagesTitle;
+
+  /// No description provided for @savedMessagesEmptyTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing saved yet'**
+  String get savedMessagesEmptyTitle;
+
+  /// No description provided for @savedMessagesEmptyMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Messages here are local to your encrypted self-conversation and never show peer presence or receipts.'**
+  String get savedMessagesEmptyMessage;
+
+  /// No description provided for @savedMessagesComposerHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Write a note to yourself'**
+  String get savedMessagesComposerHint;
+
+  /// No description provided for @chatHistoryLoading.
+  ///
+  /// In en, this message translates to:
+  /// **'Loading encrypted history'**
+  String get chatHistoryLoading;
+
+  /// No description provided for @chatHistoryErrorTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'History is unavailable'**
+  String get chatHistoryErrorTitle;
+
+  /// No description provided for @chatHistoryErrorMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'The encrypted local history could not be read. No server copy exists.'**
+  String get chatHistoryErrorMessage;
+
+  /// No description provided for @chatEmptyTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Start the conversation'**
+  String get chatEmptyTitle;
+
+  /// No description provided for @chatEmptyMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Messages are encrypted on this device before they enter the delivery queue.'**
+  String get chatEmptyMessage;
+
+  /// No description provided for @chatTimelineSemantics.
+  ///
+  /// In en, this message translates to:
+  /// **'Message timeline for {title}'**
+  String chatTimelineSemantics(String title);
+
+  /// No description provided for @chatMessageSemantics.
+  ///
+  /// In en, this message translates to:
+  /// **'{author}: {message}. State: {state}.'**
+  String chatMessageSemantics(String author, String message, String state);
+
+  /// No description provided for @chatMessageActionsLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Message actions'**
+  String get chatMessageActionsLabel;
+
+  /// No description provided for @chatReplyAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Reply'**
+  String get chatReplyAction;
+
+  /// No description provided for @chatReactAction.
+  ///
+  /// In en, this message translates to:
+  /// **'React'**
+  String get chatReactAction;
+
+  /// No description provided for @chatEditAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit'**
+  String get chatEditAction;
+
+  /// No description provided for @chatForwardAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Forward'**
+  String get chatForwardAction;
+
+  /// No description provided for @chatCopyAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy'**
+  String get chatCopyAction;
+
+  /// No description provided for @chatStarAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Star on this device'**
+  String get chatStarAction;
+
+  /// No description provided for @chatUnstarAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove star'**
+  String get chatUnstarAction;
+
+  /// No description provided for @chatPinAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Pin'**
+  String get chatPinAction;
+
+  /// No description provided for @chatUnpinAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Unpin'**
+  String get chatUnpinAction;
+
+  /// No description provided for @chatDeleteAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete'**
+  String get chatDeleteAction;
+
+  /// No description provided for @chatDeleteTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete message?'**
+  String get chatDeleteTitle;
+
+  /// No description provided for @chatDeleteHonestMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete for me removes this device\'s local copy. Delete for everyone is best-effort and cannot force another device to forget content it already received and decrypted.'**
+  String get chatDeleteHonestMessage;
+
+  /// No description provided for @chatDeleteForMeAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete for me'**
+  String get chatDeleteForMeAction;
+
+  /// No description provided for @chatDeleteForEveryoneAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete for everyone'**
+  String get chatDeleteForEveryoneAction;
+
+  /// No description provided for @chatCancelAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel'**
+  String get chatCancelAction;
+
+  /// No description provided for @chatDeletedMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Message deleted'**
+  String get chatDeletedMessage;
+
+  /// No description provided for @chatUnsupportedMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'This message needs a newer supported protocol. Its encrypted record was retained.'**
+  String get chatUnsupportedMessage;
+
+  /// No description provided for @chatSystemMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Conversation update'**
+  String get chatSystemMessage;
+
+  /// No description provided for @chatEditedLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'edited'**
+  String get chatEditedLabel;
+
+  /// No description provided for @chatTimestampSkewed.
+  ///
+  /// In en, this message translates to:
+  /// **'The sender\'s clock appears inaccurate; this time is display-only.'**
+  String get chatTimestampSkewed;
+
+  /// No description provided for @chatReplyQuote.
+  ///
+  /// In en, this message translates to:
+  /// **'Replied message'**
+  String get chatReplyQuote;
+
+  /// No description provided for @chatReactionSemantics.
+  ///
+  /// In en, this message translates to:
+  /// **'{emoji} reaction, {count} people'**
+  String chatReactionSemantics(String emoji, int count);
+
+  /// No description provided for @chatRetrySendAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Retry as a new encrypted send'**
+  String get chatRetrySendAction;
+
+  /// No description provided for @chatUnreadDivider.
+  ///
+  /// In en, this message translates to:
+  /// **'Unread messages'**
+  String get chatUnreadDivider;
+
+  /// No description provided for @chatLoadingOlder.
+  ///
+  /// In en, this message translates to:
+  /// **'Loading older messages'**
+  String get chatLoadingOlder;
+
+  /// No description provided for @chatLoadOlderAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Load older messages'**
+  String get chatLoadOlderAction;
+
+  /// No description provided for @chatOlderErrorAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Older messages could not load — retry'**
+  String get chatOlderErrorAction;
+
+  /// No description provided for @chatBeginningOfHistory.
+  ///
+  /// In en, this message translates to:
+  /// **'Beginning of local history'**
+  String get chatBeginningOfHistory;
+
+  /// No description provided for @chatJumpToLatestAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Jump to latest message'**
+  String get chatJumpToLatestAction;
+
+  /// No description provided for @chatComposerHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Message'**
+  String get chatComposerHint;
+
+  /// No description provided for @chatAttachAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Attach'**
+  String get chatAttachAction;
+
+  /// No description provided for @chatEmojiAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Insert emoji'**
+  String get chatEmojiAction;
+
+  /// No description provided for @chatSendAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Send encrypted message'**
+  String get chatSendAction;
+
+  /// No description provided for @chatSaveEditAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Save encrypted edit'**
+  String get chatSaveEditAction;
+
+  /// No description provided for @chatCancelContextAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel reply or edit'**
+  String get chatCancelContextAction;
+
+  /// No description provided for @chatEditingMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Editing message'**
+  String get chatEditingMessage;
+
+  /// No description provided for @chatReplyingTo.
+  ///
+  /// In en, this message translates to:
+  /// **'Replying to {author}'**
+  String chatReplyingTo(String author);
+
+  /// No description provided for @chatOfflineQueueNotice.
+  ///
+  /// In en, this message translates to:
+  /// **'Offline — sending stores encrypted queue work locally until this server is reachable.'**
+  String get chatOfflineQueueNotice;
+
+  /// No description provided for @chatWithheldUnverifiedIdentity.
+  ///
+  /// In en, this message translates to:
+  /// **'Messaging withheld: verify this identity out of band before sending.'**
+  String get chatWithheldUnverifiedIdentity;
+
+  /// No description provided for @chatWithheldUnverifiedDevice.
+  ///
+  /// In en, this message translates to:
+  /// **'Messaging withheld: an unsigned or invalid device cannot receive messages.'**
+  String get chatWithheldUnverifiedDevice;
+
+  /// No description provided for @chatWithheldMasterChanged.
+  ///
+  /// In en, this message translates to:
+  /// **'Messaging withheld: the contact\'s master key changed and must be verified again.'**
+  String get chatWithheldMasterChanged;
+
+  /// No description provided for @chatWithheldLogFork.
+  ///
+  /// In en, this message translates to:
+  /// **'Messaging withheld: a device-log fork indicates possible server equivocation.'**
+  String get chatWithheldLogFork;
+
+  /// No description provided for @chatWithheldPq.
+  ///
+  /// In en, this message translates to:
+  /// **'Messaging withheld: required ML-KEM post-quantum key material is unavailable. The app will not downgrade.'**
+  String get chatWithheldPq;
+
+  /// No description provided for @chatPinnedBanner.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} pinned messages'**
+  String chatPinnedBanner(int count);
+
+  /// No description provided for @chatPinnedExpandAction.
+  ///
+  /// In en, this message translates to:
+  /// **'View all'**
+  String get chatPinnedExpandAction;
+
+  /// No description provided for @chatPinnedMessagesTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Pinned messages'**
+  String get chatPinnedMessagesTitle;
+
+  /// No description provided for @chatTypingStatus.
+  ///
+  /// In en, this message translates to:
+  /// **'typing… encrypted signal may lag'**
+  String get chatTypingStatus;
+
+  /// No description provided for @chatSocketOnlineStatus.
+  ///
+  /// In en, this message translates to:
+  /// **'online via a subscribed device'**
+  String get chatSocketOnlineStatus;
+
+  /// No description provided for @chatOfflinePresenceStatus.
+  ///
+  /// In en, this message translates to:
+  /// **'offline'**
+  String get chatOfflinePresenceStatus;
+
+  /// No description provided for @chatSearchAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Search in chat'**
+  String get chatSearchAction;
+
+  /// No description provided for @chatSearchInputLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Search local messages'**
+  String get chatSearchInputLabel;
+
+  /// No description provided for @chatSearchEmptyQueryTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Search this device\'s history'**
+  String get chatSearchEmptyQueryTitle;
+
+  /// No description provided for @chatMoreAction.
+  ///
+  /// In en, this message translates to:
+  /// **'More conversation actions'**
+  String get chatMoreAction;
+
+  /// No description provided for @chatYouAuthor.
+  ///
+  /// In en, this message translates to:
+  /// **'You'**
+  String get chatYouAuthor;
+
+  /// No description provided for @chatAttachmentsUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Encrypted attachments are not available in this interface piece yet.'**
+  String get chatAttachmentsUnavailable;
+
+  /// No description provided for @chatActionFailedMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'That action could not be completed. No security guarantee was weakened.'**
+  String get chatActionFailedMessage;
+
+  /// No description provided for @chatStateLocalOnly.
+  ///
+  /// In en, this message translates to:
+  /// **'saved locally only'**
+  String get chatStateLocalOnly;
+
+  /// No description provided for @chatStateQueued.
+  ///
+  /// In en, this message translates to:
+  /// **'queued offline'**
+  String get chatStateQueued;
+
+  /// No description provided for @chatStateEncrypting.
+  ///
+  /// In en, this message translates to:
+  /// **'encrypting'**
+  String get chatStateEncrypting;
+
+  /// No description provided for @chatStateSending.
+  ///
+  /// In en, this message translates to:
+  /// **'sending to server'**
+  String get chatStateSending;
+
+  /// No description provided for @chatStateAccepted.
+  ///
+  /// In en, this message translates to:
+  /// **'accepted by server relay'**
+  String get chatStateAccepted;
+
+  /// No description provided for @chatStateDelivered.
+  ///
+  /// In en, this message translates to:
+  /// **'durably delivered to a recipient device'**
+  String get chatStateDelivered;
+
+  /// No description provided for @chatStateRead.
+  ///
+  /// In en, this message translates to:
+  /// **'read receipt received'**
+  String get chatStateRead;
+
+  /// No description provided for @chatStateFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'send failed'**
+  String get chatStateFailed;
+
+  /// No description provided for @chatStateReceived.
+  ///
+  /// In en, this message translates to:
+  /// **'received'**
+  String get chatStateReceived;
 }
 
 class _AppLocalizationsDelegate

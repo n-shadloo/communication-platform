@@ -7269,6 +7269,19 @@ class $ConversationsTable extends Conversations
     ),
     defaultValue: const Constant(false),
   );
+  static const VerificationMeta _pinnedMeta = const VerificationMeta('pinned');
+  @override
+  late final GeneratedColumn<bool> pinned = GeneratedColumn<bool>(
+    'pinned',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("pinned" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
   static const VerificationMeta _peerUserIdMeta = const VerificationMeta(
     'peerUserId',
   );
@@ -7334,6 +7347,7 @@ class $ConversationsTable extends Conversations
     listProjectionCiphertext,
     sortKey,
     tombstoned,
+    pinned,
     peerUserId,
     lastActivityEventId,
     unreadCount,
@@ -7394,6 +7408,12 @@ class $ConversationsTable extends Conversations
       context.handle(
         _tombstonedMeta,
         tombstoned.isAcceptableOrUnknown(data['tombstoned']!, _tombstonedMeta),
+      );
+    }
+    if (data.containsKey('pinned')) {
+      context.handle(
+        _pinnedMeta,
+        pinned.isAcceptableOrUnknown(data['pinned']!, _pinnedMeta),
       );
     }
     if (data.containsKey('peer_user_id')) {
@@ -7467,6 +7487,10 @@ class $ConversationsTable extends Conversations
         DriftSqlType.bool,
         data['${effectivePrefix}tombstoned'],
       )!,
+      pinned: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}pinned'],
+      )!,
       peerUserId: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}peer_user_id'],
@@ -7502,6 +7526,7 @@ class Conversation extends DataClass implements Insertable<Conversation> {
   final Uint8List listProjectionCiphertext;
   final int sortKey;
   final bool tombstoned;
+  final bool pinned;
   final String? peerUserId;
   final String? lastActivityEventId;
   final int unreadCount;
@@ -7513,6 +7538,7 @@ class Conversation extends DataClass implements Insertable<Conversation> {
     required this.listProjectionCiphertext,
     required this.sortKey,
     required this.tombstoned,
+    required this.pinned,
     this.peerUserId,
     this.lastActivityEventId,
     required this.unreadCount,
@@ -7529,6 +7555,7 @@ class Conversation extends DataClass implements Insertable<Conversation> {
     );
     map['sort_key'] = Variable<int>(sortKey);
     map['tombstoned'] = Variable<bool>(tombstoned);
+    map['pinned'] = Variable<bool>(pinned);
     if (!nullToAbsent || peerUserId != null) {
       map['peer_user_id'] = Variable<String>(peerUserId);
     }
@@ -7552,6 +7579,7 @@ class Conversation extends DataClass implements Insertable<Conversation> {
       listProjectionCiphertext: Value(listProjectionCiphertext),
       sortKey: Value(sortKey),
       tombstoned: Value(tombstoned),
+      pinned: Value(pinned),
       peerUserId: peerUserId == null && nullToAbsent
           ? const Value.absent()
           : Value(peerUserId),
@@ -7581,6 +7609,7 @@ class Conversation extends DataClass implements Insertable<Conversation> {
       ),
       sortKey: serializer.fromJson<int>(json['sortKey']),
       tombstoned: serializer.fromJson<bool>(json['tombstoned']),
+      pinned: serializer.fromJson<bool>(json['pinned']),
       peerUserId: serializer.fromJson<String?>(json['peerUserId']),
       lastActivityEventId: serializer.fromJson<String?>(
         json['lastActivityEventId'],
@@ -7601,6 +7630,7 @@ class Conversation extends DataClass implements Insertable<Conversation> {
       ),
       'sortKey': serializer.toJson<int>(sortKey),
       'tombstoned': serializer.toJson<bool>(tombstoned),
+      'pinned': serializer.toJson<bool>(pinned),
       'peerUserId': serializer.toJson<String?>(peerUserId),
       'lastActivityEventId': serializer.toJson<String?>(lastActivityEventId),
       'unreadCount': serializer.toJson<int>(unreadCount),
@@ -7615,6 +7645,7 @@ class Conversation extends DataClass implements Insertable<Conversation> {
     Uint8List? listProjectionCiphertext,
     int? sortKey,
     bool? tombstoned,
+    bool? pinned,
     Value<String?> peerUserId = const Value.absent(),
     Value<String?> lastActivityEventId = const Value.absent(),
     int? unreadCount,
@@ -7627,6 +7658,7 @@ class Conversation extends DataClass implements Insertable<Conversation> {
         listProjectionCiphertext ?? this.listProjectionCiphertext,
     sortKey: sortKey ?? this.sortKey,
     tombstoned: tombstoned ?? this.tombstoned,
+    pinned: pinned ?? this.pinned,
     peerUserId: peerUserId.present ? peerUserId.value : this.peerUserId,
     lastActivityEventId: lastActivityEventId.present
         ? lastActivityEventId.value
@@ -7650,6 +7682,7 @@ class Conversation extends DataClass implements Insertable<Conversation> {
       tombstoned: data.tombstoned.present
           ? data.tombstoned.value
           : this.tombstoned,
+      pinned: data.pinned.present ? data.pinned.value : this.pinned,
       peerUserId: data.peerUserId.present
           ? data.peerUserId.value
           : this.peerUserId,
@@ -7676,6 +7709,7 @@ class Conversation extends DataClass implements Insertable<Conversation> {
           ..write('listProjectionCiphertext: $listProjectionCiphertext, ')
           ..write('sortKey: $sortKey, ')
           ..write('tombstoned: $tombstoned, ')
+          ..write('pinned: $pinned, ')
           ..write('peerUserId: $peerUserId, ')
           ..write('lastActivityEventId: $lastActivityEventId, ')
           ..write('unreadCount: $unreadCount, ')
@@ -7692,6 +7726,7 @@ class Conversation extends DataClass implements Insertable<Conversation> {
     $driftBlobEquality.hash(listProjectionCiphertext),
     sortKey,
     tombstoned,
+    pinned,
     peerUserId,
     lastActivityEventId,
     unreadCount,
@@ -7710,6 +7745,7 @@ class Conversation extends DataClass implements Insertable<Conversation> {
           ) &&
           other.sortKey == this.sortKey &&
           other.tombstoned == this.tombstoned &&
+          other.pinned == this.pinned &&
           other.peerUserId == this.peerUserId &&
           other.lastActivityEventId == this.lastActivityEventId &&
           other.unreadCount == this.unreadCount &&
@@ -7726,6 +7762,7 @@ class ConversationsCompanion extends UpdateCompanion<Conversation> {
   final Value<Uint8List> listProjectionCiphertext;
   final Value<int> sortKey;
   final Value<bool> tombstoned;
+  final Value<bool> pinned;
   final Value<String?> peerUserId;
   final Value<String?> lastActivityEventId;
   final Value<int> unreadCount;
@@ -7738,6 +7775,7 @@ class ConversationsCompanion extends UpdateCompanion<Conversation> {
     this.listProjectionCiphertext = const Value.absent(),
     this.sortKey = const Value.absent(),
     this.tombstoned = const Value.absent(),
+    this.pinned = const Value.absent(),
     this.peerUserId = const Value.absent(),
     this.lastActivityEventId = const Value.absent(),
     this.unreadCount = const Value.absent(),
@@ -7751,6 +7789,7 @@ class ConversationsCompanion extends UpdateCompanion<Conversation> {
     required Uint8List listProjectionCiphertext,
     required int sortKey,
     this.tombstoned = const Value.absent(),
+    this.pinned = const Value.absent(),
     this.peerUserId = const Value.absent(),
     this.lastActivityEventId = const Value.absent(),
     this.unreadCount = const Value.absent(),
@@ -7767,6 +7806,7 @@ class ConversationsCompanion extends UpdateCompanion<Conversation> {
     Expression<Uint8List>? listProjectionCiphertext,
     Expression<int>? sortKey,
     Expression<bool>? tombstoned,
+    Expression<bool>? pinned,
     Expression<String>? peerUserId,
     Expression<String>? lastActivityEventId,
     Expression<int>? unreadCount,
@@ -7781,6 +7821,7 @@ class ConversationsCompanion extends UpdateCompanion<Conversation> {
         'list_projection_ciphertext': listProjectionCiphertext,
       if (sortKey != null) 'sort_key': sortKey,
       if (tombstoned != null) 'tombstoned': tombstoned,
+      if (pinned != null) 'pinned': pinned,
       if (peerUserId != null) 'peer_user_id': peerUserId,
       if (lastActivityEventId != null)
         'last_activity_event_id': lastActivityEventId,
@@ -7797,6 +7838,7 @@ class ConversationsCompanion extends UpdateCompanion<Conversation> {
     Value<Uint8List>? listProjectionCiphertext,
     Value<int>? sortKey,
     Value<bool>? tombstoned,
+    Value<bool>? pinned,
     Value<String?>? peerUserId,
     Value<String?>? lastActivityEventId,
     Value<int>? unreadCount,
@@ -7811,6 +7853,7 @@ class ConversationsCompanion extends UpdateCompanion<Conversation> {
           listProjectionCiphertext ?? this.listProjectionCiphertext,
       sortKey: sortKey ?? this.sortKey,
       tombstoned: tombstoned ?? this.tombstoned,
+      pinned: pinned ?? this.pinned,
       peerUserId: peerUserId ?? this.peerUserId,
       lastActivityEventId: lastActivityEventId ?? this.lastActivityEventId,
       unreadCount: unreadCount ?? this.unreadCount,
@@ -7839,6 +7882,9 @@ class ConversationsCompanion extends UpdateCompanion<Conversation> {
     }
     if (tombstoned.present) {
       map['tombstoned'] = Variable<bool>(tombstoned.value);
+    }
+    if (pinned.present) {
+      map['pinned'] = Variable<bool>(pinned.value);
     }
     if (peerUserId.present) {
       map['peer_user_id'] = Variable<String>(peerUserId.value);
@@ -7871,6 +7917,7 @@ class ConversationsCompanion extends UpdateCompanion<Conversation> {
           ..write('listProjectionCiphertext: $listProjectionCiphertext, ')
           ..write('sortKey: $sortKey, ')
           ..write('tombstoned: $tombstoned, ')
+          ..write('pinned: $pinned, ')
           ..write('peerUserId: $peerUserId, ')
           ..write('lastActivityEventId: $lastActivityEventId, ')
           ..write('unreadCount: $unreadCount, ')
@@ -8402,6 +8449,21 @@ class $MessagesTable extends Messages with TableInfo<$MessagesTable, Message> {
     ),
     defaultValue: const Constant(false),
   );
+  static const VerificationMeta _starredMeta = const VerificationMeta(
+    'starred',
+  );
+  @override
+  late final GeneratedColumn<bool> starred = GeneratedColumn<bool>(
+    'starred',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("starred" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
   static const VerificationMeta _unreadMeta = const VerificationMeta('unread');
   @override
   late final GeneratedColumn<bool> unread = GeneratedColumn<bool>(
@@ -8434,6 +8496,7 @@ class $MessagesTable extends Messages with TableInfo<$MessagesTable, Message> {
     deletedForEveryone,
     deletedForMe,
     pinned,
+    starred,
     unread,
   ];
   @override
@@ -8597,6 +8660,12 @@ class $MessagesTable extends Messages with TableInfo<$MessagesTable, Message> {
         pinned.isAcceptableOrUnknown(data['pinned']!, _pinnedMeta),
       );
     }
+    if (data.containsKey('starred')) {
+      context.handle(
+        _starredMeta,
+        starred.isAcceptableOrUnknown(data['starred']!, _starredMeta),
+      );
+    }
     if (data.containsKey('unread')) {
       context.handle(
         _unreadMeta,
@@ -8680,6 +8749,10 @@ class $MessagesTable extends Messages with TableInfo<$MessagesTable, Message> {
         DriftSqlType.bool,
         data['${effectivePrefix}pinned'],
       )!,
+      starred: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}starred'],
+      )!,
       unread: attachedDatabase.typeMapping.read(
         DriftSqlType.bool,
         data['${effectivePrefix}unread'],
@@ -8711,6 +8784,7 @@ class Message extends DataClass implements Insertable<Message> {
   final bool deletedForEveryone;
   final bool deletedForMe;
   final bool pinned;
+  final bool starred;
   final bool unread;
   const Message({
     required this.messageId,
@@ -8730,6 +8804,7 @@ class Message extends DataClass implements Insertable<Message> {
     required this.deletedForEveryone,
     required this.deletedForMe,
     required this.pinned,
+    required this.starred,
     required this.unread,
   });
   @override
@@ -8758,6 +8833,7 @@ class Message extends DataClass implements Insertable<Message> {
     map['deleted_for_everyone'] = Variable<bool>(deletedForEveryone);
     map['deleted_for_me'] = Variable<bool>(deletedForMe);
     map['pinned'] = Variable<bool>(pinned);
+    map['starred'] = Variable<bool>(starred);
     map['unread'] = Variable<bool>(unread);
     return map;
   }
@@ -8785,6 +8861,7 @@ class Message extends DataClass implements Insertable<Message> {
       deletedForEveryone: Value(deletedForEveryone),
       deletedForMe: Value(deletedForMe),
       pinned: Value(pinned),
+      starred: Value(starred),
       unread: Value(unread),
     );
   }
@@ -8816,6 +8893,7 @@ class Message extends DataClass implements Insertable<Message> {
       deletedForEveryone: serializer.fromJson<bool>(json['deletedForEveryone']),
       deletedForMe: serializer.fromJson<bool>(json['deletedForMe']),
       pinned: serializer.fromJson<bool>(json['pinned']),
+      starred: serializer.fromJson<bool>(json['starred']),
       unread: serializer.fromJson<bool>(json['unread']),
     );
   }
@@ -8844,6 +8922,7 @@ class Message extends DataClass implements Insertable<Message> {
       'deletedForEveryone': serializer.toJson<bool>(deletedForEveryone),
       'deletedForMe': serializer.toJson<bool>(deletedForMe),
       'pinned': serializer.toJson<bool>(pinned),
+      'starred': serializer.toJson<bool>(starred),
       'unread': serializer.toJson<bool>(unread),
     };
   }
@@ -8866,6 +8945,7 @@ class Message extends DataClass implements Insertable<Message> {
     bool? deletedForEveryone,
     bool? deletedForMe,
     bool? pinned,
+    bool? starred,
     bool? unread,
   }) => Message(
     messageId: messageId ?? this.messageId,
@@ -8889,6 +8969,7 @@ class Message extends DataClass implements Insertable<Message> {
     deletedForEveryone: deletedForEveryone ?? this.deletedForEveryone,
     deletedForMe: deletedForMe ?? this.deletedForMe,
     pinned: pinned ?? this.pinned,
+    starred: starred ?? this.starred,
     unread: unread ?? this.unread,
   );
   Message copyWithCompanion(MessagesCompanion data) {
@@ -8934,6 +9015,7 @@ class Message extends DataClass implements Insertable<Message> {
           ? data.deletedForMe.value
           : this.deletedForMe,
       pinned: data.pinned.present ? data.pinned.value : this.pinned,
+      starred: data.starred.present ? data.starred.value : this.starred,
       unread: data.unread.present ? data.unread.value : this.unread,
     );
   }
@@ -8958,6 +9040,7 @@ class Message extends DataClass implements Insertable<Message> {
           ..write('deletedForEveryone: $deletedForEveryone, ')
           ..write('deletedForMe: $deletedForMe, ')
           ..write('pinned: $pinned, ')
+          ..write('starred: $starred, ')
           ..write('unread: $unread')
           ..write(')'))
         .toString();
@@ -8982,6 +9065,7 @@ class Message extends DataClass implements Insertable<Message> {
     deletedForEveryone,
     deletedForMe,
     pinned,
+    starred,
     unread,
   );
   @override
@@ -9011,6 +9095,7 @@ class Message extends DataClass implements Insertable<Message> {
           other.deletedForEveryone == this.deletedForEveryone &&
           other.deletedForMe == this.deletedForMe &&
           other.pinned == this.pinned &&
+          other.starred == this.starred &&
           other.unread == this.unread);
 }
 
@@ -9032,6 +9117,7 @@ class MessagesCompanion extends UpdateCompanion<Message> {
   final Value<bool> deletedForEveryone;
   final Value<bool> deletedForMe;
   final Value<bool> pinned;
+  final Value<bool> starred;
   final Value<bool> unread;
   final Value<int> rowid;
   const MessagesCompanion({
@@ -9052,6 +9138,7 @@ class MessagesCompanion extends UpdateCompanion<Message> {
     this.deletedForEveryone = const Value.absent(),
     this.deletedForMe = const Value.absent(),
     this.pinned = const Value.absent(),
+    this.starred = const Value.absent(),
     this.unread = const Value.absent(),
     this.rowid = const Value.absent(),
   });
@@ -9073,6 +9160,7 @@ class MessagesCompanion extends UpdateCompanion<Message> {
     this.deletedForEveryone = const Value.absent(),
     this.deletedForMe = const Value.absent(),
     this.pinned = const Value.absent(),
+    this.starred = const Value.absent(),
     this.unread = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : messageId = Value(messageId),
@@ -9100,6 +9188,7 @@ class MessagesCompanion extends UpdateCompanion<Message> {
     Expression<bool>? deletedForEveryone,
     Expression<bool>? deletedForMe,
     Expression<bool>? pinned,
+    Expression<bool>? starred,
     Expression<bool>? unread,
     Expression<int>? rowid,
   }) {
@@ -9124,6 +9213,7 @@ class MessagesCompanion extends UpdateCompanion<Message> {
         'deleted_for_everyone': deletedForEveryone,
       if (deletedForMe != null) 'deleted_for_me': deletedForMe,
       if (pinned != null) 'pinned': pinned,
+      if (starred != null) 'starred': starred,
       if (unread != null) 'unread': unread,
       if (rowid != null) 'rowid': rowid,
     });
@@ -9147,6 +9237,7 @@ class MessagesCompanion extends UpdateCompanion<Message> {
     Value<bool>? deletedForEveryone,
     Value<bool>? deletedForMe,
     Value<bool>? pinned,
+    Value<bool>? starred,
     Value<bool>? unread,
     Value<int>? rowid,
   }) {
@@ -9169,6 +9260,7 @@ class MessagesCompanion extends UpdateCompanion<Message> {
       deletedForEveryone: deletedForEveryone ?? this.deletedForEveryone,
       deletedForMe: deletedForMe ?? this.deletedForMe,
       pinned: pinned ?? this.pinned,
+      starred: starred ?? this.starred,
       unread: unread ?? this.unread,
       rowid: rowid ?? this.rowid,
     );
@@ -9232,6 +9324,9 @@ class MessagesCompanion extends UpdateCompanion<Message> {
     if (pinned.present) {
       map['pinned'] = Variable<bool>(pinned.value);
     }
+    if (starred.present) {
+      map['starred'] = Variable<bool>(starred.value);
+    }
     if (unread.present) {
       map['unread'] = Variable<bool>(unread.value);
     }
@@ -9261,6 +9356,7 @@ class MessagesCompanion extends UpdateCompanion<Message> {
           ..write('deletedForEveryone: $deletedForEveryone, ')
           ..write('deletedForMe: $deletedForMe, ')
           ..write('pinned: $pinned, ')
+          ..write('starred: $starred, ')
           ..write('unread: $unread, ')
           ..write('rowid: $rowid')
           ..write(')'))
@@ -23803,6 +23899,7 @@ typedef $$ConversationsTableCreateCompanionBuilder =
       required Uint8List listProjectionCiphertext,
       required int sortKey,
       Value<bool> tombstoned,
+      Value<bool> pinned,
       Value<String?> peerUserId,
       Value<String?> lastActivityEventId,
       Value<int> unreadCount,
@@ -23817,6 +23914,7 @@ typedef $$ConversationsTableUpdateCompanionBuilder =
       Value<Uint8List> listProjectionCiphertext,
       Value<int> sortKey,
       Value<bool> tombstoned,
+      Value<bool> pinned,
       Value<String?> peerUserId,
       Value<String?> lastActivityEventId,
       Value<int> unreadCount,
@@ -23926,6 +24024,11 @@ class $$ConversationsTableFilterComposer
 
   ColumnFilters<bool> get tombstoned => $composableBuilder(
     column: $table.tombstoned,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get pinned => $composableBuilder(
+    column: $table.pinned,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -24064,6 +24167,11 @@ class $$ConversationsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<bool> get pinned => $composableBuilder(
+    column: $table.pinned,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get peerUserId => $composableBuilder(
     column: $table.peerUserId,
     builder: (column) => ColumnOrderings(column),
@@ -24119,6 +24227,9 @@ class $$ConversationsTableAnnotationComposer
     column: $table.tombstoned,
     builder: (column) => column,
   );
+
+  GeneratedColumn<bool> get pinned =>
+      $composableBuilder(column: $table.pinned, builder: (column) => column);
 
   GeneratedColumn<String> get peerUserId => $composableBuilder(
     column: $table.peerUserId,
@@ -24261,6 +24372,7 @@ class $$ConversationsTableTableManager
                     const Value.absent(),
                 Value<int> sortKey = const Value.absent(),
                 Value<bool> tombstoned = const Value.absent(),
+                Value<bool> pinned = const Value.absent(),
                 Value<String?> peerUserId = const Value.absent(),
                 Value<String?> lastActivityEventId = const Value.absent(),
                 Value<int> unreadCount = const Value.absent(),
@@ -24273,6 +24385,7 @@ class $$ConversationsTableTableManager
                 listProjectionCiphertext: listProjectionCiphertext,
                 sortKey: sortKey,
                 tombstoned: tombstoned,
+                pinned: pinned,
                 peerUserId: peerUserId,
                 lastActivityEventId: lastActivityEventId,
                 unreadCount: unreadCount,
@@ -24287,6 +24400,7 @@ class $$ConversationsTableTableManager
                 required Uint8List listProjectionCiphertext,
                 required int sortKey,
                 Value<bool> tombstoned = const Value.absent(),
+                Value<bool> pinned = const Value.absent(),
                 Value<String?> peerUserId = const Value.absent(),
                 Value<String?> lastActivityEventId = const Value.absent(),
                 Value<int> unreadCount = const Value.absent(),
@@ -24299,6 +24413,7 @@ class $$ConversationsTableTableManager
                 listProjectionCiphertext: listProjectionCiphertext,
                 sortKey: sortKey,
                 tombstoned: tombstoned,
+                pinned: pinned,
                 peerUserId: peerUserId,
                 lastActivityEventId: lastActivityEventId,
                 unreadCount: unreadCount,
@@ -24811,6 +24926,7 @@ typedef $$MessagesTableCreateCompanionBuilder =
       Value<bool> deletedForEveryone,
       Value<bool> deletedForMe,
       Value<bool> pinned,
+      Value<bool> starred,
       Value<bool> unread,
       Value<int> rowid,
     });
@@ -24833,6 +24949,7 @@ typedef $$MessagesTableUpdateCompanionBuilder =
       Value<bool> deletedForEveryone,
       Value<bool> deletedForMe,
       Value<bool> pinned,
+      Value<bool> starred,
       Value<bool> unread,
       Value<int> rowid,
     });
@@ -25039,6 +25156,11 @@ class $$MessagesTableFilterComposer
 
   ColumnFilters<bool> get pinned => $composableBuilder(
     column: $table.pinned,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get starred => $composableBuilder(
+    column: $table.starred,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -25262,6 +25384,11 @@ class $$MessagesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<bool> get starred => $composableBuilder(
+    column: $table.starred,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<bool> get unread => $composableBuilder(
     column: $table.unread,
     builder: (column) => ColumnOrderings(column),
@@ -25369,6 +25496,9 @@ class $$MessagesTableAnnotationComposer
 
   GeneratedColumn<bool> get pinned =>
       $composableBuilder(column: $table.pinned, builder: (column) => column);
+
+  GeneratedColumn<bool> get starred =>
+      $composableBuilder(column: $table.starred, builder: (column) => column);
 
   GeneratedColumn<bool> get unread =>
       $composableBuilder(column: $table.unread, builder: (column) => column);
@@ -25553,6 +25683,7 @@ class $$MessagesTableTableManager
                 Value<bool> deletedForEveryone = const Value.absent(),
                 Value<bool> deletedForMe = const Value.absent(),
                 Value<bool> pinned = const Value.absent(),
+                Value<bool> starred = const Value.absent(),
                 Value<bool> unread = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => MessagesCompanion(
@@ -25573,6 +25704,7 @@ class $$MessagesTableTableManager
                 deletedForEveryone: deletedForEveryone,
                 deletedForMe: deletedForMe,
                 pinned: pinned,
+                starred: starred,
                 unread: unread,
                 rowid: rowid,
               ),
@@ -25596,6 +25728,7 @@ class $$MessagesTableTableManager
                 Value<bool> deletedForEveryone = const Value.absent(),
                 Value<bool> deletedForMe = const Value.absent(),
                 Value<bool> pinned = const Value.absent(),
+                Value<bool> starred = const Value.absent(),
                 Value<bool> unread = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => MessagesCompanion.insert(
@@ -25616,6 +25749,7 @@ class $$MessagesTableTableManager
                 deletedForEveryone: deletedForEveryone,
                 deletedForMe: deletedForMe,
                 pinned: pinned,
+                starred: starred,
                 unread: unread,
                 rowid: rowid,
               ),

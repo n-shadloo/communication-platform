@@ -9,7 +9,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   test(
-    'draft, mute, unread, and delete-for-me remain local projections',
+    'draft, mute, star, unread, delete, and clear remain local projections',
     () async {
       final database = LocalDatabase(NativeDatabase.memory());
       addTearDown(database.close);
@@ -72,7 +72,33 @@ void main() {
         ),
         isA<Success<void>>(),
       );
+      expect(
+        await repository.setConversationPinned(
+          conversationId: 'conversation',
+          pinned: true,
+        ),
+        isA<Success<void>>(),
+      );
+      expect(
+        await repository.markConversationRead('conversation'),
+        isA<Success<List<String>>>(),
+      );
+      expect(
+        await repository.markConversationUnread(
+          conversationId: 'conversation',
+          currentUserId: 'current',
+        ),
+        isA<Success<void>>(),
+      );
+      expect(
+        (await database.select(database.messages).getSingle()).unread,
+        isTrue,
+      );
       expect(await repository.deleteForMe('message'), isA<Success<void>>());
+      expect(
+        await repository.setStar(messageId: 'message', starred: true),
+        isA<Success<void>>(),
+      );
 
       final summary =
           (await repository.watchConversations('current').first).single;
@@ -89,11 +115,19 @@ void main() {
           .getSingle();
       expect(summary.draft, 'draft');
       expect(summary.mutedUntil, mutedUntil);
+      expect(summary.pinned, isTrue);
       expect(summary.unreadCount, 0);
       expect(message.deletedForMe, isTrue);
+      expect(message.starred, isTrue);
       expect(message.unread, isFalse);
       expect(attachment.boundedCacheHandleCiphertext, isNull);
       expect(attachment.cacheExpiresAt, isNull);
+
+      expect(
+        await repository.deleteConversationForMe('conversation'),
+        isA<Success<void>>(),
+      );
+      expect(await repository.watchConversations('current').first, isEmpty);
     },
   );
 

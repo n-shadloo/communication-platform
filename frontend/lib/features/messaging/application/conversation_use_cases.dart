@@ -474,11 +474,35 @@ final class ManageLocalConversationState {
     mutedUntil: until,
   );
 
+  Future<Result<void>> setPinned({
+    required String conversationId,
+    required bool pinned,
+  }) => repository.setConversationPinned(
+    conversationId: conversationId,
+    pinned: pinned,
+  );
+
   Future<Result<void>> deleteForMe(String messageId) =>
       repository.deleteForMe(messageId);
 
+  Future<Result<void>> setStar({
+    required String messageId,
+    required bool starred,
+  }) => repository.setStar(messageId: messageId, starred: starred);
+
+  Future<Result<void>> deleteConversationForMe(String conversationId) =>
+      repository.deleteConversationForMe(conversationId);
+
   Future<Result<List<String>>> markRead(String conversationId) =>
       repository.markConversationRead(conversationId);
+
+  Future<Result<void>> markUnread({
+    required String conversationId,
+    required String currentUserId,
+  }) => repository.markConversationUnread(
+    conversationId: conversationId,
+    currentUserId: currentUserId,
+  );
 }
 
 final class FlushPendingDeliveredReceipts {

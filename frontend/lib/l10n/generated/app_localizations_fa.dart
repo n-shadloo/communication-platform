@@ -581,4 +581,344 @@ class AppLocalizationsFa extends AppLocalizations {
   @override
   String get safetyConfirmationRequired =>
       'پیش از تأیید، مقایسه خارج از برنامه الزامی است.';
+
+  @override
+  String get chatsTitle => 'گفت‌وگوها';
+
+  @override
+  String get chatsSearchAction => 'جست‌وجوی گفت‌وگوها';
+
+  @override
+  String get chatsSearchHint => 'جست‌وجوی پیام‌ها روی این دستگاه';
+
+  @override
+  String get chatsClearSearchAction => 'پاک کردن جست‌وجو';
+
+  @override
+  String get chatsLoadingTitle => 'در حال بارگذاری گفت‌وگوها';
+
+  @override
+  String get chatsErrorTitle => 'گفت‌وگوها در دسترس نیستند';
+
+  @override
+  String get chatsErrorMessage => 'فهرست رمزنگاری‌شدهٔ محلی باز نشد.';
+
+  @override
+  String get chatsEmptyTitle => 'هنوز گفت‌وگویی نیست';
+
+  @override
+  String get chatsEmptyMessage =>
+      'یک پیام مستقیم تأییدشده را آغاز کنید. گفت‌وگوها آفلاین روی این دستگاه خوانا می‌مانند.';
+
+  @override
+  String get chatsStartAction => 'شروع گفت‌وگو';
+
+  @override
+  String get chatsNoSearchResultsTitle => 'نتیجهٔ محلی پیدا نشد';
+
+  @override
+  String get chatsDeviceSearchScopeNotice =>
+      'جست‌وجو فقط در تاریخچهٔ رمزگشایی‌شدهٔ ذخیره‌شده روی این دستگاه است؛ سرور پیام‌ها را فهرست نمی‌کند.';
+
+  @override
+  String get chatsOfflineCachedNotice =>
+      'آفلاین — گفت‌وگوهای ذخیره‌شده نمایش داده می‌شوند. پیام‌های جدید در صف محلی می‌مانند.';
+
+  @override
+  String get chatsNoMessagesPreview => 'هنوز پیامی نیست';
+
+  @override
+  String get chatsConversationActionsLabel => 'عملیات گفت‌وگو';
+
+  @override
+  String get chatsMuteAction => 'بی‌صدا برای ۸ ساعت';
+
+  @override
+  String get chatsUnmuteAction => 'لغو بی‌صدایی';
+
+  @override
+  String get chatsMarkReadAction => 'علامت‌گذاری به‌عنوان خوانده‌شده';
+
+  @override
+  String get chatsMarkUnreadAction => 'علامت‌گذاری به‌عنوان خوانده‌نشده';
+
+  @override
+  String get chatsDeleteAction => 'حذف گفت‌وگو';
+
+  @override
+  String get chatsDeleteTitle => 'این گفت‌وگو حذف شود؟';
+
+  @override
+  String get chatsDeleteLocalOnlyMessage =>
+      'پاک‌کردن گفت‌وگو فقط نمای محلی این دستگاه را حذف می‌کند و محتوای دستگاه‌های دیگر را پاک نمی‌کند.';
+
+  @override
+  String get chatsPinViaMessageNotice =>
+      'پین‌کردن گفت‌وگو در طرح محلی فعلی در دسترس نیست؛ تغییری انجام نشد.';
+
+  @override
+  String chatsItemSemantics(String title, String preview, int unreadCount) {
+    return '$title. $preview. $unreadCount پیام خوانده‌نشده.';
+  }
+
+  @override
+  String get chatTitle => 'گفت‌وگو';
+
+  @override
+  String get savedMessagesTitle => 'پیام‌های ذخیره‌شده';
+
+  @override
+  String get savedMessagesEmptyTitle => 'هنوز چیزی ذخیره نشده';
+
+  @override
+  String get savedMessagesEmptyMessage =>
+      'این‌جا گفت‌وگوی شخصی رمزنگاری‌شدهٔ شماست و حضور یا رسید خواندن ندارد.';
+
+  @override
+  String get savedMessagesComposerHint => 'یادداشتی برای خودتان بنویسید';
+
+  @override
+  String get chatHistoryLoading => 'در حال بارگذاری تاریخچهٔ رمزنگاری‌شده';
+
+  @override
+  String get chatHistoryErrorTitle => 'تاریخچه در دسترس نیست';
+
+  @override
+  String get chatHistoryErrorMessage =>
+      'تاریخچهٔ محلی خوانده نشد؛ سرور نسخه‌ای از آن ندارد.';
+
+  @override
+  String get chatEmptyTitle => 'گفت‌وگو را آغاز کنید';
+
+  @override
+  String get chatEmptyMessage =>
+      'پیام‌ها پیش از ورود به صف ارسال، روی این دستگاه رمزنگاری می‌شوند.';
+
+  @override
+  String chatTimelineSemantics(String title) {
+    return 'خط زمانی پیام‌های $title';
+  }
+
+  @override
+  String chatMessageSemantics(String author, String message, String state) {
+    return '$author: $message. وضعیت: $state.';
+  }
+
+  @override
+  String get chatMessageActionsLabel => 'عملیات پیام';
+
+  @override
+  String get chatReplyAction => 'پاسخ';
+
+  @override
+  String get chatReactAction => 'واکنش';
+
+  @override
+  String get chatEditAction => 'ویرایش';
+
+  @override
+  String get chatForwardAction => 'بازفرستادن';
+
+  @override
+  String get chatCopyAction => 'رونوشت';
+
+  @override
+  String get chatStarAction => 'ستاره‌دار کردن روی این دستگاه';
+
+  @override
+  String get chatUnstarAction => 'برداشتن ستاره';
+
+  @override
+  String get chatPinAction => 'پین کردن';
+
+  @override
+  String get chatUnpinAction => 'برداشتن پین';
+
+  @override
+  String get chatDeleteAction => 'حذف';
+
+  @override
+  String get chatDeleteTitle => 'پیام حذف شود؟';
+
+  @override
+  String get chatDeleteHonestMessage =>
+      '«حذف برای من» نسخهٔ محلی این دستگاه را حذف می‌کند. «حذف برای همه» بهترین تلاش است و نمی‌تواند محتوای دریافت و رمزگشایی‌شدهٔ دستگاه دیگر را پاک کند.';
+
+  @override
+  String get chatDeleteForMeAction => 'حذف برای من';
+
+  @override
+  String get chatDeleteForEveryoneAction => 'حذف برای همه';
+
+  @override
+  String get chatCancelAction => 'لغو';
+
+  @override
+  String get chatDeletedMessage => 'پیام حذف شده است';
+
+  @override
+  String get chatUnsupportedMessage =>
+      'این پیام به نسخهٔ جدیدتری از پروتکل نیاز دارد؛ رکورد رمزنگاری‌شده نگه داشته شد.';
+
+  @override
+  String get chatSystemMessage => 'به‌روزرسانی گفت‌وگو';
+
+  @override
+  String get chatEditedLabel => 'ویرایش‌شده';
+
+  @override
+  String get chatTimestampSkewed =>
+      'ساعت فرستنده دقیق به نظر نمی‌رسد؛ این زمان فقط نمایشی است.';
+
+  @override
+  String get chatReplyQuote => 'پیام پاسخ‌داده‌شده';
+
+  @override
+  String chatReactionSemantics(String emoji, int count) {
+    return 'واکنش $emoji، $count نفر';
+  }
+
+  @override
+  String get chatRetrySendAction =>
+      'تلاش دوباره به‌عنوان ارسال رمزنگاری‌شدهٔ جدید';
+
+  @override
+  String get chatUnreadDivider => 'پیام‌های خوانده‌نشده';
+
+  @override
+  String get chatLoadingOlder => 'در حال بارگذاری پیام‌های قدیمی‌تر';
+
+  @override
+  String get chatLoadOlderAction => 'بارگذاری پیام‌های قدیمی‌تر';
+
+  @override
+  String get chatOlderErrorAction =>
+      'بارگذاری پیام‌های قدیمی‌تر ناموفق بود — تلاش دوباره';
+
+  @override
+  String get chatBeginningOfHistory => 'آغاز تاریخچهٔ محلی';
+
+  @override
+  String get chatJumpToLatestAction => 'رفتن به جدیدترین پیام';
+
+  @override
+  String get chatComposerHint => 'پیام';
+
+  @override
+  String get chatAttachAction => 'پیوست';
+
+  @override
+  String get chatEmojiAction => 'درج شکلک';
+
+  @override
+  String get chatSendAction => 'ارسال پیام رمزنگاری‌شده';
+
+  @override
+  String get chatSaveEditAction => 'ذخیرهٔ ویرایش رمزنگاری‌شده';
+
+  @override
+  String get chatCancelContextAction => 'لغو پاسخ یا ویرایش';
+
+  @override
+  String get chatEditingMessage => 'در حال ویرایش پیام';
+
+  @override
+  String chatReplyingTo(String author) {
+    return 'پاسخ به $author';
+  }
+
+  @override
+  String get chatOfflineQueueNotice =>
+      'آفلاین — پیام رمزنگاری‌شده تا دسترسی به سرور در صف محلی می‌ماند.';
+
+  @override
+  String get chatWithheldUnverifiedIdentity =>
+      'ارسال متوقف است: پیش از ارسال، هویت را خارج از برنامه تأیید کنید.';
+
+  @override
+  String get chatWithheldUnverifiedDevice =>
+      'ارسال متوقف است: دستگاه بدون امضا یا نامعتبر نمی‌تواند پیام بگیرد.';
+
+  @override
+  String get chatWithheldMasterChanged =>
+      'ارسال متوقف است: کلید اصلی مخاطب تغییر کرده و باید دوباره تأیید شود.';
+
+  @override
+  String get chatWithheldLogFork =>
+      'ارسال متوقف است: انشعاب دفتر دستگاه احتمال دوگانگی سرور را نشان می‌دهد.';
+
+  @override
+  String get chatWithheldPq =>
+      'ارسال متوقف است: کلید پساکوانتومی ML-KEM در دسترس نیست؛ تنزل امنیتی انجام نمی‌شود.';
+
+  @override
+  String chatPinnedBanner(int count) {
+    return '$count پیام پین‌شده';
+  }
+
+  @override
+  String get chatPinnedExpandAction => 'مشاهدهٔ همه';
+
+  @override
+  String get chatPinnedMessagesTitle => 'پیام‌های پین‌شده';
+
+  @override
+  String get chatTypingStatus =>
+      'در حال نوشتن… سیگنال رمزنگاری‌شده ممکن است با تأخیر برسد';
+
+  @override
+  String get chatSocketOnlineStatus => 'آنلاین از طریق دستگاه متصل';
+
+  @override
+  String get chatOfflinePresenceStatus => 'آفلاین';
+
+  @override
+  String get chatSearchAction => 'جست‌وجو در گفت‌وگو';
+
+  @override
+  String get chatSearchInputLabel => 'جست‌وجوی پیام‌های محلی';
+
+  @override
+  String get chatSearchEmptyQueryTitle => 'جست‌وجوی تاریخچهٔ این دستگاه';
+
+  @override
+  String get chatMoreAction => 'عملیات بیشتر گفت‌وگو';
+
+  @override
+  String get chatYouAuthor => 'شما';
+
+  @override
+  String get chatAttachmentsUnavailable =>
+      'پیوست‌های رمزنگاری‌شده در این قطعه هنوز در دسترس نیستند.';
+
+  @override
+  String get chatActionFailedMessage =>
+      'عملیات انجام نشد؛ هیچ تضمین امنیتی تضعیف نشده است.';
+
+  @override
+  String get chatStateLocalOnly => 'فقط محلی ذخیره شد';
+
+  @override
+  String get chatStateQueued => 'در صف آفلاین';
+
+  @override
+  String get chatStateEncrypting => 'در حال رمزنگاری';
+
+  @override
+  String get chatStateSending => 'در حال ارسال به سرور';
+
+  @override
+  String get chatStateAccepted => 'پذیرفته‌شده توسط رلهٔ سرور';
+
+  @override
+  String get chatStateDelivered => 'تحویل پایدار به دستگاه گیرنده';
+
+  @override
+  String get chatStateRead => 'رسید خواندن دریافت شد';
+
+  @override
+  String get chatStateFailed => 'ارسال ناموفق';
+
+  @override
+  String get chatStateReceived => 'دریافت‌شده';
 }

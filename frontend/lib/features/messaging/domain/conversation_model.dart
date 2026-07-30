@@ -29,6 +29,7 @@ final class ConversationSummary {
     required this.mutedUntil,
     required this.draft,
     required this.pinnedMessageIds,
+    this.pinned = false,
   });
 
   final String conversationId;
@@ -40,6 +41,7 @@ final class ConversationSummary {
   final DateTime? mutedUntil;
   final String? draft;
   final Set<String> pinnedMessageIds;
+  final bool pinned;
 
   bool isMutedAt(DateTime now) =>
       mutedUntil != null && mutedUntil!.isAfter(now);
@@ -69,6 +71,7 @@ final class ConversationMessage {
     required this.deletedForEveryone,
     required this.deletedForMe,
     required this.pinned,
+    this.starred = false,
     required this.unread,
     required this.transportState,
     required this.receiptState,
@@ -90,6 +93,7 @@ final class ConversationMessage {
   final bool deletedForEveryone;
   final bool deletedForMe;
   final bool pinned;
+  final bool starred;
   final bool unread;
   final MessageTransportState transportState;
   final MessageReceiptState receiptState;

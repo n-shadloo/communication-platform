@@ -54,13 +54,13 @@ opaque/client-owned; **Pending** = Flutter implementation not started.
 | Seven-day TTL / `pruned_through` gaps | Ready signal | Piece 12 pre-processing comparison, blocking queue-gap/group recovery state, retained MLS-dependent opaque envelopes, and recovered loss-baseline transition complete; fresh Welcome production flow remains gated on MLS pieces |
 | WebSocket live delivery | Ready | Piece 06 authenticated gateway/close-code mapping plus piece 12 lifecycle supervisor complete; socket envelopes are wake-up hints only and always trigger authoritative REST drain |
 | DM identity/session | Client protocol | Piece 13 hybrid PQXDH/Double Ratchet transport and exact pairwise fan-out/outbox integration complete |
-| Text messages | Client protocol | Piece 14 deterministic-CBOR text events, typed projections, honest optimistic transport state, and Riverpod streams complete; final timeline is piece 15 |
+| Text messages | Client protocol | Pieces 14–15 complete deterministic-CBOR events, typed projections, honest optimistic transport state, Riverpod streams, and the production app-owned timeline |
 | Replies/edits/deletes | Client protocol | Piece 14 reply references, deterministic revision winner, authorization, local tombstone, best-effort remote-delete, and attachment-cache cleanup complete |
 | Reactions/pins/receipts | Client protocol | Piece 14 idempotent set projections, participant/role authorization, per-device receipt provenance, durable delivered work, and privacy-gated read sends complete |
 | Typing/presence meaning | Volatile relay ready | Piece 14 bounded volatile typing expiry, conservative socket presence, disconnect clearing, and typed Riverpod streams complete; signals never enter durable projections |
 | Private contact blocking | No server ACL by design | Protocol specified; implementation pending |
 | Multi-device self-sync/history | Envelope primitives ready; no history API | Piece 14 ordinary event fan-out to own live devices uses the same event ID; authorized history transfer remains pending |
-| Saved Messages | Client protocol | Piece 14 domain-separated local conversation, own-account authorization, unread-free/local-only behavior, and no remote-delete/receipt policy complete |
+| Saved Messages | Client protocol | Pieces 14–15 complete the domain-separated local conversation, own-account authorization, unread-free/local-only behavior, no peer presence/receipt promise, routing, timeline, composer, and actions |
 | Local search | No plaintext server search by design | Pending Android encrypted index |
 
 ## Groups
@@ -108,10 +108,10 @@ opaque/client-owned; **Pending** = Flutter implementation not started.
 |---|---|---|
 | Responsive shell | Not applicable | Pieces 03â€“04 adaptive `go_router` shell plus guarded Splash/Connection bootstrap routing complete; stable branch identity, deep-link placeholders, guard hooks, keyboard navigation, focus restoration, reduced motion, resize preservation, accessible Retry, and Android-only offline entry are tested |
 | Forui design system and Lucide icons | Not applicable | Piece 03 app-owned semantic tokens and Forui wrappers complete; bundled Lucide is isolated behind typed `AppIcons`, with package-boundary, semantics, target-size, disabled, focus, and RTL-mirroring tests |
-| Flyer Chat builders | Not applicable | Selected; pending technical spike |
-| 34-screen inventory | Supporting APIs/primitives ready as above | Pieces 09â€“11 implement authentication/enrollment plus Contacts/New, Contact Profile, Edit Profile, and Safety Number; later screens remain pending |
-| English/Persian RTL | Not applicable | Piece 03 foundations plus piece 11 localized contact/profile/safety screens and RTL widget coverage complete; later feature-screen verification remains pending |
-| Accessibility/high contrast | Not applicable | Piece 03 shell/component semantics, keyboard focus, 48 px icon targets, 200% text-scale layout, reduced motion, dark mode, and authored high-contrast token mapping verified; full feature-flow audit remains pending |
+| Timeline adapter and builders | Not applicable | Piece 15 selected the documented custom reversed-sliver adapter because Flyer 2.11.1 requires mutable controller-owned message state; app-owned immutable builders, anchors, jump, semantics, and bounded virtualization pass |
+| 34-screen inventory | Supporting APIs/primitives ready as above | Pieces 09–11 implement authentication/enrollment plus Contacts/New, Contact Profile, Edit Profile, and Safety Number; piece 15 adds Chats List, DM Chat, Saved Messages, pinned/forward/action sheets, and all chat state surfaces; later screens remain pending |
+| English/Persian RTL | Not applicable | Piece 03 foundations, piece 11 contact/profile/safety screens, and piece 15 Chats/DM/Saved mixed-direction responsive goldens and widget coverage complete; later feature-screen verification remains pending |
+| Accessibility/high contrast | Not applicable | Piece 15 extends the piece 03 foundation with chat screen-reader labels/live states, keyboard message menus, scroll-safe 200% text, reduced motion, dark/high-contrast, and narrow/medium/wide verification; later feature-flow audit remains pending |
 
 ## Platform delivery
 
@@ -176,7 +176,16 @@ opaque/client-owned; **Pending** = Flutter implementation not started.
   unread/mute/Saved Messages behavior, event-order permutations, transaction-failure
   injection, redaction, strict Rust/Clippy, full Flutter tests/analyze, three-ABI
   native packaging, and development Android APK/integration fixture builds verified
-  on 2026-07-30. The final chat timeline remains piece 15.
+  on 2026-07-30. Piece 15 now supplies the final direct-message and Saved Messages
+  interface.
+- [x] Piece 15 production Chats List, DM Chat, Saved Messages, composer,
+  reply/edit/pin/forward/delete/reaction/star/retry actions, explicit
+  local-only/queued/encrypting/sending/accepted/delivered/read/failed states,
+  fail-closed identity/device/log-fork/PQ composer gates, local conversation pin/unread
+  projections and migration, and the app-owned timeline adapter pass full Flutter
+  tests/analyze, responsive English/Persian goldens, keyboard/screen-reader semantics,
+  dynamic-size/upward-pagination anchors, and the 50,000-message bounded-widget fixture
+  plus development and production Android APK builds on 2026-07-30.
 - [x] Android reproduces the backend `cross_sig`, `master_sig`, `spk_sig`, and
   `pq_spk_sig` golden vectors, including optional fields and the 64-byte `ik_pub` layout
   (Piece 08: Rust vectors, strict Clippy, Flutter tests, three-ABI native package build,
@@ -193,7 +202,10 @@ opaque/client-owned; **Pending** = Flutter implementation not started.
   boundaries, safe replay/cancellation/timeout policy, payload-free diagnostics,
   proactive single-flight token rotation, and authenticated native Android WebSocket
   gateway pass mock-adapter, race, size, redaction, and close-code tests.
-- [ ] Flyer builders pass long-history, scroll, RTL, accessibility, and media tests.
+- [x] Piece 15 timeline builders pass long-history, upward pagination, dynamic row/media
+  sizing, jump, mixed RTL/LTR, accessibility, keyboard, high-contrast, large-text, and
+  reduced-motion tests. The Flyer 2.11.1 controller path did not meet the no-duplicate-
+  state boundary, so only the adapter was replaced by the documented custom sliver.
 - [ ] Android WorkManager polling is tested under Doze/standby/force-stop; only active
   voice uses a foreground service.
 - [ ] Private CA/SPKI behavior works in Android staging. Strict WebSocket origin behavior

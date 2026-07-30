@@ -11,6 +11,7 @@ import 'package:communication_platform/features/bootstrap/domain/bootstrap_model
 import 'package:communication_platform/features/bootstrap/presentation/bootstrap_page.dart';
 import 'package:communication_platform/features/contacts/presentation/contact_pages.dart';
 import 'package:communication_platform/features/devices/presentation/device_enrollment_page.dart';
+import 'package:communication_platform/features/messaging/presentation/chat_pages.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
@@ -130,6 +131,16 @@ GoRouter createAppRouter({
         ),
       ],
     ),
+    GoRoute(
+      path: '/saved-messages',
+      pageBuilder: (context, state) => _page(
+        context,
+        state,
+        SavedMessagesPage(
+          conversationId: state.uri.queryParameters['conversationId'],
+        ),
+      ),
+    ),
     StatefulShellRoute.indexedStack(
       builder: (context, state, navigationShell) {
         final bootstrapOffline = state.uri.queryParameters['offline'] == 'true';
@@ -149,13 +160,8 @@ GoRouter createAppRouter({
           routes: [
             GoRoute(
               path: '/chats',
-              pageBuilder: (context, state) => _page(
-                context,
-                state,
-                const StructuralPlaceholderPage(
-                  kind: StructuralPlaceholderKind.chats,
-                ),
-              ),
+              pageBuilder: (context, state) =>
+                  _page(context, state, const ChatsListPage()),
               routes: [
                 GoRoute(
                   path: 'new',
@@ -163,13 +169,23 @@ GoRouter createAppRouter({
                       _page(context, state, const ContactsNewPage()),
                 ),
                 GoRoute(
-                  path: 'sample-thread',
+                  path: 'conversation/:conversationId',
                   pageBuilder: (context, state) => _page(
                     context,
                     state,
-                    const StructuralPlaceholderPage(
-                      kind: StructuralPlaceholderKind.thread,
+                    DirectChatPage(
+                      conversationId: state.pathParameters['conversationId']!,
+                      peerUserId:
+                          state.uri.queryParameters['peer'] ?? 'unknown',
                     ),
+                  ),
+                ),
+                GoRoute(
+                  path: 'direct/:userId',
+                  pageBuilder: (context, state) => _page(
+                    context,
+                    state,
+                    DirectChatPage(peerUserId: state.pathParameters['userId']!),
                   ),
                 ),
               ],

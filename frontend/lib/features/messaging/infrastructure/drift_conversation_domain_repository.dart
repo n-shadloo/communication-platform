@@ -47,6 +47,7 @@ final class DriftConversationDomainRepository extends DriftRepositoryBase
             pinnedMessageIds: Set.unmodifiable(
               pinned.map((message) => message.messageId),
             ),
+            pinned: row.pinned,
           ),
         );
       }
@@ -107,6 +108,7 @@ final class DriftConversationDomainRepository extends DriftRepositoryBase
             deletedForEveryone: row.deletedForEveryone,
             deletedForMe: row.deletedForMe,
             pinned: row.pinned,
+            starred: row.starred,
             unread: row.unread,
             transportState: MessageTransportState.values[row.status],
             receiptState: receiptState,
@@ -243,6 +245,7 @@ final class DriftConversationDomainRepository extends DriftRepositoryBase
           pinnedMessageIds: Set.unmodifiable(
             pinned.map((message) => message.messageId),
           ),
+          pinned: row.pinned,
         ),
       );
     } on Object {
@@ -304,6 +307,20 @@ final class DriftConversationDomainRepository extends DriftRepositoryBase
   });
 
   @override
+  Future<Result<void>> setConversationPinned({
+    required String conversationId,
+    required bool pinned,
+  }) => runWrite(() async {
+    final updated =
+        await (database.update(database.conversations)
+              ..where((row) => row.conversationId.equals(conversationId)))
+            .write(ConversationsCompanion(pinned: Value(pinned)));
+    if (updated != 1) {
+      throw const _MissingConversation();
+    }
+  });
+
+  @override
   Future<Result<void>> deleteForMe(String messageId) => runWrite(() async {
     final updated =
         await (database.update(
@@ -327,6 +344,46 @@ final class DriftConversationDomainRepository extends DriftRepositoryBase
     );
     await _refreshUnreadCountForMessage(messageId);
   });
+
+  @override
+  Future<Result<void>> setStar({
+    required String messageId,
+    required bool starred,
+  }) => runWrite(() async {
+    final updated =
+        await (database.update(database.messages)
+              ..where((row) => row.messageId.equals(messageId)))
+            .write(MessagesCompanion(starred: Value(starred)));
+    if (updated != 1) {
+      throw const _MissingMessage();
+    }
+  });
+
+  @override
+  Future<Result<void>> deleteConversationForMe(String conversationId) =>
+      runWrite(() async {
+        final updated =
+            await (database.update(
+              database.conversations,
+            )..where((row) => row.conversationId.equals(conversationId))).write(
+              const ConversationsCompanion(
+                tombstoned: Value(true),
+                unreadCount: Value(0),
+                draftCiphertext: Value(null),
+              ),
+            );
+        if (updated != 1) {
+          throw const _MissingConversation();
+        }
+        await (database.update(
+          database.messages,
+        )..where((row) => row.conversationId.equals(conversationId))).write(
+          const MessagesCompanion(
+            deletedForMe: Value(true),
+            unread: Value(false),
+          ),
+        );
+      });
 
   @override
   Future<Result<List<String>>> markConversationRead(String conversationId) =>
@@ -359,6 +416,46 @@ final class DriftConversationDomainRepository extends DriftRepositoryBase
             .write(const ConversationsCompanion(unreadCount: Value(0)));
         return List.unmodifiable(unread.map((message) => message.messageId));
       });
+
+  @override
+  Future<Result<void>> markConversationUnread({
+    required String conversationId,
+    required String currentUserId,
+  }) => runWrite(() async {
+    final conversation =
+        await (database.select(database.conversations)
+              ..where((row) => row.conversationId.equals(conversationId)))
+            .getSingleOrNull();
+    if (conversation == null) {
+      throw const _MissingConversation();
+    }
+    if (ConversationKind.values[conversation.kind] == ConversationKind.saved) {
+      return;
+    }
+    final latestIncoming =
+        await (database.select(database.messages)
+              ..where(
+                (row) =>
+                    row.conversationId.equals(conversationId) &
+                    row.senderUserId.equals(currentUserId.toLowerCase()).not() &
+                    row.deletedForMe.equals(false),
+              )
+              ..orderBy([
+                (row) => OrderingTerm.desc(row.orderingMs),
+                (row) => OrderingTerm.desc(row.orderingEventId),
+              ])
+              ..limit(1))
+            .getSingleOrNull();
+    if (latestIncoming == null) {
+      return;
+    }
+    await (database.update(database.messages)
+          ..where((row) => row.messageId.equals(latestIncoming.messageId)))
+        .write(const MessagesCompanion(unread: Value(true)));
+    await (database.update(database.conversations)
+          ..where((row) => row.conversationId.equals(conversationId)))
+        .write(const ConversationsCompanion(unreadCount: Value(1)));
+  });
 
   @override
   Future<Result<List<PendingDeliveredReceipt>>> readPendingDeliveredReceipts({

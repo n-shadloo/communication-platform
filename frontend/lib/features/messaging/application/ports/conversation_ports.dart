@@ -37,9 +37,26 @@ abstract interface class ConversationRepositoryPort implements RepositoryPort {
     required DateTime? mutedUntil,
   });
 
+  Future<Result<void>> setConversationPinned({
+    required String conversationId,
+    required bool pinned,
+  });
+
   Future<Result<void>> deleteForMe(String messageId);
 
+  Future<Result<void>> setStar({
+    required String messageId,
+    required bool starred,
+  });
+
+  Future<Result<void>> deleteConversationForMe(String conversationId);
+
   Future<Result<List<String>>> markConversationRead(String conversationId);
+
+  Future<Result<void>> markConversationUnread({
+    required String conversationId,
+    required String currentUserId,
+  });
 
   Future<Result<List<PendingDeliveredReceipt>>> readPendingDeliveredReceipts({
     required int limit,

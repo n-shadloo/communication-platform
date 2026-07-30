@@ -92,7 +92,9 @@ Contract fixtures MUST fail when backend documentation and behavior diverge.
   maximum text scale, own/peer/group messages, and all delivery/security states.
 - Semantics, keyboard order, focus restoration, shortcuts, context menus, and reduced
   motion.
-- Flyer Chat pagination, anchoring, media resolution, jump-to-message, and builder output.
+- Timeline-adapter pagination, anchoring, dynamic media/row sizing,
+  jump-to-message, and app-owned builder output. Re-run the same suite against Flyer
+  before any future adapter swap.
 
 ### End-to-end tests
 
