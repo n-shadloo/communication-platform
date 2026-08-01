@@ -3,6 +3,8 @@ import 'package:communication_platform/app/dependencies/core_providers.dart';
 import 'package:communication_platform/app/dependencies/local_storage_providers.dart';
 import 'package:communication_platform/core/protocol/application_message_model.dart';
 import 'package:communication_platform/core/result/result.dart';
+import 'package:communication_platform/features/devices/infrastructure/device_log_gossip_coordinator.dart';
+import 'package:communication_platform/features/devices/infrastructure/drift_linked_device_repository.dart';
 import 'package:communication_platform/features/messaging/application/conversation_use_cases.dart';
 import 'package:communication_platform/features/messaging/application/ports/conversation_ports.dart';
 import 'package:communication_platform/features/messaging/domain/conversation_model.dart';
@@ -99,8 +101,8 @@ final presenceProjectionProvider = StreamProvider.autoDispose
       return ref.watch(volatileConversationStateProvider).watchPresence(userId);
     });
 
-final sendConversationEventsProvider =
-    FutureProvider.family<SendConversationEvents, MessagingScope>((
+final pairwiseFanoutCoordinatorProvider =
+    FutureProvider.family<PairwiseFanoutCoordinator, MessagingScope>((
       ref,
       scope,
     ) async {
@@ -108,26 +110,49 @@ final sendConversationEventsProvider =
       final authentication = await ref.watch(
         peerAuthenticationServiceProvider.future,
       );
-      final liveDevices = ContactPairwiseLiveDeviceResolverAdapter(
-        delegate: authentication,
+      return PairwiseFanoutCoordinator(
+        store: DriftPairwiseTransportStore(database),
+        liveDevices: ContactPairwiseLiveDeviceResolverAdapter(
+          delegate: authentication,
+          currentUserId: scope.userId,
+        ),
+        claims: ContactSelectivePairwiseClaimAdapter(
+          delegate: authentication,
+          currentUserId: scope.userId,
+        ),
+        crypto: NativePairwiseOutboundPreparation(
+          ref.watch(pairwiseSessionCryptoProvider),
+        ),
+        clock: ref.watch(timeSourceProvider),
+      );
+    });
+
+final sendConversationEventsProvider =
+    FutureProvider.family<SendConversationEvents, MessagingScope>((
+      ref,
+      scope,
+    ) async {
+      final database = await ref.watch(localDatabaseProvider.future);
+      final fanout = await ref.watch(
+        pairwiseFanoutCoordinatorProvider(scope).future,
+      );
+      final gossip = DeviceLogGossipCoordinator(
+        database: database,
+        local: DriftLinkedDeviceRepository(database),
+        protocol: ref.watch(applicationProtocolProvider),
+        controlCrypto: ref.watch(deviceControlCryptoProvider),
+        fanout: fanout,
         currentUserId: scope.userId,
+        currentDeviceId: scope.deviceId,
       );
       return SendConversationEvents(
         repository: DriftConversationDomainRepository(database),
         protocol: ref.watch(applicationProtocolProvider),
         fanout: PairwiseApplicationFanoutAdapter(
-          PairwiseFanoutCoordinator(
-            store: DriftPairwiseTransportStore(database),
-            liveDevices: liveDevices,
-            claims: ContactSelectivePairwiseClaimAdapter(
-              delegate: authentication,
-              currentUserId: scope.userId,
-            ),
-            crypto: NativePairwiseOutboundPreparation(
-              ref.watch(pairwiseSessionCryptoProvider),
-            ),
-            clock: ref.watch(timeSourceProvider),
-          ),
+          fanout,
+          afterSuccessfulQueue: (peerUserId) async {
+            await gossip.queueForUser(peerUserId);
+          },
         ),
         clock: ref.watch(timeSourceProvider),
       );

@@ -152,6 +152,12 @@ ORDER BY u.directory_entry_ciphertext ASC
   @override
   Future<Result<bool>> hasAnyDeviceLogFork() async {
     try {
+      final global = await database
+          .select(database.securityPostures)
+          .getSingleOrNull();
+      if (global != null && global.state != 0) {
+        return const Result.success(true);
+      }
       final rows = await (database.select(
         database.localPreferences,
       )..where((entry) => entry.preferenceKey.like('$_trustPrefix%'))).get();

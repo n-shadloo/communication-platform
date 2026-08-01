@@ -37,8 +37,8 @@ opaque/client-owned; **Pending** = Flutter implementation not started.
 | User directory | Ready | Piece 11 activated-user fetch, atomic Drift cache, offline presentation, bounded local paging/search, and Contacts/New UI complete |
 | Encrypted profile blob | Ready opaque storage | Piece 11 authenticated fetch/publish, version retry, cached fallback gating, and profile-key distribution ports complete; development fake transport is explicitly non-production and production remains fail-closed pending pairwise transport |
 | Cross-signing identity publish/fetch | Ready opaque transport | Pieces 10/11 complete local identity lifecycle plus exact peer `master_sig` verification, persisted user-signing attestation, key-change blocking, and profile/Safety Number UI |
-| Register/list/label/revoke devices | Ready; two-phase enrollment contract | Piece 10 first/later two-phase registration, unsigned withholding, prekey cross-sign follow-up, orphan reconciliation/revocation, and resumable UI complete; linked-device management remains later work |
-| Peer device lists, ETags, signed device log | Ready opaque transport | Pieces 10/11 complete own-device append plus peer ETag cache, signed extension/live-set verification, prekey-bundle authentication, and persistent global fork blocking; encrypted head gossip remains a later messaging task |
+| Register/list/label/revoke devices | Ready; two-phase enrollment contract | Pieces 10/17 complete enrollment plus authenticated own-device ETag listing, account-private encrypted labels, relabel, explicit remote/self revocation, crash-resumable log-first removal, secure self cleanup, and Linked Devices UI |
+| Peer device lists, ETags, signed device log | Ready opaque transport | Pieces 10/11/17 complete authenticated own/peer device sets, canonical signed-log verification and extension, exact predicted-sequence confirmation, concurrent append recovery, encrypted pairwise head gossip, and persistent global fork/equivocation blocking |
 | Hybrid X25519 + ML-KEM prekeys | Ready public distribution | Pending reviewed PQXDH core; no classical fallback |
 | PQ MLS key packages | 4096/16384 buckets + last-resort ready | Candidate selected; blocked on IANA ID, maintained OpenMLS/provider support, vectors, and review |
 | SAS/QR master-key verification | Client protocol | Piece 11 exact-two-master-key SAS/QR, explicit out-of-band confirmation, user-signing attestation, and persistent verified/change states complete; messaging remains withheld on every non-verified state |
@@ -59,7 +59,7 @@ opaque/client-owned; **Pending** = Flutter implementation not started.
 | Reactions/pins/receipts | Client protocol | Piece 14 idempotent set projections, participant/role authorization, per-device receipt provenance, durable delivered work, and privacy-gated read sends complete |
 | Typing/presence meaning | Volatile relay ready | Piece 14 bounded volatile typing expiry, conservative socket presence, disconnect clearing, and typed Riverpod streams complete; signals never enter durable projections |
 | Private contact blocking | No server ACL by design | Protocol specified; implementation pending |
-| Multi-device self-sync/history | Envelope primitives ready; no history API | Piece 14 ordinary event fan-out to own live devices uses the same event ID; authorized history transfer remains pending |
+| Multi-device self-sync/history | Ready device-to-device; no history API | Pieces 14/17 complete ordinary own-device fan-out plus authenticated, bounded, resumable history batches over exact-recipient hybrid pairwise envelopes with transactional deduplication and honest partial/no-source recovery states |
 | Saved Messages | Client protocol | Pieces 14–15 complete the domain-separated local conversation, own-account authorization, unread-free/local-only behavior, no peer presence/receipt promise, routing, timeline, composer, and actions |
 | Local search | No plaintext server search by design | Pending Android encrypted index |
 
@@ -85,8 +85,8 @@ opaque/client-owned; **Pending** = Flutter implementation not started.
 | Encrypted attachment metadata/key | Client protocol | Pending |
 | Bounded secure cache | Not applicable | Pending |
 | Key backup blob | Ready for cross-signing identity material | Piece 10 4,096-byte Rust Argon2id/XChaCha20-Poly1305 format, parameter/bucket validation, stale-version reconciliation, and cleanup complete |
-| Server history | Deliberately absent | Device-to-device transfer specified; implementation pending |
-| New-device restore | Two-phase enrollment and identity backup APIs ready | Piece 10 identity-only restore/cross-sign/log follow-up complete; history remains intentionally deferred to device-to-device transfer |
+| Server history | Deliberately absent | Piece 17 transfers only locally held application-event history between cross-signing-authorized online devices; no history/archive endpoint or server-history dependency exists |
+| New-device restore | Two-phase enrollment and identity backup APIs ready | Pieces 10/17 complete identity restore/cross-sign/log follow-up and honest device-to-device full/partial history recovery without transferring ratchets, MLS epochs, archive keys, or server history |
 
 ## Voice rooms and realtime
 

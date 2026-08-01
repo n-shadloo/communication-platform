@@ -4,12 +4,14 @@ import 'dart:typed_data';
 import 'package:communication_platform/core/application/ports/application_protocol_port.dart';
 import 'package:communication_platform/core/application/ports/attachment_crypto_port.dart';
 import 'package:communication_platform/core/application/ports/crypto_core_port.dart';
+import 'package:communication_platform/core/application/ports/device_control_crypto_port.dart';
 import 'package:communication_platform/core/application/ports/enrollment_crypto_port.dart';
 import 'package:communication_platform/core/application/ports/identity_crypto_port.dart';
 import 'package:communication_platform/core/application/ports/pairwise_crypto_port.dart';
 import 'package:communication_platform/core/protocol/application_message_model.dart';
 import 'package:communication_platform/core/protocol/attachment_crypto_model.dart';
 import 'package:communication_platform/core/protocol/crypto_core_model.dart';
+import 'package:communication_platform/core/protocol/device_control_model.dart';
 import 'package:communication_platform/core/protocol/enrollment_crypto_model.dart';
 import 'package:communication_platform/core/protocol/identity_protocol_model.dart';
 import 'package:communication_platform/core/protocol/pairwise_crypto_model.dart';
@@ -77,6 +79,7 @@ final class CryptoCoreRuntime
         IdentityCryptoPort,
         PairwiseCryptoPort,
         ApplicationProtocolPort,
+        DeviceControlCryptoPort,
         AttachmentCryptoPort {
   CryptoCoreRuntime({
     required this.worker,
@@ -453,6 +456,244 @@ final class CryptoCoreRuntime
   }
 
   @override
+  Future<Result<Uint8List>> encodeDeviceControl(
+    DeviceControlEvent event,
+  ) async {
+    try {
+      final writer = _ApplicationWriter()
+        ..bytes(ascii.encode('CPDCV001'))
+        ..u8(DeviceControlProtocolV1.version)
+        ..u8(switch (event) {
+          DeviceHeadGossipEvent() => 1,
+          HistoryTransferRequestEvent() => 2,
+          HistoryTransferBatchEvent() => 3,
+          HistoryTransferCompleteEvent() => 4,
+          HistoryTransferUnavailableEvent() => 5,
+        })
+        ..bytes(event.eventId)
+        ..bytes(event.senderUserId)
+        ..bytes(event.senderDeviceId)
+        ..bytes(event.targetDeviceId ?? Uint8List(16))
+        ..bytes(event.transferId ?? Uint8List(16));
+      switch (event) {
+        case DeviceHeadGossipEvent(:final heads):
+          writer.u8(heads.length);
+          for (final head in heads) {
+            writer
+              ..bytes(head.userId)
+              ..u64(head.sequence)
+              ..bytes(head.hash);
+          }
+        case HistoryTransferRequestEvent(:final resumeAfterBatch):
+          writer.u32(resumeAfterBatch);
+        case HistoryTransferBatchEvent(
+          :final batchIndex,
+          :final finalBatch,
+          :final sourceCompleteness,
+          :final canonicalEvents,
+        ):
+          writer
+            ..u32(batchIndex)
+            ..boolean(finalBatch)
+            ..u8(sourceCompleteness.index)
+            ..u16(canonicalEvents.length);
+          for (final canonical in canonicalEvents) {
+            writer
+              ..u32(canonical.length)
+              ..bytes(canonical);
+          }
+        case HistoryTransferCompleteEvent(:final confirmedBatches):
+          writer.u32(confirmedBatches);
+        case HistoryTransferUnavailableEvent(:final reason):
+          writer.u8(reason.index);
+      }
+      final response = await _applicationCall(6, writer.takeBytes());
+      return response.fold(
+        onSuccess: (bytes) => _prefixedPayload(bytes, 'CPDCO001'),
+        onFailure: Result.failure,
+      );
+    } on Object {
+      return const Result.failure(
+        ValidationFailure(ValidationFailureKind.invalidInput),
+      );
+    }
+  }
+
+  @override
+  Future<Result<DeviceControlEvent>> decodeDeviceControl(
+    Uint8List bytes,
+  ) async {
+    if (bytes.isEmpty || bytes.length > 262144) {
+      return const Result.failure(
+        ValidationFailure(ValidationFailureKind.invalidInput),
+      );
+    }
+    final response = await _applicationCall(7, bytes);
+    if (response case FailureResult(failure: final failure)) {
+      return Result.failure(failure);
+    }
+    try {
+      final projection = _prefixedPayload(
+        (response as Success<Uint8List>).value,
+        'CPDOD001',
+      );
+      if (projection case FailureResult(failure: final failure)) {
+        return Result.failure(failure);
+      }
+      final reader = _ApplicationReader(
+        (projection as Success<Uint8List>).value,
+      )..expectMagic('CPDCV001');
+      if (reader.u8() != DeviceControlProtocolV1.version) {
+        throw const FormatException('unsupported device control version');
+      }
+      final kind = reader.u8();
+      final eventId = reader.take(16);
+      final senderUserId = reader.take(16);
+      final senderDeviceId = reader.take(16);
+      final targetDeviceId = reader.take(16);
+      final transferId = reader.take(16);
+      final DeviceControlEvent event = switch (kind) {
+        1 => DeviceHeadGossipEvent(
+          eventId: eventId,
+          senderUserId: senderUserId,
+          senderDeviceId: senderDeviceId,
+          heads: [
+            for (var index = 0, count = reader.u8(); index < count; index += 1)
+              DeviceLogHeadGossip(
+                userId: reader.take(16),
+                sequence: reader.u64(),
+                hash: reader.take(32),
+              ),
+          ],
+        ),
+        2 => HistoryTransferRequestEvent(
+          eventId: eventId,
+          senderUserId: senderUserId,
+          senderDeviceId: senderDeviceId,
+          targetDeviceId: targetDeviceId,
+          transferId: transferId,
+          resumeAfterBatch: reader.u32(),
+        ),
+        3 => _readHistoryBatch(
+          reader,
+          eventId: eventId,
+          senderUserId: senderUserId,
+          senderDeviceId: senderDeviceId,
+          targetDeviceId: targetDeviceId,
+          transferId: transferId,
+        ),
+        4 => HistoryTransferCompleteEvent(
+          eventId: eventId,
+          senderUserId: senderUserId,
+          senderDeviceId: senderDeviceId,
+          targetDeviceId: targetDeviceId,
+          transferId: transferId,
+          confirmedBatches: reader.u32(),
+        ),
+        5 => HistoryTransferUnavailableEvent(
+          eventId: eventId,
+          senderUserId: senderUserId,
+          senderDeviceId: senderDeviceId,
+          targetDeviceId: targetDeviceId,
+          transferId: transferId,
+          reason: HistoryUnavailableReason.values[reader.u8()],
+        ),
+        _ => throw const FormatException('unsupported device control kind'),
+      };
+      if (!reader.finished) {
+        throw const FormatException('trailing device control bytes');
+      }
+      return Result.success(event);
+    } on Object {
+      return const Result.failure(
+        SecurityFailure(SecurityFailureKind.malformedServerResponse),
+      );
+    }
+  }
+
+  @override
+  Future<Result<DeviceLabelCiphertext>> sealDeviceLabel({
+    required IdentityKeyPackage identity,
+    required Uint8List userId,
+    required Uint8List deviceId,
+    required String label,
+  }) async {
+    final labelBytes = Uint8List.fromList(utf8.encode(label));
+    if (userId.length != 16 ||
+        deviceId.length != 16 ||
+        labelBytes.isEmpty ||
+        labelBytes.length > DeviceControlProtocolV1.maximumLabelBytes ||
+        label.runes.length > DeviceControlProtocolV1.maximumLabelScalars) {
+      return const Result.failure(
+        ValidationFailure(ValidationFailureKind.invalidInput),
+      );
+    }
+    final writer = _ApplicationWriter()
+      ..bytes(ascii.encode('CPLSE001'))
+      ..u32(identity.opaqueBytes.length)
+      ..bytes(identity.opaqueBytes)
+      ..bytes(userId)
+      ..bytes(deviceId)
+      ..u32(labelBytes.length)
+      ..bytes(labelBytes);
+    final response = await _applicationCall(8, writer.takeBytes());
+    return response.fold(
+      onSuccess: (bytes) =>
+          _fixedPrefixedPayload(
+            bytes,
+            magic: 'CPLSO001',
+            length: DeviceControlProtocolV1.labelBucketBytes,
+          ).fold(
+            onSuccess: (blob) => Result.success(DeviceLabelCiphertext(blob)),
+            onFailure: Result.failure,
+          ),
+      onFailure: Result.failure,
+    );
+  }
+
+  @override
+  Future<Result<String>> openDeviceLabel({
+    required IdentityKeyPackage identity,
+    required Uint8List userId,
+    required Uint8List deviceId,
+    required DeviceLabelCiphertext ciphertext,
+  }) async {
+    if (userId.length != 16 || deviceId.length != 16) {
+      return const Result.failure(
+        ValidationFailure(ValidationFailureKind.invalidInput),
+      );
+    }
+    final writer = _ApplicationWriter()
+      ..bytes(ascii.encode('CPLOE001'))
+      ..u32(identity.opaqueBytes.length)
+      ..bytes(identity.opaqueBytes)
+      ..bytes(userId)
+      ..bytes(deviceId)
+      ..u32(ciphertext.bytes.length)
+      ..bytes(ciphertext.bytes);
+    final response = await _applicationCall(9, writer.takeBytes());
+    if (response case FailureResult(failure: final failure)) {
+      return Result.failure(failure);
+    }
+    try {
+      final reader = _ApplicationReader((response as Success<Uint8List>).value)
+        ..expectMagic('CPLOO001');
+      final label = reader.text(
+        maximumBytes: DeviceControlProtocolV1.maximumLabelBytes,
+        maximumScalars: DeviceControlProtocolV1.maximumLabelScalars,
+      );
+      if (!reader.finished) {
+        throw const FormatException('trailing label projection');
+      }
+      return Result.success(label);
+    } on Object {
+      return const Result.failure(
+        SecurityFailure(SecurityFailureKind.malformedServerResponse),
+      );
+    }
+  }
+
+  @override
   Future<Result<AttachmentCryptoPushSession>> createPush({
     required int plaintextSize,
     required int bucketSize,
@@ -556,6 +797,7 @@ final class UnsupportedCryptoCore
         IdentityCryptoPort,
         PairwiseCryptoPort,
         ApplicationProtocolPort,
+        DeviceControlCryptoPort,
         AttachmentCryptoPort {
   const UnsupportedCryptoCore();
 
@@ -633,6 +875,30 @@ final class UnsupportedCryptoCore
   @override
   Future<Result<Uint8List>> deriveSavedConversationId(Uint8List userId) =>
       _identityUnsupported();
+
+  @override
+  Future<Result<Uint8List>> encodeDeviceControl(DeviceControlEvent event) =>
+      _identityUnsupported();
+
+  @override
+  Future<Result<DeviceControlEvent>> decodeDeviceControl(Uint8List bytes) =>
+      _identityUnsupported();
+
+  @override
+  Future<Result<DeviceLabelCiphertext>> sealDeviceLabel({
+    required IdentityKeyPackage identity,
+    required Uint8List userId,
+    required Uint8List deviceId,
+    required String label,
+  }) => _identityUnsupported();
+
+  @override
+  Future<Result<String>> openDeviceLabel({
+    required IdentityKeyPackage identity,
+    required Uint8List userId,
+    required Uint8List deviceId,
+    required DeviceLabelCiphertext ciphertext,
+  }) => _identityUnsupported();
 
   @override
   Future<Result<Uint8List>> createDeviceLogRecord({
@@ -1071,6 +1337,47 @@ Result<Uint8List> _fixedPrefixedPayload(
             SecurityFailure(SecurityFailureKind.malformedServerResponse),
           ),
     onFailure: Result.failure,
+  );
+}
+
+HistoryTransferBatchEvent _readHistoryBatch(
+  _ApplicationReader reader, {
+  required Uint8List eventId,
+  required Uint8List senderUserId,
+  required Uint8List senderDeviceId,
+  required Uint8List targetDeviceId,
+  required Uint8List transferId,
+}) {
+  final batchIndex = reader.u32();
+  final finalBatch = reader.boolean();
+  final completenessIndex = reader.u8();
+  final count = reader.u16();
+  if (completenessIndex >= HistorySourceCompleteness.values.length ||
+      count < 1 ||
+      count > DeviceControlProtocolV1.maximumHistoryEventsPerBatch) {
+    throw const FormatException('invalid history batch projection');
+  }
+  var total = 0;
+  final events = <Uint8List>[];
+  for (var index = 0; index < count; index += 1) {
+    final length = reader.u32();
+    total += length;
+    if (length < 1 ||
+        total > DeviceControlProtocolV1.maximumHistoryBatchBytes) {
+      throw const FormatException('history batch exceeds bound');
+    }
+    events.add(reader.take(length));
+  }
+  return HistoryTransferBatchEvent(
+    eventId: eventId,
+    senderUserId: senderUserId,
+    senderDeviceId: senderDeviceId,
+    targetDeviceId: targetDeviceId,
+    transferId: transferId,
+    batchIndex: batchIndex,
+    finalBatch: finalBatch,
+    sourceCompleteness: HistorySourceCompleteness.values[completenessIndex],
+    canonicalEvents: events,
   );
 }
 

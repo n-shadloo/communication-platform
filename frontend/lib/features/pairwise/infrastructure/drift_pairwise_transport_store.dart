@@ -1,4 +1,5 @@
 import 'package:communication_platform/core/protocol/application_message_model.dart';
+import 'package:communication_platform/core/protocol/device_control_model.dart';
 import 'package:communication_platform/core/result/failure.dart';
 import 'package:communication_platform/core/result/result.dart';
 import 'package:communication_platform/features/local_storage/infrastructure/database/local_database.dart';
@@ -536,6 +537,7 @@ final class DriftPairwiseTransportStore implements PairwiseTransportStore {
             database,
           ).retainUnsupportedInsideTransaction(unsupported);
         }
+        await _commitDeviceControl(commit);
         await (database.update(
           database.inboxEnvelopes,
         )..where((row) => row.envelopeId.equals(commit.envelopeId))).write(
@@ -568,6 +570,197 @@ final class DriftPairwiseTransportStore implements PairwiseTransportStore {
       return const Result.failure(
         StorageFailure(StorageFailureKind.unavailable),
       );
+    }
+  }
+
+  Future<void> _commitDeviceControl(PairwiseReceiveCommit commit) async {
+    final control = commit.deviceControlEvent;
+    if (control == null) {
+      if (commit.historyApplicationEvents.isNotEmpty) {
+        throw const _PairwiseIntegrity();
+      }
+      return;
+    }
+    if (protocolUuidString(control.senderUserId) !=
+            commit.senderUserId.toLowerCase() ||
+        protocolUuidString(control.senderDeviceId) !=
+            commit.senderDeviceId.toLowerCase()) {
+      throw const _PairwiseIntegrity();
+    }
+    switch (control) {
+      case DeviceHeadGossipEvent(:final heads):
+        if (commit.historyApplicationEvents.isNotEmpty) {
+          throw const _PairwiseIntegrity();
+        }
+        for (final head in heads) {
+          final userId = protocolUuidString(head.userId);
+          final local =
+              await (database.select(database.deviceLogRecords)..where(
+                    (row) =>
+                        row.userId.equals(userId) &
+                        row.sequence.equals(head.sequence),
+                  ))
+                  .getSingleOrNull();
+          if (local != null && !_bytesEqual(local.recordHash, head.hash)) {
+            await database
+                .into(database.securityPostures)
+                .insertOnConflictUpdate(
+                  SecurityPosturesCompanion.insert(
+                    singletonId: const Value(1),
+                    state: 1,
+                    evidenceKind: const Value(2),
+                    detectedAt: Value(DateTime.now().toUtc()),
+                  ),
+                );
+          }
+        }
+      case HistoryTransferRequestEvent():
+        if (commit.senderUserId != commit.sessionTransition.remoteUserId ||
+            commit.historyApplicationEvents.isNotEmpty) {
+          throw const _PairwiseIntegrity();
+        }
+        final transferId = protocolBytesToHex(control.transferId!);
+        final existing = await (database.select(
+          database.historyTransfers,
+        )..where((row) => row.transferId.equals(transferId))).getSingleOrNull();
+        if (existing == null) {
+          await database
+              .into(database.historyTransfers)
+              .insert(
+                HistoryTransfersCompanion.insert(
+                  transferId: transferId,
+                  manifestCiphertext: control.eventId,
+                  sourceDeviceId: Value(
+                    commit.sessionTransition.localDeviceId.toLowerCase(),
+                  ),
+                  targetDeviceId: Value(commit.senderDeviceId.toLowerCase()),
+                  direction: const Value(1),
+                  state: const Value(1),
+                  nextBatchIndex: Value(control.resumeAfterBatch),
+                  sourceCompleteness: 0,
+                ),
+              );
+        } else if (existing.targetDeviceId !=
+                commit.senderDeviceId.toLowerCase() ||
+            existing.sourceDeviceId !=
+                commit.sessionTransition.localDeviceId.toLowerCase() ||
+            existing.nextBatchIndex != control.resumeAfterBatch ||
+            existing.direction != 1) {
+          throw const _PairwiseConflict();
+        }
+      case HistoryTransferBatchEvent():
+        if (commit.historyApplicationEvents.length !=
+            control.canonicalEvents.length) {
+          throw const _PairwiseIntegrity();
+        }
+        final transferId = protocolBytesToHex(control.transferId!);
+        final transfer = await (database.select(
+          database.historyTransfers,
+        )..where((row) => row.transferId.equals(transferId))).getSingleOrNull();
+        if (transfer == null ||
+            transfer.direction != 0 ||
+            transfer.sourceDeviceId != commit.senderDeviceId.toLowerCase() ||
+            transfer.targetDeviceId !=
+                commit.sessionTransition.localDeviceId.toLowerCase()) {
+          throw const _PairwiseConflict();
+        }
+        final existing =
+            await (database.select(database.historyTransferBatches)..where(
+                  (row) =>
+                      row.transferId.equals(transferId) &
+                      row.batchIndex.equals(control.batchIndex),
+                ))
+                .getSingleOrNull();
+        if (existing != null) {
+          if (existing.controlEventId != protocolBytesToHex(control.eventId)) {
+            throw const _PairwiseIntegrity();
+          }
+          return;
+        }
+        if (control.batchIndex != transfer.nextBatchIndex) {
+          throw const _PairwiseConflict();
+        }
+        for (final application in commit.historyApplicationEvents) {
+          await DriftApplicationEventProjector(
+            database,
+          ).applyInsideTransaction(application);
+        }
+        await database
+            .into(database.historyTransferBatches)
+            .insert(
+              HistoryTransferBatchesCompanion.insert(
+                transferId: transferId,
+                batchIndex: control.batchIndex,
+                controlEventId: protocolBytesToHex(control.eventId),
+                eventCount: control.canonicalEvents.length,
+                finalBatch: control.finalBatch,
+              ),
+            );
+        await (database.update(
+          database.historyTransfers,
+        )..where((row) => row.transferId.equals(transferId))).write(
+          HistoryTransfersCompanion(
+            nextBatchIndex: Value(control.batchIndex + 1),
+            eventProgress: Value(
+              transfer.eventProgress + control.canonicalEvents.length,
+            ),
+            sourceCompleteness: Value(control.sourceCompleteness.index),
+            state: Value(
+              control.sourceCompleteness == HistorySourceCompleteness.partial
+                  ? 3
+                  : control.finalBatch
+                  ? 7
+                  : 2,
+            ),
+            updatedAt: Value(DateTime.now().toUtc()),
+          ),
+        );
+      case HistoryTransferCompleteEvent(:final confirmedBatches):
+        if (commit.historyApplicationEvents.isNotEmpty) {
+          throw const _PairwiseIntegrity();
+        }
+        final transferId = protocolBytesToHex(control.transferId!);
+        final transfer = await (database.select(
+          database.historyTransfers,
+        )..where((row) => row.transferId.equals(transferId))).getSingleOrNull();
+        final sender = commit.senderDeviceId.toLowerCase();
+        if (transfer == null ||
+            transfer.nextBatchIndex != confirmedBatches ||
+            (transfer.direction == 0 && transfer.sourceDeviceId != sender) ||
+            (transfer.direction == 1 && transfer.targetDeviceId != sender)) {
+          throw const _PairwiseConflict();
+        }
+        await (database.update(
+          database.historyTransfers,
+        )..where((row) => row.transferId.equals(transferId))).write(
+          HistoryTransfersCompanion(
+            state: const Value(7),
+            updatedAt: Value(DateTime.now().toUtc()),
+          ),
+        );
+      case HistoryTransferUnavailableEvent(:final reason):
+        if (commit.historyApplicationEvents.isNotEmpty) {
+          throw const _PairwiseIntegrity();
+        }
+        final transferId = protocolBytesToHex(control.transferId!);
+        final transfer = await (database.select(
+          database.historyTransfers,
+        )..where((row) => row.transferId.equals(transferId))).getSingleOrNull();
+        if (transfer == null ||
+            transfer.direction != 0 ||
+            transfer.sourceDeviceId != commit.senderDeviceId.toLowerCase()) {
+          throw const _PairwiseConflict();
+        }
+        await (database.update(
+          database.historyTransfers,
+        )..where((row) => row.transferId.equals(transferId))).write(
+          HistoryTransfersCompanion(
+            state: Value(
+              reason == HistoryUnavailableReason.sourcePartial ? 3 : 4,
+            ),
+            updatedAt: Value(DateTime.now().toUtc()),
+          ),
+        );
     }
   }
 
@@ -1219,6 +1412,14 @@ SELECT
         commit.openedOpaquePayload.isNotEmpty &&
         commit.openedOpaquePayload.length <= 262144 &&
         !(application != null && unsupported != null) &&
+        (commit.deviceControlEvent == null ||
+            (application == null && unsupported == null)) &&
+        (commit.historyApplicationEvents.isEmpty ||
+            (commit.deviceControlEvent is HistoryTransferBatchEvent &&
+                commit.historyApplicationEvents.length ==
+                    (commit.deviceControlEvent as HistoryTransferBatchEvent)
+                        .canonicalEvents
+                        .length)) &&
         (application == null ||
             (!application.localOrigin &&
                 protocolUuidString(application.event.senderUserId) ==

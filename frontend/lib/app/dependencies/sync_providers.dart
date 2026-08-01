@@ -1,5 +1,6 @@
 import 'package:communication_platform/app/dependencies/contact_providers.dart';
 import 'package:communication_platform/app/dependencies/core_providers.dart';
+import 'package:communication_platform/app/dependencies/linked_device_providers.dart';
 import 'package:communication_platform/app/dependencies/local_storage_providers.dart';
 import 'package:communication_platform/app/dependencies/messaging_providers.dart';
 import 'package:communication_platform/features/messaging/application/conversation_use_cases.dart';
@@ -12,6 +13,7 @@ import 'package:communication_platform/features/synchronization/application/port
 import 'package:communication_platform/features/synchronization/domain/sync_model.dart';
 import 'package:communication_platform/features/synchronization/infrastructure/dio_sync_remote_port.dart';
 import 'package:communication_platform/features/synchronization/infrastructure/drift_sync_store.dart';
+import 'package:communication_platform/features/synchronization/infrastructure/history_transfer_coordinator.dart';
 import 'package:communication_platform/features/synchronization/infrastructure/pairwise_opaque_envelope_inspector.dart';
 import 'package:communication_platform/features/synchronization/infrastructure/stale_device_refresh_adapter.dart';
 import 'package:communication_platform/features/synchronization/infrastructure/sync_platform_adapters.dart';
@@ -51,6 +53,20 @@ final durableSyncEngineProvider =
           deviceId: scope.deviceId,
         )).future,
       );
+      final historyTransfer = HistoryTransferCoordinator(
+        database: database,
+        applicationProtocol: ref.watch(applicationProtocolProvider),
+        controlCrypto: ref.watch(deviceControlCryptoProvider),
+        fanout: await ref.watch(
+          pairwiseFanoutCoordinatorProvider((
+            userId: scope.userId,
+            deviceId: scope.deviceId,
+          )).future,
+        ),
+        local: await ref.watch(linkedDeviceLocalProvider.future),
+        currentUserId: scope.userId,
+        currentDeviceId: scope.deviceId,
+      );
       final inspector = PairwiseOpaqueEnvelopeInspector(
         localDeviceId: scope.deviceId,
         store: DriftPairwiseTransportStore(database),
@@ -60,6 +76,7 @@ final durableSyncEngineProvider =
         ),
         crypto: NativePairwiseSessionCrypto(ref.watch(pairwiseCryptoProvider)),
         applicationProtocol: ref.watch(applicationProtocolProvider),
+        deviceControlCrypto: ref.watch(deviceControlCryptoProvider),
         conversationResolver: DriftApplicationConversationResolver(
           database: database,
           protocol: ref.watch(applicationProtocolProvider),
@@ -74,12 +91,30 @@ final durableSyncEngineProvider =
         staleDeviceRefresh: ContactStaleDeviceRefreshAdapter(authentication),
         clock: ref.watch(timeSourceProvider),
         jitter: FullJitterSource(),
-        postInboxCommitWork: PendingReceiptPostInboxWork(
-          FlushPendingDeliveredReceipts(
-            repository: await ref.watch(conversationRepositoryProvider.future),
-            sender: sender,
-            currentUserId: scope.userId,
+        postInboxCommitWork: _CompositePostInboxWork([
+          PendingReceiptPostInboxWork(
+            FlushPendingDeliveredReceipts(
+              repository: await ref.watch(
+                conversationRepositoryProvider.future,
+              ),
+              sender: sender,
+              currentUserId: scope.userId,
+            ),
           ),
-        ),
+          HistoryTransferPostInboxWork(historyTransfer),
+        ]),
       );
     });
+
+final class _CompositePostInboxWork implements PostInboxCommitWorkPort {
+  const _CompositePostInboxWork(this.work);
+
+  final List<PostInboxCommitWorkPort> work;
+
+  @override
+  Future<void> run() async {
+    for (final item in work) {
+      await item.run();
+    }
+  }
+}

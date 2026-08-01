@@ -4,11 +4,16 @@ import 'package:communication_platform/core/protocol/application_message_model.d
 import 'package:communication_platform/core/result/result.dart';
 import 'package:communication_platform/features/messaging/application/ports/conversation_ports.dart';
 import 'package:communication_platform/features/pairwise/application/pairwise_fanout_coordinator.dart';
+import 'package:communication_platform/features/pairwise/domain/pairwise_model.dart';
 
 final class PairwiseApplicationFanoutAdapter implements ApplicationFanoutPort {
-  const PairwiseApplicationFanoutAdapter(this.delegate);
+  const PairwiseApplicationFanoutAdapter(
+    this.delegate, {
+    this.afterSuccessfulQueue,
+  });
 
   final PairwiseFanoutCoordinator delegate;
+  final Future<void> Function(String peerUserId)? afterSuccessfulQueue;
 
   @override
   Future<Result<ApplicationFanoutOutcome>> prepareAndQueue({
@@ -29,11 +34,13 @@ final class PairwiseApplicationFanoutAdapter implements ApplicationFanoutPort {
       openedOpaquePayload: openedPayload,
       applicationEvent: applicationEvent,
     );
-    return result.fold(
-      onSuccess: (operation) => Result.success(
-        ApplicationFanoutOutcome(targetCount: operation.targets.length),
-      ),
-      onFailure: Result.failure,
+    if (result case FailureResult(failure: final failure)) {
+      return Result.failure(failure);
+    }
+    final operation = (result as Success<DurablePairwiseOperation>).value;
+    await afterSuccessfulQueue?.call(peerUserId);
+    return Result.success(
+      ApplicationFanoutOutcome(targetCount: operation.targets.length),
     );
   }
 }

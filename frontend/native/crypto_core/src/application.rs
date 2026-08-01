@@ -7,6 +7,7 @@ use minicbor::{decode::Decoder, encode::Encoder};
 
 use crate::{
     bounds::{MAX_CBOR_BYTES, MAX_CBOR_ITEMS},
+    enrollment,
     error::{CryptoError, CryptoResult},
     protocol::{Reader, push_frame, push_u16, push_u32, push_u64, reserve},
     provider::{CryptoProvider, RustCryptoProvider},
@@ -20,6 +21,13 @@ const ENCODE_RESPONSE_MAGIC: &[u8; 8] = b"CPAOE001";
 const DECODE_RESPONSE_MAGIC: &[u8; 8] = b"CPAOD001";
 const RANDOM_RESPONSE_MAGIC: &[u8; 8] = b"CPAOG001";
 const CONVERSATION_RESPONSE_MAGIC: &[u8; 8] = b"CPAOC001";
+const DEVICE_CONTROL_MAGIC: &[u8; 8] = b"CPDCV001";
+const DEVICE_CONTROL_ENCODE_RESPONSE_MAGIC: &[u8; 8] = b"CPDCO001";
+const DEVICE_CONTROL_DECODE_RESPONSE_MAGIC: &[u8; 8] = b"CPDOD001";
+const LABEL_SEAL_REQUEST_MAGIC: &[u8; 8] = b"CPLSE001";
+const LABEL_SEAL_RESPONSE_MAGIC: &[u8; 8] = b"CPLSO001";
+const LABEL_OPEN_REQUEST_MAGIC: &[u8; 8] = b"CPLOE001";
+const LABEL_OPEN_RESPONSE_MAGIC: &[u8; 8] = b"CPLOO001";
 
 const DM_CONVERSATION_DOMAIN: &[u8] = b"chat:v1:dm-conversation";
 const SAVED_CONVERSATION_DOMAIN: &[u8] = b"chat:v1:saved-conversation";
@@ -41,6 +49,9 @@ const MAX_QUOTE_SCALARS: usize = 512;
 const MAX_EMOJI_BYTES: usize = 64;
 const MAX_APPLICATION_CBOR_DEPTH: usize = 16;
 const MAX_APPLICATION_MAP_ENTRIES: usize = 64;
+const MAX_DEVICE_GOSSIP_HEADS: usize = 32;
+const MAX_HISTORY_BATCH_EVENTS: usize = 32;
+const MAX_HISTORY_BATCH_BYTES: usize = 240 * 1024;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 struct ApplicationEvent {
@@ -120,8 +131,154 @@ pub fn operation(operation: u32, input: &[u8]) -> CryptoResult<Vec<u8>> {
         3 => random_event_id(input),
         4 => derive_dm_conversation_id(input),
         5 => derive_saved_conversation_id(input),
+        6 => encode_device_control(input),
+        7 => decode_device_control(input),
+        8 => seal_device_label(input),
+        9 => open_device_label(input),
         _ => Err(CryptoError::UnsupportedOperation),
     }
+}
+
+fn encode_device_control(input: &[u8]) -> CryptoResult<Vec<u8>> {
+    validate_device_control(input)?;
+    let mut output = Vec::with_capacity(DEVICE_CONTROL_ENCODE_RESPONSE_MAGIC.len() + input.len());
+    output.extend_from_slice(DEVICE_CONTROL_ENCODE_RESPONSE_MAGIC);
+    output.extend_from_slice(input);
+    Ok(output)
+}
+
+fn decode_device_control(input: &[u8]) -> CryptoResult<Vec<u8>> {
+    validate_device_control(input)?;
+    let mut output = Vec::with_capacity(DEVICE_CONTROL_DECODE_RESPONSE_MAGIC.len() + input.len());
+    output.extend_from_slice(DEVICE_CONTROL_DECODE_RESPONSE_MAGIC);
+    output.extend_from_slice(input);
+    Ok(output)
+}
+
+fn validate_device_control(input: &[u8]) -> CryptoResult<()> {
+    let mut reader = Reader::new(input);
+    reader.expect(DEVICE_CONTROL_MAGIC)?;
+    if reader.u8()? != 1 {
+        return Err(CryptoError::UnsupportedVersion);
+    }
+    let kind = reader.u8()?;
+    let _event_id: [u8; 16] = reader.array()?;
+    let _sender_user_id: [u8; 16] = reader.array()?;
+    let _sender_device_id: [u8; 16] = reader.array()?;
+    let target_device_id: [u8; 16] = reader.array()?;
+    let transfer_id: [u8; 16] = reader.array()?;
+    match kind {
+        1 => {
+            if target_device_id != [0; 16] || transfer_id != [0; 16] {
+                return Err(CryptoError::MalformedInput);
+            }
+            let count = usize::from(reader.u8()?);
+            if count == 0 || count > MAX_DEVICE_GOSSIP_HEADS {
+                return Err(CryptoError::InputTooLarge);
+            }
+            let mut users = Vec::with_capacity(count);
+            for _ in 0..count {
+                let user: [u8; 16] = reader.array()?;
+                let _sequence = reader.u64()?;
+                let _hash: [u8; 32] = reader.array()?;
+                users.push(user);
+            }
+            if has_duplicates(&users) {
+                return Err(CryptoError::MalformedInput);
+            }
+        }
+        2 => {
+            if target_device_id == [0; 16] || transfer_id == [0; 16] {
+                return Err(CryptoError::MalformedInput);
+            }
+            let _resume_after_batch = reader.u32()?;
+        }
+        3 => {
+            if target_device_id == [0; 16] || transfer_id == [0; 16] {
+                return Err(CryptoError::MalformedInput);
+            }
+            let _batch_index = reader.u32()?;
+            let _final_batch = reader.boolean()?;
+            if reader.u8()? > 1 {
+                return Err(CryptoError::MalformedInput);
+            }
+            let count = usize::from(reader.u16()?);
+            if count == 0 || count > MAX_HISTORY_BATCH_EVENTS {
+                return Err(CryptoError::InputTooLarge);
+            }
+            let mut total = 0_usize;
+            for _ in 0..count {
+                let bytes = reader.framed()?;
+                total = total
+                    .checked_add(bytes.len())
+                    .ok_or(CryptoError::InputTooLarge)?;
+                if total > MAX_HISTORY_BATCH_BYTES {
+                    return Err(CryptoError::InputTooLarge);
+                }
+                let (event, unsupported_version) = decode_event(bytes)?;
+                let event = event.ok_or(CryptoError::UnsupportedVersion)?;
+                if unsupported_version.is_some()
+                    || matches!(
+                        &event.body,
+                        EventBody::Unsupported | EventBody::TypingSet { .. }
+                    )
+                    || encode_event(&event)? != bytes
+                {
+                    return Err(CryptoError::MalformedInput);
+                }
+            }
+        }
+        4 => {
+            if target_device_id == [0; 16] || transfer_id == [0; 16] {
+                return Err(CryptoError::MalformedInput);
+            }
+            let _confirmed_batches = reader.u32()?;
+        }
+        5 => {
+            if target_device_id == [0; 16] || transfer_id == [0; 16] || reader.u8()? > 2 {
+                return Err(CryptoError::MalformedInput);
+            }
+        }
+        _ => return Err(CryptoError::UnsupportedOperation),
+    }
+    if !reader.is_finished() {
+        return Err(CryptoError::MalformedInput);
+    }
+    Ok(())
+}
+
+fn seal_device_label(input: &[u8]) -> CryptoResult<Vec<u8>> {
+    let mut reader = Reader::new(input);
+    reader.expect(LABEL_SEAL_REQUEST_MAGIC)?;
+    let identity = reader.framed()?;
+    let user_id = reader.take(16)?;
+    let device_id = reader.take(16)?;
+    let label = reader.framed()?;
+    if !reader.is_finished() {
+        return Err(CryptoError::MalformedInput);
+    }
+    let blob = enrollment::seal_device_label(identity, user_id, device_id, label)?;
+    let mut output = Vec::with_capacity(LABEL_SEAL_RESPONSE_MAGIC.len() + blob.len());
+    output.extend_from_slice(LABEL_SEAL_RESPONSE_MAGIC);
+    output.extend_from_slice(&blob);
+    Ok(output)
+}
+
+fn open_device_label(input: &[u8]) -> CryptoResult<Vec<u8>> {
+    let mut reader = Reader::new(input);
+    reader.expect(LABEL_OPEN_REQUEST_MAGIC)?;
+    let identity = reader.framed()?;
+    let user_id = reader.take(16)?;
+    let device_id = reader.take(16)?;
+    let blob = reader.framed()?;
+    if !reader.is_finished() {
+        return Err(CryptoError::MalformedInput);
+    }
+    let label = enrollment::open_device_label(identity, user_id, device_id, blob)?;
+    let mut output = Vec::with_capacity(LABEL_OPEN_RESPONSE_MAGIC.len() + 4 + label.len());
+    output.extend_from_slice(LABEL_OPEN_RESPONSE_MAGIC);
+    push_frame(&mut output, &label)?;
+    Ok(output)
 }
 
 fn encode_operation(input: &[u8]) -> CryptoResult<Vec<u8>> {
@@ -144,7 +301,7 @@ fn decode_operation(input: &[u8]) -> CryptoResult<Vec<u8>> {
         return Ok(output);
     }
     let event = event.ok_or(CryptoError::InternalFailure)?;
-    output.push(u8::from(matches!(event.body, EventBody::Unsupported)));
+    output.push(u8::from(matches!(&event.body, EventBody::Unsupported)));
     encode_projection(&event, &mut output)?;
     Ok(output)
 }
@@ -1468,12 +1625,13 @@ fn is_emoji_base(value: char) -> bool {
 mod tests {
     use super::{
         APPLICATION_VERSION, ApplicationEvent, CONVERSATION_RESPONSE_MAGIC, DECODE_RESPONSE_MAGIC,
-        ENCODE_REQUEST_MAGIC, ENCODE_RESPONSE_MAGIC, EventBody, KIND_MESSAGE_CREATE,
-        KIND_MESSAGE_EDIT, KIND_REACTION_SET, decode_event, encode_event, operation,
+        DEVICE_CONTROL_DECODE_RESPONSE_MAGIC, DEVICE_CONTROL_MAGIC, ENCODE_REQUEST_MAGIC,
+        ENCODE_RESPONSE_MAGIC, EventBody, KIND_MESSAGE_CREATE, KIND_MESSAGE_EDIT,
+        KIND_REACTION_SET, decode_event, encode_event, operation,
     };
     use crate::{
         error::CryptoError,
-        protocol::{push_frame, push_u16, push_u64},
+        protocol::{push_frame, push_u16, push_u32, push_u64},
     };
 
     fn create_projection() -> Vec<u8> {
@@ -1604,6 +1762,39 @@ mod tests {
             assert_eq!(decoded, Some(event));
             assert_eq!(encode_event(decoded.as_ref().unwrap()).unwrap(), encoded);
         }
+    }
+
+    #[test]
+    fn device_control_batches_are_bounded_canonical_and_tamper_evident() {
+        let encoded = operation(1, &create_projection()).unwrap();
+        let canonical = &encoded[8..];
+        let mut control = Vec::new();
+        control.extend_from_slice(DEVICE_CONTROL_MAGIC);
+        control.push(1);
+        control.push(3);
+        control.extend_from_slice(&[1; 16]);
+        control.extend_from_slice(&[2; 16]);
+        control.extend_from_slice(&[3; 16]);
+        control.extend_from_slice(&[4; 16]);
+        control.extend_from_slice(&[5; 16]);
+        push_u32(&mut control, 0);
+        control.push(1);
+        control.push(0);
+        push_u16(&mut control, 1);
+        push_frame(&mut control, canonical).unwrap();
+
+        let decoded = operation(7, &control).unwrap();
+        assert_eq!(&decoded[..8], DEVICE_CONTROL_DECODE_RESPONSE_MAGIC);
+        assert_eq!(&decoded[8..], control);
+
+        let mut tampered = control.clone();
+        tampered.push(0);
+        assert_eq!(operation(7, &tampered), Err(CryptoError::MalformedInput));
+
+        let mut oversized = control;
+        oversized[96] = 0;
+        oversized[97] = 33;
+        assert_eq!(operation(7, &oversized), Err(CryptoError::InputTooLarge));
     }
 
     #[test]

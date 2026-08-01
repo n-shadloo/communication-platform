@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:communication_platform/app/config/app_environment.dart';
 import 'package:communication_platform/app/design_system/app_tokens.dart';
 import 'package:communication_platform/features/app_shell/presentation/app_shell.dart';
+import 'package:communication_platform/features/app_shell/presentation/settings_page.dart';
 import 'package:communication_platform/features/app_shell/presentation/structural_placeholder_page.dart';
 import 'package:communication_platform/features/authentication/presentation/authentication_pages.dart';
 import 'package:communication_platform/features/authentication/presentation/authentication_route_state.dart';
@@ -11,6 +12,7 @@ import 'package:communication_platform/features/bootstrap/domain/bootstrap_model
 import 'package:communication_platform/features/bootstrap/presentation/bootstrap_page.dart';
 import 'package:communication_platform/features/contacts/presentation/contact_pages.dart';
 import 'package:communication_platform/features/devices/presentation/device_enrollment_page.dart';
+import 'package:communication_platform/features/devices/presentation/linked_devices_page.dart';
 import 'package:communication_platform/features/messaging/presentation/chat_pages.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
@@ -232,13 +234,8 @@ GoRouter createAppRouter({
           routes: [
             GoRoute(
               path: '/settings',
-              pageBuilder: (context, state) => _page(
-                context,
-                state,
-                const StructuralPlaceholderPage(
-                  kind: StructuralPlaceholderKind.settings,
-                ),
-              ),
+              pageBuilder: (context, state) =>
+                  _page(context, state, const SettingsPage()),
               routes: [
                 GoRoute(
                   path: 'appearance',
@@ -254,6 +251,11 @@ GoRouter createAppRouter({
                   path: 'profile',
                   pageBuilder: (context, state) =>
                       _page(context, state, const EditProfilePage()),
+                ),
+                GoRoute(
+                  path: 'linked-devices',
+                  pageBuilder: (context, state) =>
+                      _page(context, state, const LinkedDevicesPage()),
                 ),
               ],
             ),

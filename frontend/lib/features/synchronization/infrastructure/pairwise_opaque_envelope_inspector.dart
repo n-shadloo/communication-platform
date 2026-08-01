@@ -2,9 +2,11 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:communication_platform/core/application/ports/application_protocol_port.dart';
+import 'package:communication_platform/core/application/ports/device_control_crypto_port.dart';
 import 'package:communication_platform/core/application/ports/pairwise_session_crypto_port.dart';
 import 'package:communication_platform/core/application/ports/time_source.dart';
 import 'package:communication_platform/core/protocol/application_message_model.dart';
+import 'package:communication_platform/core/protocol/device_control_model.dart';
 import 'package:communication_platform/core/protocol/pairwise_crypto_model.dart'
     as native;
 import 'package:communication_platform/core/protocol/pairwise_sync_model.dart';
@@ -27,6 +29,7 @@ final class PairwiseOpaqueEnvelopeInspector implements OpaqueEnvelopeInspector {
     required this.liveDevices,
     required this.crypto,
     required this.applicationProtocol,
+    required this.deviceControlCrypto,
     required this.conversationResolver,
     required this.currentUserId,
     required this.clock,
@@ -37,6 +40,7 @@ final class PairwiseOpaqueEnvelopeInspector implements OpaqueEnvelopeInspector {
   final PairwiseLiveDeviceResolverPort liveDevices;
   final PairwiseSessionCryptoPort crypto;
   final ApplicationProtocolPort applicationProtocol;
+  final DeviceControlCryptoPort deviceControlCrypto;
   final ApplicationConversationResolverPort conversationResolver;
   final String currentUserId;
   final TimeSource clock;
@@ -192,6 +196,8 @@ final class PairwiseOpaqueEnvelopeInspector implements OpaqueEnvelopeInspector {
           ),
           applicationEvent: prepared.applicationEvent,
           unsupportedApplicationEvent: prepared.unsupportedApplicationEvent,
+          deviceControlEvent: prepared.deviceControlEvent,
+          historyApplicationEvents: prepared.historyApplicationEvents,
         ),
       ),
     );
@@ -395,6 +401,8 @@ final class PairwiseOpaqueEnvelopeInspector implements OpaqueEnvelopeInspector {
           consumedOneTimePrekeys: consumed,
           applicationEvent: prepared.applicationEvent,
           unsupportedApplicationEvent: prepared.unsupportedApplicationEvent,
+          deviceControlEvent: prepared.deviceControlEvent,
+          historyApplicationEvents: prepared.historyApplicationEvents,
         ),
       ),
     );
@@ -406,6 +414,59 @@ final class PairwiseOpaqueEnvelopeInspector implements OpaqueEnvelopeInspector {
     required String senderDeviceId,
     required Uint8List openedPayload,
   }) async {
+    if (_isDeviceControl(openedPayload)) {
+      final controlResult = await deviceControlCrypto.decodeDeviceControl(
+        openedPayload,
+      );
+      if (controlResult case FailureResult(failure: final failure)) {
+        return Result.failure(failure);
+      }
+      final control = (controlResult as Success<DeviceControlEvent>).value;
+      if (protocolUuidString(control.senderUserId) !=
+              senderUserId.toLowerCase() ||
+          protocolUuidString(control.senderDeviceId) !=
+              senderDeviceId.toLowerCase()) {
+        return const Result.failure(
+          SecurityFailure(SecurityFailureKind.unauthenticatedInput),
+        );
+      }
+      if (control.targetDeviceId != null &&
+          !_same(control.targetDeviceId!, _uuidBytes(localDeviceId))) {
+        return const Result.failure(
+          SecurityFailure(SecurityFailureKind.unauthenticatedInput),
+        );
+      }
+      if (control is HistoryTransferRequestEvent ||
+          control is HistoryTransferBatchEvent ||
+          control is HistoryTransferCompleteEvent ||
+          control is HistoryTransferUnavailableEvent) {
+        if (senderUserId != currentUserId.toLowerCase()) {
+          return const Result.failure(
+            SecurityFailure(SecurityFailureKind.unauthenticatedInput),
+          );
+        }
+      }
+      final historyEvents = <ApplicationEventCommit>[];
+      if (control is HistoryTransferBatchEvent) {
+        for (final canonical in control.canonicalEvents) {
+          final prepared = await _prepareTransferredApplication(canonical);
+          if (prepared case FailureResult(failure: final failure)) {
+            return Result.failure(failure);
+          }
+          historyEvents.add(
+            (prepared as Success<ApplicationEventCommit>).value,
+          );
+        }
+      }
+      return Result.success(
+        _PreparedApplication(
+          opaqueEventId:
+              'device-control:${protocolBytesToHex(control.eventId)}',
+          deviceControlEvent: control,
+          historyApplicationEvents: historyEvents,
+        ),
+      );
+    }
     final decodedResult = await applicationProtocol.decode(openedPayload);
     if (decodedResult case FailureResult(failure: final failure)) {
       return Result.failure(failure);
@@ -480,6 +541,44 @@ final class PairwiseOpaqueEnvelopeInspector implements OpaqueEnvelopeInspector {
           localOrigin: false,
           authenticatedAt: clock.now().toUtc(),
         ),
+      ),
+    );
+  }
+
+  Future<Result<ApplicationEventCommit>> _prepareTransferredApplication(
+    Uint8List canonical,
+  ) async {
+    final decodedResult = await applicationProtocol.decode(canonical);
+    if (decodedResult case FailureResult(failure: final failure)) {
+      return Result.failure(failure);
+    }
+    final decoded = (decodedResult as Success<DecodedApplicationEvent>).value;
+    if (decoded is! SupportedApplicationEvent ||
+        decoded.event.kind == ApplicationEventKind.typingSet ||
+        !_same(decoded.canonicalBytes, canonical)) {
+      return const Result.failure(
+        SecurityFailure(SecurityFailureKind.unauthenticatedInput),
+      );
+    }
+    final conversationResult = await conversationResolver.resolve(
+      event: decoded.event,
+      currentUserId: currentUserId,
+    );
+    if (conversationResult case FailureResult(failure: final failure)) {
+      return Result.failure(failure);
+    }
+    final conversation =
+        (conversationResult as Success<ResolvedApplicationConversation>).value;
+    return Result.success(
+      ApplicationEventCommit(
+        event: decoded.event,
+        canonicalBytes: decoded.canonicalBytes,
+        currentUserId: currentUserId.toLowerCase(),
+        currentDeviceId: localDeviceId.toLowerCase(),
+        conversationKind: conversation.kind.index,
+        peerUserId: conversation.peerUserId,
+        localOrigin: false,
+        authenticatedAt: clock.now().toUtc(),
       ),
     );
   }
@@ -637,9 +736,24 @@ final class _PreparedApplication {
     required this.opaqueEventId,
     this.applicationEvent,
     this.unsupportedApplicationEvent,
+    this.deviceControlEvent,
+    this.historyApplicationEvents = const [],
   });
 
   final String opaqueEventId;
   final ApplicationEventCommit? applicationEvent;
   final UnsupportedApplicationCommit? unsupportedApplicationEvent;
+  final DeviceControlEvent? deviceControlEvent;
+  final List<ApplicationEventCommit> historyApplicationEvents;
 }
+
+bool _isDeviceControl(List<int> bytes) =>
+    bytes.length >= 8 &&
+    bytes[0] == 0x43 &&
+    bytes[1] == 0x50 &&
+    bytes[2] == 0x44 &&
+    bytes[3] == 0x43 &&
+    bytes[4] == 0x56 &&
+    bytes[5] == 0x30 &&
+    bytes[6] == 0x30 &&
+    bytes[7] == 0x31;

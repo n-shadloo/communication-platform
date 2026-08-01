@@ -220,21 +220,17 @@ final class ClientAuthenticationService
             advertisedHead < previous!.logHeadSequence!)) {
       return _fork(previous, userId, identity, etag);
     }
-    if (listChanged && advertisedHead == previous?.logHeadSequence) {
-      // A signed-prekey rotation updates cross_sig/bundle_version before the
-      // separately appended device-log record can become visible. Treat only
-      // that exact immutable-identity, version+1 shape as transient. An
-      // addition/removal or any unexplained signature change at the same head
-      // remains equivocation evidence.
-      if (_onlyPendingMonotonicRotations(cachedDevices, devices)) {
-        return const Result.failure(
-          SecurityFailure(SecurityFailureKind.policyBlocked),
-        );
-      }
-      return _fork(previous, userId, identity, etag);
-    }
     if (!_isValidDeviceTransition(cachedDevices, devices)) {
       return _invalidDevice(previous, userId, identity, etag);
+    }
+    if (listChanged && advertisedHead == previous?.logHeadSequence) {
+      // Device registration, revocation, and prekey rotation are separate
+      // server mutations from the signed append. A same-head device-set change
+      // is therefore a bounded pending window, not fork evidence. The list is
+      // never exposed as authenticated until the extending record arrives.
+      return const Result.failure(
+        SecurityFailure(SecurityFailureKind.policyBlocked),
+      );
     }
 
     var expectedPrevious = previous?.logHeadHash ?? Uint8List(32);
@@ -589,35 +585,6 @@ final class ClientAuthenticationService
       }
     }
     return true;
-  }
-
-  bool _onlyPendingMonotonicRotations(
-    List<PeerPublicDevice> previous,
-    List<PeerPublicDevice> current,
-  ) {
-    if (previous.length != current.length) {
-      return false;
-    }
-    final oldById = {for (final device in previous) device.deviceId: device};
-    var changed = false;
-    for (final device in current) {
-      final old = oldById[device.deviceId];
-      if (old == null ||
-          old.registrationId != device.registrationId ||
-          !_same(old.identityPublic, device.identityPublic)) {
-        return false;
-      }
-      if (!_nullableSame(old.crossSignature, device.crossSignature)) {
-        if (old.bundleVersion == null ||
-            device.bundleVersion != old.bundleVersion! + 1) {
-          return false;
-        }
-        changed = true;
-      } else if (old.bundleVersion != device.bundleVersion) {
-        return false;
-      }
-    }
-    return changed;
   }
 
   bool _nullableSame(Uint8List? left, Uint8List? right) =>

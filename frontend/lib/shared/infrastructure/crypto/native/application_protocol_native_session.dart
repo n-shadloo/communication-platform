@@ -11,7 +11,7 @@ final class ApplicationProtocolNativeSession {
   final ApplicationProtocolNativeApi api;
 
   Result<Uint8List> operation(int operation, Uint8List input) {
-    if (operation < 1 || operation > 5 || input.length > 262144) {
+    if (operation < 1 || operation > 9 || input.length > 262144) {
       return const Result.failure(
         ValidationFailure(ValidationFailureKind.invalidInput),
       );

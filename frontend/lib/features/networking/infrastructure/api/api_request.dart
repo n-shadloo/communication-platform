@@ -94,6 +94,7 @@ final class ApiRequest<T> {
     this.headers = const {},
     this.body,
     this.timeouts = const NetworkTimeouts(),
+    this.decodeWithHeaders,
   }) {
     if (!path.startsWith('/api/v1/') || Uri.parse(path).hasQuery) {
       throw ArgumentError.value(path, 'path', 'must be an /api/v1/ path');
@@ -124,6 +125,8 @@ final class ApiRequest<T> {
   final Map<String, String> headers;
   final Object? body;
   final NetworkTimeouts timeouts;
+  final T Function(Object? json, Map<String, List<String>> headers)?
+  decodeWithHeaders;
 
   bool get canReplay => replaySafety != ReplaySafety.never;
 }

@@ -1,4 +1,5 @@
 import 'package:communication_platform/core/protocol/application_message_model.dart';
+import 'package:communication_platform/core/protocol/device_control_model.dart';
 import 'package:communication_platform/core/result/failure.dart';
 import 'package:communication_platform/core/result/result.dart';
 import 'package:communication_platform/features/local_storage/infrastructure/database/local_database.dart';
@@ -564,6 +565,194 @@ void main() {
       expect(markers, isEmpty);
     },
   );
+
+  test(
+    'encrypted head gossip records global equivocation fail-closed',
+    () async {
+      final watchedUser = uuid(700);
+      await database
+          .into(database.users)
+          .insert(
+            UsersCompanion.insert(
+              userId: watchedUser,
+              activated: true,
+              directoryEntryCiphertext: bytes(8, 1),
+              localState: 0,
+            ),
+          );
+      await database
+          .into(database.deviceLogRecords)
+          .insert(
+            DeviceLogRecordsCompanion.insert(
+              userId: watchedUser,
+              sequence: 0,
+              signedOpaqueRecord: bytes(256, 1),
+              recordHash: bytes(32, 1),
+              forkState: 0,
+              gossipState: 0,
+            ),
+          );
+      await inspectEnvelope(DriftSyncStore(database), 80);
+      final gossip = DeviceHeadGossipEvent(
+        eventId: bytes(16, 80),
+        senderUserId: protocolUuidBytes(uuid(1000)),
+        senderDeviceId: protocolUuidBytes(uuid(500)),
+        heads: [
+          DeviceLogHeadGossip(
+            userId: protocolUuidBytes(watchedUser),
+            sequence: 0,
+            hash: bytes(32, 2),
+          ),
+        ],
+      );
+      final result = await store.commitPreparedReceive(
+        receiveCommit(
+          envelopeNumber: 80,
+          stateMarker: 1,
+          replayMarker: bytes(32, 80),
+          senderUserId: uuid(1000),
+          deviceControlEvent: gossip,
+        ),
+      );
+
+      expect(result, isA<Success<bool>>());
+      expect(
+        (await database.select(database.securityPostures).getSingle()).state,
+        1,
+      );
+    },
+  );
+
+  test('history batches resume and deduplicate transactionally', () async {
+    final transferBytes = bytes(16, 44);
+    final transferId = protocolBytesToHex(transferBytes);
+    await database
+        .into(database.historyTransfers)
+        .insert(
+          HistoryTransfersCompanion.insert(
+            transferId: transferId,
+            manifestCiphertext: bytes(16, 1),
+            sourceDeviceId: Value(uuid(500)),
+            targetDeviceId: Value(uuid(900)),
+            direction: const Value(0),
+            state: const Value(1),
+            sourceCompleteness: 0,
+          ),
+        );
+    final application = applicationCommit(
+      eventNumber: 81,
+      senderUserNumber: 2000,
+      senderDeviceNumber: 2001,
+      peerUserNumber: 2000,
+    );
+    final batch = HistoryTransferBatchEvent(
+      eventId: bytes(16, 81),
+      senderUserId: protocolUuidBytes(uuid(1000)),
+      senderDeviceId: protocolUuidBytes(uuid(500)),
+      targetDeviceId: protocolUuidBytes(uuid(900)),
+      transferId: transferBytes,
+      batchIndex: 0,
+      finalBatch: true,
+      sourceCompleteness: HistorySourceCompleteness.partial,
+      canonicalEvents: [application.canonicalBytes],
+    );
+    final sync = DriftSyncStore(database);
+    await inspectEnvelope(sync, 81);
+    final first = await store.commitPreparedReceive(
+      receiveCommit(
+        envelopeNumber: 81,
+        stateMarker: 1,
+        replayMarker: bytes(32, 81),
+        senderUserId: uuid(1000),
+        deviceControlEvent: batch,
+        historyApplicationEvents: [application],
+      ),
+    );
+
+    expect(first, isA<Success<bool>>());
+    expect(
+      await database.select(database.storedApplicationEvents).get(),
+      hasLength(1),
+    );
+    expect(
+      await database.select(database.historyTransferBatches).get(),
+      hasLength(1),
+    );
+    var progress = await database.select(database.historyTransfers).getSingle();
+    expect(progress.eventProgress, 1);
+    expect(progress.nextBatchIndex, 1);
+    expect(progress.state, 3);
+    expect(
+      progress.sourceCompleteness,
+      HistorySourceCompleteness.partial.index,
+    );
+
+    await inspectEnvelope(sync, 82);
+    final duplicate = await store.commitPreparedReceive(
+      receiveCommit(
+        envelopeNumber: 82,
+        stateMarker: 2,
+        replayMarker: bytes(32, 82),
+        expectedStateVersion: 1,
+        senderUserId: uuid(1000),
+        deviceControlEvent: batch,
+        historyApplicationEvents: [application],
+      ),
+    );
+    expect(duplicate, isA<Success<bool>>());
+    progress = await database.select(database.historyTransfers).getSingle();
+    expect(progress.eventProgress, 1);
+    expect(
+      await database.select(database.storedApplicationEvents).get(),
+      hasLength(1),
+    );
+  });
+
+  test('corrupt history batch shape rolls back ratchet and progress', () async {
+    final transferBytes = bytes(16, 45);
+    await database
+        .into(database.historyTransfers)
+        .insert(
+          HistoryTransfersCompanion.insert(
+            transferId: protocolBytesToHex(transferBytes),
+            manifestCiphertext: bytes(16, 1),
+            sourceDeviceId: Value(uuid(500)),
+            targetDeviceId: Value(uuid(900)),
+            direction: const Value(0),
+            state: const Value(1),
+            sourceCompleteness: 0,
+          ),
+        );
+    final batch = HistoryTransferBatchEvent(
+      eventId: bytes(16, 83),
+      senderUserId: protocolUuidBytes(uuid(1000)),
+      senderDeviceId: protocolUuidBytes(uuid(500)),
+      targetDeviceId: protocolUuidBytes(uuid(900)),
+      transferId: transferBytes,
+      batchIndex: 0,
+      finalBatch: false,
+      sourceCompleteness: HistorySourceCompleteness.full,
+      canonicalEvents: [bytes(128, 9)],
+    );
+    await inspectEnvelope(DriftSyncStore(database), 83);
+    final corrupt = await store.commitPreparedReceive(
+      receiveCommit(
+        envelopeNumber: 83,
+        stateMarker: 1,
+        replayMarker: bytes(32, 83),
+        senderUserId: uuid(1000),
+        deviceControlEvent: batch,
+      ),
+    );
+
+    expect(corrupt, isA<FailureResult<bool>>());
+    expect(await database.select(database.pairwiseSessions).get(), isEmpty);
+    expect(
+      (await database.select(database.historyTransfers).getSingle())
+          .eventProgress,
+      0,
+    );
+  });
 }
 
 PairwiseSendCommit sendCommit({
@@ -616,6 +805,8 @@ PairwiseReceiveCommit receiveCommit({
   int? pqSignedPrekeyId,
   Uint8List? replacedSessionId,
   ApplicationEventCommit? applicationEvent,
+  DeviceControlEvent? deviceControlEvent,
+  List<ApplicationEventCommit> historyApplicationEvents = const [],
 }) => PairwiseReceiveCommit(
   envelopeId: uuid(envelopeNumber),
   opaqueEventId: 'opaque-event-$envelopeNumber',
@@ -642,6 +833,8 @@ PairwiseReceiveCommit receiveCommit({
   deviceStateTransition: deviceState,
   consumedOneTimePrekeys: consumed,
   applicationEvent: applicationEvent,
+  deviceControlEvent: deviceControlEvent,
+  historyApplicationEvents: historyApplicationEvents,
 );
 
 ApplicationEventCommit applicationCommit({

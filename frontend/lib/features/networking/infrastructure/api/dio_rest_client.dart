@@ -184,7 +184,12 @@ final class DioRestClient {
           }
 
           try {
-            final decoded = request.decode(wireResponse.json);
+            final decoded = request.decodeWithHeaders == null
+                ? request.decode(wireResponse.json)
+                : request.decodeWithHeaders!(
+                    wireResponse.json,
+                    wireResponse.headers.map,
+                  );
             _record(
               request,
               NetworkOutcome.succeeded,

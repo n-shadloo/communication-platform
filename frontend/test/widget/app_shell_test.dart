@@ -52,7 +52,7 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.digit3);
     await tester.sendKeyUpEvent(LogicalKeyboardKey.altLeft);
     await tester.pumpAndSettle();
-    expect(find.text('Settings structure'), findsOneWidget);
+    expect(find.text('Linked Devices'), findsOneWidget);
   });
 
   testWidgets('guard hook can reject a protected destination', (tester) async {
@@ -64,7 +64,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('No chats yet'), findsOneWidget);
-    expect(find.text('Settings structure'), findsNothing);
+    expect(find.text('Linked Devices'), findsNothing);
   });
 
   testWidgets('large text on an Android-sized viewport does not overflow', (

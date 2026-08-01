@@ -3117,6 +3117,17 @@ class $DevicesTable extends Devices with TableInfo<$DevicesTable, Device> {
         type: DriftSqlType.blob,
         requiredDuringInsert: false,
       );
+  static const VerificationMeta _decryptedLabelMeta = const VerificationMeta(
+    'decryptedLabel',
+  );
+  @override
+  late final GeneratedColumn<String> decryptedLabel = GeneratedColumn<String>(
+    'decrypted_label',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _revocationStateMeta = const VerificationMeta(
     'revocationState',
   );
@@ -3158,6 +3169,58 @@ class $DevicesTable extends Devices with TableInfo<$DevicesTable, Device> {
         requiredDuringInsert: false,
         defaultValue: const Constant(0),
       );
+  static const VerificationMeta _createdDateMeta = const VerificationMeta(
+    'createdDate',
+  );
+  @override
+  late final GeneratedColumn<String> createdDate = GeneratedColumn<String>(
+    'created_date',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _lastActiveDateMeta = const VerificationMeta(
+    'lastActiveDate',
+  );
+  @override
+  late final GeneratedColumn<String> lastActiveDate = GeneratedColumn<String>(
+    'last_active_date',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _isCurrentDeviceMeta = const VerificationMeta(
+    'isCurrentDevice',
+  );
+  @override
+  late final GeneratedColumn<bool> isCurrentDevice = GeneratedColumn<bool>(
+    'is_current_device',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("is_current_device" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _ownerListingMeta = const VerificationMeta(
+    'ownerListing',
+  );
+  @override
+  late final GeneratedColumn<bool> ownerListing = GeneratedColumn<bool>(
+    'owner_listing',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("owner_listing" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     deviceId,
@@ -3165,9 +3228,14 @@ class $DevicesTable extends Devices with TableInfo<$DevicesTable, Device> {
     publicBundle,
     etagCiphertext,
     labelCiphertext,
+    decryptedLabel,
     revocationState,
     bundleVersion,
     lastSignedPrekeyRotationUnixDay,
+    createdDate,
+    lastActiveDate,
+    isCurrentDevice,
+    ownerListing,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -3226,6 +3294,15 @@ class $DevicesTable extends Devices with TableInfo<$DevicesTable, Device> {
         ),
       );
     }
+    if (data.containsKey('decrypted_label')) {
+      context.handle(
+        _decryptedLabelMeta,
+        decryptedLabel.isAcceptableOrUnknown(
+          data['decrypted_label']!,
+          _decryptedLabelMeta,
+        ),
+      );
+    }
     if (data.containsKey('revocation_state')) {
       context.handle(
         _revocationStateMeta,
@@ -3252,6 +3329,42 @@ class $DevicesTable extends Devices with TableInfo<$DevicesTable, Device> {
         lastSignedPrekeyRotationUnixDay.isAcceptableOrUnknown(
           data['last_signed_prekey_rotation_unix_day']!,
           _lastSignedPrekeyRotationUnixDayMeta,
+        ),
+      );
+    }
+    if (data.containsKey('created_date')) {
+      context.handle(
+        _createdDateMeta,
+        createdDate.isAcceptableOrUnknown(
+          data['created_date']!,
+          _createdDateMeta,
+        ),
+      );
+    }
+    if (data.containsKey('last_active_date')) {
+      context.handle(
+        _lastActiveDateMeta,
+        lastActiveDate.isAcceptableOrUnknown(
+          data['last_active_date']!,
+          _lastActiveDateMeta,
+        ),
+      );
+    }
+    if (data.containsKey('is_current_device')) {
+      context.handle(
+        _isCurrentDeviceMeta,
+        isCurrentDevice.isAcceptableOrUnknown(
+          data['is_current_device']!,
+          _isCurrentDeviceMeta,
+        ),
+      );
+    }
+    if (data.containsKey('owner_listing')) {
+      context.handle(
+        _ownerListingMeta,
+        ownerListing.isAcceptableOrUnknown(
+          data['owner_listing']!,
+          _ownerListingMeta,
         ),
       );
     }
@@ -3284,6 +3397,10 @@ class $DevicesTable extends Devices with TableInfo<$DevicesTable, Device> {
         DriftSqlType.blob,
         data['${effectivePrefix}label_ciphertext'],
       ),
+      decryptedLabel: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}decrypted_label'],
+      ),
       revocationState: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}revocation_state'],
@@ -3295,6 +3412,22 @@ class $DevicesTable extends Devices with TableInfo<$DevicesTable, Device> {
       lastSignedPrekeyRotationUnixDay: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}last_signed_prekey_rotation_unix_day'],
+      )!,
+      createdDate: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}created_date'],
+      ),
+      lastActiveDate: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}last_active_date'],
+      ),
+      isCurrentDevice: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}is_current_device'],
+      )!,
+      ownerListing: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}owner_listing'],
       )!,
     );
   }
@@ -3311,18 +3444,28 @@ class Device extends DataClass implements Insertable<Device> {
   final Uint8List publicBundle;
   final Uint8List? etagCiphertext;
   final Uint8List? labelCiphertext;
+  final String? decryptedLabel;
   final int revocationState;
   final int? bundleVersion;
   final int lastSignedPrekeyRotationUnixDay;
+  final String? createdDate;
+  final String? lastActiveDate;
+  final bool isCurrentDevice;
+  final bool ownerListing;
   const Device({
     required this.deviceId,
     required this.userId,
     required this.publicBundle,
     this.etagCiphertext,
     this.labelCiphertext,
+    this.decryptedLabel,
     required this.revocationState,
     this.bundleVersion,
     required this.lastSignedPrekeyRotationUnixDay,
+    this.createdDate,
+    this.lastActiveDate,
+    required this.isCurrentDevice,
+    required this.ownerListing,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -3336,6 +3479,9 @@ class Device extends DataClass implements Insertable<Device> {
     if (!nullToAbsent || labelCiphertext != null) {
       map['label_ciphertext'] = Variable<Uint8List>(labelCiphertext);
     }
+    if (!nullToAbsent || decryptedLabel != null) {
+      map['decrypted_label'] = Variable<String>(decryptedLabel);
+    }
     map['revocation_state'] = Variable<int>(revocationState);
     if (!nullToAbsent || bundleVersion != null) {
       map['bundle_version'] = Variable<int>(bundleVersion);
@@ -3343,6 +3489,14 @@ class Device extends DataClass implements Insertable<Device> {
     map['last_signed_prekey_rotation_unix_day'] = Variable<int>(
       lastSignedPrekeyRotationUnixDay,
     );
+    if (!nullToAbsent || createdDate != null) {
+      map['created_date'] = Variable<String>(createdDate);
+    }
+    if (!nullToAbsent || lastActiveDate != null) {
+      map['last_active_date'] = Variable<String>(lastActiveDate);
+    }
+    map['is_current_device'] = Variable<bool>(isCurrentDevice);
+    map['owner_listing'] = Variable<bool>(ownerListing);
     return map;
   }
 
@@ -3357,11 +3511,22 @@ class Device extends DataClass implements Insertable<Device> {
       labelCiphertext: labelCiphertext == null && nullToAbsent
           ? const Value.absent()
           : Value(labelCiphertext),
+      decryptedLabel: decryptedLabel == null && nullToAbsent
+          ? const Value.absent()
+          : Value(decryptedLabel),
       revocationState: Value(revocationState),
       bundleVersion: bundleVersion == null && nullToAbsent
           ? const Value.absent()
           : Value(bundleVersion),
       lastSignedPrekeyRotationUnixDay: Value(lastSignedPrekeyRotationUnixDay),
+      createdDate: createdDate == null && nullToAbsent
+          ? const Value.absent()
+          : Value(createdDate),
+      lastActiveDate: lastActiveDate == null && nullToAbsent
+          ? const Value.absent()
+          : Value(lastActiveDate),
+      isCurrentDevice: Value(isCurrentDevice),
+      ownerListing: Value(ownerListing),
     );
   }
 
@@ -3376,11 +3541,16 @@ class Device extends DataClass implements Insertable<Device> {
       publicBundle: serializer.fromJson<Uint8List>(json['publicBundle']),
       etagCiphertext: serializer.fromJson<Uint8List?>(json['etagCiphertext']),
       labelCiphertext: serializer.fromJson<Uint8List?>(json['labelCiphertext']),
+      decryptedLabel: serializer.fromJson<String?>(json['decryptedLabel']),
       revocationState: serializer.fromJson<int>(json['revocationState']),
       bundleVersion: serializer.fromJson<int?>(json['bundleVersion']),
       lastSignedPrekeyRotationUnixDay: serializer.fromJson<int>(
         json['lastSignedPrekeyRotationUnixDay'],
       ),
+      createdDate: serializer.fromJson<String?>(json['createdDate']),
+      lastActiveDate: serializer.fromJson<String?>(json['lastActiveDate']),
+      isCurrentDevice: serializer.fromJson<bool>(json['isCurrentDevice']),
+      ownerListing: serializer.fromJson<bool>(json['ownerListing']),
     );
   }
   @override
@@ -3392,11 +3562,16 @@ class Device extends DataClass implements Insertable<Device> {
       'publicBundle': serializer.toJson<Uint8List>(publicBundle),
       'etagCiphertext': serializer.toJson<Uint8List?>(etagCiphertext),
       'labelCiphertext': serializer.toJson<Uint8List?>(labelCiphertext),
+      'decryptedLabel': serializer.toJson<String?>(decryptedLabel),
       'revocationState': serializer.toJson<int>(revocationState),
       'bundleVersion': serializer.toJson<int?>(bundleVersion),
       'lastSignedPrekeyRotationUnixDay': serializer.toJson<int>(
         lastSignedPrekeyRotationUnixDay,
       ),
+      'createdDate': serializer.toJson<String?>(createdDate),
+      'lastActiveDate': serializer.toJson<String?>(lastActiveDate),
+      'isCurrentDevice': serializer.toJson<bool>(isCurrentDevice),
+      'ownerListing': serializer.toJson<bool>(ownerListing),
     };
   }
 
@@ -3406,9 +3581,14 @@ class Device extends DataClass implements Insertable<Device> {
     Uint8List? publicBundle,
     Value<Uint8List?> etagCiphertext = const Value.absent(),
     Value<Uint8List?> labelCiphertext = const Value.absent(),
+    Value<String?> decryptedLabel = const Value.absent(),
     int? revocationState,
     Value<int?> bundleVersion = const Value.absent(),
     int? lastSignedPrekeyRotationUnixDay,
+    Value<String?> createdDate = const Value.absent(),
+    Value<String?> lastActiveDate = const Value.absent(),
+    bool? isCurrentDevice,
+    bool? ownerListing,
   }) => Device(
     deviceId: deviceId ?? this.deviceId,
     userId: userId ?? this.userId,
@@ -3419,12 +3599,21 @@ class Device extends DataClass implements Insertable<Device> {
     labelCiphertext: labelCiphertext.present
         ? labelCiphertext.value
         : this.labelCiphertext,
+    decryptedLabel: decryptedLabel.present
+        ? decryptedLabel.value
+        : this.decryptedLabel,
     revocationState: revocationState ?? this.revocationState,
     bundleVersion: bundleVersion.present
         ? bundleVersion.value
         : this.bundleVersion,
     lastSignedPrekeyRotationUnixDay:
         lastSignedPrekeyRotationUnixDay ?? this.lastSignedPrekeyRotationUnixDay,
+    createdDate: createdDate.present ? createdDate.value : this.createdDate,
+    lastActiveDate: lastActiveDate.present
+        ? lastActiveDate.value
+        : this.lastActiveDate,
+    isCurrentDevice: isCurrentDevice ?? this.isCurrentDevice,
+    ownerListing: ownerListing ?? this.ownerListing,
   );
   Device copyWithCompanion(DevicesCompanion data) {
     return Device(
@@ -3439,6 +3628,9 @@ class Device extends DataClass implements Insertable<Device> {
       labelCiphertext: data.labelCiphertext.present
           ? data.labelCiphertext.value
           : this.labelCiphertext,
+      decryptedLabel: data.decryptedLabel.present
+          ? data.decryptedLabel.value
+          : this.decryptedLabel,
       revocationState: data.revocationState.present
           ? data.revocationState.value
           : this.revocationState,
@@ -3449,6 +3641,18 @@ class Device extends DataClass implements Insertable<Device> {
           data.lastSignedPrekeyRotationUnixDay.present
           ? data.lastSignedPrekeyRotationUnixDay.value
           : this.lastSignedPrekeyRotationUnixDay,
+      createdDate: data.createdDate.present
+          ? data.createdDate.value
+          : this.createdDate,
+      lastActiveDate: data.lastActiveDate.present
+          ? data.lastActiveDate.value
+          : this.lastActiveDate,
+      isCurrentDevice: data.isCurrentDevice.present
+          ? data.isCurrentDevice.value
+          : this.isCurrentDevice,
+      ownerListing: data.ownerListing.present
+          ? data.ownerListing.value
+          : this.ownerListing,
     );
   }
 
@@ -3460,11 +3664,16 @@ class Device extends DataClass implements Insertable<Device> {
           ..write('publicBundle: $publicBundle, ')
           ..write('etagCiphertext: $etagCiphertext, ')
           ..write('labelCiphertext: $labelCiphertext, ')
+          ..write('decryptedLabel: $decryptedLabel, ')
           ..write('revocationState: $revocationState, ')
           ..write('bundleVersion: $bundleVersion, ')
           ..write(
-            'lastSignedPrekeyRotationUnixDay: $lastSignedPrekeyRotationUnixDay',
+            'lastSignedPrekeyRotationUnixDay: $lastSignedPrekeyRotationUnixDay, ',
           )
+          ..write('createdDate: $createdDate, ')
+          ..write('lastActiveDate: $lastActiveDate, ')
+          ..write('isCurrentDevice: $isCurrentDevice, ')
+          ..write('ownerListing: $ownerListing')
           ..write(')'))
         .toString();
   }
@@ -3476,9 +3685,14 @@ class Device extends DataClass implements Insertable<Device> {
     $driftBlobEquality.hash(publicBundle),
     $driftBlobEquality.hash(etagCiphertext),
     $driftBlobEquality.hash(labelCiphertext),
+    decryptedLabel,
     revocationState,
     bundleVersion,
     lastSignedPrekeyRotationUnixDay,
+    createdDate,
+    lastActiveDate,
+    isCurrentDevice,
+    ownerListing,
   );
   @override
   bool operator ==(Object other) =>
@@ -3495,10 +3709,15 @@ class Device extends DataClass implements Insertable<Device> {
             other.labelCiphertext,
             this.labelCiphertext,
           ) &&
+          other.decryptedLabel == this.decryptedLabel &&
           other.revocationState == this.revocationState &&
           other.bundleVersion == this.bundleVersion &&
           other.lastSignedPrekeyRotationUnixDay ==
-              this.lastSignedPrekeyRotationUnixDay);
+              this.lastSignedPrekeyRotationUnixDay &&
+          other.createdDate == this.createdDate &&
+          other.lastActiveDate == this.lastActiveDate &&
+          other.isCurrentDevice == this.isCurrentDevice &&
+          other.ownerListing == this.ownerListing);
 }
 
 class DevicesCompanion extends UpdateCompanion<Device> {
@@ -3507,9 +3726,14 @@ class DevicesCompanion extends UpdateCompanion<Device> {
   final Value<Uint8List> publicBundle;
   final Value<Uint8List?> etagCiphertext;
   final Value<Uint8List?> labelCiphertext;
+  final Value<String?> decryptedLabel;
   final Value<int> revocationState;
   final Value<int?> bundleVersion;
   final Value<int> lastSignedPrekeyRotationUnixDay;
+  final Value<String?> createdDate;
+  final Value<String?> lastActiveDate;
+  final Value<bool> isCurrentDevice;
+  final Value<bool> ownerListing;
   final Value<int> rowid;
   const DevicesCompanion({
     this.deviceId = const Value.absent(),
@@ -3517,9 +3741,14 @@ class DevicesCompanion extends UpdateCompanion<Device> {
     this.publicBundle = const Value.absent(),
     this.etagCiphertext = const Value.absent(),
     this.labelCiphertext = const Value.absent(),
+    this.decryptedLabel = const Value.absent(),
     this.revocationState = const Value.absent(),
     this.bundleVersion = const Value.absent(),
     this.lastSignedPrekeyRotationUnixDay = const Value.absent(),
+    this.createdDate = const Value.absent(),
+    this.lastActiveDate = const Value.absent(),
+    this.isCurrentDevice = const Value.absent(),
+    this.ownerListing = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   DevicesCompanion.insert({
@@ -3528,9 +3757,14 @@ class DevicesCompanion extends UpdateCompanion<Device> {
     required Uint8List publicBundle,
     this.etagCiphertext = const Value.absent(),
     this.labelCiphertext = const Value.absent(),
+    this.decryptedLabel = const Value.absent(),
     required int revocationState,
     this.bundleVersion = const Value.absent(),
     this.lastSignedPrekeyRotationUnixDay = const Value.absent(),
+    this.createdDate = const Value.absent(),
+    this.lastActiveDate = const Value.absent(),
+    this.isCurrentDevice = const Value.absent(),
+    this.ownerListing = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : deviceId = Value(deviceId),
        userId = Value(userId),
@@ -3542,9 +3776,14 @@ class DevicesCompanion extends UpdateCompanion<Device> {
     Expression<Uint8List>? publicBundle,
     Expression<Uint8List>? etagCiphertext,
     Expression<Uint8List>? labelCiphertext,
+    Expression<String>? decryptedLabel,
     Expression<int>? revocationState,
     Expression<int>? bundleVersion,
     Expression<int>? lastSignedPrekeyRotationUnixDay,
+    Expression<String>? createdDate,
+    Expression<String>? lastActiveDate,
+    Expression<bool>? isCurrentDevice,
+    Expression<bool>? ownerListing,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -3553,10 +3792,15 @@ class DevicesCompanion extends UpdateCompanion<Device> {
       if (publicBundle != null) 'public_bundle': publicBundle,
       if (etagCiphertext != null) 'etag_ciphertext': etagCiphertext,
       if (labelCiphertext != null) 'label_ciphertext': labelCiphertext,
+      if (decryptedLabel != null) 'decrypted_label': decryptedLabel,
       if (revocationState != null) 'revocation_state': revocationState,
       if (bundleVersion != null) 'bundle_version': bundleVersion,
       if (lastSignedPrekeyRotationUnixDay != null)
         'last_signed_prekey_rotation_unix_day': lastSignedPrekeyRotationUnixDay,
+      if (createdDate != null) 'created_date': createdDate,
+      if (lastActiveDate != null) 'last_active_date': lastActiveDate,
+      if (isCurrentDevice != null) 'is_current_device': isCurrentDevice,
+      if (ownerListing != null) 'owner_listing': ownerListing,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -3567,9 +3811,14 @@ class DevicesCompanion extends UpdateCompanion<Device> {
     Value<Uint8List>? publicBundle,
     Value<Uint8List?>? etagCiphertext,
     Value<Uint8List?>? labelCiphertext,
+    Value<String?>? decryptedLabel,
     Value<int>? revocationState,
     Value<int?>? bundleVersion,
     Value<int>? lastSignedPrekeyRotationUnixDay,
+    Value<String?>? createdDate,
+    Value<String?>? lastActiveDate,
+    Value<bool>? isCurrentDevice,
+    Value<bool>? ownerListing,
     Value<int>? rowid,
   }) {
     return DevicesCompanion(
@@ -3578,11 +3827,16 @@ class DevicesCompanion extends UpdateCompanion<Device> {
       publicBundle: publicBundle ?? this.publicBundle,
       etagCiphertext: etagCiphertext ?? this.etagCiphertext,
       labelCiphertext: labelCiphertext ?? this.labelCiphertext,
+      decryptedLabel: decryptedLabel ?? this.decryptedLabel,
       revocationState: revocationState ?? this.revocationState,
       bundleVersion: bundleVersion ?? this.bundleVersion,
       lastSignedPrekeyRotationUnixDay:
           lastSignedPrekeyRotationUnixDay ??
           this.lastSignedPrekeyRotationUnixDay,
+      createdDate: createdDate ?? this.createdDate,
+      lastActiveDate: lastActiveDate ?? this.lastActiveDate,
+      isCurrentDevice: isCurrentDevice ?? this.isCurrentDevice,
+      ownerListing: ownerListing ?? this.ownerListing,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -3605,6 +3859,9 @@ class DevicesCompanion extends UpdateCompanion<Device> {
     if (labelCiphertext.present) {
       map['label_ciphertext'] = Variable<Uint8List>(labelCiphertext.value);
     }
+    if (decryptedLabel.present) {
+      map['decrypted_label'] = Variable<String>(decryptedLabel.value);
+    }
     if (revocationState.present) {
       map['revocation_state'] = Variable<int>(revocationState.value);
     }
@@ -3615,6 +3872,18 @@ class DevicesCompanion extends UpdateCompanion<Device> {
       map['last_signed_prekey_rotation_unix_day'] = Variable<int>(
         lastSignedPrekeyRotationUnixDay.value,
       );
+    }
+    if (createdDate.present) {
+      map['created_date'] = Variable<String>(createdDate.value);
+    }
+    if (lastActiveDate.present) {
+      map['last_active_date'] = Variable<String>(lastActiveDate.value);
+    }
+    if (isCurrentDevice.present) {
+      map['is_current_device'] = Variable<bool>(isCurrentDevice.value);
+    }
+    if (ownerListing.present) {
+      map['owner_listing'] = Variable<bool>(ownerListing.value);
     }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
@@ -3630,11 +3899,16 @@ class DevicesCompanion extends UpdateCompanion<Device> {
           ..write('publicBundle: $publicBundle, ')
           ..write('etagCiphertext: $etagCiphertext, ')
           ..write('labelCiphertext: $labelCiphertext, ')
+          ..write('decryptedLabel: $decryptedLabel, ')
           ..write('revocationState: $revocationState, ')
           ..write('bundleVersion: $bundleVersion, ')
           ..write(
             'lastSignedPrekeyRotationUnixDay: $lastSignedPrekeyRotationUnixDay, ',
           )
+          ..write('createdDate: $createdDate, ')
+          ..write('lastActiveDate: $lastActiveDate, ')
+          ..write('isCurrentDevice: $isCurrentDevice, ')
+          ..write('ownerListing: $ownerListing, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -4081,6 +4355,933 @@ class DeviceLogRecordsCompanion extends UpdateCompanion<DeviceLogRecord> {
           ..write('forkState: $forkState, ')
           ..write('gossipState: $gossipState, ')
           ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $DeviceLogMutationsTable extends DeviceLogMutations
+    with TableInfo<$DeviceLogMutationsTable, DeviceLogMutation> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $DeviceLogMutationsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _operationIdMeta = const VerificationMeta(
+    'operationId',
+  );
+  @override
+  late final GeneratedColumn<String> operationId = GeneratedColumn<String>(
+    'operation_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _userIdMeta = const VerificationMeta('userId');
+  @override
+  late final GeneratedColumn<String> userId = GeneratedColumn<String>(
+    'user_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _mutationKindMeta = const VerificationMeta(
+    'mutationKind',
+  );
+  @override
+  late final GeneratedColumn<int> mutationKind = GeneratedColumn<int>(
+    'mutation_kind',
+    aliasedName,
+    false,
+    check: () => ComparableExpr(mutationKind).isBetweenValues(0, 3),
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _targetDeviceIdMeta = const VerificationMeta(
+    'targetDeviceId',
+  );
+  @override
+  late final GeneratedColumn<String> targetDeviceId = GeneratedColumn<String>(
+    'target_device_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _expectedSequenceMeta = const VerificationMeta(
+    'expectedSequence',
+  );
+  @override
+  late final GeneratedColumn<int> expectedSequence = GeneratedColumn<int>(
+    'expected_sequence',
+    aliasedName,
+    false,
+    check: () => ComparableExpr(expectedSequence).isBiggerOrEqualValue(0),
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _previousHeadHashMeta = const VerificationMeta(
+    'previousHeadHash',
+  );
+  @override
+  late final GeneratedColumn<Uint8List> previousHeadHash =
+      GeneratedColumn<Uint8List>(
+        'previous_head_hash',
+        aliasedName,
+        false,
+        type: DriftSqlType.blob,
+        requiredDuringInsert: true,
+      );
+  static const VerificationMeta _exactRecordMeta = const VerificationMeta(
+    'exactRecord',
+  );
+  @override
+  late final GeneratedColumn<Uint8List> exactRecord =
+      GeneratedColumn<Uint8List>(
+        'exact_record',
+        aliasedName,
+        false,
+        type: DriftSqlType.blob,
+        requiredDuringInsert: true,
+      );
+  static const VerificationMeta _stateMeta = const VerificationMeta('state');
+  @override
+  late final GeneratedColumn<int> state = GeneratedColumn<int>(
+    'state',
+    aliasedName,
+    false,
+    check: () => ComparableExpr(state).isBetweenValues(0, 3),
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    operationId,
+    userId,
+    mutationKind,
+    targetDeviceId,
+    expectedSequence,
+    previousHeadHash,
+    exactRecord,
+    state,
+    updatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'device_log_mutations';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<DeviceLogMutation> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('operation_id')) {
+      context.handle(
+        _operationIdMeta,
+        operationId.isAcceptableOrUnknown(
+          data['operation_id']!,
+          _operationIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_operationIdMeta);
+    }
+    if (data.containsKey('user_id')) {
+      context.handle(
+        _userIdMeta,
+        userId.isAcceptableOrUnknown(data['user_id']!, _userIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_userIdMeta);
+    }
+    if (data.containsKey('mutation_kind')) {
+      context.handle(
+        _mutationKindMeta,
+        mutationKind.isAcceptableOrUnknown(
+          data['mutation_kind']!,
+          _mutationKindMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_mutationKindMeta);
+    }
+    if (data.containsKey('target_device_id')) {
+      context.handle(
+        _targetDeviceIdMeta,
+        targetDeviceId.isAcceptableOrUnknown(
+          data['target_device_id']!,
+          _targetDeviceIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('expected_sequence')) {
+      context.handle(
+        _expectedSequenceMeta,
+        expectedSequence.isAcceptableOrUnknown(
+          data['expected_sequence']!,
+          _expectedSequenceMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_expectedSequenceMeta);
+    }
+    if (data.containsKey('previous_head_hash')) {
+      context.handle(
+        _previousHeadHashMeta,
+        previousHeadHash.isAcceptableOrUnknown(
+          data['previous_head_hash']!,
+          _previousHeadHashMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_previousHeadHashMeta);
+    }
+    if (data.containsKey('exact_record')) {
+      context.handle(
+        _exactRecordMeta,
+        exactRecord.isAcceptableOrUnknown(
+          data['exact_record']!,
+          _exactRecordMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_exactRecordMeta);
+    }
+    if (data.containsKey('state')) {
+      context.handle(
+        _stateMeta,
+        state.isAcceptableOrUnknown(data['state']!, _stateMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_stateMeta);
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {operationId};
+  @override
+  DeviceLogMutation map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return DeviceLogMutation(
+      operationId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}operation_id'],
+      )!,
+      userId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}user_id'],
+      )!,
+      mutationKind: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}mutation_kind'],
+      )!,
+      targetDeviceId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}target_device_id'],
+      ),
+      expectedSequence: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}expected_sequence'],
+      )!,
+      previousHeadHash: attachedDatabase.typeMapping.read(
+        DriftSqlType.blob,
+        data['${effectivePrefix}previous_head_hash'],
+      )!,
+      exactRecord: attachedDatabase.typeMapping.read(
+        DriftSqlType.blob,
+        data['${effectivePrefix}exact_record'],
+      )!,
+      state: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}state'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+    );
+  }
+
+  @override
+  $DeviceLogMutationsTable createAlias(String alias) {
+    return $DeviceLogMutationsTable(attachedDatabase, alias);
+  }
+}
+
+class DeviceLogMutation extends DataClass
+    implements Insertable<DeviceLogMutation> {
+  final String operationId;
+  final String userId;
+  final int mutationKind;
+  final String? targetDeviceId;
+  final int expectedSequence;
+  final Uint8List previousHeadHash;
+  final Uint8List exactRecord;
+  final int state;
+  final DateTime updatedAt;
+  const DeviceLogMutation({
+    required this.operationId,
+    required this.userId,
+    required this.mutationKind,
+    this.targetDeviceId,
+    required this.expectedSequence,
+    required this.previousHeadHash,
+    required this.exactRecord,
+    required this.state,
+    required this.updatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['operation_id'] = Variable<String>(operationId);
+    map['user_id'] = Variable<String>(userId);
+    map['mutation_kind'] = Variable<int>(mutationKind);
+    if (!nullToAbsent || targetDeviceId != null) {
+      map['target_device_id'] = Variable<String>(targetDeviceId);
+    }
+    map['expected_sequence'] = Variable<int>(expectedSequence);
+    map['previous_head_hash'] = Variable<Uint8List>(previousHeadHash);
+    map['exact_record'] = Variable<Uint8List>(exactRecord);
+    map['state'] = Variable<int>(state);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    return map;
+  }
+
+  DeviceLogMutationsCompanion toCompanion(bool nullToAbsent) {
+    return DeviceLogMutationsCompanion(
+      operationId: Value(operationId),
+      userId: Value(userId),
+      mutationKind: Value(mutationKind),
+      targetDeviceId: targetDeviceId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(targetDeviceId),
+      expectedSequence: Value(expectedSequence),
+      previousHeadHash: Value(previousHeadHash),
+      exactRecord: Value(exactRecord),
+      state: Value(state),
+      updatedAt: Value(updatedAt),
+    );
+  }
+
+  factory DeviceLogMutation.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return DeviceLogMutation(
+      operationId: serializer.fromJson<String>(json['operationId']),
+      userId: serializer.fromJson<String>(json['userId']),
+      mutationKind: serializer.fromJson<int>(json['mutationKind']),
+      targetDeviceId: serializer.fromJson<String?>(json['targetDeviceId']),
+      expectedSequence: serializer.fromJson<int>(json['expectedSequence']),
+      previousHeadHash: serializer.fromJson<Uint8List>(
+        json['previousHeadHash'],
+      ),
+      exactRecord: serializer.fromJson<Uint8List>(json['exactRecord']),
+      state: serializer.fromJson<int>(json['state']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'operationId': serializer.toJson<String>(operationId),
+      'userId': serializer.toJson<String>(userId),
+      'mutationKind': serializer.toJson<int>(mutationKind),
+      'targetDeviceId': serializer.toJson<String?>(targetDeviceId),
+      'expectedSequence': serializer.toJson<int>(expectedSequence),
+      'previousHeadHash': serializer.toJson<Uint8List>(previousHeadHash),
+      'exactRecord': serializer.toJson<Uint8List>(exactRecord),
+      'state': serializer.toJson<int>(state),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+    };
+  }
+
+  DeviceLogMutation copyWith({
+    String? operationId,
+    String? userId,
+    int? mutationKind,
+    Value<String?> targetDeviceId = const Value.absent(),
+    int? expectedSequence,
+    Uint8List? previousHeadHash,
+    Uint8List? exactRecord,
+    int? state,
+    DateTime? updatedAt,
+  }) => DeviceLogMutation(
+    operationId: operationId ?? this.operationId,
+    userId: userId ?? this.userId,
+    mutationKind: mutationKind ?? this.mutationKind,
+    targetDeviceId: targetDeviceId.present
+        ? targetDeviceId.value
+        : this.targetDeviceId,
+    expectedSequence: expectedSequence ?? this.expectedSequence,
+    previousHeadHash: previousHeadHash ?? this.previousHeadHash,
+    exactRecord: exactRecord ?? this.exactRecord,
+    state: state ?? this.state,
+    updatedAt: updatedAt ?? this.updatedAt,
+  );
+  DeviceLogMutation copyWithCompanion(DeviceLogMutationsCompanion data) {
+    return DeviceLogMutation(
+      operationId: data.operationId.present
+          ? data.operationId.value
+          : this.operationId,
+      userId: data.userId.present ? data.userId.value : this.userId,
+      mutationKind: data.mutationKind.present
+          ? data.mutationKind.value
+          : this.mutationKind,
+      targetDeviceId: data.targetDeviceId.present
+          ? data.targetDeviceId.value
+          : this.targetDeviceId,
+      expectedSequence: data.expectedSequence.present
+          ? data.expectedSequence.value
+          : this.expectedSequence,
+      previousHeadHash: data.previousHeadHash.present
+          ? data.previousHeadHash.value
+          : this.previousHeadHash,
+      exactRecord: data.exactRecord.present
+          ? data.exactRecord.value
+          : this.exactRecord,
+      state: data.state.present ? data.state.value : this.state,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('DeviceLogMutation(')
+          ..write('operationId: $operationId, ')
+          ..write('userId: $userId, ')
+          ..write('mutationKind: $mutationKind, ')
+          ..write('targetDeviceId: $targetDeviceId, ')
+          ..write('expectedSequence: $expectedSequence, ')
+          ..write('previousHeadHash: $previousHeadHash, ')
+          ..write('exactRecord: $exactRecord, ')
+          ..write('state: $state, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    operationId,
+    userId,
+    mutationKind,
+    targetDeviceId,
+    expectedSequence,
+    $driftBlobEquality.hash(previousHeadHash),
+    $driftBlobEquality.hash(exactRecord),
+    state,
+    updatedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is DeviceLogMutation &&
+          other.operationId == this.operationId &&
+          other.userId == this.userId &&
+          other.mutationKind == this.mutationKind &&
+          other.targetDeviceId == this.targetDeviceId &&
+          other.expectedSequence == this.expectedSequence &&
+          $driftBlobEquality.equals(
+            other.previousHeadHash,
+            this.previousHeadHash,
+          ) &&
+          $driftBlobEquality.equals(other.exactRecord, this.exactRecord) &&
+          other.state == this.state &&
+          other.updatedAt == this.updatedAt);
+}
+
+class DeviceLogMutationsCompanion extends UpdateCompanion<DeviceLogMutation> {
+  final Value<String> operationId;
+  final Value<String> userId;
+  final Value<int> mutationKind;
+  final Value<String?> targetDeviceId;
+  final Value<int> expectedSequence;
+  final Value<Uint8List> previousHeadHash;
+  final Value<Uint8List> exactRecord;
+  final Value<int> state;
+  final Value<DateTime> updatedAt;
+  final Value<int> rowid;
+  const DeviceLogMutationsCompanion({
+    this.operationId = const Value.absent(),
+    this.userId = const Value.absent(),
+    this.mutationKind = const Value.absent(),
+    this.targetDeviceId = const Value.absent(),
+    this.expectedSequence = const Value.absent(),
+    this.previousHeadHash = const Value.absent(),
+    this.exactRecord = const Value.absent(),
+    this.state = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  DeviceLogMutationsCompanion.insert({
+    required String operationId,
+    required String userId,
+    required int mutationKind,
+    this.targetDeviceId = const Value.absent(),
+    required int expectedSequence,
+    required Uint8List previousHeadHash,
+    required Uint8List exactRecord,
+    required int state,
+    this.updatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : operationId = Value(operationId),
+       userId = Value(userId),
+       mutationKind = Value(mutationKind),
+       expectedSequence = Value(expectedSequence),
+       previousHeadHash = Value(previousHeadHash),
+       exactRecord = Value(exactRecord),
+       state = Value(state);
+  static Insertable<DeviceLogMutation> custom({
+    Expression<String>? operationId,
+    Expression<String>? userId,
+    Expression<int>? mutationKind,
+    Expression<String>? targetDeviceId,
+    Expression<int>? expectedSequence,
+    Expression<Uint8List>? previousHeadHash,
+    Expression<Uint8List>? exactRecord,
+    Expression<int>? state,
+    Expression<DateTime>? updatedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (operationId != null) 'operation_id': operationId,
+      if (userId != null) 'user_id': userId,
+      if (mutationKind != null) 'mutation_kind': mutationKind,
+      if (targetDeviceId != null) 'target_device_id': targetDeviceId,
+      if (expectedSequence != null) 'expected_sequence': expectedSequence,
+      if (previousHeadHash != null) 'previous_head_hash': previousHeadHash,
+      if (exactRecord != null) 'exact_record': exactRecord,
+      if (state != null) 'state': state,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  DeviceLogMutationsCompanion copyWith({
+    Value<String>? operationId,
+    Value<String>? userId,
+    Value<int>? mutationKind,
+    Value<String?>? targetDeviceId,
+    Value<int>? expectedSequence,
+    Value<Uint8List>? previousHeadHash,
+    Value<Uint8List>? exactRecord,
+    Value<int>? state,
+    Value<DateTime>? updatedAt,
+    Value<int>? rowid,
+  }) {
+    return DeviceLogMutationsCompanion(
+      operationId: operationId ?? this.operationId,
+      userId: userId ?? this.userId,
+      mutationKind: mutationKind ?? this.mutationKind,
+      targetDeviceId: targetDeviceId ?? this.targetDeviceId,
+      expectedSequence: expectedSequence ?? this.expectedSequence,
+      previousHeadHash: previousHeadHash ?? this.previousHeadHash,
+      exactRecord: exactRecord ?? this.exactRecord,
+      state: state ?? this.state,
+      updatedAt: updatedAt ?? this.updatedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (operationId.present) {
+      map['operation_id'] = Variable<String>(operationId.value);
+    }
+    if (userId.present) {
+      map['user_id'] = Variable<String>(userId.value);
+    }
+    if (mutationKind.present) {
+      map['mutation_kind'] = Variable<int>(mutationKind.value);
+    }
+    if (targetDeviceId.present) {
+      map['target_device_id'] = Variable<String>(targetDeviceId.value);
+    }
+    if (expectedSequence.present) {
+      map['expected_sequence'] = Variable<int>(expectedSequence.value);
+    }
+    if (previousHeadHash.present) {
+      map['previous_head_hash'] = Variable<Uint8List>(previousHeadHash.value);
+    }
+    if (exactRecord.present) {
+      map['exact_record'] = Variable<Uint8List>(exactRecord.value);
+    }
+    if (state.present) {
+      map['state'] = Variable<int>(state.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('DeviceLogMutationsCompanion(')
+          ..write('operationId: $operationId, ')
+          ..write('userId: $userId, ')
+          ..write('mutationKind: $mutationKind, ')
+          ..write('targetDeviceId: $targetDeviceId, ')
+          ..write('expectedSequence: $expectedSequence, ')
+          ..write('previousHeadHash: $previousHeadHash, ')
+          ..write('exactRecord: $exactRecord, ')
+          ..write('state: $state, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $SecurityPosturesTable extends SecurityPostures
+    with TableInfo<$SecurityPosturesTable, SecurityPosture> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $SecurityPosturesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _singletonIdMeta = const VerificationMeta(
+    'singletonId',
+  );
+  @override
+  late final GeneratedColumn<int> singletonId = GeneratedColumn<int>(
+    'singleton_id',
+    aliasedName,
+    false,
+    check: () => singletonId.equals(1),
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(1),
+  );
+  static const VerificationMeta _stateMeta = const VerificationMeta('state');
+  @override
+  late final GeneratedColumn<int> state = GeneratedColumn<int>(
+    'state',
+    aliasedName,
+    false,
+    check: () => ComparableExpr(state).isBetweenValues(0, 2),
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _evidenceKindMeta = const VerificationMeta(
+    'evidenceKind',
+  );
+  @override
+  late final GeneratedColumn<int> evidenceKind = GeneratedColumn<int>(
+    'evidence_kind',
+    aliasedName,
+    true,
+    check: () =>
+        evidenceKind.isNull() |
+        ComparableExpr(evidenceKind).isBetweenValues(0, 4),
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _detectedAtMeta = const VerificationMeta(
+    'detectedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> detectedAt = GeneratedColumn<DateTime>(
+    'detected_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    singletonId,
+    state,
+    evidenceKind,
+    detectedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'security_posture';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<SecurityPosture> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('singleton_id')) {
+      context.handle(
+        _singletonIdMeta,
+        singletonId.isAcceptableOrUnknown(
+          data['singleton_id']!,
+          _singletonIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('state')) {
+      context.handle(
+        _stateMeta,
+        state.isAcceptableOrUnknown(data['state']!, _stateMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_stateMeta);
+    }
+    if (data.containsKey('evidence_kind')) {
+      context.handle(
+        _evidenceKindMeta,
+        evidenceKind.isAcceptableOrUnknown(
+          data['evidence_kind']!,
+          _evidenceKindMeta,
+        ),
+      );
+    }
+    if (data.containsKey('detected_at')) {
+      context.handle(
+        _detectedAtMeta,
+        detectedAt.isAcceptableOrUnknown(data['detected_at']!, _detectedAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {singletonId};
+  @override
+  SecurityPosture map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return SecurityPosture(
+      singletonId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}singleton_id'],
+      )!,
+      state: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}state'],
+      )!,
+      evidenceKind: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}evidence_kind'],
+      ),
+      detectedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}detected_at'],
+      ),
+    );
+  }
+
+  @override
+  $SecurityPosturesTable createAlias(String alias) {
+    return $SecurityPosturesTable(attachedDatabase, alias);
+  }
+}
+
+class SecurityPosture extends DataClass implements Insertable<SecurityPosture> {
+  final int singletonId;
+  final int state;
+  final int? evidenceKind;
+  final DateTime? detectedAt;
+  const SecurityPosture({
+    required this.singletonId,
+    required this.state,
+    this.evidenceKind,
+    this.detectedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['singleton_id'] = Variable<int>(singletonId);
+    map['state'] = Variable<int>(state);
+    if (!nullToAbsent || evidenceKind != null) {
+      map['evidence_kind'] = Variable<int>(evidenceKind);
+    }
+    if (!nullToAbsent || detectedAt != null) {
+      map['detected_at'] = Variable<DateTime>(detectedAt);
+    }
+    return map;
+  }
+
+  SecurityPosturesCompanion toCompanion(bool nullToAbsent) {
+    return SecurityPosturesCompanion(
+      singletonId: Value(singletonId),
+      state: Value(state),
+      evidenceKind: evidenceKind == null && nullToAbsent
+          ? const Value.absent()
+          : Value(evidenceKind),
+      detectedAt: detectedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(detectedAt),
+    );
+  }
+
+  factory SecurityPosture.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return SecurityPosture(
+      singletonId: serializer.fromJson<int>(json['singletonId']),
+      state: serializer.fromJson<int>(json['state']),
+      evidenceKind: serializer.fromJson<int?>(json['evidenceKind']),
+      detectedAt: serializer.fromJson<DateTime?>(json['detectedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'singletonId': serializer.toJson<int>(singletonId),
+      'state': serializer.toJson<int>(state),
+      'evidenceKind': serializer.toJson<int?>(evidenceKind),
+      'detectedAt': serializer.toJson<DateTime?>(detectedAt),
+    };
+  }
+
+  SecurityPosture copyWith({
+    int? singletonId,
+    int? state,
+    Value<int?> evidenceKind = const Value.absent(),
+    Value<DateTime?> detectedAt = const Value.absent(),
+  }) => SecurityPosture(
+    singletonId: singletonId ?? this.singletonId,
+    state: state ?? this.state,
+    evidenceKind: evidenceKind.present ? evidenceKind.value : this.evidenceKind,
+    detectedAt: detectedAt.present ? detectedAt.value : this.detectedAt,
+  );
+  SecurityPosture copyWithCompanion(SecurityPosturesCompanion data) {
+    return SecurityPosture(
+      singletonId: data.singletonId.present
+          ? data.singletonId.value
+          : this.singletonId,
+      state: data.state.present ? data.state.value : this.state,
+      evidenceKind: data.evidenceKind.present
+          ? data.evidenceKind.value
+          : this.evidenceKind,
+      detectedAt: data.detectedAt.present
+          ? data.detectedAt.value
+          : this.detectedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SecurityPosture(')
+          ..write('singletonId: $singletonId, ')
+          ..write('state: $state, ')
+          ..write('evidenceKind: $evidenceKind, ')
+          ..write('detectedAt: $detectedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(singletonId, state, evidenceKind, detectedAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is SecurityPosture &&
+          other.singletonId == this.singletonId &&
+          other.state == this.state &&
+          other.evidenceKind == this.evidenceKind &&
+          other.detectedAt == this.detectedAt);
+}
+
+class SecurityPosturesCompanion extends UpdateCompanion<SecurityPosture> {
+  final Value<int> singletonId;
+  final Value<int> state;
+  final Value<int?> evidenceKind;
+  final Value<DateTime?> detectedAt;
+  const SecurityPosturesCompanion({
+    this.singletonId = const Value.absent(),
+    this.state = const Value.absent(),
+    this.evidenceKind = const Value.absent(),
+    this.detectedAt = const Value.absent(),
+  });
+  SecurityPosturesCompanion.insert({
+    this.singletonId = const Value.absent(),
+    required int state,
+    this.evidenceKind = const Value.absent(),
+    this.detectedAt = const Value.absent(),
+  }) : state = Value(state);
+  static Insertable<SecurityPosture> custom({
+    Expression<int>? singletonId,
+    Expression<int>? state,
+    Expression<int>? evidenceKind,
+    Expression<DateTime>? detectedAt,
+  }) {
+    return RawValuesInsertable({
+      if (singletonId != null) 'singleton_id': singletonId,
+      if (state != null) 'state': state,
+      if (evidenceKind != null) 'evidence_kind': evidenceKind,
+      if (detectedAt != null) 'detected_at': detectedAt,
+    });
+  }
+
+  SecurityPosturesCompanion copyWith({
+    Value<int>? singletonId,
+    Value<int>? state,
+    Value<int?>? evidenceKind,
+    Value<DateTime?>? detectedAt,
+  }) {
+    return SecurityPosturesCompanion(
+      singletonId: singletonId ?? this.singletonId,
+      state: state ?? this.state,
+      evidenceKind: evidenceKind ?? this.evidenceKind,
+      detectedAt: detectedAt ?? this.detectedAt,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (singletonId.present) {
+      map['singleton_id'] = Variable<int>(singletonId.value);
+    }
+    if (state.present) {
+      map['state'] = Variable<int>(state.value);
+    }
+    if (evidenceKind.present) {
+      map['evidence_kind'] = Variable<int>(evidenceKind.value);
+    }
+    if (detectedAt.present) {
+      map['detected_at'] = Variable<DateTime>(detectedAt.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SecurityPosturesCompanion(')
+          ..write('singletonId: $singletonId, ')
+          ..write('state: $state, ')
+          ..write('evidenceKind: $evidenceKind, ')
+          ..write('detectedAt: $detectedAt')
           ..write(')'))
         .toString();
   }
@@ -17742,6 +18943,67 @@ class $HistoryTransfersTable extends HistoryTransfers
         type: DriftSqlType.blob,
         requiredDuringInsert: true,
       );
+  static const VerificationMeta _sourceDeviceIdMeta = const VerificationMeta(
+    'sourceDeviceId',
+  );
+  @override
+  late final GeneratedColumn<String> sourceDeviceId = GeneratedColumn<String>(
+    'source_device_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
+  static const VerificationMeta _targetDeviceIdMeta = const VerificationMeta(
+    'targetDeviceId',
+  );
+  @override
+  late final GeneratedColumn<String> targetDeviceId = GeneratedColumn<String>(
+    'target_device_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
+  static const VerificationMeta _directionMeta = const VerificationMeta(
+    'direction',
+  );
+  @override
+  late final GeneratedColumn<int> direction = GeneratedColumn<int>(
+    'direction',
+    aliasedName,
+    false,
+    check: () => ComparableExpr(direction).isBetweenValues(0, 1),
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _stateMeta = const VerificationMeta('state');
+  @override
+  late final GeneratedColumn<int> state = GeneratedColumn<int>(
+    'state',
+    aliasedName,
+    false,
+    check: () => ComparableExpr(state).isBetweenValues(0, 7),
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _nextBatchIndexMeta = const VerificationMeta(
+    'nextBatchIndex',
+  );
+  @override
+  late final GeneratedColumn<int> nextBatchIndex = GeneratedColumn<int>(
+    'next_batch_index',
+    aliasedName,
+    false,
+    check: () => ComparableExpr(nextBatchIndex).isBiggerOrEqualValue(0),
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
   static const VerificationMeta _eventProgressMeta = const VerificationMeta(
     'eventProgress',
   );
@@ -17766,12 +19028,62 @@ class $HistoryTransfersTable extends HistoryTransfers
     type: DriftSqlType.int,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _groupReinviteRequiredMeta =
+      const VerificationMeta('groupReinviteRequired');
+  @override
+  late final GeneratedColumn<bool> groupReinviteRequired =
+      GeneratedColumn<bool>(
+        'group_reinvite_required',
+        aliasedName,
+        false,
+        type: DriftSqlType.bool,
+        requiredDuringInsert: false,
+        defaultConstraints: GeneratedColumn.constraintIsAlways(
+          'CHECK ("group_reinvite_required" IN (0, 1))',
+        ),
+        defaultValue: const Constant(false),
+      );
+  static const VerificationMeta _queueGapRecoveryRequiredMeta =
+      const VerificationMeta('queueGapRecoveryRequired');
+  @override
+  late final GeneratedColumn<bool> queueGapRecoveryRequired =
+      GeneratedColumn<bool>(
+        'queue_gap_recovery_required',
+        aliasedName,
+        false,
+        type: DriftSqlType.bool,
+        requiredDuringInsert: false,
+        defaultConstraints: GeneratedColumn.constraintIsAlways(
+          'CHECK ("queue_gap_recovery_required" IN (0, 1))',
+        ),
+        defaultValue: const Constant(false),
+      );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
   @override
   List<GeneratedColumn> get $columns => [
     transferId,
     manifestCiphertext,
+    sourceDeviceId,
+    targetDeviceId,
+    direction,
+    state,
+    nextBatchIndex,
     eventProgress,
     sourceCompleteness,
+    groupReinviteRequired,
+    queueGapRecoveryRequired,
+    updatedAt,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -17804,6 +19116,45 @@ class $HistoryTransfersTable extends HistoryTransfers
     } else if (isInserting) {
       context.missing(_manifestCiphertextMeta);
     }
+    if (data.containsKey('source_device_id')) {
+      context.handle(
+        _sourceDeviceIdMeta,
+        sourceDeviceId.isAcceptableOrUnknown(
+          data['source_device_id']!,
+          _sourceDeviceIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('target_device_id')) {
+      context.handle(
+        _targetDeviceIdMeta,
+        targetDeviceId.isAcceptableOrUnknown(
+          data['target_device_id']!,
+          _targetDeviceIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('direction')) {
+      context.handle(
+        _directionMeta,
+        direction.isAcceptableOrUnknown(data['direction']!, _directionMeta),
+      );
+    }
+    if (data.containsKey('state')) {
+      context.handle(
+        _stateMeta,
+        state.isAcceptableOrUnknown(data['state']!, _stateMeta),
+      );
+    }
+    if (data.containsKey('next_batch_index')) {
+      context.handle(
+        _nextBatchIndexMeta,
+        nextBatchIndex.isAcceptableOrUnknown(
+          data['next_batch_index']!,
+          _nextBatchIndexMeta,
+        ),
+      );
+    }
     if (data.containsKey('event_progress')) {
       context.handle(
         _eventProgressMeta,
@@ -17824,6 +19175,30 @@ class $HistoryTransfersTable extends HistoryTransfers
     } else if (isInserting) {
       context.missing(_sourceCompletenessMeta);
     }
+    if (data.containsKey('group_reinvite_required')) {
+      context.handle(
+        _groupReinviteRequiredMeta,
+        groupReinviteRequired.isAcceptableOrUnknown(
+          data['group_reinvite_required']!,
+          _groupReinviteRequiredMeta,
+        ),
+      );
+    }
+    if (data.containsKey('queue_gap_recovery_required')) {
+      context.handle(
+        _queueGapRecoveryRequiredMeta,
+        queueGapRecoveryRequired.isAcceptableOrUnknown(
+          data['queue_gap_recovery_required']!,
+          _queueGapRecoveryRequiredMeta,
+        ),
+      );
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    }
     return context;
   }
 
@@ -17841,6 +19216,26 @@ class $HistoryTransfersTable extends HistoryTransfers
         DriftSqlType.blob,
         data['${effectivePrefix}manifest_ciphertext'],
       )!,
+      sourceDeviceId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}source_device_id'],
+      )!,
+      targetDeviceId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}target_device_id'],
+      )!,
+      direction: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}direction'],
+      )!,
+      state: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}state'],
+      )!,
+      nextBatchIndex: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}next_batch_index'],
+      )!,
       eventProgress: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}event_progress'],
@@ -17848,6 +19243,18 @@ class $HistoryTransfersTable extends HistoryTransfers
       sourceCompleteness: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}source_completeness'],
+      )!,
+      groupReinviteRequired: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}group_reinvite_required'],
+      )!,
+      queueGapRecoveryRequired: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}queue_gap_recovery_required'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
       )!,
     );
   }
@@ -17861,21 +19268,47 @@ class $HistoryTransfersTable extends HistoryTransfers
 class HistoryTransfer extends DataClass implements Insertable<HistoryTransfer> {
   final String transferId;
   final Uint8List manifestCiphertext;
+  final String sourceDeviceId;
+  final String targetDeviceId;
+  final int direction;
+  final int state;
+  final int nextBatchIndex;
   final int eventProgress;
   final int sourceCompleteness;
+  final bool groupReinviteRequired;
+  final bool queueGapRecoveryRequired;
+  final DateTime updatedAt;
   const HistoryTransfer({
     required this.transferId,
     required this.manifestCiphertext,
+    required this.sourceDeviceId,
+    required this.targetDeviceId,
+    required this.direction,
+    required this.state,
+    required this.nextBatchIndex,
     required this.eventProgress,
     required this.sourceCompleteness,
+    required this.groupReinviteRequired,
+    required this.queueGapRecoveryRequired,
+    required this.updatedAt,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
     map['transfer_id'] = Variable<String>(transferId);
     map['manifest_ciphertext'] = Variable<Uint8List>(manifestCiphertext);
+    map['source_device_id'] = Variable<String>(sourceDeviceId);
+    map['target_device_id'] = Variable<String>(targetDeviceId);
+    map['direction'] = Variable<int>(direction);
+    map['state'] = Variable<int>(state);
+    map['next_batch_index'] = Variable<int>(nextBatchIndex);
     map['event_progress'] = Variable<int>(eventProgress);
     map['source_completeness'] = Variable<int>(sourceCompleteness);
+    map['group_reinvite_required'] = Variable<bool>(groupReinviteRequired);
+    map['queue_gap_recovery_required'] = Variable<bool>(
+      queueGapRecoveryRequired,
+    );
+    map['updated_at'] = Variable<DateTime>(updatedAt);
     return map;
   }
 
@@ -17883,8 +19316,16 @@ class HistoryTransfer extends DataClass implements Insertable<HistoryTransfer> {
     return HistoryTransfersCompanion(
       transferId: Value(transferId),
       manifestCiphertext: Value(manifestCiphertext),
+      sourceDeviceId: Value(sourceDeviceId),
+      targetDeviceId: Value(targetDeviceId),
+      direction: Value(direction),
+      state: Value(state),
+      nextBatchIndex: Value(nextBatchIndex),
       eventProgress: Value(eventProgress),
       sourceCompleteness: Value(sourceCompleteness),
+      groupReinviteRequired: Value(groupReinviteRequired),
+      queueGapRecoveryRequired: Value(queueGapRecoveryRequired),
+      updatedAt: Value(updatedAt),
     );
   }
 
@@ -17898,8 +19339,20 @@ class HistoryTransfer extends DataClass implements Insertable<HistoryTransfer> {
       manifestCiphertext: serializer.fromJson<Uint8List>(
         json['manifestCiphertext'],
       ),
+      sourceDeviceId: serializer.fromJson<String>(json['sourceDeviceId']),
+      targetDeviceId: serializer.fromJson<String>(json['targetDeviceId']),
+      direction: serializer.fromJson<int>(json['direction']),
+      state: serializer.fromJson<int>(json['state']),
+      nextBatchIndex: serializer.fromJson<int>(json['nextBatchIndex']),
       eventProgress: serializer.fromJson<int>(json['eventProgress']),
       sourceCompleteness: serializer.fromJson<int>(json['sourceCompleteness']),
+      groupReinviteRequired: serializer.fromJson<bool>(
+        json['groupReinviteRequired'],
+      ),
+      queueGapRecoveryRequired: serializer.fromJson<bool>(
+        json['queueGapRecoveryRequired'],
+      ),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
     );
   }
   @override
@@ -17908,21 +19361,48 @@ class HistoryTransfer extends DataClass implements Insertable<HistoryTransfer> {
     return <String, dynamic>{
       'transferId': serializer.toJson<String>(transferId),
       'manifestCiphertext': serializer.toJson<Uint8List>(manifestCiphertext),
+      'sourceDeviceId': serializer.toJson<String>(sourceDeviceId),
+      'targetDeviceId': serializer.toJson<String>(targetDeviceId),
+      'direction': serializer.toJson<int>(direction),
+      'state': serializer.toJson<int>(state),
+      'nextBatchIndex': serializer.toJson<int>(nextBatchIndex),
       'eventProgress': serializer.toJson<int>(eventProgress),
       'sourceCompleteness': serializer.toJson<int>(sourceCompleteness),
+      'groupReinviteRequired': serializer.toJson<bool>(groupReinviteRequired),
+      'queueGapRecoveryRequired': serializer.toJson<bool>(
+        queueGapRecoveryRequired,
+      ),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
     };
   }
 
   HistoryTransfer copyWith({
     String? transferId,
     Uint8List? manifestCiphertext,
+    String? sourceDeviceId,
+    String? targetDeviceId,
+    int? direction,
+    int? state,
+    int? nextBatchIndex,
     int? eventProgress,
     int? sourceCompleteness,
+    bool? groupReinviteRequired,
+    bool? queueGapRecoveryRequired,
+    DateTime? updatedAt,
   }) => HistoryTransfer(
     transferId: transferId ?? this.transferId,
     manifestCiphertext: manifestCiphertext ?? this.manifestCiphertext,
+    sourceDeviceId: sourceDeviceId ?? this.sourceDeviceId,
+    targetDeviceId: targetDeviceId ?? this.targetDeviceId,
+    direction: direction ?? this.direction,
+    state: state ?? this.state,
+    nextBatchIndex: nextBatchIndex ?? this.nextBatchIndex,
     eventProgress: eventProgress ?? this.eventProgress,
     sourceCompleteness: sourceCompleteness ?? this.sourceCompleteness,
+    groupReinviteRequired: groupReinviteRequired ?? this.groupReinviteRequired,
+    queueGapRecoveryRequired:
+        queueGapRecoveryRequired ?? this.queueGapRecoveryRequired,
+    updatedAt: updatedAt ?? this.updatedAt,
   );
   HistoryTransfer copyWithCompanion(HistoryTransfersCompanion data) {
     return HistoryTransfer(
@@ -17932,12 +19412,30 @@ class HistoryTransfer extends DataClass implements Insertable<HistoryTransfer> {
       manifestCiphertext: data.manifestCiphertext.present
           ? data.manifestCiphertext.value
           : this.manifestCiphertext,
+      sourceDeviceId: data.sourceDeviceId.present
+          ? data.sourceDeviceId.value
+          : this.sourceDeviceId,
+      targetDeviceId: data.targetDeviceId.present
+          ? data.targetDeviceId.value
+          : this.targetDeviceId,
+      direction: data.direction.present ? data.direction.value : this.direction,
+      state: data.state.present ? data.state.value : this.state,
+      nextBatchIndex: data.nextBatchIndex.present
+          ? data.nextBatchIndex.value
+          : this.nextBatchIndex,
       eventProgress: data.eventProgress.present
           ? data.eventProgress.value
           : this.eventProgress,
       sourceCompleteness: data.sourceCompleteness.present
           ? data.sourceCompleteness.value
           : this.sourceCompleteness,
+      groupReinviteRequired: data.groupReinviteRequired.present
+          ? data.groupReinviteRequired.value
+          : this.groupReinviteRequired,
+      queueGapRecoveryRequired: data.queueGapRecoveryRequired.present
+          ? data.queueGapRecoveryRequired.value
+          : this.queueGapRecoveryRequired,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
     );
   }
 
@@ -17946,8 +19444,16 @@ class HistoryTransfer extends DataClass implements Insertable<HistoryTransfer> {
     return (StringBuffer('HistoryTransfer(')
           ..write('transferId: $transferId, ')
           ..write('manifestCiphertext: $manifestCiphertext, ')
+          ..write('sourceDeviceId: $sourceDeviceId, ')
+          ..write('targetDeviceId: $targetDeviceId, ')
+          ..write('direction: $direction, ')
+          ..write('state: $state, ')
+          ..write('nextBatchIndex: $nextBatchIndex, ')
           ..write('eventProgress: $eventProgress, ')
-          ..write('sourceCompleteness: $sourceCompleteness')
+          ..write('sourceCompleteness: $sourceCompleteness, ')
+          ..write('groupReinviteRequired: $groupReinviteRequired, ')
+          ..write('queueGapRecoveryRequired: $queueGapRecoveryRequired, ')
+          ..write('updatedAt: $updatedAt')
           ..write(')'))
         .toString();
   }
@@ -17956,8 +19462,16 @@ class HistoryTransfer extends DataClass implements Insertable<HistoryTransfer> {
   int get hashCode => Object.hash(
     transferId,
     $driftBlobEquality.hash(manifestCiphertext),
+    sourceDeviceId,
+    targetDeviceId,
+    direction,
+    state,
+    nextBatchIndex,
     eventProgress,
     sourceCompleteness,
+    groupReinviteRequired,
+    queueGapRecoveryRequired,
+    updatedAt,
   );
   @override
   bool operator ==(Object other) =>
@@ -17968,28 +19482,60 @@ class HistoryTransfer extends DataClass implements Insertable<HistoryTransfer> {
             other.manifestCiphertext,
             this.manifestCiphertext,
           ) &&
+          other.sourceDeviceId == this.sourceDeviceId &&
+          other.targetDeviceId == this.targetDeviceId &&
+          other.direction == this.direction &&
+          other.state == this.state &&
+          other.nextBatchIndex == this.nextBatchIndex &&
           other.eventProgress == this.eventProgress &&
-          other.sourceCompleteness == this.sourceCompleteness);
+          other.sourceCompleteness == this.sourceCompleteness &&
+          other.groupReinviteRequired == this.groupReinviteRequired &&
+          other.queueGapRecoveryRequired == this.queueGapRecoveryRequired &&
+          other.updatedAt == this.updatedAt);
 }
 
 class HistoryTransfersCompanion extends UpdateCompanion<HistoryTransfer> {
   final Value<String> transferId;
   final Value<Uint8List> manifestCiphertext;
+  final Value<String> sourceDeviceId;
+  final Value<String> targetDeviceId;
+  final Value<int> direction;
+  final Value<int> state;
+  final Value<int> nextBatchIndex;
   final Value<int> eventProgress;
   final Value<int> sourceCompleteness;
+  final Value<bool> groupReinviteRequired;
+  final Value<bool> queueGapRecoveryRequired;
+  final Value<DateTime> updatedAt;
   final Value<int> rowid;
   const HistoryTransfersCompanion({
     this.transferId = const Value.absent(),
     this.manifestCiphertext = const Value.absent(),
+    this.sourceDeviceId = const Value.absent(),
+    this.targetDeviceId = const Value.absent(),
+    this.direction = const Value.absent(),
+    this.state = const Value.absent(),
+    this.nextBatchIndex = const Value.absent(),
     this.eventProgress = const Value.absent(),
     this.sourceCompleteness = const Value.absent(),
+    this.groupReinviteRequired = const Value.absent(),
+    this.queueGapRecoveryRequired = const Value.absent(),
+    this.updatedAt = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   HistoryTransfersCompanion.insert({
     required String transferId,
     required Uint8List manifestCiphertext,
+    this.sourceDeviceId = const Value.absent(),
+    this.targetDeviceId = const Value.absent(),
+    this.direction = const Value.absent(),
+    this.state = const Value.absent(),
+    this.nextBatchIndex = const Value.absent(),
     this.eventProgress = const Value.absent(),
     required int sourceCompleteness,
+    this.groupReinviteRequired = const Value.absent(),
+    this.queueGapRecoveryRequired = const Value.absent(),
+    this.updatedAt = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : transferId = Value(transferId),
        manifestCiphertext = Value(manifestCiphertext),
@@ -17997,15 +19543,33 @@ class HistoryTransfersCompanion extends UpdateCompanion<HistoryTransfer> {
   static Insertable<HistoryTransfer> custom({
     Expression<String>? transferId,
     Expression<Uint8List>? manifestCiphertext,
+    Expression<String>? sourceDeviceId,
+    Expression<String>? targetDeviceId,
+    Expression<int>? direction,
+    Expression<int>? state,
+    Expression<int>? nextBatchIndex,
     Expression<int>? eventProgress,
     Expression<int>? sourceCompleteness,
+    Expression<bool>? groupReinviteRequired,
+    Expression<bool>? queueGapRecoveryRequired,
+    Expression<DateTime>? updatedAt,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
       if (transferId != null) 'transfer_id': transferId,
       if (manifestCiphertext != null) 'manifest_ciphertext': manifestCiphertext,
+      if (sourceDeviceId != null) 'source_device_id': sourceDeviceId,
+      if (targetDeviceId != null) 'target_device_id': targetDeviceId,
+      if (direction != null) 'direction': direction,
+      if (state != null) 'state': state,
+      if (nextBatchIndex != null) 'next_batch_index': nextBatchIndex,
       if (eventProgress != null) 'event_progress': eventProgress,
       if (sourceCompleteness != null) 'source_completeness': sourceCompleteness,
+      if (groupReinviteRequired != null)
+        'group_reinvite_required': groupReinviteRequired,
+      if (queueGapRecoveryRequired != null)
+        'queue_gap_recovery_required': queueGapRecoveryRequired,
+      if (updatedAt != null) 'updated_at': updatedAt,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -18013,15 +19577,33 @@ class HistoryTransfersCompanion extends UpdateCompanion<HistoryTransfer> {
   HistoryTransfersCompanion copyWith({
     Value<String>? transferId,
     Value<Uint8List>? manifestCiphertext,
+    Value<String>? sourceDeviceId,
+    Value<String>? targetDeviceId,
+    Value<int>? direction,
+    Value<int>? state,
+    Value<int>? nextBatchIndex,
     Value<int>? eventProgress,
     Value<int>? sourceCompleteness,
+    Value<bool>? groupReinviteRequired,
+    Value<bool>? queueGapRecoveryRequired,
+    Value<DateTime>? updatedAt,
     Value<int>? rowid,
   }) {
     return HistoryTransfersCompanion(
       transferId: transferId ?? this.transferId,
       manifestCiphertext: manifestCiphertext ?? this.manifestCiphertext,
+      sourceDeviceId: sourceDeviceId ?? this.sourceDeviceId,
+      targetDeviceId: targetDeviceId ?? this.targetDeviceId,
+      direction: direction ?? this.direction,
+      state: state ?? this.state,
+      nextBatchIndex: nextBatchIndex ?? this.nextBatchIndex,
       eventProgress: eventProgress ?? this.eventProgress,
       sourceCompleteness: sourceCompleteness ?? this.sourceCompleteness,
+      groupReinviteRequired:
+          groupReinviteRequired ?? this.groupReinviteRequired,
+      queueGapRecoveryRequired:
+          queueGapRecoveryRequired ?? this.queueGapRecoveryRequired,
+      updatedAt: updatedAt ?? this.updatedAt,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -18037,11 +19619,39 @@ class HistoryTransfersCompanion extends UpdateCompanion<HistoryTransfer> {
         manifestCiphertext.value,
       );
     }
+    if (sourceDeviceId.present) {
+      map['source_device_id'] = Variable<String>(sourceDeviceId.value);
+    }
+    if (targetDeviceId.present) {
+      map['target_device_id'] = Variable<String>(targetDeviceId.value);
+    }
+    if (direction.present) {
+      map['direction'] = Variable<int>(direction.value);
+    }
+    if (state.present) {
+      map['state'] = Variable<int>(state.value);
+    }
+    if (nextBatchIndex.present) {
+      map['next_batch_index'] = Variable<int>(nextBatchIndex.value);
+    }
     if (eventProgress.present) {
       map['event_progress'] = Variable<int>(eventProgress.value);
     }
     if (sourceCompleteness.present) {
       map['source_completeness'] = Variable<int>(sourceCompleteness.value);
+    }
+    if (groupReinviteRequired.present) {
+      map['group_reinvite_required'] = Variable<bool>(
+        groupReinviteRequired.value,
+      );
+    }
+    if (queueGapRecoveryRequired.present) {
+      map['queue_gap_recovery_required'] = Variable<bool>(
+        queueGapRecoveryRequired.value,
+      );
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
     }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
@@ -18054,8 +19664,415 @@ class HistoryTransfersCompanion extends UpdateCompanion<HistoryTransfer> {
     return (StringBuffer('HistoryTransfersCompanion(')
           ..write('transferId: $transferId, ')
           ..write('manifestCiphertext: $manifestCiphertext, ')
+          ..write('sourceDeviceId: $sourceDeviceId, ')
+          ..write('targetDeviceId: $targetDeviceId, ')
+          ..write('direction: $direction, ')
+          ..write('state: $state, ')
+          ..write('nextBatchIndex: $nextBatchIndex, ')
           ..write('eventProgress: $eventProgress, ')
           ..write('sourceCompleteness: $sourceCompleteness, ')
+          ..write('groupReinviteRequired: $groupReinviteRequired, ')
+          ..write('queueGapRecoveryRequired: $queueGapRecoveryRequired, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $HistoryTransferBatchesTable extends HistoryTransferBatches
+    with TableInfo<$HistoryTransferBatchesTable, HistoryTransferBatche> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $HistoryTransferBatchesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _transferIdMeta = const VerificationMeta(
+    'transferId',
+  );
+  @override
+  late final GeneratedColumn<String> transferId = GeneratedColumn<String>(
+    'transfer_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES history_transfers (transfer_id) ON DELETE CASCADE',
+    ),
+  );
+  static const VerificationMeta _batchIndexMeta = const VerificationMeta(
+    'batchIndex',
+  );
+  @override
+  late final GeneratedColumn<int> batchIndex = GeneratedColumn<int>(
+    'batch_index',
+    aliasedName,
+    false,
+    check: () => ComparableExpr(batchIndex).isBiggerOrEqualValue(0),
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _controlEventIdMeta = const VerificationMeta(
+    'controlEventId',
+  );
+  @override
+  late final GeneratedColumn<String> controlEventId = GeneratedColumn<String>(
+    'control_event_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways('UNIQUE'),
+  );
+  static const VerificationMeta _eventCountMeta = const VerificationMeta(
+    'eventCount',
+  );
+  @override
+  late final GeneratedColumn<int> eventCount = GeneratedColumn<int>(
+    'event_count',
+    aliasedName,
+    false,
+    check: () => ComparableExpr(eventCount).isBetweenValues(1, 32),
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _finalBatchMeta = const VerificationMeta(
+    'finalBatch',
+  );
+  @override
+  late final GeneratedColumn<bool> finalBatch = GeneratedColumn<bool>(
+    'final_batch',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("final_batch" IN (0, 1))',
+    ),
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    transferId,
+    batchIndex,
+    controlEventId,
+    eventCount,
+    finalBatch,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'history_transfer_batches';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<HistoryTransferBatche> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('transfer_id')) {
+      context.handle(
+        _transferIdMeta,
+        transferId.isAcceptableOrUnknown(data['transfer_id']!, _transferIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_transferIdMeta);
+    }
+    if (data.containsKey('batch_index')) {
+      context.handle(
+        _batchIndexMeta,
+        batchIndex.isAcceptableOrUnknown(data['batch_index']!, _batchIndexMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_batchIndexMeta);
+    }
+    if (data.containsKey('control_event_id')) {
+      context.handle(
+        _controlEventIdMeta,
+        controlEventId.isAcceptableOrUnknown(
+          data['control_event_id']!,
+          _controlEventIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_controlEventIdMeta);
+    }
+    if (data.containsKey('event_count')) {
+      context.handle(
+        _eventCountMeta,
+        eventCount.isAcceptableOrUnknown(data['event_count']!, _eventCountMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_eventCountMeta);
+    }
+    if (data.containsKey('final_batch')) {
+      context.handle(
+        _finalBatchMeta,
+        finalBatch.isAcceptableOrUnknown(data['final_batch']!, _finalBatchMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_finalBatchMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {transferId, batchIndex};
+  @override
+  HistoryTransferBatche map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return HistoryTransferBatche(
+      transferId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}transfer_id'],
+      )!,
+      batchIndex: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}batch_index'],
+      )!,
+      controlEventId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}control_event_id'],
+      )!,
+      eventCount: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}event_count'],
+      )!,
+      finalBatch: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}final_batch'],
+      )!,
+    );
+  }
+
+  @override
+  $HistoryTransferBatchesTable createAlias(String alias) {
+    return $HistoryTransferBatchesTable(attachedDatabase, alias);
+  }
+}
+
+class HistoryTransferBatche extends DataClass
+    implements Insertable<HistoryTransferBatche> {
+  final String transferId;
+  final int batchIndex;
+  final String controlEventId;
+  final int eventCount;
+  final bool finalBatch;
+  const HistoryTransferBatche({
+    required this.transferId,
+    required this.batchIndex,
+    required this.controlEventId,
+    required this.eventCount,
+    required this.finalBatch,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['transfer_id'] = Variable<String>(transferId);
+    map['batch_index'] = Variable<int>(batchIndex);
+    map['control_event_id'] = Variable<String>(controlEventId);
+    map['event_count'] = Variable<int>(eventCount);
+    map['final_batch'] = Variable<bool>(finalBatch);
+    return map;
+  }
+
+  HistoryTransferBatchesCompanion toCompanion(bool nullToAbsent) {
+    return HistoryTransferBatchesCompanion(
+      transferId: Value(transferId),
+      batchIndex: Value(batchIndex),
+      controlEventId: Value(controlEventId),
+      eventCount: Value(eventCount),
+      finalBatch: Value(finalBatch),
+    );
+  }
+
+  factory HistoryTransferBatche.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return HistoryTransferBatche(
+      transferId: serializer.fromJson<String>(json['transferId']),
+      batchIndex: serializer.fromJson<int>(json['batchIndex']),
+      controlEventId: serializer.fromJson<String>(json['controlEventId']),
+      eventCount: serializer.fromJson<int>(json['eventCount']),
+      finalBatch: serializer.fromJson<bool>(json['finalBatch']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'transferId': serializer.toJson<String>(transferId),
+      'batchIndex': serializer.toJson<int>(batchIndex),
+      'controlEventId': serializer.toJson<String>(controlEventId),
+      'eventCount': serializer.toJson<int>(eventCount),
+      'finalBatch': serializer.toJson<bool>(finalBatch),
+    };
+  }
+
+  HistoryTransferBatche copyWith({
+    String? transferId,
+    int? batchIndex,
+    String? controlEventId,
+    int? eventCount,
+    bool? finalBatch,
+  }) => HistoryTransferBatche(
+    transferId: transferId ?? this.transferId,
+    batchIndex: batchIndex ?? this.batchIndex,
+    controlEventId: controlEventId ?? this.controlEventId,
+    eventCount: eventCount ?? this.eventCount,
+    finalBatch: finalBatch ?? this.finalBatch,
+  );
+  HistoryTransferBatche copyWithCompanion(
+    HistoryTransferBatchesCompanion data,
+  ) {
+    return HistoryTransferBatche(
+      transferId: data.transferId.present
+          ? data.transferId.value
+          : this.transferId,
+      batchIndex: data.batchIndex.present
+          ? data.batchIndex.value
+          : this.batchIndex,
+      controlEventId: data.controlEventId.present
+          ? data.controlEventId.value
+          : this.controlEventId,
+      eventCount: data.eventCount.present
+          ? data.eventCount.value
+          : this.eventCount,
+      finalBatch: data.finalBatch.present
+          ? data.finalBatch.value
+          : this.finalBatch,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('HistoryTransferBatche(')
+          ..write('transferId: $transferId, ')
+          ..write('batchIndex: $batchIndex, ')
+          ..write('controlEventId: $controlEventId, ')
+          ..write('eventCount: $eventCount, ')
+          ..write('finalBatch: $finalBatch')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    transferId,
+    batchIndex,
+    controlEventId,
+    eventCount,
+    finalBatch,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is HistoryTransferBatche &&
+          other.transferId == this.transferId &&
+          other.batchIndex == this.batchIndex &&
+          other.controlEventId == this.controlEventId &&
+          other.eventCount == this.eventCount &&
+          other.finalBatch == this.finalBatch);
+}
+
+class HistoryTransferBatchesCompanion
+    extends UpdateCompanion<HistoryTransferBatche> {
+  final Value<String> transferId;
+  final Value<int> batchIndex;
+  final Value<String> controlEventId;
+  final Value<int> eventCount;
+  final Value<bool> finalBatch;
+  final Value<int> rowid;
+  const HistoryTransferBatchesCompanion({
+    this.transferId = const Value.absent(),
+    this.batchIndex = const Value.absent(),
+    this.controlEventId = const Value.absent(),
+    this.eventCount = const Value.absent(),
+    this.finalBatch = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  HistoryTransferBatchesCompanion.insert({
+    required String transferId,
+    required int batchIndex,
+    required String controlEventId,
+    required int eventCount,
+    required bool finalBatch,
+    this.rowid = const Value.absent(),
+  }) : transferId = Value(transferId),
+       batchIndex = Value(batchIndex),
+       controlEventId = Value(controlEventId),
+       eventCount = Value(eventCount),
+       finalBatch = Value(finalBatch);
+  static Insertable<HistoryTransferBatche> custom({
+    Expression<String>? transferId,
+    Expression<int>? batchIndex,
+    Expression<String>? controlEventId,
+    Expression<int>? eventCount,
+    Expression<bool>? finalBatch,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (transferId != null) 'transfer_id': transferId,
+      if (batchIndex != null) 'batch_index': batchIndex,
+      if (controlEventId != null) 'control_event_id': controlEventId,
+      if (eventCount != null) 'event_count': eventCount,
+      if (finalBatch != null) 'final_batch': finalBatch,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  HistoryTransferBatchesCompanion copyWith({
+    Value<String>? transferId,
+    Value<int>? batchIndex,
+    Value<String>? controlEventId,
+    Value<int>? eventCount,
+    Value<bool>? finalBatch,
+    Value<int>? rowid,
+  }) {
+    return HistoryTransferBatchesCompanion(
+      transferId: transferId ?? this.transferId,
+      batchIndex: batchIndex ?? this.batchIndex,
+      controlEventId: controlEventId ?? this.controlEventId,
+      eventCount: eventCount ?? this.eventCount,
+      finalBatch: finalBatch ?? this.finalBatch,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (transferId.present) {
+      map['transfer_id'] = Variable<String>(transferId.value);
+    }
+    if (batchIndex.present) {
+      map['batch_index'] = Variable<int>(batchIndex.value);
+    }
+    if (controlEventId.present) {
+      map['control_event_id'] = Variable<String>(controlEventId.value);
+    }
+    if (eventCount.present) {
+      map['event_count'] = Variable<int>(eventCount.value);
+    }
+    if (finalBatch.present) {
+      map['final_batch'] = Variable<bool>(finalBatch.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('HistoryTransferBatchesCompanion(')
+          ..write('transferId: $transferId, ')
+          ..write('batchIndex: $batchIndex, ')
+          ..write('controlEventId: $controlEventId, ')
+          ..write('eventCount: $eventCount, ')
+          ..write('finalBatch: $finalBatch, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -19482,6 +21499,11 @@ abstract class _$LocalDatabase extends GeneratedDatabase {
   late final $DeviceLogRecordsTable deviceLogRecords = $DeviceLogRecordsTable(
     this,
   );
+  late final $DeviceLogMutationsTable deviceLogMutations =
+      $DeviceLogMutationsTable(this);
+  late final $SecurityPosturesTable securityPostures = $SecurityPosturesTable(
+    this,
+  );
   late final $PairwiseSessionsTable pairwiseSessions = $PairwiseSessionsTable(
     this,
   );
@@ -19528,6 +21550,8 @@ abstract class _$LocalDatabase extends GeneratedDatabase {
   late final $HistoryTransfersTable historyTransfers = $HistoryTransfersTable(
     this,
   );
+  late final $HistoryTransferBatchesTable historyTransferBatches =
+      $HistoryTransferBatchesTable(this);
   late final $SyncCheckpointsTable syncCheckpoints = $SyncCheckpointsTable(
     this,
   );
@@ -19549,6 +21573,8 @@ abstract class _$LocalDatabase extends GeneratedDatabase {
     profiles,
     devices,
     deviceLogRecords,
+    deviceLogMutations,
+    securityPostures,
     pairwiseSessions,
     pairwiseSessionAlternates,
     prekeys,
@@ -19575,6 +21601,7 @@ abstract class _$LocalDatabase extends GeneratedDatabase {
     pendingApplicationReceipts,
     voiceRooms,
     historyTransfers,
+    historyTransferBatches,
     syncCheckpoints,
     localPreferences,
     quarantineRecords,
@@ -19658,6 +21685,15 @@ abstract class _$LocalDatabase extends GeneratedDatabase {
       ),
       result: [
         TableUpdate('pending_application_receipts', kind: UpdateKind.delete),
+      ],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'history_transfers',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [
+        TableUpdate('history_transfer_batches', kind: UpdateKind.delete),
       ],
     ),
   ]);
@@ -21680,9 +23716,14 @@ typedef $$DevicesTableCreateCompanionBuilder =
       required Uint8List publicBundle,
       Value<Uint8List?> etagCiphertext,
       Value<Uint8List?> labelCiphertext,
+      Value<String?> decryptedLabel,
       required int revocationState,
       Value<int?> bundleVersion,
       Value<int> lastSignedPrekeyRotationUnixDay,
+      Value<String?> createdDate,
+      Value<String?> lastActiveDate,
+      Value<bool> isCurrentDevice,
+      Value<bool> ownerListing,
       Value<int> rowid,
     });
 typedef $$DevicesTableUpdateCompanionBuilder =
@@ -21692,9 +23733,14 @@ typedef $$DevicesTableUpdateCompanionBuilder =
       Value<Uint8List> publicBundle,
       Value<Uint8List?> etagCiphertext,
       Value<Uint8List?> labelCiphertext,
+      Value<String?> decryptedLabel,
       Value<int> revocationState,
       Value<int?> bundleVersion,
       Value<int> lastSignedPrekeyRotationUnixDay,
+      Value<String?> createdDate,
+      Value<String?> lastActiveDate,
+      Value<bool> isCurrentDevice,
+      Value<bool> ownerListing,
       Value<int> rowid,
     });
 
@@ -21749,6 +23795,11 @@ class $$DevicesTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
+  ColumnFilters<String> get decryptedLabel => $composableBuilder(
+    column: $table.decryptedLabel,
+    builder: (column) => ColumnFilters(column),
+  );
+
   ColumnFilters<int> get revocationState => $composableBuilder(
     column: $table.revocationState,
     builder: (column) => ColumnFilters(column),
@@ -21761,6 +23812,26 @@ class $$DevicesTableFilterComposer
 
   ColumnFilters<int> get lastSignedPrekeyRotationUnixDay => $composableBuilder(
     column: $table.lastSignedPrekeyRotationUnixDay,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get createdDate => $composableBuilder(
+    column: $table.createdDate,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get lastActiveDate => $composableBuilder(
+    column: $table.lastActiveDate,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get isCurrentDevice => $composableBuilder(
+    column: $table.isCurrentDevice,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get ownerListing => $composableBuilder(
+    column: $table.ownerListing,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -21817,6 +23888,11 @@ class $$DevicesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get decryptedLabel => $composableBuilder(
+    column: $table.decryptedLabel,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<int> get revocationState => $composableBuilder(
     column: $table.revocationState,
     builder: (column) => ColumnOrderings(column),
@@ -21832,6 +23908,26 @@ class $$DevicesTableOrderingComposer
         column: $table.lastSignedPrekeyRotationUnixDay,
         builder: (column) => ColumnOrderings(column),
       );
+
+  ColumnOrderings<String> get createdDate => $composableBuilder(
+    column: $table.createdDate,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get lastActiveDate => $composableBuilder(
+    column: $table.lastActiveDate,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get isCurrentDevice => $composableBuilder(
+    column: $table.isCurrentDevice,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get ownerListing => $composableBuilder(
+    column: $table.ownerListing,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   $$UsersTableOrderingComposer get userId {
     final $$UsersTableOrderingComposer composer = $composerBuilder(
@@ -21884,6 +23980,11 @@ class $$DevicesTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<String> get decryptedLabel => $composableBuilder(
+    column: $table.decryptedLabel,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<int> get revocationState => $composableBuilder(
     column: $table.revocationState,
     builder: (column) => column,
@@ -21899,6 +24000,26 @@ class $$DevicesTableAnnotationComposer
         column: $table.lastSignedPrekeyRotationUnixDay,
         builder: (column) => column,
       );
+
+  GeneratedColumn<String> get createdDate => $composableBuilder(
+    column: $table.createdDate,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get lastActiveDate => $composableBuilder(
+    column: $table.lastActiveDate,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get isCurrentDevice => $composableBuilder(
+    column: $table.isCurrentDevice,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get ownerListing => $composableBuilder(
+    column: $table.ownerListing,
+    builder: (column) => column,
+  );
 
   $$UsersTableAnnotationComposer get userId {
     final $$UsersTableAnnotationComposer composer = $composerBuilder(
@@ -21957,10 +24078,15 @@ class $$DevicesTableTableManager
                 Value<Uint8List> publicBundle = const Value.absent(),
                 Value<Uint8List?> etagCiphertext = const Value.absent(),
                 Value<Uint8List?> labelCiphertext = const Value.absent(),
+                Value<String?> decryptedLabel = const Value.absent(),
                 Value<int> revocationState = const Value.absent(),
                 Value<int?> bundleVersion = const Value.absent(),
                 Value<int> lastSignedPrekeyRotationUnixDay =
                     const Value.absent(),
+                Value<String?> createdDate = const Value.absent(),
+                Value<String?> lastActiveDate = const Value.absent(),
+                Value<bool> isCurrentDevice = const Value.absent(),
+                Value<bool> ownerListing = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => DevicesCompanion(
                 deviceId: deviceId,
@@ -21968,10 +24094,15 @@ class $$DevicesTableTableManager
                 publicBundle: publicBundle,
                 etagCiphertext: etagCiphertext,
                 labelCiphertext: labelCiphertext,
+                decryptedLabel: decryptedLabel,
                 revocationState: revocationState,
                 bundleVersion: bundleVersion,
                 lastSignedPrekeyRotationUnixDay:
                     lastSignedPrekeyRotationUnixDay,
+                createdDate: createdDate,
+                lastActiveDate: lastActiveDate,
+                isCurrentDevice: isCurrentDevice,
+                ownerListing: ownerListing,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -21981,10 +24112,15 @@ class $$DevicesTableTableManager
                 required Uint8List publicBundle,
                 Value<Uint8List?> etagCiphertext = const Value.absent(),
                 Value<Uint8List?> labelCiphertext = const Value.absent(),
+                Value<String?> decryptedLabel = const Value.absent(),
                 required int revocationState,
                 Value<int?> bundleVersion = const Value.absent(),
                 Value<int> lastSignedPrekeyRotationUnixDay =
                     const Value.absent(),
+                Value<String?> createdDate = const Value.absent(),
+                Value<String?> lastActiveDate = const Value.absent(),
+                Value<bool> isCurrentDevice = const Value.absent(),
+                Value<bool> ownerListing = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => DevicesCompanion.insert(
                 deviceId: deviceId,
@@ -21992,10 +24128,15 @@ class $$DevicesTableTableManager
                 publicBundle: publicBundle,
                 etagCiphertext: etagCiphertext,
                 labelCiphertext: labelCiphertext,
+                decryptedLabel: decryptedLabel,
                 revocationState: revocationState,
                 bundleVersion: bundleVersion,
                 lastSignedPrekeyRotationUnixDay:
                     lastSignedPrekeyRotationUnixDay,
+                createdDate: createdDate,
+                lastActiveDate: lastActiveDate,
+                isCurrentDevice: isCurrentDevice,
+                ownerListing: ownerListing,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
@@ -22419,6 +24560,498 @@ typedef $$DeviceLogRecordsTableProcessedTableManager =
       (DeviceLogRecord, $$DeviceLogRecordsTableReferences),
       DeviceLogRecord,
       PrefetchHooks Function({bool userId})
+    >;
+typedef $$DeviceLogMutationsTableCreateCompanionBuilder =
+    DeviceLogMutationsCompanion Function({
+      required String operationId,
+      required String userId,
+      required int mutationKind,
+      Value<String?> targetDeviceId,
+      required int expectedSequence,
+      required Uint8List previousHeadHash,
+      required Uint8List exactRecord,
+      required int state,
+      Value<DateTime> updatedAt,
+      Value<int> rowid,
+    });
+typedef $$DeviceLogMutationsTableUpdateCompanionBuilder =
+    DeviceLogMutationsCompanion Function({
+      Value<String> operationId,
+      Value<String> userId,
+      Value<int> mutationKind,
+      Value<String?> targetDeviceId,
+      Value<int> expectedSequence,
+      Value<Uint8List> previousHeadHash,
+      Value<Uint8List> exactRecord,
+      Value<int> state,
+      Value<DateTime> updatedAt,
+      Value<int> rowid,
+    });
+
+class $$DeviceLogMutationsTableFilterComposer
+    extends Composer<_$LocalDatabase, $DeviceLogMutationsTable> {
+  $$DeviceLogMutationsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get operationId => $composableBuilder(
+    column: $table.operationId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get userId => $composableBuilder(
+    column: $table.userId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get mutationKind => $composableBuilder(
+    column: $table.mutationKind,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get targetDeviceId => $composableBuilder(
+    column: $table.targetDeviceId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get expectedSequence => $composableBuilder(
+    column: $table.expectedSequence,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<Uint8List> get previousHeadHash => $composableBuilder(
+    column: $table.previousHeadHash,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<Uint8List> get exactRecord => $composableBuilder(
+    column: $table.exactRecord,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get state => $composableBuilder(
+    column: $table.state,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$DeviceLogMutationsTableOrderingComposer
+    extends Composer<_$LocalDatabase, $DeviceLogMutationsTable> {
+  $$DeviceLogMutationsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get operationId => $composableBuilder(
+    column: $table.operationId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get userId => $composableBuilder(
+    column: $table.userId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get mutationKind => $composableBuilder(
+    column: $table.mutationKind,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get targetDeviceId => $composableBuilder(
+    column: $table.targetDeviceId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get expectedSequence => $composableBuilder(
+    column: $table.expectedSequence,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<Uint8List> get previousHeadHash => $composableBuilder(
+    column: $table.previousHeadHash,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<Uint8List> get exactRecord => $composableBuilder(
+    column: $table.exactRecord,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get state => $composableBuilder(
+    column: $table.state,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$DeviceLogMutationsTableAnnotationComposer
+    extends Composer<_$LocalDatabase, $DeviceLogMutationsTable> {
+  $$DeviceLogMutationsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get operationId => $composableBuilder(
+    column: $table.operationId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get userId =>
+      $composableBuilder(column: $table.userId, builder: (column) => column);
+
+  GeneratedColumn<int> get mutationKind => $composableBuilder(
+    column: $table.mutationKind,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get targetDeviceId => $composableBuilder(
+    column: $table.targetDeviceId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get expectedSequence => $composableBuilder(
+    column: $table.expectedSequence,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<Uint8List> get previousHeadHash => $composableBuilder(
+    column: $table.previousHeadHash,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<Uint8List> get exactRecord => $composableBuilder(
+    column: $table.exactRecord,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get state =>
+      $composableBuilder(column: $table.state, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+}
+
+class $$DeviceLogMutationsTableTableManager
+    extends
+        RootTableManager<
+          _$LocalDatabase,
+          $DeviceLogMutationsTable,
+          DeviceLogMutation,
+          $$DeviceLogMutationsTableFilterComposer,
+          $$DeviceLogMutationsTableOrderingComposer,
+          $$DeviceLogMutationsTableAnnotationComposer,
+          $$DeviceLogMutationsTableCreateCompanionBuilder,
+          $$DeviceLogMutationsTableUpdateCompanionBuilder,
+          (
+            DeviceLogMutation,
+            BaseReferences<
+              _$LocalDatabase,
+              $DeviceLogMutationsTable,
+              DeviceLogMutation
+            >,
+          ),
+          DeviceLogMutation,
+          PrefetchHooks Function()
+        > {
+  $$DeviceLogMutationsTableTableManager(
+    _$LocalDatabase db,
+    $DeviceLogMutationsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$DeviceLogMutationsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$DeviceLogMutationsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$DeviceLogMutationsTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> operationId = const Value.absent(),
+                Value<String> userId = const Value.absent(),
+                Value<int> mutationKind = const Value.absent(),
+                Value<String?> targetDeviceId = const Value.absent(),
+                Value<int> expectedSequence = const Value.absent(),
+                Value<Uint8List> previousHeadHash = const Value.absent(),
+                Value<Uint8List> exactRecord = const Value.absent(),
+                Value<int> state = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => DeviceLogMutationsCompanion(
+                operationId: operationId,
+                userId: userId,
+                mutationKind: mutationKind,
+                targetDeviceId: targetDeviceId,
+                expectedSequence: expectedSequence,
+                previousHeadHash: previousHeadHash,
+                exactRecord: exactRecord,
+                state: state,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String operationId,
+                required String userId,
+                required int mutationKind,
+                Value<String?> targetDeviceId = const Value.absent(),
+                required int expectedSequence,
+                required Uint8List previousHeadHash,
+                required Uint8List exactRecord,
+                required int state,
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => DeviceLogMutationsCompanion.insert(
+                operationId: operationId,
+                userId: userId,
+                mutationKind: mutationKind,
+                targetDeviceId: targetDeviceId,
+                expectedSequence: expectedSequence,
+                previousHeadHash: previousHeadHash,
+                exactRecord: exactRecord,
+                state: state,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$DeviceLogMutationsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$LocalDatabase,
+      $DeviceLogMutationsTable,
+      DeviceLogMutation,
+      $$DeviceLogMutationsTableFilterComposer,
+      $$DeviceLogMutationsTableOrderingComposer,
+      $$DeviceLogMutationsTableAnnotationComposer,
+      $$DeviceLogMutationsTableCreateCompanionBuilder,
+      $$DeviceLogMutationsTableUpdateCompanionBuilder,
+      (
+        DeviceLogMutation,
+        BaseReferences<
+          _$LocalDatabase,
+          $DeviceLogMutationsTable,
+          DeviceLogMutation
+        >,
+      ),
+      DeviceLogMutation,
+      PrefetchHooks Function()
+    >;
+typedef $$SecurityPosturesTableCreateCompanionBuilder =
+    SecurityPosturesCompanion Function({
+      Value<int> singletonId,
+      required int state,
+      Value<int?> evidenceKind,
+      Value<DateTime?> detectedAt,
+    });
+typedef $$SecurityPosturesTableUpdateCompanionBuilder =
+    SecurityPosturesCompanion Function({
+      Value<int> singletonId,
+      Value<int> state,
+      Value<int?> evidenceKind,
+      Value<DateTime?> detectedAt,
+    });
+
+class $$SecurityPosturesTableFilterComposer
+    extends Composer<_$LocalDatabase, $SecurityPosturesTable> {
+  $$SecurityPosturesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get singletonId => $composableBuilder(
+    column: $table.singletonId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get state => $composableBuilder(
+    column: $table.state,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get evidenceKind => $composableBuilder(
+    column: $table.evidenceKind,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get detectedAt => $composableBuilder(
+    column: $table.detectedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$SecurityPosturesTableOrderingComposer
+    extends Composer<_$LocalDatabase, $SecurityPosturesTable> {
+  $$SecurityPosturesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get singletonId => $composableBuilder(
+    column: $table.singletonId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get state => $composableBuilder(
+    column: $table.state,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get evidenceKind => $composableBuilder(
+    column: $table.evidenceKind,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get detectedAt => $composableBuilder(
+    column: $table.detectedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$SecurityPosturesTableAnnotationComposer
+    extends Composer<_$LocalDatabase, $SecurityPosturesTable> {
+  $$SecurityPosturesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get singletonId => $composableBuilder(
+    column: $table.singletonId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get state =>
+      $composableBuilder(column: $table.state, builder: (column) => column);
+
+  GeneratedColumn<int> get evidenceKind => $composableBuilder(
+    column: $table.evidenceKind,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get detectedAt => $composableBuilder(
+    column: $table.detectedAt,
+    builder: (column) => column,
+  );
+}
+
+class $$SecurityPosturesTableTableManager
+    extends
+        RootTableManager<
+          _$LocalDatabase,
+          $SecurityPosturesTable,
+          SecurityPosture,
+          $$SecurityPosturesTableFilterComposer,
+          $$SecurityPosturesTableOrderingComposer,
+          $$SecurityPosturesTableAnnotationComposer,
+          $$SecurityPosturesTableCreateCompanionBuilder,
+          $$SecurityPosturesTableUpdateCompanionBuilder,
+          (
+            SecurityPosture,
+            BaseReferences<
+              _$LocalDatabase,
+              $SecurityPosturesTable,
+              SecurityPosture
+            >,
+          ),
+          SecurityPosture,
+          PrefetchHooks Function()
+        > {
+  $$SecurityPosturesTableTableManager(
+    _$LocalDatabase db,
+    $SecurityPosturesTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$SecurityPosturesTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$SecurityPosturesTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$SecurityPosturesTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<int> singletonId = const Value.absent(),
+                Value<int> state = const Value.absent(),
+                Value<int?> evidenceKind = const Value.absent(),
+                Value<DateTime?> detectedAt = const Value.absent(),
+              }) => SecurityPosturesCompanion(
+                singletonId: singletonId,
+                state: state,
+                evidenceKind: evidenceKind,
+                detectedAt: detectedAt,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> singletonId = const Value.absent(),
+                required int state,
+                Value<int?> evidenceKind = const Value.absent(),
+                Value<DateTime?> detectedAt = const Value.absent(),
+              }) => SecurityPosturesCompanion.insert(
+                singletonId: singletonId,
+                state: state,
+                evidenceKind: evidenceKind,
+                detectedAt: detectedAt,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$SecurityPosturesTableProcessedTableManager =
+    ProcessedTableManager<
+      _$LocalDatabase,
+      $SecurityPosturesTable,
+      SecurityPosture,
+      $$SecurityPosturesTableFilterComposer,
+      $$SecurityPosturesTableOrderingComposer,
+      $$SecurityPosturesTableAnnotationComposer,
+      $$SecurityPosturesTableCreateCompanionBuilder,
+      $$SecurityPosturesTableUpdateCompanionBuilder,
+      (
+        SecurityPosture,
+        BaseReferences<
+          _$LocalDatabase,
+          $SecurityPosturesTable,
+          SecurityPosture
+        >,
+      ),
+      SecurityPosture,
+      PrefetchHooks Function()
     >;
 typedef $$PairwiseSessionsTableCreateCompanionBuilder =
     PairwiseSessionsCompanion Function({
@@ -30866,18 +33499,80 @@ typedef $$HistoryTransfersTableCreateCompanionBuilder =
     HistoryTransfersCompanion Function({
       required String transferId,
       required Uint8List manifestCiphertext,
+      Value<String> sourceDeviceId,
+      Value<String> targetDeviceId,
+      Value<int> direction,
+      Value<int> state,
+      Value<int> nextBatchIndex,
       Value<int> eventProgress,
       required int sourceCompleteness,
+      Value<bool> groupReinviteRequired,
+      Value<bool> queueGapRecoveryRequired,
+      Value<DateTime> updatedAt,
       Value<int> rowid,
     });
 typedef $$HistoryTransfersTableUpdateCompanionBuilder =
     HistoryTransfersCompanion Function({
       Value<String> transferId,
       Value<Uint8List> manifestCiphertext,
+      Value<String> sourceDeviceId,
+      Value<String> targetDeviceId,
+      Value<int> direction,
+      Value<int> state,
+      Value<int> nextBatchIndex,
       Value<int> eventProgress,
       Value<int> sourceCompleteness,
+      Value<bool> groupReinviteRequired,
+      Value<bool> queueGapRecoveryRequired,
+      Value<DateTime> updatedAt,
       Value<int> rowid,
     });
+
+final class $$HistoryTransfersTableReferences
+    extends
+        BaseReferences<
+          _$LocalDatabase,
+          $HistoryTransfersTable,
+          HistoryTransfer
+        > {
+  $$HistoryTransfersTableReferences(
+    super.$_db,
+    super.$_table,
+    super.$_typedResult,
+  );
+
+  static MultiTypedResultKey<
+    $HistoryTransferBatchesTable,
+    List<HistoryTransferBatche>
+  >
+  _historyTransferBatchesRefsTable(
+    _$LocalDatabase db,
+  ) => MultiTypedResultKey.fromTable(
+    db.historyTransferBatches,
+    aliasName:
+        'history_transfers__transfer_id__history_transfer_batches__transfer_id',
+  );
+
+  $$HistoryTransferBatchesTableProcessedTableManager
+  get historyTransferBatchesRefs {
+    final manager =
+        $$HistoryTransferBatchesTableTableManager(
+          $_db,
+          $_db.historyTransferBatches,
+        ).filter(
+          (f) => f.transferId.transferId.sqlEquals(
+            $_itemColumn<String>('transfer_id')!,
+          ),
+        );
+
+    final cache = $_typedResult.readTableOrNull(
+      _historyTransferBatchesRefsTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+}
 
 class $$HistoryTransfersTableFilterComposer
     extends Composer<_$LocalDatabase, $HistoryTransfersTable> {
@@ -30898,6 +33593,31 @@ class $$HistoryTransfersTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
+  ColumnFilters<String> get sourceDeviceId => $composableBuilder(
+    column: $table.sourceDeviceId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get targetDeviceId => $composableBuilder(
+    column: $table.targetDeviceId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get direction => $composableBuilder(
+    column: $table.direction,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get state => $composableBuilder(
+    column: $table.state,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get nextBatchIndex => $composableBuilder(
+    column: $table.nextBatchIndex,
+    builder: (column) => ColumnFilters(column),
+  );
+
   ColumnFilters<int> get eventProgress => $composableBuilder(
     column: $table.eventProgress,
     builder: (column) => ColumnFilters(column),
@@ -30907,6 +33627,47 @@ class $$HistoryTransfersTableFilterComposer
     column: $table.sourceCompleteness,
     builder: (column) => ColumnFilters(column),
   );
+
+  ColumnFilters<bool> get groupReinviteRequired => $composableBuilder(
+    column: $table.groupReinviteRequired,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get queueGapRecoveryRequired => $composableBuilder(
+    column: $table.queueGapRecoveryRequired,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  Expression<bool> historyTransferBatchesRefs(
+    Expression<bool> Function($$HistoryTransferBatchesTableFilterComposer f) f,
+  ) {
+    final $$HistoryTransferBatchesTableFilterComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.transferId,
+          referencedTable: $db.historyTransferBatches,
+          getReferencedColumn: (t) => t.transferId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$HistoryTransferBatchesTableFilterComposer(
+                $db: $db,
+                $table: $db.historyTransferBatches,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
 }
 
 class $$HistoryTransfersTableOrderingComposer
@@ -30928,6 +33689,31 @@ class $$HistoryTransfersTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get sourceDeviceId => $composableBuilder(
+    column: $table.sourceDeviceId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get targetDeviceId => $composableBuilder(
+    column: $table.targetDeviceId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get direction => $composableBuilder(
+    column: $table.direction,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get state => $composableBuilder(
+    column: $table.state,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get nextBatchIndex => $composableBuilder(
+    column: $table.nextBatchIndex,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<int> get eventProgress => $composableBuilder(
     column: $table.eventProgress,
     builder: (column) => ColumnOrderings(column),
@@ -30935,6 +33721,21 @@ class $$HistoryTransfersTableOrderingComposer
 
   ColumnOrderings<int> get sourceCompleteness => $composableBuilder(
     column: $table.sourceCompleteness,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get groupReinviteRequired => $composableBuilder(
+    column: $table.groupReinviteRequired,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get queueGapRecoveryRequired => $composableBuilder(
+    column: $table.queueGapRecoveryRequired,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
     builder: (column) => ColumnOrderings(column),
   );
 }
@@ -30958,6 +33759,27 @@ class $$HistoryTransfersTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<String> get sourceDeviceId => $composableBuilder(
+    column: $table.sourceDeviceId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get targetDeviceId => $composableBuilder(
+    column: $table.targetDeviceId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get direction =>
+      $composableBuilder(column: $table.direction, builder: (column) => column);
+
+  GeneratedColumn<int> get state =>
+      $composableBuilder(column: $table.state, builder: (column) => column);
+
+  GeneratedColumn<int> get nextBatchIndex => $composableBuilder(
+    column: $table.nextBatchIndex,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<int> get eventProgress => $composableBuilder(
     column: $table.eventProgress,
     builder: (column) => column,
@@ -30967,6 +33789,45 @@ class $$HistoryTransfersTableAnnotationComposer
     column: $table.sourceCompleteness,
     builder: (column) => column,
   );
+
+  GeneratedColumn<bool> get groupReinviteRequired => $composableBuilder(
+    column: $table.groupReinviteRequired,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get queueGapRecoveryRequired => $composableBuilder(
+    column: $table.queueGapRecoveryRequired,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  Expression<T> historyTransferBatchesRefs<T extends Object>(
+    Expression<T> Function($$HistoryTransferBatchesTableAnnotationComposer a) f,
+  ) {
+    final $$HistoryTransferBatchesTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.transferId,
+          referencedTable: $db.historyTransferBatches,
+          getReferencedColumn: (t) => t.transferId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$HistoryTransferBatchesTableAnnotationComposer(
+                $db: $db,
+                $table: $db.historyTransferBatches,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
 }
 
 class $$HistoryTransfersTableTableManager
@@ -30980,16 +33841,9 @@ class $$HistoryTransfersTableTableManager
           $$HistoryTransfersTableAnnotationComposer,
           $$HistoryTransfersTableCreateCompanionBuilder,
           $$HistoryTransfersTableUpdateCompanionBuilder,
-          (
-            HistoryTransfer,
-            BaseReferences<
-              _$LocalDatabase,
-              $HistoryTransfersTable,
-              HistoryTransfer
-            >,
-          ),
+          (HistoryTransfer, $$HistoryTransfersTableReferences),
           HistoryTransfer,
-          PrefetchHooks Function()
+          PrefetchHooks Function({bool historyTransferBatchesRefs})
         > {
   $$HistoryTransfersTableTableManager(
     _$LocalDatabase db,
@@ -31008,34 +33862,104 @@ class $$HistoryTransfersTableTableManager
               ({
                 Value<String> transferId = const Value.absent(),
                 Value<Uint8List> manifestCiphertext = const Value.absent(),
+                Value<String> sourceDeviceId = const Value.absent(),
+                Value<String> targetDeviceId = const Value.absent(),
+                Value<int> direction = const Value.absent(),
+                Value<int> state = const Value.absent(),
+                Value<int> nextBatchIndex = const Value.absent(),
                 Value<int> eventProgress = const Value.absent(),
                 Value<int> sourceCompleteness = const Value.absent(),
+                Value<bool> groupReinviteRequired = const Value.absent(),
+                Value<bool> queueGapRecoveryRequired = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => HistoryTransfersCompanion(
                 transferId: transferId,
                 manifestCiphertext: manifestCiphertext,
+                sourceDeviceId: sourceDeviceId,
+                targetDeviceId: targetDeviceId,
+                direction: direction,
+                state: state,
+                nextBatchIndex: nextBatchIndex,
                 eventProgress: eventProgress,
                 sourceCompleteness: sourceCompleteness,
+                groupReinviteRequired: groupReinviteRequired,
+                queueGapRecoveryRequired: queueGapRecoveryRequired,
+                updatedAt: updatedAt,
                 rowid: rowid,
               ),
           createCompanionCallback:
               ({
                 required String transferId,
                 required Uint8List manifestCiphertext,
+                Value<String> sourceDeviceId = const Value.absent(),
+                Value<String> targetDeviceId = const Value.absent(),
+                Value<int> direction = const Value.absent(),
+                Value<int> state = const Value.absent(),
+                Value<int> nextBatchIndex = const Value.absent(),
                 Value<int> eventProgress = const Value.absent(),
                 required int sourceCompleteness,
+                Value<bool> groupReinviteRequired = const Value.absent(),
+                Value<bool> queueGapRecoveryRequired = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => HistoryTransfersCompanion.insert(
                 transferId: transferId,
                 manifestCiphertext: manifestCiphertext,
+                sourceDeviceId: sourceDeviceId,
+                targetDeviceId: targetDeviceId,
+                direction: direction,
+                state: state,
+                nextBatchIndex: nextBatchIndex,
                 eventProgress: eventProgress,
                 sourceCompleteness: sourceCompleteness,
+                groupReinviteRequired: groupReinviteRequired,
+                queueGapRecoveryRequired: queueGapRecoveryRequired,
+                updatedAt: updatedAt,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$HistoryTransfersTableReferences(db, table, e),
+                ),
+              )
               .toList(),
-          prefetchHooksCallback: null,
+          prefetchHooksCallback: ({historyTransferBatchesRefs = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [
+                if (historyTransferBatchesRefs) db.historyTransferBatches,
+              ],
+              addJoins: null,
+              getPrefetchedDataCallback: (items) async {
+                return [
+                  if (historyTransferBatchesRefs)
+                    await $_getPrefetchedData<
+                      HistoryTransfer,
+                      $HistoryTransfersTable,
+                      HistoryTransferBatche
+                    >(
+                      currentTable: table,
+                      referencedTable: $$HistoryTransfersTableReferences
+                          ._historyTransferBatchesRefsTable(db),
+                      managerFromTypedResult: (p0) =>
+                          $$HistoryTransfersTableReferences(
+                            db,
+                            table,
+                            p0,
+                          ).historyTransferBatchesRefs,
+                      referencedItemsForCurrentItem: (item, referencedItems) =>
+                          referencedItems.where(
+                            (e) => e.transferId == item.transferId,
+                          ),
+                      typedResults: items,
+                    ),
+                ];
+              },
+            );
+          },
         ),
       );
 }
@@ -31050,16 +33974,358 @@ typedef $$HistoryTransfersTableProcessedTableManager =
       $$HistoryTransfersTableAnnotationComposer,
       $$HistoryTransfersTableCreateCompanionBuilder,
       $$HistoryTransfersTableUpdateCompanionBuilder,
-      (
-        HistoryTransfer,
+      (HistoryTransfer, $$HistoryTransfersTableReferences),
+      HistoryTransfer,
+      PrefetchHooks Function({bool historyTransferBatchesRefs})
+    >;
+typedef $$HistoryTransferBatchesTableCreateCompanionBuilder =
+    HistoryTransferBatchesCompanion Function({
+      required String transferId,
+      required int batchIndex,
+      required String controlEventId,
+      required int eventCount,
+      required bool finalBatch,
+      Value<int> rowid,
+    });
+typedef $$HistoryTransferBatchesTableUpdateCompanionBuilder =
+    HistoryTransferBatchesCompanion Function({
+      Value<String> transferId,
+      Value<int> batchIndex,
+      Value<String> controlEventId,
+      Value<int> eventCount,
+      Value<bool> finalBatch,
+      Value<int> rowid,
+    });
+
+final class $$HistoryTransferBatchesTableReferences
+    extends
         BaseReferences<
           _$LocalDatabase,
-          $HistoryTransfersTable,
-          HistoryTransfer
-        >,
-      ),
-      HistoryTransfer,
-      PrefetchHooks Function()
+          $HistoryTransferBatchesTable,
+          HistoryTransferBatche
+        > {
+  $$HistoryTransferBatchesTableReferences(
+    super.$_db,
+    super.$_table,
+    super.$_typedResult,
+  );
+
+  static $HistoryTransfersTable _transferIdTable(_$LocalDatabase db) =>
+      db.historyTransfers.createAlias(
+        'history_transfer_batches__transfer_id__history_transfers__transfer_id',
+      );
+
+  $$HistoryTransfersTableProcessedTableManager get transferId {
+    final $_column = $_itemColumn<String>('transfer_id')!;
+
+    final manager = $$HistoryTransfersTableTableManager(
+      $_db,
+      $_db.historyTransfers,
+    ).filter((f) => f.transferId.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_transferIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+}
+
+class $$HistoryTransferBatchesTableFilterComposer
+    extends Composer<_$LocalDatabase, $HistoryTransferBatchesTable> {
+  $$HistoryTransferBatchesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get batchIndex => $composableBuilder(
+    column: $table.batchIndex,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get controlEventId => $composableBuilder(
+    column: $table.controlEventId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get eventCount => $composableBuilder(
+    column: $table.eventCount,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get finalBatch => $composableBuilder(
+    column: $table.finalBatch,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$HistoryTransfersTableFilterComposer get transferId {
+    final $$HistoryTransfersTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.transferId,
+      referencedTable: $db.historyTransfers,
+      getReferencedColumn: (t) => t.transferId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$HistoryTransfersTableFilterComposer(
+            $db: $db,
+            $table: $db.historyTransfers,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$HistoryTransferBatchesTableOrderingComposer
+    extends Composer<_$LocalDatabase, $HistoryTransferBatchesTable> {
+  $$HistoryTransferBatchesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get batchIndex => $composableBuilder(
+    column: $table.batchIndex,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get controlEventId => $composableBuilder(
+    column: $table.controlEventId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get eventCount => $composableBuilder(
+    column: $table.eventCount,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get finalBatch => $composableBuilder(
+    column: $table.finalBatch,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$HistoryTransfersTableOrderingComposer get transferId {
+    final $$HistoryTransfersTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.transferId,
+      referencedTable: $db.historyTransfers,
+      getReferencedColumn: (t) => t.transferId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$HistoryTransfersTableOrderingComposer(
+            $db: $db,
+            $table: $db.historyTransfers,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$HistoryTransferBatchesTableAnnotationComposer
+    extends Composer<_$LocalDatabase, $HistoryTransferBatchesTable> {
+  $$HistoryTransferBatchesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get batchIndex => $composableBuilder(
+    column: $table.batchIndex,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get controlEventId => $composableBuilder(
+    column: $table.controlEventId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get eventCount => $composableBuilder(
+    column: $table.eventCount,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get finalBatch => $composableBuilder(
+    column: $table.finalBatch,
+    builder: (column) => column,
+  );
+
+  $$HistoryTransfersTableAnnotationComposer get transferId {
+    final $$HistoryTransfersTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.transferId,
+      referencedTable: $db.historyTransfers,
+      getReferencedColumn: (t) => t.transferId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$HistoryTransfersTableAnnotationComposer(
+            $db: $db,
+            $table: $db.historyTransfers,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$HistoryTransferBatchesTableTableManager
+    extends
+        RootTableManager<
+          _$LocalDatabase,
+          $HistoryTransferBatchesTable,
+          HistoryTransferBatche,
+          $$HistoryTransferBatchesTableFilterComposer,
+          $$HistoryTransferBatchesTableOrderingComposer,
+          $$HistoryTransferBatchesTableAnnotationComposer,
+          $$HistoryTransferBatchesTableCreateCompanionBuilder,
+          $$HistoryTransferBatchesTableUpdateCompanionBuilder,
+          (HistoryTransferBatche, $$HistoryTransferBatchesTableReferences),
+          HistoryTransferBatche,
+          PrefetchHooks Function({bool transferId})
+        > {
+  $$HistoryTransferBatchesTableTableManager(
+    _$LocalDatabase db,
+    $HistoryTransferBatchesTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$HistoryTransferBatchesTableFilterComposer(
+                $db: db,
+                $table: table,
+              ),
+          createOrderingComposer: () =>
+              $$HistoryTransferBatchesTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$HistoryTransferBatchesTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> transferId = const Value.absent(),
+                Value<int> batchIndex = const Value.absent(),
+                Value<String> controlEventId = const Value.absent(),
+                Value<int> eventCount = const Value.absent(),
+                Value<bool> finalBatch = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => HistoryTransferBatchesCompanion(
+                transferId: transferId,
+                batchIndex: batchIndex,
+                controlEventId: controlEventId,
+                eventCount: eventCount,
+                finalBatch: finalBatch,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String transferId,
+                required int batchIndex,
+                required String controlEventId,
+                required int eventCount,
+                required bool finalBatch,
+                Value<int> rowid = const Value.absent(),
+              }) => HistoryTransferBatchesCompanion.insert(
+                transferId: transferId,
+                batchIndex: batchIndex,
+                controlEventId: controlEventId,
+                eventCount: eventCount,
+                finalBatch: finalBatch,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$HistoryTransferBatchesTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: ({transferId = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [],
+              addJoins:
+                  <
+                    T extends TableManagerState<
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic
+                    >
+                  >(state) {
+                    if (transferId) {
+                      state =
+                          state.withJoin(
+                                currentTable: table,
+                                currentColumn: table.transferId,
+                                referencedTable:
+                                    $$HistoryTransferBatchesTableReferences
+                                        ._transferIdTable(db),
+                                referencedColumn:
+                                    $$HistoryTransferBatchesTableReferences
+                                        ._transferIdTable(db)
+                                        .transferId,
+                              )
+                              as T;
+                    }
+
+                    return state;
+                  },
+              getPrefetchedDataCallback: (items) async {
+                return [];
+              },
+            );
+          },
+        ),
+      );
+}
+
+typedef $$HistoryTransferBatchesTableProcessedTableManager =
+    ProcessedTableManager<
+      _$LocalDatabase,
+      $HistoryTransferBatchesTable,
+      HistoryTransferBatche,
+      $$HistoryTransferBatchesTableFilterComposer,
+      $$HistoryTransferBatchesTableOrderingComposer,
+      $$HistoryTransferBatchesTableAnnotationComposer,
+      $$HistoryTransferBatchesTableCreateCompanionBuilder,
+      $$HistoryTransferBatchesTableUpdateCompanionBuilder,
+      (HistoryTransferBatche, $$HistoryTransferBatchesTableReferences),
+      HistoryTransferBatche,
+      PrefetchHooks Function({bool transferId})
     >;
 typedef $$SyncCheckpointsTableCreateCompanionBuilder =
     SyncCheckpointsCompanion Function({
@@ -31812,6 +35078,10 @@ class $LocalDatabaseManager {
       $$DevicesTableTableManager(_db, _db.devices);
   $$DeviceLogRecordsTableTableManager get deviceLogRecords =>
       $$DeviceLogRecordsTableTableManager(_db, _db.deviceLogRecords);
+  $$DeviceLogMutationsTableTableManager get deviceLogMutations =>
+      $$DeviceLogMutationsTableTableManager(_db, _db.deviceLogMutations);
+  $$SecurityPosturesTableTableManager get securityPostures =>
+      $$SecurityPosturesTableTableManager(_db, _db.securityPostures);
   $$PairwiseSessionsTableTableManager get pairwiseSessions =>
       $$PairwiseSessionsTableTableManager(_db, _db.pairwiseSessions);
   $$PairwiseSessionAlternatesTableTableManager get pairwiseSessionAlternates =>
@@ -31900,6 +35170,11 @@ class $LocalDatabaseManager {
       $$VoiceRoomsTableTableManager(_db, _db.voiceRooms);
   $$HistoryTransfersTableTableManager get historyTransfers =>
       $$HistoryTransfersTableTableManager(_db, _db.historyTransfers);
+  $$HistoryTransferBatchesTableTableManager get historyTransferBatches =>
+      $$HistoryTransferBatchesTableTableManager(
+        _db,
+        _db.historyTransferBatches,
+      );
   $$SyncCheckpointsTableTableManager get syncCheckpoints =>
       $$SyncCheckpointsTableTableManager(_db, _db.syncCheckpoints);
   $$LocalPreferencesTableTableManager get localPreferences =>

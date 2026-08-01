@@ -5,6 +5,7 @@ import 'package:communication_platform/app/config/app_environment.dart';
 import 'package:communication_platform/core/application/ports/application_protocol_port.dart';
 import 'package:communication_platform/core/application/ports/attachment_crypto_port.dart';
 import 'package:communication_platform/core/application/ports/crypto_core_port.dart';
+import 'package:communication_platform/core/application/ports/device_control_crypto_port.dart';
 import 'package:communication_platform/core/application/ports/enrollment_crypto_port.dart';
 import 'package:communication_platform/core/application/ports/identity_crypto_port.dart';
 import 'package:communication_platform/core/application/ports/pairwise_crypto_port.dart';
@@ -74,6 +75,13 @@ final applicationProtocolProvider = Provider<ApplicationProtocolPort>((ref) {
   final cryptoCore = ref.watch(cryptoCoreProvider);
   return cryptoCore is ApplicationProtocolPort
       ? cryptoCore as ApplicationProtocolPort
+      : const UnsupportedCryptoCore();
+});
+
+final deviceControlCryptoProvider = Provider<DeviceControlCryptoPort>((ref) {
+  final cryptoCore = ref.watch(cryptoCoreProvider);
+  return cryptoCore is DeviceControlCryptoPort
+      ? cryptoCore as DeviceControlCryptoPort
       : const UnsupportedCryptoCore();
 });
 

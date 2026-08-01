@@ -134,6 +134,7 @@ class Devices extends Table {
   BlobColumn get publicBundle => blob()();
   BlobColumn get etagCiphertext => blob().nullable()();
   BlobColumn get labelCiphertext => blob().nullable()();
+  TextColumn get decryptedLabel => text().nullable()();
   IntColumn get revocationState =>
       integer().check(revocationState.isBetweenValues(0, 3))();
   IntColumn get bundleVersion => integer().nullable().check(
@@ -142,9 +143,52 @@ class Devices extends Table {
   IntColumn get lastSignedPrekeyRotationUnixDay => integer()
       .withDefault(const Constant(0))
       .check(lastSignedPrekeyRotationUnixDay.isBiggerOrEqualValue(0))();
+  TextColumn get createdDate => text().nullable()();
+  TextColumn get lastActiveDate => text().nullable()();
+  BoolColumn get isCurrentDevice =>
+      boolean().withDefault(const Constant(false))();
+  BoolColumn get ownerListing => boolean().withDefault(const Constant(false))();
 
   @override
   Set<Column<Object>> get primaryKey => {deviceId};
+}
+
+/// Exact own-account log append retained before its non-idempotent POST.
+class DeviceLogMutations extends Table {
+  @override
+  String get tableName => 'device_log_mutations';
+
+  TextColumn get operationId => text()();
+  TextColumn get userId => text()();
+  IntColumn get mutationKind =>
+      integer().check(mutationKind.isBetweenValues(0, 3))();
+  TextColumn get targetDeviceId => text().nullable()();
+  IntColumn get expectedSequence =>
+      integer().check(expectedSequence.isBiggerOrEqualValue(0))();
+  BlobColumn get previousHeadHash => blob()();
+  BlobColumn get exactRecord => blob()();
+  IntColumn get state => integer().check(state.isBetweenValues(0, 3))();
+  DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
+
+  @override
+  Set<Column<Object>> get primaryKey => {operationId};
+}
+
+class SecurityPostures extends Table {
+  @override
+  String get tableName => 'security_posture';
+
+  IntColumn get singletonId =>
+      integer().withDefault(const Constant(1)).check(singletonId.equals(1))();
+  // 0 normal, 1 globally-forked, 2 pending authenticated device change.
+  IntColumn get state => integer().check(state.isBetweenValues(0, 2))();
+  IntColumn get evidenceKind => integer().nullable().check(
+    evidenceKind.isNull() | evidenceKind.isBetweenValues(0, 4),
+  )();
+  DateTimeColumn get detectedAt => dateTime().nullable()();
+
+  @override
+  Set<Column<Object>> get primaryKey => {singletonId};
 }
 
 class DeviceLogRecords extends Table {
@@ -689,14 +733,50 @@ class HistoryTransfers extends Table {
 
   TextColumn get transferId => text()();
   BlobColumn get manifestCiphertext => blob()();
+  TextColumn get sourceDeviceId => text().withDefault(const Constant(''))();
+  TextColumn get targetDeviceId => text().withDefault(const Constant(''))();
+  IntColumn get direction => integer()
+      .withDefault(const Constant(0))
+      .check(direction.isBetweenValues(0, 1))();
+  IntColumn get state => integer()
+      .withDefault(const Constant(0))
+      .check(state.isBetweenValues(0, 7))();
+  IntColumn get nextBatchIndex => integer()
+      .withDefault(const Constant(0))
+      .check(nextBatchIndex.isBiggerOrEqualValue(0))();
   IntColumn get eventProgress => integer()
       .withDefault(const Constant(0))
       .check(eventProgress.isBiggerOrEqualValue(0))();
   IntColumn get sourceCompleteness =>
       integer().check(sourceCompleteness.isBetweenValues(0, 2))();
+  BoolColumn get groupReinviteRequired =>
+      boolean().withDefault(const Constant(false))();
+  BoolColumn get queueGapRecoveryRequired =>
+      boolean().withDefault(const Constant(false))();
+  DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
 
   @override
   Set<Column<Object>> get primaryKey => {transferId};
+}
+
+class HistoryTransferBatches extends Table {
+  @override
+  String get tableName => 'history_transfer_batches';
+
+  TextColumn get transferId => text().references(
+    HistoryTransfers,
+    #transferId,
+    onDelete: KeyAction.cascade,
+  )();
+  IntColumn get batchIndex =>
+      integer().check(batchIndex.isBiggerOrEqualValue(0))();
+  TextColumn get controlEventId => text().unique()();
+  IntColumn get eventCount =>
+      integer().check(eventCount.isBetweenValues(1, 32))();
+  BoolColumn get finalBatch => boolean()();
+
+  @override
+  Set<Column<Object>> get primaryKey => {transferId, batchIndex};
 }
 
 class SyncCheckpoints extends Table {
@@ -776,6 +856,8 @@ class StorageMigrationHooks {
     Profiles,
     Devices,
     DeviceLogRecords,
+    DeviceLogMutations,
+    SecurityPostures,
     PairwiseSessions,
     PairwiseSessionAlternates,
     Prekeys,
@@ -802,6 +884,7 @@ class StorageMigrationHooks {
     PendingApplicationReceipts,
     VoiceRooms,
     HistoryTransfers,
+    HistoryTransferBatches,
     SyncCheckpoints,
     LocalPreferences,
     QuarantineRecords,
@@ -811,7 +894,7 @@ final class LocalDatabase extends _$LocalDatabase {
   LocalDatabase(super.executor, {StorageMigrationHooks? migrationHooks})
     : _migrationHooks = migrationHooks ?? const StorageMigrationHooks();
 
-  static const currentSchemaVersion = 6;
+  static const currentSchemaVersion = 7;
   final StorageMigrationHooks _migrationHooks;
 
   @override
@@ -965,6 +1048,110 @@ final class LocalDatabase extends _$LocalDatabase {
         if (from < 6) {
           await migrator.addColumn(conversations, conversations.pinned);
           await migrator.addColumn(messages, messages.starred);
+        }
+        if (from < 7) {
+          Future<void> addIfMissing(
+            String table,
+            String column,
+            Future<void> Function() add,
+          ) async {
+            final existing = await customSelect(
+              'PRAGMA table_info("$table")',
+            ).get();
+            if (!existing.any((row) => row.read<String>('name') == column)) {
+              await add();
+            }
+          }
+
+          await addIfMissing(
+            devices.actualTableName,
+            devices.createdDate.$name,
+            () => migrator.addColumn(devices, devices.createdDate),
+          );
+          await addIfMissing(
+            devices.actualTableName,
+            devices.decryptedLabel.$name,
+            () => migrator.addColumn(devices, devices.decryptedLabel),
+          );
+          await addIfMissing(
+            devices.actualTableName,
+            devices.lastActiveDate.$name,
+            () => migrator.addColumn(devices, devices.lastActiveDate),
+          );
+          await addIfMissing(
+            devices.actualTableName,
+            devices.isCurrentDevice.$name,
+            () => migrator.addColumn(devices, devices.isCurrentDevice),
+          );
+          await addIfMissing(
+            devices.actualTableName,
+            devices.ownerListing.$name,
+            () => migrator.addColumn(devices, devices.ownerListing),
+          );
+          await migrator.createTable(deviceLogMutations);
+          await migrator.createTable(securityPostures);
+          await addIfMissing(
+            historyTransfers.actualTableName,
+            historyTransfers.sourceDeviceId.$name,
+            () => migrator.addColumn(
+              historyTransfers,
+              historyTransfers.sourceDeviceId,
+            ),
+          );
+          await addIfMissing(
+            historyTransfers.actualTableName,
+            historyTransfers.targetDeviceId.$name,
+            () => migrator.addColumn(
+              historyTransfers,
+              historyTransfers.targetDeviceId,
+            ),
+          );
+          await addIfMissing(
+            historyTransfers.actualTableName,
+            historyTransfers.direction.$name,
+            () => migrator.addColumn(
+              historyTransfers,
+              historyTransfers.direction,
+            ),
+          );
+          await addIfMissing(
+            historyTransfers.actualTableName,
+            historyTransfers.state.$name,
+            () => migrator.addColumn(historyTransfers, historyTransfers.state),
+          );
+          await addIfMissing(
+            historyTransfers.actualTableName,
+            historyTransfers.nextBatchIndex.$name,
+            () => migrator.addColumn(
+              historyTransfers,
+              historyTransfers.nextBatchIndex,
+            ),
+          );
+          await addIfMissing(
+            historyTransfers.actualTableName,
+            historyTransfers.groupReinviteRequired.$name,
+            () => migrator.addColumn(
+              historyTransfers,
+              historyTransfers.groupReinviteRequired,
+            ),
+          );
+          await addIfMissing(
+            historyTransfers.actualTableName,
+            historyTransfers.queueGapRecoveryRequired.$name,
+            () => migrator.addColumn(
+              historyTransfers,
+              historyTransfers.queueGapRecoveryRequired,
+            ),
+          );
+          await addIfMissing(
+            historyTransfers.actualTableName,
+            historyTransfers.updatedAt.$name,
+            () => migrator.addColumn(
+              historyTransfers,
+              historyTransfers.updatedAt,
+            ),
+          );
+          await migrator.createTable(historyTransferBatches);
         }
         await _migrationHooks.afterUpgrade(from, to);
       });

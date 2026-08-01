@@ -32,6 +32,10 @@ final class PairwiseFanoutCoordinator {
     required String peerUserId,
     required Uint8List openedOpaquePayload,
     ApplicationEventCommit? applicationEvent,
+
+    /// For device-to-device recovery, restrict the audience to this exact
+    /// already-authenticated device.  A null value preserves normal fan-out.
+    String? onlyRecipientDeviceId,
   }) async {
     if (!_isUuid(currentUserId) ||
         !_isUuid(currentDeviceId) ||
@@ -91,8 +95,19 @@ final class PairwiseFanoutCoordinator {
     if (targetResult case FailureResult(failure: final failure)) {
       return Result.failure(failure);
     }
-    final targets =
+    var targets =
         (targetResult as Success<List<VerifiedPairwiseLiveDevice>>).value;
+    if (onlyRecipientDeviceId != null) {
+      final requested = onlyRecipientDeviceId.toLowerCase();
+      targets = targets
+          .where((target) => target.deviceId.toLowerCase() == requested)
+          .toList(growable: false);
+      if (targets.length != 1 || targets.single.userId != peerUserId) {
+        return const Result.failure(
+          SecurityFailure(SecurityFailureKind.unauthenticatedInput),
+        );
+      }
+    }
     final peerReconciled = await store.reconcileRemoteLiveDevices(
       remoteUserId: peerUserId,
       liveDeviceIds: peerDevices.map((device) => device.deviceId).toSet(),

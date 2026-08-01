@@ -445,6 +445,8 @@ WHERE c.singleton_id = 1
           ],
           applicationEvent: pairwise.applicationEvent,
           unsupportedApplicationEvent: pairwise.unsupportedApplicationEvent,
+          deviceControlEvent: pairwise.deviceControlEvent,
+          historyApplicationEvents: pairwise.historyApplicationEvents,
         ),
       );
     }
