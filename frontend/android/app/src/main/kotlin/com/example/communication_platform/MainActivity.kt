@@ -3,6 +3,7 @@ package com.example.communication_platform
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.Intent
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
@@ -15,6 +16,7 @@ import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 import java.io.File
 import java.io.FileOutputStream
+import androidx.core.content.FileProvider
 import java.security.KeyStore
 import java.security.SecureRandom
 import javax.crypto.AEADBadTagException
@@ -74,6 +76,47 @@ class MainActivity : FlutterActivity() {
                     else -> result.notImplemented()
                 }
             }
+        MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            "communication_platform/attachments",
+        ).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "privateCacheDirectory" -> result.success(
+                    cacheDir.resolve("secure_attachment_cache").absolutePath,
+                )
+                "shareVerifiedFile" -> {
+                    val path = call.argument<String>("path")
+                    val mime = safeShareMime(call.argument<String>("mime"))
+                    if (path == null) {
+                        result.error("invalid_argument", null, null)
+                    } else {
+                        try {
+                            val file = File(path).canonicalFile
+                            val cache = cacheDir.resolve("secure_attachment_cache").canonicalFile
+                            if (!file.path.startsWith(cache.path + File.separator) || !file.isFile) {
+                                result.error("invalid_argument", null, null)
+                            } else {
+                                val uri = FileProvider.getUriForFile(
+                                    this,
+                                    "${applicationContext.packageName}.attachments",
+                                    file,
+                                )
+                                val intent = Intent(Intent.ACTION_SEND).apply {
+                                    type = mime
+                                    putExtra(Intent.EXTRA_STREAM, uri)
+                                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                }
+                                startActivity(Intent.createChooser(intent, null))
+                                result.success(null)
+                            }
+                        } catch (_: Exception) {
+                            result.error("share_failed", null, null)
+                        }
+                    }
+                }
+                else -> result.notImplemented()
+            }
+        }
     }
 
     private fun copySensitiveText(text: String, clearAfterSeconds: Int) {
@@ -243,5 +286,14 @@ class MainActivity : FlutterActivity() {
         listOf(database, File("${database.path}-wal"), File("${database.path}-shm"))
             .forEach(File::delete)
         File(cacheDir, "secure_attachment_cache").deleteRecursively()
+    }
+
+    private fun safeShareMime(value: String?): String {
+        val normalized = value?.trim()?.lowercase() ?: return "application/octet-stream"
+        val safe = setOf(
+            "image/jpeg", "image/png", "image/webp", "image/gif",
+            "audio/mpeg", "audio/ogg", "audio/wav", "text/plain", "application/pdf",
+        )
+        return if (normalized in safe) normalized else "application/octet-stream"
     }
 }

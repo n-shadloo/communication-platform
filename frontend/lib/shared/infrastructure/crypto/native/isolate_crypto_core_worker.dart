@@ -2,8 +2,10 @@ import 'dart:async';
 import 'dart:isolate';
 import 'dart:typed_data';
 
+import 'package:communication_platform/core/application/ports/attachment_crypto_port.dart';
 import 'package:communication_platform/core/application/ports/enrollment_crypto_port.dart';
 import 'package:communication_platform/core/application/ports/identity_crypto_port.dart';
+import 'package:communication_platform/core/protocol/attachment_crypto_model.dart';
 import 'package:communication_platform/core/protocol/crypto_core_model.dart';
 import 'package:communication_platform/core/protocol/enrollment_crypto_model.dart';
 import 'package:communication_platform/core/protocol/identity_protocol_model.dart';
@@ -13,6 +15,8 @@ import 'package:communication_platform/core/result/result.dart';
 import 'package:communication_platform/shared/infrastructure/crypto/crypto_core_runtime.dart';
 import 'package:communication_platform/shared/infrastructure/crypto/native/application_protocol_ffi.dart';
 import 'package:communication_platform/shared/infrastructure/crypto/native/application_protocol_native_session.dart';
+import 'package:communication_platform/shared/infrastructure/crypto/native/attachment_crypto_ffi.dart';
+import 'package:communication_platform/shared/infrastructure/crypto/native/attachment_crypto_native_session.dart';
 import 'package:communication_platform/shared/infrastructure/crypto/native/crypto_core_ffi.dart';
 import 'package:communication_platform/shared/infrastructure/crypto/native/crypto_core_native_session.dart';
 import 'package:communication_platform/shared/infrastructure/crypto/native/enrollment_crypto_ffi.dart';
@@ -42,6 +46,13 @@ const int _operationAttestPeerMaster = 15;
 const int _operationVerifyUserAttestation = 16;
 const int _operationPairwise = 17;
 const int _operationApplicationProtocol = 18;
+const int _operationAttachment = 19;
+const int _attachmentCreate = 1;
+const int _attachmentPush = 2;
+const int _attachmentPullCreate = 3;
+const int _attachmentPullChunk = 4;
+const int _attachmentClose = 5;
+const int _attachmentRandom = 6;
 const int _replySuccess = 0;
 const int _replyFailure = 1;
 const int _failureCryptoCore = 1;
@@ -55,7 +66,8 @@ final class IsolateCryptoCoreWorker
         EnrollmentCryptoWorker,
         IdentityCryptoWorker,
         PairwiseCryptoWorker,
-        ApplicationProtocolWorker {
+        ApplicationProtocolWorker,
+        AttachmentCryptoWorker {
   bool _closed = false;
   Future<_CryptoWorkerState?>? _stateFuture;
   Future<void>? _closeFuture;
@@ -87,6 +99,158 @@ final class IsolateCryptoCoreWorker
       final reply = await _request(_operationSelfTest);
       return _decodeSelfTestReply(reply);
     });
+  }
+
+  @override
+  Future<Result<AttachmentCryptoPushSession>> createPush({
+    required int plaintextSize,
+    required int bucketSize,
+    required Uint8List metadata,
+  }) => _guarded(() async {
+    final reply = await _request(_operationAttachment, <Object?>[
+      _attachmentCreate,
+      plaintextSize,
+      bucketSize,
+      metadata,
+    ]);
+    return _decodeAttachmentPushReply(reply);
+  });
+
+  @override
+  Future<Result<Uint8List>> pushChunk({
+    required AttachmentCryptoPushSession session,
+    required Uint8List plaintext,
+    required bool finalChunk,
+  }) => _guarded(() async {
+    final reply = await _request(_operationAttachment, <Object?>[
+      _attachmentPush,
+      session.handle,
+      plaintext,
+      finalChunk,
+    ]);
+    return _decodeBytesReply(reply);
+  });
+
+  @override
+  Future<Result<AttachmentCryptoPullSession>> createPull({
+    required Uint8List key,
+    required Uint8List header,
+    required Uint8List secretstreamHeader,
+    required Uint8List metadata,
+  }) => _guarded(() async {
+    final reply = await _request(_operationAttachment, <Object?>[
+      _attachmentPullCreate,
+      key,
+      header,
+      secretstreamHeader,
+      metadata,
+    ]);
+    return _decodeAttachmentPullReply(reply);
+  });
+
+  @override
+  Future<Result<AttachmentDecryptedChunk>> pullChunk({
+    required AttachmentCryptoPullSession session,
+    required Uint8List ciphertext,
+  }) => _guarded(() async {
+    final reply = await _request(_operationAttachment, <Object?>[
+      _attachmentPullChunk,
+      session.handle,
+      ciphertext,
+    ]);
+    final result = _decodeBytesReply(reply);
+    return result.fold(
+      onSuccess: (bytes) {
+        if (bytes.isEmpty) {
+          return const Result.failure(
+            SecurityFailure(SecurityFailureKind.malformedServerResponse),
+          );
+        }
+        return Result.success(
+          AttachmentDecryptedChunk(
+            finalChunk: bytes[0] == 1,
+            plaintext: bytes.sublist(1),
+          ),
+        );
+      },
+      onFailure: Result.failure,
+    );
+  });
+
+  @override
+  Future<Result<void>> closeSession({
+    required int handle,
+    bool abort = false,
+  }) => _guarded(() async {
+    final reply = await _request(_operationAttachment, <Object?>[
+      _attachmentClose,
+      handle,
+      abort,
+    ]);
+    return _decodeVoidReply(reply);
+  });
+
+  @override
+  Future<Result<Uint8List>> randomBytes(int length) => _guarded(() async {
+    final reply = await _request(_operationAttachment, <Object?>[
+      _attachmentRandom,
+      length,
+    ]);
+    return _decodeBytesReply(reply);
+  });
+
+  Result<AttachmentCryptoPushSession> _decodeAttachmentPushReply(
+    Object? rawReply,
+  ) {
+    if (rawReply is! List<Object?>) {
+      return const Result.failure(
+        SecurityFailure(SecurityFailureKind.malformedServerResponse),
+      );
+    }
+    final reply = rawReply;
+    if (reply.length != 8 || reply[0] != _replySuccess) {
+      return reply.isNotEmpty && reply[0] == _replyFailure
+          ? Result.failure(_decodeFailureReply(reply))
+          : const Result.failure(
+              SecurityFailure(SecurityFailureKind.malformedServerResponse),
+            );
+    }
+    try {
+      return Result.success(
+        AttachmentCryptoPushSession(
+          handle: reply[1]! as int,
+          key: _bytesArgument(reply, 2),
+          header: _bytesArgument(reply, 3),
+          secretstreamHeader: _bytesArgument(reply, 4),
+          plaintextSize: reply[5]! as int,
+          streamSize: reply[6]! as int,
+          bucketSize: reply[7]! as int,
+        ),
+      );
+    } on Object {
+      return const Result.failure(
+        SecurityFailure(SecurityFailureKind.malformedServerResponse),
+      );
+    }
+  }
+
+  Result<AttachmentCryptoPullSession> _decodeAttachmentPullReply(
+    Object? rawReply,
+  ) {
+    if (rawReply is! List<Object?>) {
+      return const Result.failure(
+        SecurityFailure(SecurityFailureKind.malformedServerResponse),
+      );
+    }
+    final reply = rawReply;
+    if (reply.length == 2 && reply[0] == _replySuccess && reply[1] is int) {
+      return Result.success(AttachmentCryptoPullSession(reply[1]! as int));
+    }
+    return reply.isNotEmpty && reply[0] == _replyFailure
+        ? Result.failure(_decodeFailureReply(reply))
+        : const Result.failure(
+            SecurityFailure(SecurityFailureKind.malformedServerResponse),
+          );
   }
 
   @override
@@ -528,6 +692,7 @@ Future<void> _runCryptoCoreWorker(SendPort bootstrapPort) async {
   late final IdentityCryptoNativeSession identitySession;
   late final PairwiseCryptoNativeSession pairwiseSession;
   late final ApplicationProtocolNativeSession applicationSession;
+  late final AttachmentCryptoNativeSession attachmentSession;
   try {
     session = CryptoCoreNativeSession(
       api: DynamicCryptoCoreNativeApi.openAndroid(),
@@ -543,6 +708,9 @@ Future<void> _runCryptoCoreWorker(SendPort bootstrapPort) async {
     );
     applicationSession = ApplicationProtocolNativeSession(
       api: DynamicApplicationProtocolNativeApi.openAndroid(),
+    );
+    attachmentSession = AttachmentCryptoNativeSession(
+      api: DynamicAttachmentCryptoNativeApi.openAndroid(),
     );
   } on Object {
     bootstrapPort.send(const <Object?>[_handshakeFailed]);
@@ -681,6 +849,11 @@ Future<void> _runCryptoCoreWorker(SendPort bootstrapPort) async {
               _encodeBytesReply(
                 _applicationInWorker(applicationSession, message),
               ),
+            );
+            continue;
+          case _operationAttachment:
+            replyPort.send(
+              await _attachmentInWorker(attachmentSession, message),
             );
             continue;
           case _operationClose:
@@ -976,6 +1149,87 @@ Result<Uint8List> _applicationInWorker(
     );
   }
   return session.operation(operation, _bytesArgument(message, 3));
+}
+
+Future<List<Object?>> _attachmentInWorker(
+  AttachmentCryptoNativeSession session,
+  List<Object?> message,
+) async {
+  final operation = message.length > 2 ? message[2] : null;
+  if (operation is! int || operation < 1 || operation > 6) {
+    return _encodeFailureReply(
+      const UnsupportedProtocolFailure(UnsupportedProtocolFailureKind.version),
+    );
+  }
+  try {
+    switch (operation) {
+      case _attachmentCreate:
+        final result = await session.createPush(
+          plaintextSize: message[3]! as int,
+          bucketSize: message[4]! as int,
+          metadata: _bytesArgument(message, 5),
+        );
+        return result.fold(
+          onSuccess: (value) => <Object?>[
+            _replySuccess,
+            value.handle,
+            value.key,
+            value.header,
+            value.secretstreamHeader,
+            value.plaintextSize,
+            value.streamSize,
+            value.bucketSize,
+          ],
+          onFailure: _encodeFailureReply,
+        );
+      case _attachmentPush:
+        final result = await session.pushChunk(
+          session: AttachmentCryptoPushSession.handleOnly(message[3]! as int),
+          plaintext: _bytesArgument(message, 4),
+          finalChunk: message[5] == true,
+        );
+        return _encodeBytesReply(result);
+      case _attachmentPullCreate:
+        final result = await session.createPull(
+          key: _bytesArgument(message, 3),
+          header: _bytesArgument(message, 4),
+          secretstreamHeader: _bytesArgument(message, 5),
+          metadata: _bytesArgument(message, 6),
+        );
+        return result.fold(
+          onSuccess: (value) => <Object?>[_replySuccess, value.handle],
+          onFailure: _encodeFailureReply,
+        );
+      case _attachmentPullChunk:
+        final result = await session.pullChunk(
+          session: AttachmentCryptoPullSession(message[3]! as int),
+          ciphertext: _bytesArgument(message, 4),
+        );
+        return result.fold(
+          onSuccess: (value) => <Object?>[
+            _replySuccess,
+            Uint8List.fromList([value.finalChunk ? 1 : 0, ...value.plaintext]),
+          ],
+          onFailure: _encodeFailureReply,
+        );
+      case _attachmentClose:
+        return _encodeVoidReply(
+          await session.closeSession(
+            handle: message[3]! as int,
+            abort: message[4] == true,
+          ),
+        );
+      case _attachmentRandom:
+        return _encodeBytesReply(await session.randomBytes(message[3]! as int));
+    }
+  } on Object {
+    return _encodeFailureReply(
+      const SecurityFailure(SecurityFailureKind.malformedServerResponse),
+    );
+  }
+  return _encodeFailureReply(
+    const UnsupportedProtocolFailure(UnsupportedProtocolFailureKind.version),
+  );
 }
 
 List<Object?> _encodeCapabilitiesReply(Result<CryptoCoreCapabilities> result) {

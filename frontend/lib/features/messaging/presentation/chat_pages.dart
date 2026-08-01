@@ -7,6 +7,7 @@ import 'package:communication_platform/app/design_system/app_icons.dart';
 import 'package:communication_platform/app/design_system/app_tokens.dart';
 import 'package:communication_platform/core/result/failure.dart';
 import 'package:communication_platform/core/result/result.dart';
+import 'package:communication_platform/features/attachments/presentation/attachment_sheet.dart';
 import 'package:communication_platform/features/authentication/presentation/authentication_controller.dart';
 import 'package:communication_platform/features/contacts/domain/contact_model.dart';
 import 'package:communication_platform/features/contacts/presentation/contact_avatar.dart';
@@ -585,14 +586,12 @@ class _ProjectedConversationPage extends ConsumerWidget {
       await manager.saveDraft(conversationId: conversationId, text: text);
       return;
     }
-    if (intent is OpenAttachmentIntent) {
+    if (intent case OpenAttachmentIntent(:final attachment)) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              AppLocalizations.of(context).chatAttachmentsUnavailable,
-            ),
-          ),
+        await showModalBottomSheet<void>(
+          context: context,
+          showDragHandle: true,
+          builder: (_) => AttachmentSheet(descriptor: attachment),
         );
       }
       return;

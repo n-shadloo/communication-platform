@@ -101,6 +101,13 @@ android {
     }
 }
 
+dependencies {
+    // FileProvider is used for scoped, read-only attachment sharing. Keep the
+    // dependency explicit so this security boundary does not rely on a
+    // transitive Flutter/plugin dependency.
+    implementation("androidx.core:core:1.16.0")
+}
+
 tasks.configureEach {
     if (name.startsWith("merge") && name.endsWith("JniLibFolders")) {
         dependsOn(buildRustCryptoAndroid)

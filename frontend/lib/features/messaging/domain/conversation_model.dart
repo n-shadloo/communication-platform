@@ -1,5 +1,7 @@
 import 'dart:typed_data';
 
+import 'package:communication_platform/core/protocol/attachment_crypto_model.dart';
+
 enum ConversationKind { direct, group, saved }
 
 enum MessageTransportState {
@@ -61,6 +63,8 @@ final class ConversationMessage {
     required this.senderUserId,
     required this.senderDeviceId,
     required this.text,
+    this.attachments = const [],
+    this.attachmentStates = const [],
     required this.replyToMessageId,
     required this.quoteFallback,
     required this.createdMs,
@@ -83,6 +87,8 @@ final class ConversationMessage {
   final String senderUserId;
   final String senderDeviceId;
   final String? text;
+  final List<EncryptedAttachmentDescriptor> attachments;
+  final List<AttachmentTransferState> attachmentStates;
   final String? replyToMessageId;
   final String? quoteFallback;
   final int createdMs;

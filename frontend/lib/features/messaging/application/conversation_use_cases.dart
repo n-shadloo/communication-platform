@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:communication_platform/core/application/ports/application_protocol_port.dart';
 import 'package:communication_platform/core/application/ports/time_source.dart';
 import 'package:communication_platform/core/protocol/application_message_model.dart';
+import 'package:communication_platform/core/protocol/attachment_crypto_model.dart';
 import 'package:communication_platform/core/result/failure.dart';
 import 'package:communication_platform/core/result/result.dart';
 import 'package:communication_platform/features/messaging/application/ports/conversation_ports.dart';
@@ -61,6 +62,48 @@ final class SendConversationEvents {
         text: text,
         replyToMessageId: reply,
         quoteFallback: quoteFallback,
+      ),
+    );
+    return _sendMessage(event, resolved, currentUserId, currentDeviceId);
+  }
+
+  Future<Result<SendMessageOutcome>> sendAttachments({
+    required String currentUserId,
+    required String currentDeviceId,
+    required ConversationTarget target,
+    required List<EncryptedAttachmentDescriptor> attachments,
+    String? caption,
+    bool imageMessage = false,
+  }) async {
+    if (attachments.isEmpty || attachments.length > 32) {
+      return const Result.failure(
+        ValidationFailure(ValidationFailureKind.invalidInput),
+      );
+    }
+    final identity = await _newIdentity(currentDeviceId);
+    if (identity case FailureResult(failure: final failure)) {
+      return Result.failure(failure);
+    }
+    final values = (identity as Success<_NewEventIdentity>).value;
+    final conversation = await _resolveTarget(currentUserId, target);
+    if (conversation case FailureResult(failure: final failure)) {
+      return Result.failure(failure);
+    }
+    final resolved = (conversation as Success<_OutboundConversation>).value;
+    final event = _event(
+      identity: values,
+      conversation: resolved,
+      currentUserId: currentUserId,
+      currentDeviceId: currentDeviceId,
+      kind: ApplicationEventKind.messageCreate,
+      references: const [],
+      body: MessageCreateBody(
+        messageId: values.eventId,
+        text: caption ?? '',
+        contentType: imageMessage
+            ? MessageContentType.image
+            : MessageContentType.attachment,
+        attachments: attachments,
       ),
     );
     return _sendMessage(event, resolved, currentUserId, currentDeviceId);

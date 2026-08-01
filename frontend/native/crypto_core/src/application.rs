@@ -60,9 +60,11 @@ struct ApplicationEvent {
 enum EventBody {
     MessageCreate {
         message_id: [u8; 16],
+        content_type: u8,
         text: String,
         reply_to: Option<[u8; 16]>,
         quote_fallback: Option<String>,
+        attachments: Vec<AttachmentDescriptor>,
     },
     MessageEdit {
         target: [u8; 16],
@@ -88,6 +90,24 @@ enum EventBody {
         expires_ms: u64,
     },
     Unsupported,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct AttachmentDescriptor {
+    capability_id: String,
+    key: [u8; 32],
+    header: [u8; 66],
+    stream_header: [u8; 24],
+    encrypted_size: u64,
+    bucket_size: u64,
+    plaintext_size: u64,
+    display_name: String,
+    mime_type: String,
+    media_kind: u8,
+    width: u32,
+    height: u32,
+    caption: Option<String>,
+    thumbnail: Option<Vec<u8>>,
 }
 
 pub fn operation(operation: u32, input: &[u8]) -> CryptoResult<Vec<u8>> {
@@ -243,17 +263,36 @@ fn decode_projection_body(kind: u16, reader: &mut Reader<'_>) -> CryptoResult<Ev
     match kind {
         KIND_MESSAGE_CREATE => {
             let message_id = reader.array()?;
-            if reader.u8()? != 0 {
+            let content_type = reader.u8()?;
+            if content_type > 2 {
                 return Err(CryptoError::UnsupportedOperation);
             }
-            let text = framed_text(reader, MAX_TEXT_BYTES, MAX_TEXT_SCALARS, true)?;
+            let text = framed_text(reader, MAX_TEXT_BYTES, MAX_TEXT_SCALARS, content_type == 0)?;
             let reply_to = optional_id(reader)?;
             let quote_fallback = optional_text(reader, MAX_QUOTE_BYTES, MAX_QUOTE_SCALARS)?;
+            let attachments = if content_type == 0 {
+                Vec::new()
+            } else {
+                let count = usize::from(reader.u8()?);
+                if count > 32 {
+                    return Err(CryptoError::InputTooLarge);
+                }
+                let mut attachments = Vec::new();
+                for _ in 0..count {
+                    attachments.push(decode_projection_attachment(reader)?);
+                }
+                attachments
+            };
+            if content_type != 0 && attachments.is_empty() {
+                return Err(CryptoError::MalformedInput);
+            }
             Ok(EventBody::MessageCreate {
                 message_id,
+                content_type,
                 text,
                 reply_to,
                 quote_fallback,
+                attachments,
             })
         }
         KIND_MESSAGE_EDIT => {
@@ -372,17 +411,26 @@ fn encode_event_body(encoder: &mut Encoder<&mut Vec<u8>>, body: &EventBody) -> C
     match body {
         EventBody::MessageCreate {
             message_id,
+            content_type,
             text,
             reply_to,
             quote_fallback,
+            attachments,
         } => {
-            encoder.map(5).map_err(|_| CryptoError::InternalFailure)?;
+            if (*content_type == 0) != attachments.is_empty() {
+                return Err(CryptoError::MalformedInput);
+            }
+            encoder
+                .map(if attachments.is_empty() { 5 } else { 6 })
+                .map_err(|_| CryptoError::InternalFailure)?;
             encode_key(encoder, 0)?;
             encoder
                 .bytes(message_id)
                 .map_err(|_| CryptoError::InternalFailure)?;
             encode_key(encoder, 1)?;
-            encoder.u8(0).map_err(|_| CryptoError::InternalFailure)?;
+            encoder
+                .u8(*content_type)
+                .map_err(|_| CryptoError::InternalFailure)?;
             encode_key(encoder, 2)?;
             encoder
                 .str(text)
@@ -391,6 +439,17 @@ fn encode_event_body(encoder: &mut Encoder<&mut Vec<u8>>, body: &EventBody) -> C
             encode_optional_id(encoder, reply_to.as_ref())?;
             encode_key(encoder, 4)?;
             encode_optional_text(encoder, quote_fallback.as_deref())?;
+            if !attachments.is_empty() {
+                encode_key(encoder, 5)?;
+                encoder
+                    .array(
+                        u64::try_from(attachments.len()).map_err(|_| CryptoError::InputTooLarge)?,
+                    )
+                    .map_err(|_| CryptoError::InternalFailure)?;
+                for attachment in attachments {
+                    encode_cbor_attachment(encoder, attachment)?;
+                }
+            }
         }
         EventBody::MessageEdit {
             target,
@@ -467,6 +526,133 @@ fn encode_event_body(encoder: &mut Encoder<&mut Vec<u8>>, body: &EventBody) -> C
         EventBody::Unsupported => return Err(CryptoError::UnsupportedOperation),
     }
     Ok(())
+}
+
+fn encode_cbor_attachment(
+    encoder: &mut Encoder<&mut Vec<u8>>,
+    attachment: &AttachmentDescriptor,
+) -> CryptoResult<()> {
+    encoder.map(14).map_err(|_| CryptoError::InternalFailure)?;
+    encode_key(encoder, 0)?;
+    encoder
+        .str(&attachment.capability_id)
+        .map_err(|_| CryptoError::InternalFailure)?;
+    encode_key(encoder, 1)?;
+    encoder
+        .bytes(&attachment.key)
+        .map_err(|_| CryptoError::InternalFailure)?;
+    encode_key(encoder, 2)?;
+    encoder
+        .bytes(&attachment.header)
+        .map_err(|_| CryptoError::InternalFailure)?;
+    encode_key(encoder, 3)?;
+    encoder
+        .bytes(&attachment.stream_header)
+        .map_err(|_| CryptoError::InternalFailure)?;
+    encode_key(encoder, 4)?;
+    encoder
+        .u64(attachment.encrypted_size)
+        .map_err(|_| CryptoError::InternalFailure)?;
+    encode_key(encoder, 5)?;
+    encoder
+        .u64(attachment.bucket_size)
+        .map_err(|_| CryptoError::InternalFailure)?;
+    encode_key(encoder, 6)?;
+    encoder
+        .u64(attachment.plaintext_size)
+        .map_err(|_| CryptoError::InternalFailure)?;
+    encode_key(encoder, 7)?;
+    encoder
+        .str(&attachment.display_name)
+        .map_err(|_| CryptoError::InternalFailure)?;
+    encode_key(encoder, 8)?;
+    encoder
+        .str(&attachment.mime_type)
+        .map_err(|_| CryptoError::InternalFailure)?;
+    encode_key(encoder, 9)?;
+    encoder
+        .u8(attachment.media_kind)
+        .map_err(|_| CryptoError::InternalFailure)?;
+    encode_key(encoder, 10)?;
+    encoder
+        .u32(attachment.width)
+        .map_err(|_| CryptoError::InternalFailure)?;
+    encode_key(encoder, 11)?;
+    encoder
+        .u32(attachment.height)
+        .map_err(|_| CryptoError::InternalFailure)?;
+    encode_key(encoder, 12)?;
+    encode_optional_text(encoder, attachment.caption.as_deref())?;
+    encode_key(encoder, 13)?;
+    encoder
+        .bytes(attachment.thumbnail.as_deref().unwrap_or_default())
+        .map_err(|_| CryptoError::InternalFailure)?;
+    Ok(())
+}
+
+fn read_cbor_attachment(decoder: &mut Decoder<'_>) -> CryptoResult<AttachmentDescriptor> {
+    read_exact_map(decoder, 14)?;
+    read_key(decoder, 0)?;
+    let capability_id = read_text(decoder, 43, 43, true)?;
+    if !capability_id
+        .as_bytes()
+        .iter()
+        .all(|byte| byte.is_ascii_alphanumeric() || *byte == b'_' || *byte == b'-')
+    {
+        return Err(CryptoError::MalformedInput);
+    }
+    read_key(decoder, 1)?;
+    let key = read_exact_bytes(decoder)?;
+    read_key(decoder, 2)?;
+    let header = read_exact_bytes(decoder)?;
+    read_key(decoder, 3)?;
+    let stream_header = read_exact_bytes(decoder)?;
+    read_key(decoder, 4)?;
+    let encrypted_size = read_uint(decoder)?;
+    read_key(decoder, 5)?;
+    let bucket_size = read_uint(decoder)?;
+    read_key(decoder, 6)?;
+    let plaintext_size = read_uint(decoder)?;
+    read_key(decoder, 7)?;
+    let display_name = read_text(decoder, 128, 128, true)?;
+    read_key(decoder, 8)?;
+    let mime_type = read_text(decoder, 128, 128, true)?;
+    read_key(decoder, 9)?;
+    let media_kind = u8::try_from(read_uint(decoder)?).map_err(|_| CryptoError::MalformedInput)?;
+    if media_kind > 1 {
+        return Err(CryptoError::MalformedInput);
+    }
+    read_key(decoder, 10)?;
+    let width = u32::try_from(read_uint(decoder)?).map_err(|_| CryptoError::MalformedInput)?;
+    read_key(decoder, 11)?;
+    let height = u32::try_from(read_uint(decoder)?).map_err(|_| CryptoError::MalformedInput)?;
+    read_key(decoder, 12)?;
+    let caption = read_nullable_text(decoder, MAX_TEXT_BYTES, MAX_TEXT_SCALARS)?;
+    read_key(decoder, 13)?;
+    let thumbnail = read_bytes(decoder)?;
+    if thumbnail.len() > 65_536 {
+        return Err(CryptoError::InputTooLarge);
+    }
+    Ok(AttachmentDescriptor {
+        capability_id,
+        key,
+        header,
+        stream_header,
+        encrypted_size,
+        bucket_size,
+        plaintext_size,
+        display_name,
+        mime_type,
+        media_kind,
+        width,
+        height,
+        caption,
+        thumbnail: if thumbnail.is_empty() {
+            None
+        } else {
+            Some(thumbnail.to_vec())
+        },
+    })
 }
 
 fn decode_event(input: &[u8]) -> CryptoResult<(Option<ApplicationEvent>, Option<u8>)> {
@@ -635,24 +821,48 @@ fn validate_unknown_value(
 fn decode_cbor_body(kind: u16, decoder: &mut Decoder<'_>) -> CryptoResult<EventBody> {
     match kind {
         KIND_MESSAGE_CREATE => {
-            read_exact_map(decoder, 5)?;
+            let map_len = read_map_len(decoder)?;
+            if map_len != 5 && map_len != 6 {
+                return Err(CryptoError::MalformedInput);
+            }
             read_key(decoder, 0)?;
             let message_id = read_exact_bytes(decoder)?;
             read_key(decoder, 1)?;
-            if read_uint(decoder)? != 0 {
+            let content_type = read_uint(decoder)?;
+            if content_type > 2 {
                 return Err(CryptoError::UnsupportedOperation);
             }
             read_key(decoder, 2)?;
-            let text = read_text(decoder, MAX_TEXT_BYTES, MAX_TEXT_SCALARS, true)?;
+            let text = read_text(decoder, MAX_TEXT_BYTES, MAX_TEXT_SCALARS, content_type == 0)?;
             read_key(decoder, 3)?;
             let reply_to = read_nullable_id(decoder)?;
             read_key(decoder, 4)?;
             let quote_fallback = read_nullable_text(decoder, MAX_QUOTE_BYTES, MAX_QUOTE_SCALARS)?;
+            let attachments = if map_len == 6 {
+                read_key(decoder, 5)?;
+                let count = read_array_len(decoder)?;
+                if count > 32 {
+                    return Err(CryptoError::InputTooLarge);
+                }
+                let mut attachments = Vec::new();
+                for _ in 0..count {
+                    attachments.push(read_cbor_attachment(decoder)?);
+                }
+                attachments
+            } else {
+                Vec::new()
+            };
+            if (content_type == 0) != attachments.is_empty() {
+                return Err(CryptoError::MalformedInput);
+            }
             Ok(EventBody::MessageCreate {
                 message_id,
+                content_type: u8::try_from(content_type)
+                    .map_err(|_| CryptoError::MalformedInput)?,
                 text,
                 reply_to,
                 quote_fallback,
+                attachments,
             })
         }
         KIND_MESSAGE_EDIT => {
@@ -753,15 +963,24 @@ fn encode_projection(event: &ApplicationEvent, output: &mut Vec<u8>) -> CryptoRe
     match &event.body {
         EventBody::MessageCreate {
             message_id,
+            content_type,
             text,
             reply_to,
             quote_fallback,
+            attachments,
         } => {
             output.extend_from_slice(message_id);
-            output.push(0);
+            output.push(*content_type);
             push_frame(output, text.as_bytes())?;
             push_optional_id(output, reply_to.as_ref());
             push_optional_text(output, quote_fallback.as_deref())?;
+            if !attachments.is_empty() {
+                output
+                    .push(u8::try_from(attachments.len()).map_err(|_| CryptoError::InputTooLarge)?);
+                for attachment in attachments {
+                    push_projection_attachment(output, attachment)?;
+                }
+            }
         }
         EventBody::MessageEdit {
             target,
@@ -880,6 +1099,84 @@ fn framed_text(
         return Err(CryptoError::InputTooLarge);
     }
     Ok(text.to_owned())
+}
+
+fn decode_projection_attachment(reader: &mut Reader<'_>) -> CryptoResult<AttachmentDescriptor> {
+    let capability_id = framed_text(reader, 43, 43, true)?;
+    if !capability_id
+        .as_bytes()
+        .iter()
+        .all(|byte| byte.is_ascii_alphanumeric() || *byte == b'_' || *byte == b'-')
+    {
+        return Err(CryptoError::MalformedInput);
+    }
+    let key = reader.array()?;
+    let header = reader.array()?;
+    let stream_header = reader.array()?;
+    let encrypted_size = reader.u64()?;
+    let bucket_size = reader.u64()?;
+    let plaintext_size = reader.u64()?;
+    let display_name = framed_text(reader, 128, 128, true)?;
+    let mime_type = framed_text(reader, 128, 128, true)?;
+    let media_kind = reader.u8()?;
+    if media_kind > 1 {
+        return Err(CryptoError::MalformedInput);
+    }
+    let width = reader.u32()?;
+    let height = reader.u32()?;
+    let caption = optional_text(reader, MAX_TEXT_BYTES, MAX_TEXT_SCALARS)?;
+    let thumbnail_length =
+        usize::try_from(reader.u32()?).map_err(|_| CryptoError::InputTooLarge)?;
+    if thumbnail_length > 65_536 {
+        return Err(CryptoError::InputTooLarge);
+    }
+    let thumbnail = if thumbnail_length == 0 {
+        None
+    } else {
+        Some(reader.take(thumbnail_length)?.to_vec())
+    };
+    Ok(AttachmentDescriptor {
+        capability_id,
+        key,
+        header,
+        stream_header,
+        encrypted_size,
+        bucket_size,
+        plaintext_size,
+        display_name,
+        mime_type,
+        media_kind,
+        width,
+        height,
+        caption,
+        thumbnail,
+    })
+}
+
+fn push_projection_attachment(
+    output: &mut Vec<u8>,
+    attachment: &AttachmentDescriptor,
+) -> CryptoResult<()> {
+    push_frame(output, attachment.capability_id.as_bytes())?;
+    output.extend_from_slice(&attachment.key);
+    output.extend_from_slice(&attachment.header);
+    output.extend_from_slice(&attachment.stream_header);
+    push_u64(output, attachment.encrypted_size);
+    push_u64(output, attachment.bucket_size);
+    push_u64(output, attachment.plaintext_size);
+    push_frame(output, attachment.display_name.as_bytes())?;
+    push_frame(output, attachment.mime_type.as_bytes())?;
+    output.push(attachment.media_kind);
+    push_u32(output, attachment.width);
+    push_u32(output, attachment.height);
+    push_optional_text(output, attachment.caption.as_deref())?;
+    let thumbnail = attachment.thumbnail.as_deref().unwrap_or_default();
+    push_u32(
+        output,
+        u32::try_from(thumbnail.len()).map_err(|_| CryptoError::InputTooLarge)?,
+    );
+    output.extend_from_slice(thumbnail);
+    Ok(())
 }
 
 fn push_optional_id(output: &mut Vec<u8>, value: Option<&[u8; 16]>) {
@@ -1290,6 +1587,7 @@ mod tests {
                 references: vec![[u8::try_from((index + 4) & 0xff).unwrap(); 16]],
                 body: EventBody::MessageCreate {
                     message_id: [u8::try_from((index + 5) & 0xff).unwrap(); 16],
+                    content_type: 0,
                     text: format!("property-{index}-{}", state & 0xffff),
                     reply_to: Some([u8::try_from((index + 4) & 0xff).unwrap(); 16]),
                     quote_fallback: if index % 2 == 0 {
@@ -1297,6 +1595,7 @@ mod tests {
                     } else {
                         None
                     },
+                    attachments: Vec::new(),
                 },
             };
             let encoded = encode_event(&event).unwrap();

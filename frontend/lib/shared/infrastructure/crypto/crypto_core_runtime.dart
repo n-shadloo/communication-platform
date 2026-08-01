@@ -2,11 +2,13 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:communication_platform/core/application/ports/application_protocol_port.dart';
+import 'package:communication_platform/core/application/ports/attachment_crypto_port.dart';
 import 'package:communication_platform/core/application/ports/crypto_core_port.dart';
 import 'package:communication_platform/core/application/ports/enrollment_crypto_port.dart';
 import 'package:communication_platform/core/application/ports/identity_crypto_port.dart';
 import 'package:communication_platform/core/application/ports/pairwise_crypto_port.dart';
 import 'package:communication_platform/core/protocol/application_message_model.dart';
+import 'package:communication_platform/core/protocol/attachment_crypto_model.dart';
 import 'package:communication_platform/core/protocol/crypto_core_model.dart';
 import 'package:communication_platform/core/protocol/enrollment_crypto_model.dart';
 import 'package:communication_platform/core/protocol/identity_protocol_model.dart';
@@ -37,6 +39,36 @@ abstract interface class ApplicationProtocolWorker {
   });
 }
 
+abstract interface class AttachmentCryptoWorker {
+  Future<Result<AttachmentCryptoPushSession>> createPush({
+    required int plaintextSize,
+    required int bucketSize,
+    required Uint8List metadata,
+  });
+
+  Future<Result<Uint8List>> pushChunk({
+    required AttachmentCryptoPushSession session,
+    required Uint8List plaintext,
+    required bool finalChunk,
+  });
+
+  Future<Result<AttachmentCryptoPullSession>> createPull({
+    required Uint8List key,
+    required Uint8List header,
+    required Uint8List secretstreamHeader,
+    required Uint8List metadata,
+  });
+
+  Future<Result<AttachmentDecryptedChunk>> pullChunk({
+    required AttachmentCryptoPullSession session,
+    required Uint8List ciphertext,
+  });
+
+  Future<Result<void>> closeSession({required int handle, bool abort});
+
+  Future<Result<Uint8List>> randomBytes(int length);
+}
+
 /// Scope-owned lifecycle wrapper around the platform crypto worker.
 final class CryptoCoreRuntime
     implements
@@ -44,13 +76,15 @@ final class CryptoCoreRuntime
         EnrollmentCryptoPort,
         IdentityCryptoPort,
         PairwiseCryptoPort,
-        ApplicationProtocolPort {
+        ApplicationProtocolPort,
+        AttachmentCryptoPort {
   CryptoCoreRuntime({
     required this.worker,
     this.enrollmentWorker,
     this.identityWorker,
     this.pairwiseWorker,
     this.applicationWorker,
+    this.attachmentWorker,
   });
 
   final CryptoCoreWorker worker;
@@ -58,6 +92,7 @@ final class CryptoCoreRuntime
   final IdentityCryptoWorker? identityWorker;
   final PairwiseCryptoWorker? pairwiseWorker;
   final ApplicationProtocolWorker? applicationWorker;
+  final AttachmentCryptoWorker? attachmentWorker;
   bool _closed = false;
 
   @override
@@ -417,6 +452,67 @@ final class CryptoCoreRuntime
     );
   }
 
+  @override
+  Future<Result<AttachmentCryptoPushSession>> createPush({
+    required int plaintextSize,
+    required int bucketSize,
+    required Uint8List metadata,
+  }) =>
+      attachmentWorker?.createPush(
+        plaintextSize: plaintextSize,
+        bucketSize: bucketSize,
+        metadata: metadata,
+      ) ??
+      _unsupported();
+
+  @override
+  Future<Result<Uint8List>> pushChunk({
+    required AttachmentCryptoPushSession session,
+    required Uint8List plaintext,
+    required bool finalChunk,
+  }) =>
+      attachmentWorker?.pushChunk(
+        session: session,
+        plaintext: plaintext,
+        finalChunk: finalChunk,
+      ) ??
+      _unsupported();
+
+  @override
+  Future<Result<AttachmentCryptoPullSession>> createPull({
+    required Uint8List key,
+    required Uint8List header,
+    required Uint8List secretstreamHeader,
+    required Uint8List metadata,
+  }) =>
+      attachmentWorker?.createPull(
+        key: key,
+        header: header,
+        secretstreamHeader: secretstreamHeader,
+        metadata: metadata,
+      ) ??
+      _unsupported();
+
+  @override
+  Future<Result<AttachmentDecryptedChunk>> pullChunk({
+    required AttachmentCryptoPullSession session,
+    required Uint8List ciphertext,
+  }) =>
+      attachmentWorker?.pullChunk(session: session, ciphertext: ciphertext) ??
+      _unsupported();
+
+  @override
+  Future<Result<void>> closeSession({
+    required int handle,
+    bool abort = false,
+  }) =>
+      attachmentWorker?.closeSession(handle: handle, abort: abort) ??
+      _unsupported();
+
+  @override
+  Future<Result<Uint8List>> randomBytes(int length) =>
+      attachmentWorker?.randomBytes(length) ?? _unsupported();
+
   Future<Result<Uint8List>> _applicationCall(
     int operation,
     Uint8List payload,
@@ -459,7 +555,8 @@ final class UnsupportedCryptoCore
         EnrollmentCryptoPort,
         IdentityCryptoPort,
         PairwiseCryptoPort,
-        ApplicationProtocolPort {
+        ApplicationProtocolPort,
+        AttachmentCryptoPort {
   const UnsupportedCryptoCore();
 
   @override
@@ -478,6 +575,43 @@ final class UnsupportedCryptoCore
       UnsupportedProtocolFailure(UnsupportedProtocolFailureKind.capability),
     );
   }
+
+  @override
+  Future<Result<AttachmentCryptoPushSession>> createPush({
+    required int plaintextSize,
+    required int bucketSize,
+    required Uint8List metadata,
+  }) => _identityUnsupported();
+
+  @override
+  Future<Result<Uint8List>> pushChunk({
+    required AttachmentCryptoPushSession session,
+    required Uint8List plaintext,
+    required bool finalChunk,
+  }) => _identityUnsupported();
+
+  @override
+  Future<Result<AttachmentCryptoPullSession>> createPull({
+    required Uint8List key,
+    required Uint8List header,
+    required Uint8List secretstreamHeader,
+    required Uint8List metadata,
+  }) => _identityUnsupported();
+
+  @override
+  Future<Result<AttachmentDecryptedChunk>> pullChunk({
+    required AttachmentCryptoPullSession session,
+    required Uint8List ciphertext,
+  }) => _identityUnsupported();
+
+  @override
+  Future<Result<void>> closeSession({
+    required int handle,
+    bool abort = false,
+  }) => _identityUnsupported();
+
+  @override
+  Future<Result<Uint8List>> randomBytes(int length) => _identityUnsupported();
 
   @override
   Future<Result<Uint8List>> encode(ApplicationEventRecord event) =>
@@ -652,14 +786,22 @@ void _writeApplicationProjection(
         :final text,
         :final replyToMessageId,
         :final quoteFallback,
+        :final contentType,
+        :final attachments,
       ),
     ):
       writer
         ..bytes(messageId)
-        ..u8(MessageContentType.text.index)
+        ..u8(contentType.index)
         ..text(text)
         ..optionalBytes(replyToMessageId)
         ..optionalText(quoteFallback);
+      if (contentType != MessageContentType.text) {
+        writer.u8(attachments.length);
+        for (final attachment in attachments) {
+          _writeAttachmentProjection(writer, attachment);
+        }
+      }
     case (
       ApplicationEventKind.messageEdit,
       MessageEditBody(
@@ -783,19 +925,108 @@ ApplicationEventRecord _readApplicationProjection(
 
 MessageCreateBody _readCreateBody(_ApplicationReader reader) {
   final messageId = reader.take(ApplicationMessageProtocolV1.eventIdBytes);
-  if (reader.u8() != MessageContentType.text.index) {
+  final contentTypeValue = reader.u8();
+  if (contentTypeValue < 0 ||
+      contentTypeValue >= MessageContentType.values.length) {
     throw const FormatException('unsupported content type');
   }
+  final contentType = MessageContentType.values[contentTypeValue];
+  final text = reader.text(
+    maximumBytes: ApplicationMessageProtocolV1.maximumTextBytes,
+    maximumScalars: ApplicationMessageProtocolV1.maximumTextScalars,
+    requireNonEmpty: contentType == MessageContentType.text,
+  );
+  final replyToMessageId = reader.optionalBytes(
+    ApplicationMessageProtocolV1.eventIdBytes,
+  );
+  final quoteFallback = reader.optionalText(
+    maximumBytes: 2048,
+    maximumScalars: 512,
+  );
+  final attachmentCount = contentType == MessageContentType.text
+      ? 0
+      : reader.u8();
+  if (attachmentCount > 32) {
+    throw const FormatException('too many attachments');
+  }
+  final attachments = [
+    for (var index = 0; index < attachmentCount; index += 1)
+      _readAttachmentProjection(reader),
+  ];
   return MessageCreateBody(
     messageId: messageId,
-    text: reader.text(
-      maximumBytes: ApplicationMessageProtocolV1.maximumTextBytes,
-      maximumScalars: ApplicationMessageProtocolV1.maximumTextScalars,
-    ),
-    replyToMessageId: reader.optionalBytes(
-      ApplicationMessageProtocolV1.eventIdBytes,
-    ),
-    quoteFallback: reader.optionalText(maximumBytes: 2048, maximumScalars: 512),
+    text: text,
+    replyToMessageId: replyToMessageId,
+    quoteFallback: quoteFallback,
+    contentType: contentType,
+    attachments: attachments,
+  );
+}
+
+void _writeAttachmentProjection(
+  _ApplicationWriter writer,
+  EncryptedAttachmentDescriptor attachment,
+) {
+  writer
+    ..text(attachment.capabilityId)
+    ..bytes(attachment.key)
+    ..bytes(attachment.header)
+    ..bytes(attachment.secretstreamHeader)
+    ..u64(attachment.encryptedSize)
+    ..u64(attachment.bucketSize)
+    ..u64(attachment.plaintextSize)
+    ..text(attachment.displayName)
+    ..text(attachment.mimeType)
+    ..u8(attachment.mediaKind.index)
+    ..u32(attachment.width ?? 0)
+    ..u32(attachment.height ?? 0)
+    ..optionalText(attachment.caption)
+    ..u32(attachment.thumbnail?.length ?? 0);
+  if (attachment.thumbnail != null) writer.bytes(attachment.thumbnail!);
+}
+
+EncryptedAttachmentDescriptor _readAttachmentProjection(
+  _ApplicationReader reader,
+) {
+  final capability = reader.text(maximumBytes: 43, maximumScalars: 43);
+  final key = reader.take(32);
+  final header = reader.take(66);
+  final streamHeader = reader.take(24);
+  final encryptedSize = reader.u64();
+  final bucketSize = reader.u64();
+  final plaintextSize = reader.u64();
+  final name = reader.text(maximumBytes: 128, maximumScalars: 128);
+  final mime = reader.text(maximumBytes: 128, maximumScalars: 128);
+  final mediaKind = reader.u8();
+  if (mediaKind >= AttachmentMediaKind.values.length) {
+    throw const FormatException('invalid attachment media kind');
+  }
+  final width = reader.u32();
+  final height = reader.u32();
+  final caption = reader.optionalText(
+    maximumBytes: 65536,
+    maximumScalars: 16384,
+  );
+  final thumbnailLength = reader.u32();
+  if (thumbnailLength > 65536) {
+    throw const FormatException('thumbnail too large');
+  }
+  final thumbnail = thumbnailLength == 0 ? null : reader.take(thumbnailLength);
+  return EncryptedAttachmentDescriptor(
+    capabilityId: capability,
+    key: key,
+    header: header,
+    secretstreamHeader: streamHeader,
+    encryptedSize: encryptedSize,
+    bucketSize: bucketSize,
+    plaintextSize: plaintextSize,
+    displayName: name,
+    mimeType: mime,
+    mediaKind: AttachmentMediaKind.values[mediaKind],
+    width: width == 0 ? null : width,
+    height: height == 0 ? null : height,
+    caption: caption,
+    thumbnail: thumbnail,
   );
 }
 
@@ -943,9 +1174,13 @@ final class _ApplicationReader {
     _ => throw const FormatException('invalid boolean'),
   };
 
-  String text({required int maximumBytes, required int maximumScalars}) {
+  String text({
+    required int maximumBytes,
+    required int maximumScalars,
+    bool requireNonEmpty = true,
+  }) {
     final length = u32();
-    if (length < 1 || length > maximumBytes) {
+    if ((requireNonEmpty && length < 1) || length > maximumBytes) {
       throw const FormatException('invalid text length');
     }
     final value = utf8.decode(take(length), allowMalformed: false);

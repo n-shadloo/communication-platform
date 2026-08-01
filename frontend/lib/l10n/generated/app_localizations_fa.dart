@@ -888,8 +888,64 @@ class AppLocalizationsFa extends AppLocalizations {
   String get chatYouAuthor => 'شما';
 
   @override
-  String get chatAttachmentsUnavailable =>
-      'پیوست‌های رمزنگاری‌شده در این قطعه هنوز در دسترس نیستند.';
+  String get chatAttachmentsUnavailable => 'باز کردن یا ذخیرهٔ فایل تأییدشده';
+
+  @override
+  String get attachmentChoosePrompt =>
+      'رسانه یا فایل رمزنگاری‌شده را انتخاب کنید.';
+
+  @override
+  String get attachmentPhotoOption => 'عکس یا تصویر';
+
+  @override
+  String get attachmentFileOption => 'فایل';
+
+  @override
+  String get attachmentCameraOption => 'دوربین';
+
+  @override
+  String get attachmentImageLabel => 'تصویر رمزنگاری‌شده';
+
+  @override
+  String get attachmentFileLabel => 'پیوست رمزنگاری‌شده';
+
+  @override
+  String get attachmentOpenHint => 'پس از تأیید محلی باز کنید';
+
+  @override
+  String get attachmentQueuedState => 'پیوست در صف است';
+
+  @override
+  String get attachmentDownloadingState => 'در حال دریافت پیوست';
+
+  @override
+  String get attachmentVerifyingState => 'در حال تأیید پیوست';
+
+  @override
+  String get attachmentReadyState => 'پیوست تأییدشده';
+
+  @override
+  String get attachmentExpiredState => 'پیوست منقضی شده است';
+
+  @override
+  String get attachmentCancelledState => 'پیوست لغو شده است';
+
+  @override
+  String get attachmentQuotaState => 'سهمیهٔ پیوست تمام شده است';
+
+  @override
+  String get attachmentUnsupportedState => 'پیوست پشتیبانی نمی‌شود';
+
+  @override
+  String get attachmentCorruptState => 'پیوست خراب است';
+
+  @override
+  String get attachmentFailedState => 'پیوست ناموفق بود';
+
+  @override
+  String attachmentDetails(String mimeType, int size) {
+    return '$mimeType · $size بایت';
+  }
 
   @override
   String get chatActionFailedMessage =>

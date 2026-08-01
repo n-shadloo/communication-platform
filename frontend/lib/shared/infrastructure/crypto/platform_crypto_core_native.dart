@@ -15,5 +15,6 @@ CryptoCorePort createPlatformCryptoCore() {
     identityWorker: worker,
     pairwiseWorker: worker,
     applicationWorker: worker,
+    attachmentWorker: worker,
   );
 }

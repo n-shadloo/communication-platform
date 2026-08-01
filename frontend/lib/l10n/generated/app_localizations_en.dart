@@ -891,8 +891,63 @@ class AppLocalizationsEn extends AppLocalizations {
   String get chatYouAuthor => 'You';
 
   @override
-  String get chatAttachmentsUnavailable =>
-      'Encrypted attachments are not available in this interface piece yet.';
+  String get chatAttachmentsUnavailable => 'Open or save verified file';
+
+  @override
+  String get attachmentChoosePrompt => 'Choose encrypted media or a file.';
+
+  @override
+  String get attachmentPhotoOption => 'Photo or image';
+
+  @override
+  String get attachmentFileOption => 'File';
+
+  @override
+  String get attachmentCameraOption => 'Camera';
+
+  @override
+  String get attachmentImageLabel => 'Encrypted image';
+
+  @override
+  String get attachmentFileLabel => 'Encrypted attachment';
+
+  @override
+  String get attachmentOpenHint => 'Open after local verification';
+
+  @override
+  String get attachmentQueuedState => 'attachment queued';
+
+  @override
+  String get attachmentDownloadingState => 'downloading attachment';
+
+  @override
+  String get attachmentVerifyingState => 'verifying attachment';
+
+  @override
+  String get attachmentReadyState => 'verified attachment';
+
+  @override
+  String get attachmentExpiredState => 'attachment expired';
+
+  @override
+  String get attachmentCancelledState => 'attachment cancelled';
+
+  @override
+  String get attachmentQuotaState => 'attachment quota exceeded';
+
+  @override
+  String get attachmentUnsupportedState => 'attachment unsupported';
+
+  @override
+  String get attachmentCorruptState => 'attachment corrupt';
+
+  @override
+  String get attachmentFailedState => 'attachment failed';
+
+  @override
+  String attachmentDetails(String mimeType, int size) {
+    return '$mimeType · $size bytes';
+  }
 
   @override
   String get chatActionFailedMessage =>

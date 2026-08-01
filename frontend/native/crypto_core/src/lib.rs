@@ -1,6 +1,7 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
 mod application;
+mod attachment;
 mod bounds;
 mod cbor;
 pub mod device_signatures;
@@ -489,6 +490,34 @@ pub unsafe extern "C" fn cp_crypto_v1_application_operation(
         let input =
             unsafe { ffi_input_bounded(input, input_len, application::APPLICATION_MAX_IO_BYTES)? };
         let value = application::operation(operation, input)?;
+        // SAFETY: upheld by this function's caller contract.
+        unsafe { ffi_output(&value, output, output_len, written) }
+    })
+}
+
+#[unsafe(no_mangle)]
+/// Runs one bounded stateful attachment secretstream operation.
+///
+/// Requests contain only one bounded chunk and opaque native session handles.
+/// The handle table is process-local and is cleared by an explicit close or
+/// process death; no attachment plaintext is retained by the core.
+///
+/// # Safety
+///
+/// Pointer requirements are identical to [`cp_crypto_v1_prepare_device`].
+pub unsafe extern "C" fn cp_crypto_v1_attachment_operation(
+    operation: u32,
+    input: *const u8,
+    input_len: usize,
+    output: *mut u8,
+    output_len: usize,
+    written: *mut usize,
+) -> i32 {
+    guard(|| {
+        // SAFETY: upheld by this function's caller contract.
+        let input =
+            unsafe { ffi_input_bounded(input, input_len, attachment::ATTACHMENT_MAX_IO_BYTES)? };
+        let value = attachment::operation(operation, input)?;
         // SAFETY: upheld by this function's caller contract.
         unsafe { ffi_output(&value, output, output_len, written) }
     })

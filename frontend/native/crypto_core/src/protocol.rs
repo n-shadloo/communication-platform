@@ -33,6 +33,18 @@ impl<'a> Reader<'a> {
         Ok(value)
     }
 
+    pub(crate) fn expect(&mut self, expected: &[u8]) -> CryptoResult<()> {
+        if self.take(expected.len())? == expected {
+            Ok(())
+        } else {
+            Err(CryptoError::MalformedInput)
+        }
+    }
+
+    pub(crate) fn remaining(&self) -> usize {
+        self.input.len().saturating_sub(self.position)
+    }
+
     pub(crate) fn array<const LENGTH: usize>(&mut self) -> CryptoResult<[u8; LENGTH]> {
         self.take(LENGTH)?
             .try_into()

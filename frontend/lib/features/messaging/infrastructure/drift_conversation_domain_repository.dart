@@ -1,6 +1,8 @@
 import 'dart:convert';
+import 'dart:math' as math;
 
 import 'package:communication_platform/core/protocol/application_message_model.dart';
+import 'package:communication_platform/core/protocol/attachment_crypto_model.dart';
 import 'package:communication_platform/core/result/failure.dart';
 import 'package:communication_platform/core/result/result.dart';
 import 'package:communication_platform/features/local_storage/infrastructure/database/drift_repository_base.dart';
@@ -89,6 +91,56 @@ final class DriftConversationDomainRepository extends DriftRepositoryBase
             receiptState = state;
           }
         }
+        final attachmentRows =
+            await (database.select(database.attachments)..where(
+                  (attachment) => attachment.messageId.equals(row.messageId),
+                ))
+                .get();
+        final attachments = <EncryptedAttachmentDescriptor>[];
+        final attachmentStates = <AttachmentTransferState>[];
+        for (final attachment in attachmentRows) {
+          try {
+            final value = jsonDecode(
+              utf8.decode(
+                attachment.encryptedDescriptor,
+                allowMalformed: false,
+              ),
+            );
+            if (value is! Map<String, Object?>) continue;
+            attachments.add(
+              EncryptedAttachmentDescriptor(
+                capabilityId: value['capability']! as String,
+                key: base64Url.decode(value['key']! as String),
+                header: base64Url.decode(value['header']! as String),
+                secretstreamHeader: base64Url.decode(
+                  value['stream_header']! as String,
+                ),
+                encryptedSize: value['encrypted_size']! as int,
+                bucketSize: value['bucket_size']! as int,
+                plaintextSize: value['plaintext_size']! as int,
+                displayName: value['name']! as String,
+                mimeType: value['mime']! as String,
+                mediaKind:
+                    AttachmentMediaKind.values[value['media_kind']! as int],
+                width: value['width'] as int?,
+                height: value['height'] as int?,
+                caption: value['caption'] as String?,
+                thumbnail: value['thumbnail'] == null
+                    ? null
+                    : base64Url.decode(value['thumbnail']! as String),
+              ),
+            );
+            attachmentStates.add(
+              AttachmentTransferState.values[math.min(
+                math.max(attachment.transferState, 0),
+                AttachmentTransferState.values.length - 1,
+              )],
+            );
+          } on Object {
+            // Malformed local descriptors remain invisible until the next
+            // authenticated event rebuild; they are never presented.
+          }
+        }
         messages.add(
           ConversationMessage(
             messageId: row.messageId,
@@ -98,6 +150,8 @@ final class DriftConversationDomainRepository extends DriftRepositoryBase
             text: row.deletedForEveryone
                 ? null
                 : _optionalText(row.projectionCiphertext),
+            attachments: List.unmodifiable(attachments),
+            attachmentStates: List.unmodifiable(attachmentStates),
             replyToMessageId: row.replyToMessageId,
             quoteFallback: _optionalText(row.quoteFallbackCiphertext),
             createdMs: row.createdAt.millisecondsSinceEpoch,

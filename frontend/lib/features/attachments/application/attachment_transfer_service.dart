@@ -1,0 +1,124 @@
+import 'dart:io';
+
+import 'package:communication_platform/core/application/cancellation_signal.dart';
+import 'package:communication_platform/core/protocol/attachment_crypto_model.dart';
+import 'package:communication_platform/core/result/result.dart';
+import 'package:communication_platform/features/attachments/application/attachment_crypto_service.dart';
+import 'package:communication_platform/features/attachments/application/ports/attachment_transfer_ports.dart';
+import 'package:communication_platform/features/attachments/domain/attachment_model.dart';
+
+final class AttachmentTransferService {
+  AttachmentTransferService({
+    required this.crypto,
+    required this.transport,
+    required this.storage,
+  });
+
+  final AttachmentCryptoService crypto;
+  final AttachmentTransportPort transport;
+  final AttachmentStoragePort storage;
+
+  Future<Result<AttachmentDescriptor>> createAndUpload({
+    required AttachmentSource source,
+    String? caption,
+    CancellationSignal? cancellation,
+    void Function(AttachmentProgress progress)? onProgress,
+  }) async {
+    final encrypted = await storage.createEncryptedTemp();
+    try {
+      final encryptedResult = await crypto.encryptToFile(
+        source: source,
+        destination: encrypted,
+        caption: caption,
+        cancellation: cancellation,
+        onProgress: onProgress,
+      );
+      if (encryptedResult case FailureResult(failure: final failure)) {
+        return Result.failure(failure);
+      }
+      if (encryptedResult is! Success<AttachmentDescriptor>) {
+        return Result.failure(
+          (encryptedResult as FailureResult<AttachmentDescriptor>).failure,
+        );
+      }
+      final descriptor = encryptedResult.value;
+      onProgress?.call(
+        AttachmentProgress(
+          state: AttachmentTransferState.uploading,
+          completedBytes: 0,
+          totalBytes: descriptor.bucketSize,
+        ),
+      );
+      final uploaded = await transport.upload(
+        encryptedFile: encrypted,
+        bucketSize: descriptor.bucketSize,
+        cancellation: cancellation,
+      );
+      if (uploaded case FailureResult(failure: final failure)) {
+        return Result.failure(failure);
+      }
+      final response = (uploaded as Success<AttachmentUploadResponse>).value;
+      onProgress?.call(
+        AttachmentProgress(
+          state: AttachmentTransferState.ready,
+          completedBytes: descriptor.bucketSize,
+          totalBytes: descriptor.bucketSize,
+        ),
+      );
+      return Result.success(descriptor.withCapability(response.capabilityId));
+    } finally {
+      await storage.delete(encrypted);
+    }
+  }
+
+  Future<Result<File>> downloadAndDecrypt({
+    required AttachmentDescriptor descriptor,
+    CancellationSignal? cancellation,
+    void Function(AttachmentProgress progress)? onProgress,
+  }) async {
+    final encrypted = await storage.createEncryptedTemp();
+    final decrypted = await storage.createDecryptedTemp(
+      safeName: descriptor.displayName,
+    );
+    try {
+      final encryptedSink = encrypted.openWrite();
+      try {
+        final downloaded = await transport.download(
+          capabilityId: descriptor.capabilityId,
+          destination: encryptedSink,
+          expectedBucketSize: descriptor.bucketSize,
+          cancellation: cancellation,
+          onProgress: (bytes) => onProgress?.call(
+            AttachmentProgress(
+              state: AttachmentTransferState.downloading,
+              completedBytes: bytes,
+              totalBytes: descriptor.bucketSize,
+            ),
+          ),
+        );
+        await encryptedSink.close();
+        if (downloaded case FailureResult(failure: final failure)) {
+          return Result.failure(failure);
+        }
+      } finally {
+        await encryptedSink.close();
+      }
+      final encryptedStream = encrypted.openRead();
+      final decryptedResult = await crypto.decryptStreamToFile(
+        descriptor: descriptor,
+        ciphertext: encryptedStream,
+        destination: decrypted,
+        cancellation: cancellation,
+        onProgress: onProgress,
+      );
+      if (decryptedResult case FailureResult(failure: final failure)) {
+        return Result.failure(failure);
+      }
+      return Result.success(decrypted);
+    } finally {
+      await storage.delete(encrypted);
+      // The caller owns a verified file and must place it in the bounded cache
+      // or delete it. A failure path is cleaned by the crypto service.
+    }
+  }
+}

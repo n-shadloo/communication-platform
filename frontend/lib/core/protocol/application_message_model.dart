@@ -1,5 +1,7 @@
 import 'dart:typed_data';
 
+import 'package:communication_platform/core/protocol/attachment_crypto_model.dart';
+
 abstract final class ApplicationMessageProtocolV1 {
   static const int version = 1;
   static const int eventIdBytes = 16;
@@ -35,7 +37,7 @@ enum ApplicationEventKind {
   }
 }
 
-enum MessageContentType { text }
+enum MessageContentType { text, attachment, image }
 
 sealed class ApplicationEventBody {
   const ApplicationEventBody();
@@ -47,6 +49,8 @@ final class MessageCreateBody extends ApplicationEventBody {
     required this.text,
     Uint8List? replyToMessageId,
     this.quoteFallback,
+    this.contentType = MessageContentType.text,
+    Iterable<EncryptedAttachmentDescriptor> attachments = const [],
   }) : messageId = _copyExact(
          messageId,
          ApplicationMessageProtocolV1.eventIdBytes,
@@ -58,13 +62,39 @@ final class MessageCreateBody extends ApplicationEventBody {
                replyToMessageId,
                ApplicationMessageProtocolV1.eventIdBytes,
                'replyToMessageId',
-             );
+             ),
+       attachments = List.unmodifiable(attachments.map(_copyAttachment)) {
+    if ((contentType == MessageContentType.text) != this.attachments.isEmpty) {
+      throw const FormatException('content type and attachments mismatch');
+    }
+  }
 
   final Uint8List messageId;
   final String text;
   final Uint8List? replyToMessageId;
   final String? quoteFallback;
+  final MessageContentType contentType;
+  final List<EncryptedAttachmentDescriptor> attachments;
 }
+
+EncryptedAttachmentDescriptor _copyAttachment(
+  EncryptedAttachmentDescriptor value,
+) => EncryptedAttachmentDescriptor(
+  capabilityId: value.capabilityId,
+  key: value.key,
+  header: value.header,
+  secretstreamHeader: value.secretstreamHeader,
+  encryptedSize: value.encryptedSize,
+  bucketSize: value.bucketSize,
+  plaintextSize: value.plaintextSize,
+  displayName: value.displayName,
+  mimeType: value.mimeType,
+  mediaKind: value.mediaKind,
+  width: value.width,
+  height: value.height,
+  caption: value.caption,
+  thumbnail: value.thumbnail,
+);
 
 final class MessageEditBody extends ApplicationEventBody {
   MessageEditBody({

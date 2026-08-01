@@ -105,8 +105,14 @@ abstract final class ChatViewModelMapper {
       authorId: message.senderUserId,
       authorName: outgoing ? currentUserName : peerName,
       outgoing: outgoing,
-      kind: ChatTimelineContentKind.text,
+      kind: message.attachments.isEmpty
+          ? ChatTimelineContentKind.text
+          : message.attachments.every((attachment) => attachment.isInlineImage)
+          ? ChatTimelineContentKind.image
+          : ChatTimelineContentKind.attachment,
       text: message.text,
+      attachments: message.attachments,
+      attachmentStates: message.attachmentStates,
       timestamp: DateTime.fromMillisecondsSinceEpoch(
         message.createdMs,
         isUtc: true,

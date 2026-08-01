@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:communication_platform/core/protocol/application_message_model.dart';
+import 'package:communication_platform/core/protocol/attachment_crypto_model.dart';
 import 'package:communication_platform/features/local_storage/infrastructure/database/local_database.dart';
 import 'package:communication_platform/features/messaging/domain/conversation_model.dart';
 import 'package:communication_platform/features/synchronization/domain/sync_model.dart';
@@ -650,6 +651,11 @@ final class DriftApplicationEventProjector {
 
     final text =
         winnerEdit?.body['text'] as String? ?? create.body['text']! as String;
+    final attachments =
+        (create.body['attachments'] as List<Object?>?)
+            ?.whereType<Map<String, Object?>>()
+            .toList(growable: false) ??
+        const <Map<String, Object?>>[];
     final revision = winnerEdit?.row.revision ?? 0;
     final currentEventId = winnerEdit?.row.eventId ?? create.row.eventId;
     var unread =
@@ -668,6 +674,7 @@ final class DriftApplicationEventProjector {
       senderUserId: senderUserId,
       senderDeviceId: create.row.senderDeviceId,
       text: deletedForEveryone ? null : text,
+      attachments: deletedForEveryone ? const [] : attachments,
       replyToMessageId: create.body['reply_to'] as String?,
       quoteFallback: create.body['quote'] as String?,
       status: transport,
@@ -733,6 +740,27 @@ final class DriftApplicationEventProjector {
             unread: Value(message.unread),
           ),
         );
+    if (message.attachments.isNotEmpty) {
+      await (database.delete(
+        database.attachments,
+      )..where((row) => row.messageId.equals(message.messageId))).go();
+      for (final attachment in message.attachments) {
+        final id = attachment['capability'];
+        if (id is! String) continue;
+        await database
+            .into(database.attachments)
+            .insertOnConflictUpdate(
+              AttachmentsCompanion.insert(
+                attachmentId: id,
+                messageId: message.messageId,
+                encryptedDescriptor: Uint8List.fromList(
+                  utf8.encode(jsonEncode(attachment)),
+                ),
+                transferState: AttachmentTransferState.queued.index,
+              ),
+            );
+      }
+    }
     await (database.delete(
       database.messageReactions,
     )..where((row) => row.messageId.equals(message.messageId))).go();
@@ -958,6 +986,7 @@ final class _ProjectedMessage {
     required this.senderUserId,
     required this.senderDeviceId,
     required this.text,
+    required this.attachments,
     required this.replyToMessageId,
     required this.quoteFallback,
     required this.status,
@@ -985,6 +1014,7 @@ final class _ProjectedMessage {
   final String senderUserId;
   final String senderDeviceId;
   final String? text;
+  final List<Map<String, Object?>> attachments;
   final String? replyToMessageId;
   final String? quoteFallback;
   final MessageTransportState status;
@@ -1045,6 +1075,28 @@ Uint8List _encodeBody(ApplicationEventBody body, List<Uint8List> references) {
     MessageCreateBody() => {
       'message_id': protocolBytesToHex(body.messageId),
       'text': body.text,
+      'content_type': body.contentType.index,
+      'attachments': [
+        for (final attachment in body.attachments)
+          <String, Object?>{
+            'capability': attachment.capabilityId,
+            'key': base64UrlEncode(attachment.key),
+            'header': base64UrlEncode(attachment.header),
+            'stream_header': base64UrlEncode(attachment.secretstreamHeader),
+            'encrypted_size': attachment.encryptedSize,
+            'bucket_size': attachment.bucketSize,
+            'plaintext_size': attachment.plaintextSize,
+            'name': attachment.displayName,
+            'mime': attachment.mimeType,
+            'media_kind': attachment.mediaKind.index,
+            'width': attachment.width,
+            'height': attachment.height,
+            'caption': attachment.caption,
+            'thumbnail': attachment.thumbnail == null
+                ? null
+                : base64UrlEncode(attachment.thumbnail!),
+          },
+      ],
       'reply_to': body.replyToMessageId == null
           ? null
           : protocolBytesToHex(body.replyToMessageId!),

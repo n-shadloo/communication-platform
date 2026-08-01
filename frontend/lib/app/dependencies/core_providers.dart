@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:communication_platform/app/config/app_environment.dart';
 import 'package:communication_platform/core/application/ports/application_protocol_port.dart';
+import 'package:communication_platform/core/application/ports/attachment_crypto_port.dart';
 import 'package:communication_platform/core/application/ports/crypto_core_port.dart';
 import 'package:communication_platform/core/application/ports/enrollment_crypto_port.dart';
 import 'package:communication_platform/core/application/ports/identity_crypto_port.dart';
@@ -73,6 +74,13 @@ final applicationProtocolProvider = Provider<ApplicationProtocolPort>((ref) {
   final cryptoCore = ref.watch(cryptoCoreProvider);
   return cryptoCore is ApplicationProtocolPort
       ? cryptoCore as ApplicationProtocolPort
+      : const UnsupportedCryptoCore();
+});
+
+final attachmentCryptoProvider = Provider<AttachmentCryptoPort>((ref) {
+  final cryptoCore = ref.watch(cryptoCoreProvider);
+  return cryptoCore is AttachmentCryptoPort
+      ? cryptoCore as AttachmentCryptoPort
       : const UnsupportedCryptoCore();
 });
 

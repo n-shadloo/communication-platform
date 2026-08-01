@@ -1661,8 +1661,116 @@ abstract class AppLocalizations {
   /// No description provided for @chatAttachmentsUnavailable.
   ///
   /// In en, this message translates to:
-  /// **'Encrypted attachments are not available in this interface piece yet.'**
+  /// **'Open or save verified file'**
   String get chatAttachmentsUnavailable;
+
+  /// No description provided for @attachmentChoosePrompt.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose encrypted media or a file.'**
+  String get attachmentChoosePrompt;
+
+  /// No description provided for @attachmentPhotoOption.
+  ///
+  /// In en, this message translates to:
+  /// **'Photo or image'**
+  String get attachmentPhotoOption;
+
+  /// No description provided for @attachmentFileOption.
+  ///
+  /// In en, this message translates to:
+  /// **'File'**
+  String get attachmentFileOption;
+
+  /// No description provided for @attachmentCameraOption.
+  ///
+  /// In en, this message translates to:
+  /// **'Camera'**
+  String get attachmentCameraOption;
+
+  /// No description provided for @attachmentImageLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Encrypted image'**
+  String get attachmentImageLabel;
+
+  /// No description provided for @attachmentFileLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Encrypted attachment'**
+  String get attachmentFileLabel;
+
+  /// No description provided for @attachmentOpenHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Open after local verification'**
+  String get attachmentOpenHint;
+
+  /// No description provided for @attachmentQueuedState.
+  ///
+  /// In en, this message translates to:
+  /// **'attachment queued'**
+  String get attachmentQueuedState;
+
+  /// No description provided for @attachmentDownloadingState.
+  ///
+  /// In en, this message translates to:
+  /// **'downloading attachment'**
+  String get attachmentDownloadingState;
+
+  /// No description provided for @attachmentVerifyingState.
+  ///
+  /// In en, this message translates to:
+  /// **'verifying attachment'**
+  String get attachmentVerifyingState;
+
+  /// No description provided for @attachmentReadyState.
+  ///
+  /// In en, this message translates to:
+  /// **'verified attachment'**
+  String get attachmentReadyState;
+
+  /// No description provided for @attachmentExpiredState.
+  ///
+  /// In en, this message translates to:
+  /// **'attachment expired'**
+  String get attachmentExpiredState;
+
+  /// No description provided for @attachmentCancelledState.
+  ///
+  /// In en, this message translates to:
+  /// **'attachment cancelled'**
+  String get attachmentCancelledState;
+
+  /// No description provided for @attachmentQuotaState.
+  ///
+  /// In en, this message translates to:
+  /// **'attachment quota exceeded'**
+  String get attachmentQuotaState;
+
+  /// No description provided for @attachmentUnsupportedState.
+  ///
+  /// In en, this message translates to:
+  /// **'attachment unsupported'**
+  String get attachmentUnsupportedState;
+
+  /// No description provided for @attachmentCorruptState.
+  ///
+  /// In en, this message translates to:
+  /// **'attachment corrupt'**
+  String get attachmentCorruptState;
+
+  /// No description provided for @attachmentFailedState.
+  ///
+  /// In en, this message translates to:
+  /// **'attachment failed'**
+  String get attachmentFailedState;
+
+  /// No description provided for @attachmentDetails.
+  ///
+  /// In en, this message translates to:
+  /// **'{mimeType} · {size} bytes'**
+  String attachmentDetails(String mimeType, int size);
 
   /// No description provided for @chatActionFailedMessage.
   ///

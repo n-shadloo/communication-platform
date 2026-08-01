@@ -1,6 +1,7 @@
+import 'package:communication_platform/core/protocol/attachment_crypto_model.dart';
 import 'package:flutter/foundation.dart';
 
-enum ChatTimelineContentKind { text, system, unsupported }
+enum ChatTimelineContentKind { text, image, attachment, system, unsupported }
 
 enum ChatDeliveryViewState {
   localOnly,
@@ -49,6 +50,8 @@ final class ChatMessageViewModel {
     required this.outgoing,
     required this.kind,
     required this.text,
+    this.attachments = const [],
+    this.attachmentStates = const [],
     required this.timestamp,
     required this.delivery,
     required this.firstInAuthorGroup,
@@ -73,6 +76,8 @@ final class ChatMessageViewModel {
   final bool outgoing;
   final ChatTimelineContentKind kind;
   final String? text;
+  final List<EncryptedAttachmentDescriptor> attachments;
+  final List<AttachmentTransferState> attachmentStates;
   final DateTime timestamp;
   final ChatDeliveryViewState delivery;
   final bool firstInAuthorGroup;
@@ -290,5 +295,7 @@ final class SaveDraftIntent extends ChatIntent {
 }
 
 final class OpenAttachmentIntent extends ChatIntent {
-  const OpenAttachmentIntent();
+  const OpenAttachmentIntent({this.attachment});
+
+  final EncryptedAttachmentDescriptor? attachment;
 }
