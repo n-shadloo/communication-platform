@@ -979,4 +979,230 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get chatStateReceived => 'received';
+
+  @override
+  String get groupProductionUnavailableTitle =>
+      'Production groups are not available';
+
+  @override
+  String get groupProductionUnavailableMessage =>
+      'The post-quantum MLS profile is still gated. This build cannot create groups, generate KeyPackages, or send group ciphertext.';
+
+  @override
+  String get groupDevelopmentPreviewBanner =>
+      'Development preview only — no production group ciphertext is sent';
+
+  @override
+  String get groupCreateTitle => 'Create Group';
+
+  @override
+  String get groupPickMembersTitle => 'Pick members';
+
+  @override
+  String get groupDetailsTitle => 'Group details';
+
+  @override
+  String get groupNextAction => 'Next';
+
+  @override
+  String get groupBackAction => 'Back';
+
+  @override
+  String get groupCreateAction => 'Create';
+
+  @override
+  String get groupCreatingState => 'Creating local group preview…';
+
+  @override
+  String get groupCreateFailed =>
+      'The group could not be created. Nothing was sent.';
+
+  @override
+  String get groupSelectMemberMessage => 'Select at least one member.';
+
+  @override
+  String get groupMemberLimitMessage =>
+      'A group can have at most 50 members, including you.';
+
+  @override
+  String get groupNameLabel => 'Group name';
+
+  @override
+  String get groupDescriptionLabel => 'Description (optional)';
+
+  @override
+  String get groupPhotoAction => 'Choose encrypted photo';
+
+  @override
+  String get groupPhotoSelected => 'A local preview photo is selected';
+
+  @override
+  String get groupSearchMembersLabel => 'Search members';
+
+  @override
+  String groupSelectedCount(int count) {
+    return '$count selected';
+  }
+
+  @override
+  String groupMemberCount(int count) {
+    return '$count members';
+  }
+
+  @override
+  String get groupInfoTitle => 'Group Info';
+
+  @override
+  String get groupEditTitle => 'Edit Group';
+
+  @override
+  String get groupEditAction => 'Edit';
+
+  @override
+  String get groupAddMembersAction => 'Add members';
+
+  @override
+  String get groupLeaveAction => 'Leave group';
+
+  @override
+  String get groupRemoveAction => 'Remove from group';
+
+  @override
+  String get groupPromoteAction => 'Make admin';
+
+  @override
+  String get groupDemoteAction => 'Make member';
+
+  @override
+  String get groupTransferOwnerAction => 'Transfer ownership';
+
+  @override
+  String get groupRoleOwner => 'Owner';
+
+  @override
+  String get groupRoleAdmin => 'Admin';
+
+  @override
+  String get groupRoleMember => 'Member';
+
+  @override
+  String get groupInvitePolicyLabel => 'Who can add members';
+
+  @override
+  String get groupInviteOwnerOnly => 'Owner only';
+
+  @override
+  String get groupInviteAdmins => 'Owner and admins';
+
+  @override
+  String get groupInviteEveryone => 'All members';
+
+  @override
+  String get groupHistorySharingLabel =>
+      'Show available past history to new members';
+
+  @override
+  String get groupHistorySharingNote =>
+      'When this is on, an existing member’s device intentionally re-shares the backlog to the newcomer. The server cannot reconstruct or send that history, and the source device may have only partial history.';
+
+  @override
+  String get groupSaveAction => 'Save';
+
+  @override
+  String get groupCancelAction => 'Cancel';
+
+  @override
+  String get groupPermissionChanged =>
+      'Your role changed. These settings can no longer be saved.';
+
+  @override
+  String get groupMembershipUpdatingState =>
+      'Membership is updating. Sending and member changes are paused.';
+
+  @override
+  String get groupRemovedState =>
+      'You were removed. Past content on this device stays readable, but future group epochs are unavailable.';
+
+  @override
+  String get groupLeftState => 'You left this group. This copy is read-only.';
+
+  @override
+  String get groupQueueGapState =>
+      'A mailbox gap may have hidden an MLS commit. This device must be removed and re-added with a fresh Welcome before sending.';
+
+  @override
+  String get groupForkState =>
+      'Concurrent MLS commits were quarantined. The client will not choose a branch.';
+
+  @override
+  String get groupControlQuarantineState =>
+      'An invalid or unauthorized group control was quarantined.';
+
+  @override
+  String get groupReadOnlyLabel => 'Read-only group';
+
+  @override
+  String get groupMessageHint => 'Message group';
+
+  @override
+  String get groupSendFailed => 'The message was not saved. Nothing was sent.';
+
+  @override
+  String get groupMuteAction => 'Mute';
+
+  @override
+  String get groupSearchChatAction => 'Search in chat';
+
+  @override
+  String get groupSharedMediaAction => 'Shared media';
+
+  @override
+  String get groupNoDescription => 'No description';
+
+  @override
+  String get groupMembersSection => 'Members';
+
+  @override
+  String get groupVerifiedMember => 'Verified identity';
+
+  @override
+  String get groupConfirmRemoveTitle => 'Remove member?';
+
+  @override
+  String get groupConfirmRemoveBody =>
+      'Removing this member advances the group epoch and cuts off access to future messages. It cannot erase content already received.';
+
+  @override
+  String get groupConfirmLeaveTitle => 'Leave group?';
+
+  @override
+  String get groupConfirmLeaveBody =>
+      'You will lose access to future group epochs. Content already stored on this device remains readable.';
+
+  @override
+  String get groupOwnerMustTransfer =>
+      'Transfer ownership before leaving this group.';
+
+  @override
+  String get groupActionFailed =>
+      'That group change could not be committed. The previous group state is unchanged.';
+
+  @override
+  String get groupMemberPickerEmpty => 'No eligible contacts found';
+
+  @override
+  String get groupWithheldUpdating =>
+      'Messaging withheld: membership is updating.';
+
+  @override
+  String get groupWithheldRemoved =>
+      'Messaging withheld: this group is read-only on this device.';
+
+  @override
+  String get groupWithheldQueueGap =>
+      'Messaging withheld: rejoin with a fresh Welcome after the mailbox gap.';
+
+  @override
+  String get groupWithheldConflict =>
+      'Messaging withheld: a group control conflict is quarantined.';
 }

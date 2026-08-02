@@ -67,14 +67,14 @@ opaque/client-owned; **Pending** = Flutter implementation not started.
 
 | Capability | Backend | Flutter |
 |---|---|---|
-| Key-package claim | Ready | Pending |
-| Group ciphertext delivery | Envelope transport ready | Pending MLS + pairwise wrapping |
-| Group creation/membership | Client protocol | Pending |
-| Owner/admin/member roles | Client protocol | Pending signed control state |
-| Invite/remove/leave | Client protocol | Pending MLS commits/UI |
-| Encrypted metadata | Opaque envelope transport ready | Pending |
-| History for new members | Envelope transport ready; no server history | Pending client re-share |
-| Fork/conflict handling | Client protocol | Safe quarantine/blocking specified; reviewed crypto-core convergence remains a release gate |
+| Key-package claim | Ready | Piece 18 defines the crypto port only; production generation/claim remains disabled pending every MLS profile gate and piece 19 |
+| Group ciphertext delivery | Envelope transport ready | Piece 18 transactional state/outbound boundaries complete; production encryption/send remains disabled pending MLS + pairwise wrapping in piece 19 |
+| Group creation/membership | Client protocol | Piece 18 deterministic intents, membership projections, repository/use-case boundary, and development-preview UI complete; production transport is fail-closed |
+| Owner/admin/member roles | Client protocol | Piece 18 role hierarchy, permission evaluation, deterministic control projection, concurrent-change rejection, and role-aware UI complete; native signing/verification remains piece 19 |
+| Invite/remove/leave | Client protocol | Piece 18 authorization, owner-transfer rule, intent/state transitions, and UI complete; production MLS commits remain gated |
+| Encrypted metadata | Opaque envelope transport ready | Piece 18 metadata/policy domain and atomic opaque-state/projection storage complete; production MLS encryption remains gated |
+| History for new members | Envelope transport ready; no server history | Piece 18 policy and honest opt-in re-share wording complete; cryptographic client re-share remains piece 19 and never implies server history |
+| Fork/conflict handling | Client protocol | Piece 18 stale/sibling/malformed/unauthorized control and queue-gap quarantine/blocking complete; reviewed crypto-core convergence remains a release gate |
 
 ## Attachments and recovery
 
@@ -109,9 +109,9 @@ opaque/client-owned; **Pending** = Flutter implementation not started.
 | Responsive shell | Not applicable | Pieces 03â€“04 adaptive `go_router` shell plus guarded Splash/Connection bootstrap routing complete; stable branch identity, deep-link placeholders, guard hooks, keyboard navigation, focus restoration, reduced motion, resize preservation, accessible Retry, and Android-only offline entry are tested |
 | Forui design system and Lucide icons | Not applicable | Piece 03 app-owned semantic tokens and Forui wrappers complete; bundled Lucide is isolated behind typed `AppIcons`, with package-boundary, semantics, target-size, disabled, focus, and RTL-mirroring tests |
 | Timeline adapter and builders | Not applicable | Piece 15 selected the documented custom reversed-sliver adapter because Flyer 2.11.1 requires mutable controller-owned message state; app-owned immutable builders, anchors, jump, semantics, and bounded virtualization pass |
-| 34-screen inventory | Supporting APIs/primitives ready as above | Pieces 09–11 implement authentication/enrollment plus Contacts/New, Contact Profile, Edit Profile, and Safety Number; piece 15 adds Chats List, DM Chat, Saved Messages, pinned/forward/action sheets, and all chat state surfaces; later screens remain pending |
-| English/Persian RTL | Not applicable | Piece 03 foundations, piece 11 contact/profile/safety screens, and piece 15 Chats/DM/Saved mixed-direction responsive goldens and widget coverage complete; later feature-screen verification remains pending |
-| Accessibility/high contrast | Not applicable | Piece 15 extends the piece 03 foundation with chat screen-reader labels/live states, keyboard message menus, scroll-safe 200% text, reduced motion, dark/high-contrast, and narrow/medium/wide verification; later feature-flow audit remains pending |
+| 34-screen inventory | Supporting APIs/primitives ready as above | Pieces 09–11 implement authentication/enrollment plus Contacts/New, Contact Profile, Edit Profile, and Safety Number; piece 15 adds Chats List, DM Chat, Saved Messages, pinned/forward/action sheets, and all chat state surfaces; piece 18 adds Create Group, Group Chat, Group Info, Edit Group, and Add Members behind the production gate; later screens remain pending |
+| English/Persian RTL | Not applicable | Piece 03 foundations, piece 11 contact/profile/safety screens, piece 15 Chats/DM/Saved coverage, and piece 18 narrow Persian group creation plus responsive group-chat/info coverage complete; later feature-screen verification remains pending |
+| Accessibility/high contrast | Not applicable | Piece 18 extends the piece 15 screen-reader/live-state and 200% text foundation with semantic member actions, honest gated/read-only states, and narrow/wide group verification; later feature-flow audit remains pending |
 
 ## Platform delivery
 
@@ -186,6 +186,14 @@ opaque/client-owned; **Pending** = Flutter implementation not started.
   tests/analyze, responsive English/Persian goldens, keyboard/screen-reader semantics,
   dynamic-size/upward-pagination anchors, and the 50,000-message bounded-widget fixture
   plus development and production Android APK builds on 2026-07-30.
+- [x] Piece 18 group domain, deterministic control projection, role authorization,
+  invite/remove/leave and metadata/history policies, membership/conflict/quarantine
+  projections, atomic Drift state/outbound boundaries, and responsive localized group
+  screens pass authorization/state-machine/property/concurrency/fault tests, the full
+  Flutter suite, fatal analysis, and development/production Android APK builds on
+  2026-08-02. Development uses an explicitly non-cryptographic in-memory preview;
+  production is compile-time fail-closed with no KeyPackage, suite ID, or group
+  ciphertext path. All cryptographic production enablement remains piece 19.
 - [x] Android reproduces the backend `cross_sig`, `master_sig`, `spk_sig`, and
   `pq_spk_sig` golden vectors, including optional fields and the 64-byte `ik_pub` layout
   (Piece 08: Rust vectors, strict Clippy, Flutter tests, three-ABI native package build,

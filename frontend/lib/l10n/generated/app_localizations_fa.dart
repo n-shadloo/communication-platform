@@ -977,4 +977,228 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get chatStateReceived => 'دریافت‌شده';
+
+  @override
+  String get groupProductionUnavailableTitle =>
+      'گروه‌های عملیاتی در دسترس نیستند';
+
+  @override
+  String get groupProductionUnavailableMessage =>
+      'پروفایل MLS پساکوانتومی هنوز پشت دروازهٔ امنیتی است. این ساخت نمی‌تواند گروه بسازد، KeyPackage تولید کند یا متن رمز گروهی بفرستد.';
+
+  @override
+  String get groupDevelopmentPreviewBanner =>
+      'فقط پیش‌نمایش توسعه — هیچ متن رمز گروهی عملیاتی ارسال نمی‌شود';
+
+  @override
+  String get groupCreateTitle => 'ساخت گروه';
+
+  @override
+  String get groupPickMembersTitle => 'انتخاب اعضا';
+
+  @override
+  String get groupDetailsTitle => 'مشخصات گروه';
+
+  @override
+  String get groupNextAction => 'بعدی';
+
+  @override
+  String get groupBackAction => 'بازگشت';
+
+  @override
+  String get groupCreateAction => 'ساخت';
+
+  @override
+  String get groupCreatingState => 'در حال ساخت پیش‌نمایش محلی گروه…';
+
+  @override
+  String get groupCreateFailed => 'گروه ساخته نشد. چیزی ارسال نشد.';
+
+  @override
+  String get groupSelectMemberMessage => 'حداقل یک عضو انتخاب کنید.';
+
+  @override
+  String get groupMemberLimitMessage =>
+      'گروه با احتساب شما حداکثر ۵۰ عضو دارد.';
+
+  @override
+  String get groupNameLabel => 'نام گروه';
+
+  @override
+  String get groupDescriptionLabel => 'توضیح (اختیاری)';
+
+  @override
+  String get groupPhotoAction => 'انتخاب عکس رمزگذاری‌شده';
+
+  @override
+  String get groupPhotoSelected => 'یک عکس پیش‌نمایش محلی انتخاب شده است';
+
+  @override
+  String get groupSearchMembersLabel => 'جست‌وجوی اعضا';
+
+  @override
+  String groupSelectedCount(int count) {
+    return '$count انتخاب‌شده';
+  }
+
+  @override
+  String groupMemberCount(int count) {
+    return '$count عضو';
+  }
+
+  @override
+  String get groupInfoTitle => 'اطلاعات گروه';
+
+  @override
+  String get groupEditTitle => 'ویرایش گروه';
+
+  @override
+  String get groupEditAction => 'ویرایش';
+
+  @override
+  String get groupAddMembersAction => 'افزودن اعضا';
+
+  @override
+  String get groupLeaveAction => 'ترک گروه';
+
+  @override
+  String get groupRemoveAction => 'حذف از گروه';
+
+  @override
+  String get groupPromoteAction => 'مدیر کردن';
+
+  @override
+  String get groupDemoteAction => 'عضو کردن';
+
+  @override
+  String get groupTransferOwnerAction => 'انتقال مالکیت';
+
+  @override
+  String get groupRoleOwner => 'مالک';
+
+  @override
+  String get groupRoleAdmin => 'مدیر';
+
+  @override
+  String get groupRoleMember => 'عضو';
+
+  @override
+  String get groupInvitePolicyLabel => 'چه کسانی می‌توانند عضو بیفزایند';
+
+  @override
+  String get groupInviteOwnerOnly => 'فقط مالک';
+
+  @override
+  String get groupInviteAdmins => 'مالک و مدیران';
+
+  @override
+  String get groupInviteEveryone => 'همهٔ اعضا';
+
+  @override
+  String get groupHistorySharingLabel => 'نمایش تاریخچهٔ موجود به اعضای جدید';
+
+  @override
+  String get groupHistorySharingNote =>
+      'اگر روشن باشد، دستگاه یکی از اعضای موجود عمداً پیام‌های قبلی را دوباره با عضو جدید به اشتراک می‌گذارد. سرور نمی‌تواند این تاریخچه را بازسازی یا ارسال کند و ممکن است دستگاه منبع فقط بخشی از تاریخچه را داشته باشد.';
+
+  @override
+  String get groupSaveAction => 'ذخیره';
+
+  @override
+  String get groupCancelAction => 'انصراف';
+
+  @override
+  String get groupPermissionChanged =>
+      'نقش شما تغییر کرده و دیگر نمی‌توانید این تنظیمات را ذخیره کنید.';
+
+  @override
+  String get groupMembershipUpdatingState =>
+      'عضویت در حال تغییر است. ارسال و تغییر اعضا موقتاً متوقف شده است.';
+
+  @override
+  String get groupRemovedState =>
+      'شما حذف شده‌اید. محتوای قبلی این دستگاه خواندنی می‌ماند، اما دوره‌های آیندهٔ گروه در دسترس نیست.';
+
+  @override
+  String get groupLeftState =>
+      'شما گروه را ترک کرده‌اید. این نسخه فقط خواندنی است.';
+
+  @override
+  String get groupQueueGapState =>
+      'ممکن است شکاف صندوق پستی یک Commit از MLS را پنهان کرده باشد. پیش از ارسال، این دستگاه باید حذف و با Welcome تازه دوباره افزوده شود.';
+
+  @override
+  String get groupForkState =>
+      'Commitهای هم‌زمان MLS قرنطینه شدند. برنامه هیچ شاخه‌ای را خودسرانه انتخاب نمی‌کند.';
+
+  @override
+  String get groupControlQuarantineState =>
+      'یک کنترل نامعتبر یا بدون مجوز گروه قرنطینه شد.';
+
+  @override
+  String get groupReadOnlyLabel => 'گروه فقط خواندنی';
+
+  @override
+  String get groupMessageHint => 'پیام به گروه';
+
+  @override
+  String get groupSendFailed => 'پیام ذخیره نشد. چیزی ارسال نشد.';
+
+  @override
+  String get groupMuteAction => 'بی‌صدا';
+
+  @override
+  String get groupSearchChatAction => 'جست‌وجو در گفتگو';
+
+  @override
+  String get groupSharedMediaAction => 'رسانه‌های مشترک';
+
+  @override
+  String get groupNoDescription => 'بدون توضیح';
+
+  @override
+  String get groupMembersSection => 'اعضا';
+
+  @override
+  String get groupVerifiedMember => 'هویت تأییدشده';
+
+  @override
+  String get groupConfirmRemoveTitle => 'عضو حذف شود؟';
+
+  @override
+  String get groupConfirmRemoveBody =>
+      'حذف عضو دورهٔ گروه را جلو می‌برد و دسترسی او به پیام‌های آینده را قطع می‌کند؛ محتوای از قبل دریافت‌شده پاک نمی‌شود.';
+
+  @override
+  String get groupConfirmLeaveTitle => 'گروه ترک شود؟';
+
+  @override
+  String get groupConfirmLeaveBody =>
+      'دسترسی به دوره‌های آیندهٔ گروه را از دست می‌دهید. محتوای ذخیره‌شده روی این دستگاه خواندنی می‌ماند.';
+
+  @override
+  String get groupOwnerMustTransfer => 'پیش از ترک گروه، مالکیت را منتقل کنید.';
+
+  @override
+  String get groupActionFailed =>
+      'تغییر گروه ثبت نشد. وضعیت قبلی گروه بدون تغییر ماند.';
+
+  @override
+  String get groupMemberPickerEmpty => 'مخاطب واجد شرایطی پیدا نشد';
+
+  @override
+  String get groupWithheldUpdating =>
+      'ارسال پیام متوقف است: عضویت در حال تغییر است.';
+
+  @override
+  String get groupWithheldRemoved =>
+      'ارسال پیام متوقف است: این گروه روی این دستگاه فقط خواندنی است.';
+
+  @override
+  String get groupWithheldQueueGap =>
+      'ارسال پیام متوقف است: پس از شکاف صندوق پستی باید با Welcome تازه دوباره بپیوندید.';
+
+  @override
+  String get groupWithheldConflict =>
+      'ارسال پیام متوقف است: تعارض کنترل گروه قرنطینه شده است.';
 }

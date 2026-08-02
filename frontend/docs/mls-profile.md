@@ -48,6 +48,14 @@ not integrate OpenMLS, create MLS state, or produce KeyPackages. Web crypto rema
 fail-closed until the reviewed same-source Wasm adapter and browser fixtures exist in a
 post-v1 milestone.
 
+Piece 18 implements the crypto-independent group product model, authorization,
+transactional storage boundary, and UI. Its Dart crypto port is a boundary for piece 19,
+not an MLS implementation. Tests and development previews may use an explicitly
+non-cryptographic in-memory adapter that emits no suite identifier, KeyPackage, Welcome,
+or production-compatible ciphertext. Production resolves only to an unsupported port;
+the release entry point references a source-constant closed gate whose constructor
+assertion prevents an accidental true value from compiling.
+
 OpenMLS is preferred, but its documented supported suites currently do not include the
 selected candidate. The Android implementation spike must prove provider support and
 lifecycle behavior for version 1; a later Web spike must prove the Wasm/browser path.

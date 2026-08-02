@@ -1471,6 +1471,10 @@ class _WithheldComposer extends StatelessWidget {
       ChatSecurityGate.masterKeyChanged => strings.chatWithheldMasterChanged,
       ChatSecurityGate.deviceLogFork => strings.chatWithheldLogFork,
       ChatSecurityGate.postQuantumUnavailable => strings.chatWithheldPq,
+      ChatSecurityGate.groupUpdating => strings.groupWithheldUpdating,
+      ChatSecurityGate.groupRemoved => strings.groupWithheldRemoved,
+      ChatSecurityGate.groupQueueGap => strings.groupWithheldQueueGap,
+      ChatSecurityGate.groupConflict => strings.groupWithheldConflict,
     };
     return Semantics(
       container: true,

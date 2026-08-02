@@ -38,6 +38,8 @@ void main() {
       'prekeys',
       'prekey_maintenance_plans',
       'mls_groups',
+      'group_control_events',
+      'group_outbound_objects',
       'conversations',
       'memberships',
       'messages',

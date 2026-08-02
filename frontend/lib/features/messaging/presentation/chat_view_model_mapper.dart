@@ -26,6 +26,8 @@ abstract final class ChatViewModelMapper {
           conversationId: summary.conversationId,
           title: summary.kind == ConversationKind.saved
               ? savedMessagesTitle
+              : summary.kind == ConversationKind.group
+              ? summary.displayTitle ?? summary.conversationId
               : summary.peerUserId == null
               ? summary.conversationId
               : peerTitle(summary.peerUserId!),
@@ -41,6 +43,7 @@ abstract final class ChatViewModelMapper {
           pinned: summary.pinned,
           savedMessages: summary.kind == ConversationKind.saved,
           peerUserId: summary.peerUserId,
+          group: summary.kind == ConversationKind.group,
         ),
     ];
     items.sort((left, right) {

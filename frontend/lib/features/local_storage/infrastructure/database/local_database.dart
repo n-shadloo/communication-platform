@@ -322,9 +322,71 @@ class MlsGroups extends Table {
   IntColumn get queueGapRecoveryState => integer()
       .withDefault(const Constant(0))
       .check(queueGapRecoveryState.isBetweenValues(0, 2))();
+  BlobColumn get controlProjectionCiphertext => blob().nullable()();
+  IntColumn get controlRevision => integer()
+      .withDefault(const Constant(0))
+      .check(controlRevision.isBiggerOrEqualValue(0))();
+  BlobColumn get controlStateHash => blob().nullable()();
+  IntColumn get lifecycle => integer()
+      .withDefault(const Constant(0))
+      .check(lifecycle.isBetweenValues(0, 6))();
+  TextColumn get pendingMutationId => text().nullable()();
 
   @override
   Set<Column<Object>> get primaryKey => {groupId};
+}
+
+@DataClassName('StoredGroupControlEventRow')
+class GroupControlEvents extends Table {
+  @override
+  String get tableName => 'group_control_events';
+
+  TextColumn get eventId => text()();
+  TextColumn get groupId =>
+      text().references(MlsGroups, #groupId, onDelete: KeyAction.cascade)();
+  IntColumn get revision => integer().check(revision.isBiggerThanValue(0))();
+  BlobColumn get previousControlStateHash => blob().nullable()();
+  BlobColumn get controlStateHash => blob()();
+  BlobColumn get mlsCommitHash => blob().nullable()();
+  IntColumn get epoch => integer().check(epoch.isBiggerOrEqualValue(0))();
+  TextColumn get signerUserId => text()();
+  TextColumn get signerDeviceId => text()();
+  IntColumn get operationKind =>
+      integer().check(operationKind.isBetweenValues(1, 8))();
+  BlobColumn get canonicalControl => blob()();
+  BlobColumn get signature => blob()();
+  IntColumn get applyState =>
+      integer().check(applyState.isBetweenValues(0, 2))();
+  IntColumn get createdMs =>
+      integer().check(createdMs.isBiggerOrEqualValue(0))();
+
+  @override
+  Set<Column<Object>> get primaryKey => {eventId};
+
+  @override
+  List<Set<Column<Object>>> get uniqueKeys => [
+    {groupId, revision},
+  ];
+}
+
+@DataClassName('StoredGroupOutboundObjectRow')
+class GroupOutboundObjects extends Table {
+  @override
+  String get tableName => 'group_outbound_objects';
+
+  TextColumn get operationId => text()();
+  TextColumn get groupId =>
+      text().references(MlsGroups, #groupId, onDelete: KeyAction.cascade)();
+  TextColumn get eventId => text()();
+  IntColumn get epoch => integer().check(epoch.isBiggerOrEqualValue(0))();
+  BlobColumn get mlsObject => blob()();
+  // 0 development preview only, 1 blocked by production gate, 2 ready for piece 19.
+  IntColumn get deliveryState =>
+      integer().check(deliveryState.isBetweenValues(0, 2))();
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+
+  @override
+  Set<Column<Object>> get primaryKey => {operationId};
 }
 
 class Conversations extends Table {
@@ -344,6 +406,7 @@ class Conversations extends Table {
       .check(unreadCount.isBiggerOrEqualValue(0))();
   DateTimeColumn get mutedUntil => dateTime().nullable()();
   BlobColumn get draftCiphertext => blob().nullable()();
+  BlobColumn get displayTitleCiphertext => blob().nullable()();
 
   @override
   Set<Column<Object>> get primaryKey => {conversationId};
@@ -863,6 +926,8 @@ class StorageMigrationHooks {
     Prekeys,
     PrekeyMaintenancePlans,
     MlsGroups,
+    GroupControlEvents,
+    GroupOutboundObjects,
     Conversations,
     Memberships,
     Messages,
@@ -894,7 +959,7 @@ final class LocalDatabase extends _$LocalDatabase {
   LocalDatabase(super.executor, {StorageMigrationHooks? migrationHooks})
     : _migrationHooks = migrationHooks ?? const StorageMigrationHooks();
 
-  static const currentSchemaVersion = 7;
+  static const currentSchemaVersion = 8;
   final StorageMigrationHooks _migrationHooks;
 
   @override
@@ -1152,6 +1217,22 @@ final class LocalDatabase extends _$LocalDatabase {
             ),
           );
           await migrator.createTable(historyTransferBatches);
+        }
+        if (from < 8) {
+          await migrator.addColumn(
+            mlsGroups,
+            mlsGroups.controlProjectionCiphertext,
+          );
+          await migrator.addColumn(mlsGroups, mlsGroups.controlRevision);
+          await migrator.addColumn(mlsGroups, mlsGroups.controlStateHash);
+          await migrator.addColumn(mlsGroups, mlsGroups.lifecycle);
+          await migrator.addColumn(mlsGroups, mlsGroups.pendingMutationId);
+          await migrator.addColumn(
+            conversations,
+            conversations.displayTitleCiphertext,
+          );
+          await migrator.createTable(groupControlEvents);
+          await migrator.createTable(groupOutboundObjects);
         }
         await _migrationHooks.afterUpgrade(from, to);
       });

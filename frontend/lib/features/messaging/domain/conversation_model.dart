@@ -32,6 +32,7 @@ final class ConversationSummary {
     required this.draft,
     required this.pinnedMessageIds,
     this.pinned = false,
+    this.displayTitle,
   });
 
   final String conversationId;
@@ -44,6 +45,7 @@ final class ConversationSummary {
   final String? draft;
   final Set<String> pinnedMessageIds;
   final bool pinned;
+  final String? displayTitle;
 
   bool isMutedAt(DateTime now) =>
       mutedUntil != null && mutedUntil!.isAfter(now);

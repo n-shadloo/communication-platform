@@ -1831,6 +1831,408 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'received'**
   String get chatStateReceived;
+
+  /// No description provided for @groupProductionUnavailableTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Production groups are not available'**
+  String get groupProductionUnavailableTitle;
+
+  /// No description provided for @groupProductionUnavailableMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'The post-quantum MLS profile is still gated. This build cannot create groups, generate KeyPackages, or send group ciphertext.'**
+  String get groupProductionUnavailableMessage;
+
+  /// No description provided for @groupDevelopmentPreviewBanner.
+  ///
+  /// In en, this message translates to:
+  /// **'Development preview only — no production group ciphertext is sent'**
+  String get groupDevelopmentPreviewBanner;
+
+  /// No description provided for @groupCreateTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Create Group'**
+  String get groupCreateTitle;
+
+  /// No description provided for @groupPickMembersTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Pick members'**
+  String get groupPickMembersTitle;
+
+  /// No description provided for @groupDetailsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Group details'**
+  String get groupDetailsTitle;
+
+  /// No description provided for @groupNextAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Next'**
+  String get groupNextAction;
+
+  /// No description provided for @groupBackAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Back'**
+  String get groupBackAction;
+
+  /// No description provided for @groupCreateAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Create'**
+  String get groupCreateAction;
+
+  /// No description provided for @groupCreatingState.
+  ///
+  /// In en, this message translates to:
+  /// **'Creating local group preview…'**
+  String get groupCreatingState;
+
+  /// No description provided for @groupCreateFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'The group could not be created. Nothing was sent.'**
+  String get groupCreateFailed;
+
+  /// No description provided for @groupSelectMemberMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Select at least one member.'**
+  String get groupSelectMemberMessage;
+
+  /// No description provided for @groupMemberLimitMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'A group can have at most 50 members, including you.'**
+  String get groupMemberLimitMessage;
+
+  /// No description provided for @groupNameLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Group name'**
+  String get groupNameLabel;
+
+  /// No description provided for @groupDescriptionLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Description (optional)'**
+  String get groupDescriptionLabel;
+
+  /// No description provided for @groupPhotoAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose encrypted photo'**
+  String get groupPhotoAction;
+
+  /// No description provided for @groupPhotoSelected.
+  ///
+  /// In en, this message translates to:
+  /// **'A local preview photo is selected'**
+  String get groupPhotoSelected;
+
+  /// No description provided for @groupSearchMembersLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Search members'**
+  String get groupSearchMembersLabel;
+
+  /// No description provided for @groupSelectedCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} selected'**
+  String groupSelectedCount(int count);
+
+  /// No description provided for @groupMemberCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} members'**
+  String groupMemberCount(int count);
+
+  /// No description provided for @groupInfoTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Group Info'**
+  String get groupInfoTitle;
+
+  /// No description provided for @groupEditTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit Group'**
+  String get groupEditTitle;
+
+  /// No description provided for @groupEditAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit'**
+  String get groupEditAction;
+
+  /// No description provided for @groupAddMembersAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Add members'**
+  String get groupAddMembersAction;
+
+  /// No description provided for @groupLeaveAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Leave group'**
+  String get groupLeaveAction;
+
+  /// No description provided for @groupRemoveAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove from group'**
+  String get groupRemoveAction;
+
+  /// No description provided for @groupPromoteAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Make admin'**
+  String get groupPromoteAction;
+
+  /// No description provided for @groupDemoteAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Make member'**
+  String get groupDemoteAction;
+
+  /// No description provided for @groupTransferOwnerAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Transfer ownership'**
+  String get groupTransferOwnerAction;
+
+  /// No description provided for @groupRoleOwner.
+  ///
+  /// In en, this message translates to:
+  /// **'Owner'**
+  String get groupRoleOwner;
+
+  /// No description provided for @groupRoleAdmin.
+  ///
+  /// In en, this message translates to:
+  /// **'Admin'**
+  String get groupRoleAdmin;
+
+  /// No description provided for @groupRoleMember.
+  ///
+  /// In en, this message translates to:
+  /// **'Member'**
+  String get groupRoleMember;
+
+  /// No description provided for @groupInvitePolicyLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Who can add members'**
+  String get groupInvitePolicyLabel;
+
+  /// No description provided for @groupInviteOwnerOnly.
+  ///
+  /// In en, this message translates to:
+  /// **'Owner only'**
+  String get groupInviteOwnerOnly;
+
+  /// No description provided for @groupInviteAdmins.
+  ///
+  /// In en, this message translates to:
+  /// **'Owner and admins'**
+  String get groupInviteAdmins;
+
+  /// No description provided for @groupInviteEveryone.
+  ///
+  /// In en, this message translates to:
+  /// **'All members'**
+  String get groupInviteEveryone;
+
+  /// No description provided for @groupHistorySharingLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Show available past history to new members'**
+  String get groupHistorySharingLabel;
+
+  /// No description provided for @groupHistorySharingNote.
+  ///
+  /// In en, this message translates to:
+  /// **'When this is on, an existing member’s device intentionally re-shares the backlog to the newcomer. The server cannot reconstruct or send that history, and the source device may have only partial history.'**
+  String get groupHistorySharingNote;
+
+  /// No description provided for @groupSaveAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Save'**
+  String get groupSaveAction;
+
+  /// No description provided for @groupCancelAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel'**
+  String get groupCancelAction;
+
+  /// No description provided for @groupPermissionChanged.
+  ///
+  /// In en, this message translates to:
+  /// **'Your role changed. These settings can no longer be saved.'**
+  String get groupPermissionChanged;
+
+  /// No description provided for @groupMembershipUpdatingState.
+  ///
+  /// In en, this message translates to:
+  /// **'Membership is updating. Sending and member changes are paused.'**
+  String get groupMembershipUpdatingState;
+
+  /// No description provided for @groupRemovedState.
+  ///
+  /// In en, this message translates to:
+  /// **'You were removed. Past content on this device stays readable, but future group epochs are unavailable.'**
+  String get groupRemovedState;
+
+  /// No description provided for @groupLeftState.
+  ///
+  /// In en, this message translates to:
+  /// **'You left this group. This copy is read-only.'**
+  String get groupLeftState;
+
+  /// No description provided for @groupQueueGapState.
+  ///
+  /// In en, this message translates to:
+  /// **'A mailbox gap may have hidden an MLS commit. This device must be removed and re-added with a fresh Welcome before sending.'**
+  String get groupQueueGapState;
+
+  /// No description provided for @groupForkState.
+  ///
+  /// In en, this message translates to:
+  /// **'Concurrent MLS commits were quarantined. The client will not choose a branch.'**
+  String get groupForkState;
+
+  /// No description provided for @groupControlQuarantineState.
+  ///
+  /// In en, this message translates to:
+  /// **'An invalid or unauthorized group control was quarantined.'**
+  String get groupControlQuarantineState;
+
+  /// No description provided for @groupReadOnlyLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Read-only group'**
+  String get groupReadOnlyLabel;
+
+  /// No description provided for @groupMessageHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Message group'**
+  String get groupMessageHint;
+
+  /// No description provided for @groupSendFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'The message was not saved. Nothing was sent.'**
+  String get groupSendFailed;
+
+  /// No description provided for @groupMuteAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Mute'**
+  String get groupMuteAction;
+
+  /// No description provided for @groupSearchChatAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Search in chat'**
+  String get groupSearchChatAction;
+
+  /// No description provided for @groupSharedMediaAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Shared media'**
+  String get groupSharedMediaAction;
+
+  /// No description provided for @groupNoDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'No description'**
+  String get groupNoDescription;
+
+  /// No description provided for @groupMembersSection.
+  ///
+  /// In en, this message translates to:
+  /// **'Members'**
+  String get groupMembersSection;
+
+  /// No description provided for @groupVerifiedMember.
+  ///
+  /// In en, this message translates to:
+  /// **'Verified identity'**
+  String get groupVerifiedMember;
+
+  /// No description provided for @groupConfirmRemoveTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove member?'**
+  String get groupConfirmRemoveTitle;
+
+  /// No description provided for @groupConfirmRemoveBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Removing this member advances the group epoch and cuts off access to future messages. It cannot erase content already received.'**
+  String get groupConfirmRemoveBody;
+
+  /// No description provided for @groupConfirmLeaveTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Leave group?'**
+  String get groupConfirmLeaveTitle;
+
+  /// No description provided for @groupConfirmLeaveBody.
+  ///
+  /// In en, this message translates to:
+  /// **'You will lose access to future group epochs. Content already stored on this device remains readable.'**
+  String get groupConfirmLeaveBody;
+
+  /// No description provided for @groupOwnerMustTransfer.
+  ///
+  /// In en, this message translates to:
+  /// **'Transfer ownership before leaving this group.'**
+  String get groupOwnerMustTransfer;
+
+  /// No description provided for @groupActionFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'That group change could not be committed. The previous group state is unchanged.'**
+  String get groupActionFailed;
+
+  /// No description provided for @groupMemberPickerEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No eligible contacts found'**
+  String get groupMemberPickerEmpty;
+
+  /// No description provided for @groupWithheldUpdating.
+  ///
+  /// In en, this message translates to:
+  /// **'Messaging withheld: membership is updating.'**
+  String get groupWithheldUpdating;
+
+  /// No description provided for @groupWithheldRemoved.
+  ///
+  /// In en, this message translates to:
+  /// **'Messaging withheld: this group is read-only on this device.'**
+  String get groupWithheldRemoved;
+
+  /// No description provided for @groupWithheldQueueGap.
+  ///
+  /// In en, this message translates to:
+  /// **'Messaging withheld: rejoin with a fresh Welcome after the mailbox gap.'**
+  String get groupWithheldQueueGap;
+
+  /// No description provided for @groupWithheldConflict.
+  ///
+  /// In en, this message translates to:
+  /// **'Messaging withheld: a group control conflict is quarantined.'**
+  String get groupWithheldConflict;
 }
 
 class _AppLocalizationsDelegate

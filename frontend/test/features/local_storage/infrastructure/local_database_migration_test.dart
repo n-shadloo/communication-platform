@@ -104,6 +104,7 @@ void main() {
           'ALTER TABLE sync_checkpoint DROP COLUMN last_successful_sync_at',
         );
       _dropPieceFourteenSchema(versionOne);
+      _dropPieceEighteenSchema(versionOne);
       versionOne.execute('PRAGMA user_version = 1');
       versionOne.close();
 
@@ -185,6 +186,7 @@ void main() {
           'ALTER TABLE pairwise_sessions DROP COLUMN last_authenticated_at',
         );
       _dropPieceFourteenSchema(versionThree);
+      _dropPieceEighteenSchema(versionThree);
       versionThree.execute('PRAGMA user_version = 3');
       versionThree.close();
 
@@ -279,8 +281,9 @@ void main() {
 
     final versionFive = sqlite3.open(databaseFile.path)
       ..execute('ALTER TABLE conversations DROP COLUMN pinned')
-      ..execute('ALTER TABLE messages DROP COLUMN starred')
-      ..execute('PRAGMA user_version = 5');
+      ..execute('ALTER TABLE messages DROP COLUMN starred');
+    _dropPieceEighteenSchema(versionFive);
+    versionFive.execute('PRAGMA user_version = 5');
     versionFive.close();
 
     final upgraded = LocalDatabase(NativeDatabase(databaseFile));
@@ -337,6 +340,20 @@ void _dropPieceFourteenSchema(Database database) {
   ]) {
     database.execute('ALTER TABLE messages DROP COLUMN $column');
   }
+}
+
+void _dropPieceEighteenSchema(Database database) {
+  database
+    ..execute('DROP TABLE group_outbound_objects')
+    ..execute('DROP TABLE group_control_events')
+    ..execute(
+      'ALTER TABLE mls_groups DROP COLUMN control_projection_ciphertext',
+    )
+    ..execute('ALTER TABLE mls_groups DROP COLUMN control_revision')
+    ..execute('ALTER TABLE mls_groups DROP COLUMN control_state_hash')
+    ..execute('ALTER TABLE mls_groups DROP COLUMN lifecycle')
+    ..execute('ALTER TABLE mls_groups DROP COLUMN pending_mutation_id')
+    ..execute('ALTER TABLE conversations DROP COLUMN display_title_ciphertext');
 }
 
 final class _FailAfterSchemaCreation extends StorageMigrationHooks {

@@ -265,6 +265,8 @@ class _ChatsListPageState extends State<ChatsListPage> {
     }
     if (item.savedMessages) {
       context.go('/saved-messages?conversationId=${item.conversationId}');
+    } else if (item.group) {
+      context.go('/groups/${item.conversationId}');
     } else {
       context.go(
         '/chats/conversation/${item.conversationId}'

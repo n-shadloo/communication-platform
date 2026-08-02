@@ -22,6 +22,10 @@ enum ChatSecurityGate {
   masterKeyChanged,
   deviceLogFork,
   postQuantumUnavailable,
+  groupUpdating,
+  groupRemoved,
+  groupQueueGap,
+  groupConflict,
 }
 
 enum ChatTimelineLoadState { loading, data, empty, error }
@@ -149,6 +153,7 @@ final class ChatListItemViewModel {
     required this.savedMessages,
     required this.peerUserId,
     this.delivery,
+    this.group = false,
   });
 
   final String conversationId;
@@ -161,6 +166,7 @@ final class ChatListItemViewModel {
   final bool savedMessages;
   final String? peerUserId;
   final ChatDeliveryViewState? delivery;
+  final bool group;
 }
 
 @immutable

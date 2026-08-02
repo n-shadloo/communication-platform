@@ -50,6 +50,7 @@ final class DriftConversationDomainRepository extends DriftRepositoryBase
               pinned.map((message) => message.messageId),
             ),
             pinned: row.pinned,
+            displayTitle: _optionalText(row.displayTitleCiphertext),
           ),
         );
       }
@@ -300,6 +301,7 @@ final class DriftConversationDomainRepository extends DriftRepositoryBase
             pinned.map((message) => message.messageId),
           ),
           pinned: row.pinned,
+          displayTitle: _optionalText(row.displayTitleCiphertext),
         ),
       );
     } on Object {

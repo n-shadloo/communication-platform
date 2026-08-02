@@ -138,7 +138,7 @@ class _ContactsNewPageState extends ConsumerState<ContactsNewPage> {
             _ActionRow(
               label: strings.contactsNewGroup,
               icon: AppIcons.add,
-              onTap: null,
+              onTap: () => context.push('/groups/new'),
             ),
             _ActionRow(
               label: strings.contactsNewVoiceRoom,

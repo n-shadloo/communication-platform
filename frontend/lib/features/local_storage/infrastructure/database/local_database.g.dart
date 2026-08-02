@@ -8057,6 +8057,67 @@ class $MlsGroupsTable extends MlsGroups
     requiredDuringInsert: false,
     defaultValue: const Constant(0),
   );
+  static const VerificationMeta _controlProjectionCiphertextMeta =
+      const VerificationMeta('controlProjectionCiphertext');
+  @override
+  late final GeneratedColumn<Uint8List> controlProjectionCiphertext =
+      GeneratedColumn<Uint8List>(
+        'control_projection_ciphertext',
+        aliasedName,
+        true,
+        type: DriftSqlType.blob,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _controlRevisionMeta = const VerificationMeta(
+    'controlRevision',
+  );
+  @override
+  late final GeneratedColumn<int> controlRevision = GeneratedColumn<int>(
+    'control_revision',
+    aliasedName,
+    false,
+    check: () => ComparableExpr(controlRevision).isBiggerOrEqualValue(0),
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _controlStateHashMeta = const VerificationMeta(
+    'controlStateHash',
+  );
+  @override
+  late final GeneratedColumn<Uint8List> controlStateHash =
+      GeneratedColumn<Uint8List>(
+        'control_state_hash',
+        aliasedName,
+        true,
+        type: DriftSqlType.blob,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _lifecycleMeta = const VerificationMeta(
+    'lifecycle',
+  );
+  @override
+  late final GeneratedColumn<int> lifecycle = GeneratedColumn<int>(
+    'lifecycle',
+    aliasedName,
+    false,
+    check: () => ComparableExpr(lifecycle).isBetweenValues(0, 6),
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _pendingMutationIdMeta = const VerificationMeta(
+    'pendingMutationId',
+  );
+  @override
+  late final GeneratedColumn<String> pendingMutationId =
+      GeneratedColumn<String>(
+        'pending_mutation_id',
+        aliasedName,
+        true,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+      );
   @override
   List<GeneratedColumn> get $columns => [
     groupId,
@@ -8064,6 +8125,11 @@ class $MlsGroupsTable extends MlsGroups
     acceptedEpoch,
     stateVersion,
     queueGapRecoveryState,
+    controlProjectionCiphertext,
+    controlRevision,
+    controlStateHash,
+    lifecycle,
+    pendingMutationId,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -8127,6 +8193,48 @@ class $MlsGroupsTable extends MlsGroups
         ),
       );
     }
+    if (data.containsKey('control_projection_ciphertext')) {
+      context.handle(
+        _controlProjectionCiphertextMeta,
+        controlProjectionCiphertext.isAcceptableOrUnknown(
+          data['control_projection_ciphertext']!,
+          _controlProjectionCiphertextMeta,
+        ),
+      );
+    }
+    if (data.containsKey('control_revision')) {
+      context.handle(
+        _controlRevisionMeta,
+        controlRevision.isAcceptableOrUnknown(
+          data['control_revision']!,
+          _controlRevisionMeta,
+        ),
+      );
+    }
+    if (data.containsKey('control_state_hash')) {
+      context.handle(
+        _controlStateHashMeta,
+        controlStateHash.isAcceptableOrUnknown(
+          data['control_state_hash']!,
+          _controlStateHashMeta,
+        ),
+      );
+    }
+    if (data.containsKey('lifecycle')) {
+      context.handle(
+        _lifecycleMeta,
+        lifecycle.isAcceptableOrUnknown(data['lifecycle']!, _lifecycleMeta),
+      );
+    }
+    if (data.containsKey('pending_mutation_id')) {
+      context.handle(
+        _pendingMutationIdMeta,
+        pendingMutationId.isAcceptableOrUnknown(
+          data['pending_mutation_id']!,
+          _pendingMutationIdMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -8156,6 +8264,26 @@ class $MlsGroupsTable extends MlsGroups
         DriftSqlType.int,
         data['${effectivePrefix}queue_gap_recovery_state'],
       )!,
+      controlProjectionCiphertext: attachedDatabase.typeMapping.read(
+        DriftSqlType.blob,
+        data['${effectivePrefix}control_projection_ciphertext'],
+      ),
+      controlRevision: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}control_revision'],
+      )!,
+      controlStateHash: attachedDatabase.typeMapping.read(
+        DriftSqlType.blob,
+        data['${effectivePrefix}control_state_hash'],
+      ),
+      lifecycle: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}lifecycle'],
+      )!,
+      pendingMutationId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}pending_mutation_id'],
+      ),
     );
   }
 
@@ -8171,12 +8299,22 @@ class MlsGroup extends DataClass implements Insertable<MlsGroup> {
   final int acceptedEpoch;
   final int stateVersion;
   final int queueGapRecoveryState;
+  final Uint8List? controlProjectionCiphertext;
+  final int controlRevision;
+  final Uint8List? controlStateHash;
+  final int lifecycle;
+  final String? pendingMutationId;
   const MlsGroup({
     required this.groupId,
     required this.opaqueCryptoStateHandle,
     required this.acceptedEpoch,
     required this.stateVersion,
     required this.queueGapRecoveryState,
+    this.controlProjectionCiphertext,
+    required this.controlRevision,
+    this.controlStateHash,
+    required this.lifecycle,
+    this.pendingMutationId,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -8188,6 +8326,19 @@ class MlsGroup extends DataClass implements Insertable<MlsGroup> {
     map['accepted_epoch'] = Variable<int>(acceptedEpoch);
     map['state_version'] = Variable<int>(stateVersion);
     map['queue_gap_recovery_state'] = Variable<int>(queueGapRecoveryState);
+    if (!nullToAbsent || controlProjectionCiphertext != null) {
+      map['control_projection_ciphertext'] = Variable<Uint8List>(
+        controlProjectionCiphertext,
+      );
+    }
+    map['control_revision'] = Variable<int>(controlRevision);
+    if (!nullToAbsent || controlStateHash != null) {
+      map['control_state_hash'] = Variable<Uint8List>(controlStateHash);
+    }
+    map['lifecycle'] = Variable<int>(lifecycle);
+    if (!nullToAbsent || pendingMutationId != null) {
+      map['pending_mutation_id'] = Variable<String>(pendingMutationId);
+    }
     return map;
   }
 
@@ -8198,6 +8349,18 @@ class MlsGroup extends DataClass implements Insertable<MlsGroup> {
       acceptedEpoch: Value(acceptedEpoch),
       stateVersion: Value(stateVersion),
       queueGapRecoveryState: Value(queueGapRecoveryState),
+      controlProjectionCiphertext:
+          controlProjectionCiphertext == null && nullToAbsent
+          ? const Value.absent()
+          : Value(controlProjectionCiphertext),
+      controlRevision: Value(controlRevision),
+      controlStateHash: controlStateHash == null && nullToAbsent
+          ? const Value.absent()
+          : Value(controlStateHash),
+      lifecycle: Value(lifecycle),
+      pendingMutationId: pendingMutationId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(pendingMutationId),
     );
   }
 
@@ -8216,6 +8379,17 @@ class MlsGroup extends DataClass implements Insertable<MlsGroup> {
       queueGapRecoveryState: serializer.fromJson<int>(
         json['queueGapRecoveryState'],
       ),
+      controlProjectionCiphertext: serializer.fromJson<Uint8List?>(
+        json['controlProjectionCiphertext'],
+      ),
+      controlRevision: serializer.fromJson<int>(json['controlRevision']),
+      controlStateHash: serializer.fromJson<Uint8List?>(
+        json['controlStateHash'],
+      ),
+      lifecycle: serializer.fromJson<int>(json['lifecycle']),
+      pendingMutationId: serializer.fromJson<String?>(
+        json['pendingMutationId'],
+      ),
     );
   }
   @override
@@ -8229,6 +8403,13 @@ class MlsGroup extends DataClass implements Insertable<MlsGroup> {
       'acceptedEpoch': serializer.toJson<int>(acceptedEpoch),
       'stateVersion': serializer.toJson<int>(stateVersion),
       'queueGapRecoveryState': serializer.toJson<int>(queueGapRecoveryState),
+      'controlProjectionCiphertext': serializer.toJson<Uint8List?>(
+        controlProjectionCiphertext,
+      ),
+      'controlRevision': serializer.toJson<int>(controlRevision),
+      'controlStateHash': serializer.toJson<Uint8List?>(controlStateHash),
+      'lifecycle': serializer.toJson<int>(lifecycle),
+      'pendingMutationId': serializer.toJson<String?>(pendingMutationId),
     };
   }
 
@@ -8238,6 +8419,11 @@ class MlsGroup extends DataClass implements Insertable<MlsGroup> {
     int? acceptedEpoch,
     int? stateVersion,
     int? queueGapRecoveryState,
+    Value<Uint8List?> controlProjectionCiphertext = const Value.absent(),
+    int? controlRevision,
+    Value<Uint8List?> controlStateHash = const Value.absent(),
+    int? lifecycle,
+    Value<String?> pendingMutationId = const Value.absent(),
   }) => MlsGroup(
     groupId: groupId ?? this.groupId,
     opaqueCryptoStateHandle:
@@ -8245,6 +8431,17 @@ class MlsGroup extends DataClass implements Insertable<MlsGroup> {
     acceptedEpoch: acceptedEpoch ?? this.acceptedEpoch,
     stateVersion: stateVersion ?? this.stateVersion,
     queueGapRecoveryState: queueGapRecoveryState ?? this.queueGapRecoveryState,
+    controlProjectionCiphertext: controlProjectionCiphertext.present
+        ? controlProjectionCiphertext.value
+        : this.controlProjectionCiphertext,
+    controlRevision: controlRevision ?? this.controlRevision,
+    controlStateHash: controlStateHash.present
+        ? controlStateHash.value
+        : this.controlStateHash,
+    lifecycle: lifecycle ?? this.lifecycle,
+    pendingMutationId: pendingMutationId.present
+        ? pendingMutationId.value
+        : this.pendingMutationId,
   );
   MlsGroup copyWithCompanion(MlsGroupsCompanion data) {
     return MlsGroup(
@@ -8261,6 +8458,19 @@ class MlsGroup extends DataClass implements Insertable<MlsGroup> {
       queueGapRecoveryState: data.queueGapRecoveryState.present
           ? data.queueGapRecoveryState.value
           : this.queueGapRecoveryState,
+      controlProjectionCiphertext: data.controlProjectionCiphertext.present
+          ? data.controlProjectionCiphertext.value
+          : this.controlProjectionCiphertext,
+      controlRevision: data.controlRevision.present
+          ? data.controlRevision.value
+          : this.controlRevision,
+      controlStateHash: data.controlStateHash.present
+          ? data.controlStateHash.value
+          : this.controlStateHash,
+      lifecycle: data.lifecycle.present ? data.lifecycle.value : this.lifecycle,
+      pendingMutationId: data.pendingMutationId.present
+          ? data.pendingMutationId.value
+          : this.pendingMutationId,
     );
   }
 
@@ -8271,7 +8481,12 @@ class MlsGroup extends DataClass implements Insertable<MlsGroup> {
           ..write('opaqueCryptoStateHandle: $opaqueCryptoStateHandle, ')
           ..write('acceptedEpoch: $acceptedEpoch, ')
           ..write('stateVersion: $stateVersion, ')
-          ..write('queueGapRecoveryState: $queueGapRecoveryState')
+          ..write('queueGapRecoveryState: $queueGapRecoveryState, ')
+          ..write('controlProjectionCiphertext: $controlProjectionCiphertext, ')
+          ..write('controlRevision: $controlRevision, ')
+          ..write('controlStateHash: $controlStateHash, ')
+          ..write('lifecycle: $lifecycle, ')
+          ..write('pendingMutationId: $pendingMutationId')
           ..write(')'))
         .toString();
   }
@@ -8283,6 +8498,11 @@ class MlsGroup extends DataClass implements Insertable<MlsGroup> {
     acceptedEpoch,
     stateVersion,
     queueGapRecoveryState,
+    $driftBlobEquality.hash(controlProjectionCiphertext),
+    controlRevision,
+    $driftBlobEquality.hash(controlStateHash),
+    lifecycle,
+    pendingMutationId,
   );
   @override
   bool operator ==(Object other) =>
@@ -8295,7 +8515,18 @@ class MlsGroup extends DataClass implements Insertable<MlsGroup> {
           ) &&
           other.acceptedEpoch == this.acceptedEpoch &&
           other.stateVersion == this.stateVersion &&
-          other.queueGapRecoveryState == this.queueGapRecoveryState);
+          other.queueGapRecoveryState == this.queueGapRecoveryState &&
+          $driftBlobEquality.equals(
+            other.controlProjectionCiphertext,
+            this.controlProjectionCiphertext,
+          ) &&
+          other.controlRevision == this.controlRevision &&
+          $driftBlobEquality.equals(
+            other.controlStateHash,
+            this.controlStateHash,
+          ) &&
+          other.lifecycle == this.lifecycle &&
+          other.pendingMutationId == this.pendingMutationId);
 }
 
 class MlsGroupsCompanion extends UpdateCompanion<MlsGroup> {
@@ -8304,6 +8535,11 @@ class MlsGroupsCompanion extends UpdateCompanion<MlsGroup> {
   final Value<int> acceptedEpoch;
   final Value<int> stateVersion;
   final Value<int> queueGapRecoveryState;
+  final Value<Uint8List?> controlProjectionCiphertext;
+  final Value<int> controlRevision;
+  final Value<Uint8List?> controlStateHash;
+  final Value<int> lifecycle;
+  final Value<String?> pendingMutationId;
   final Value<int> rowid;
   const MlsGroupsCompanion({
     this.groupId = const Value.absent(),
@@ -8311,6 +8547,11 @@ class MlsGroupsCompanion extends UpdateCompanion<MlsGroup> {
     this.acceptedEpoch = const Value.absent(),
     this.stateVersion = const Value.absent(),
     this.queueGapRecoveryState = const Value.absent(),
+    this.controlProjectionCiphertext = const Value.absent(),
+    this.controlRevision = const Value.absent(),
+    this.controlStateHash = const Value.absent(),
+    this.lifecycle = const Value.absent(),
+    this.pendingMutationId = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   MlsGroupsCompanion.insert({
@@ -8319,6 +8560,11 @@ class MlsGroupsCompanion extends UpdateCompanion<MlsGroup> {
     required int acceptedEpoch,
     required int stateVersion,
     this.queueGapRecoveryState = const Value.absent(),
+    this.controlProjectionCiphertext = const Value.absent(),
+    this.controlRevision = const Value.absent(),
+    this.controlStateHash = const Value.absent(),
+    this.lifecycle = const Value.absent(),
+    this.pendingMutationId = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : groupId = Value(groupId),
        opaqueCryptoStateHandle = Value(opaqueCryptoStateHandle),
@@ -8330,6 +8576,11 @@ class MlsGroupsCompanion extends UpdateCompanion<MlsGroup> {
     Expression<int>? acceptedEpoch,
     Expression<int>? stateVersion,
     Expression<int>? queueGapRecoveryState,
+    Expression<Uint8List>? controlProjectionCiphertext,
+    Expression<int>? controlRevision,
+    Expression<Uint8List>? controlStateHash,
+    Expression<int>? lifecycle,
+    Expression<String>? pendingMutationId,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -8340,6 +8591,12 @@ class MlsGroupsCompanion extends UpdateCompanion<MlsGroup> {
       if (stateVersion != null) 'state_version': stateVersion,
       if (queueGapRecoveryState != null)
         'queue_gap_recovery_state': queueGapRecoveryState,
+      if (controlProjectionCiphertext != null)
+        'control_projection_ciphertext': controlProjectionCiphertext,
+      if (controlRevision != null) 'control_revision': controlRevision,
+      if (controlStateHash != null) 'control_state_hash': controlStateHash,
+      if (lifecycle != null) 'lifecycle': lifecycle,
+      if (pendingMutationId != null) 'pending_mutation_id': pendingMutationId,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -8350,6 +8607,11 @@ class MlsGroupsCompanion extends UpdateCompanion<MlsGroup> {
     Value<int>? acceptedEpoch,
     Value<int>? stateVersion,
     Value<int>? queueGapRecoveryState,
+    Value<Uint8List?>? controlProjectionCiphertext,
+    Value<int>? controlRevision,
+    Value<Uint8List?>? controlStateHash,
+    Value<int>? lifecycle,
+    Value<String?>? pendingMutationId,
     Value<int>? rowid,
   }) {
     return MlsGroupsCompanion(
@@ -8360,6 +8622,12 @@ class MlsGroupsCompanion extends UpdateCompanion<MlsGroup> {
       stateVersion: stateVersion ?? this.stateVersion,
       queueGapRecoveryState:
           queueGapRecoveryState ?? this.queueGapRecoveryState,
+      controlProjectionCiphertext:
+          controlProjectionCiphertext ?? this.controlProjectionCiphertext,
+      controlRevision: controlRevision ?? this.controlRevision,
+      controlStateHash: controlStateHash ?? this.controlStateHash,
+      lifecycle: lifecycle ?? this.lifecycle,
+      pendingMutationId: pendingMutationId ?? this.pendingMutationId,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -8386,6 +8654,23 @@ class MlsGroupsCompanion extends UpdateCompanion<MlsGroup> {
         queueGapRecoveryState.value,
       );
     }
+    if (controlProjectionCiphertext.present) {
+      map['control_projection_ciphertext'] = Variable<Uint8List>(
+        controlProjectionCiphertext.value,
+      );
+    }
+    if (controlRevision.present) {
+      map['control_revision'] = Variable<int>(controlRevision.value);
+    }
+    if (controlStateHash.present) {
+      map['control_state_hash'] = Variable<Uint8List>(controlStateHash.value);
+    }
+    if (lifecycle.present) {
+      map['lifecycle'] = Variable<int>(lifecycle.value);
+    }
+    if (pendingMutationId.present) {
+      map['pending_mutation_id'] = Variable<String>(pendingMutationId.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -8400,6 +8685,1389 @@ class MlsGroupsCompanion extends UpdateCompanion<MlsGroup> {
           ..write('acceptedEpoch: $acceptedEpoch, ')
           ..write('stateVersion: $stateVersion, ')
           ..write('queueGapRecoveryState: $queueGapRecoveryState, ')
+          ..write('controlProjectionCiphertext: $controlProjectionCiphertext, ')
+          ..write('controlRevision: $controlRevision, ')
+          ..write('controlStateHash: $controlStateHash, ')
+          ..write('lifecycle: $lifecycle, ')
+          ..write('pendingMutationId: $pendingMutationId, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $GroupControlEventsTable extends GroupControlEvents
+    with TableInfo<$GroupControlEventsTable, StoredGroupControlEventRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $GroupControlEventsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _eventIdMeta = const VerificationMeta(
+    'eventId',
+  );
+  @override
+  late final GeneratedColumn<String> eventId = GeneratedColumn<String>(
+    'event_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _groupIdMeta = const VerificationMeta(
+    'groupId',
+  );
+  @override
+  late final GeneratedColumn<String> groupId = GeneratedColumn<String>(
+    'group_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES mls_groups (group_id) ON DELETE CASCADE',
+    ),
+  );
+  static const VerificationMeta _revisionMeta = const VerificationMeta(
+    'revision',
+  );
+  @override
+  late final GeneratedColumn<int> revision = GeneratedColumn<int>(
+    'revision',
+    aliasedName,
+    false,
+    check: () => ComparableExpr(revision).isBiggerThanValue(0),
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _previousControlStateHashMeta =
+      const VerificationMeta('previousControlStateHash');
+  @override
+  late final GeneratedColumn<Uint8List> previousControlStateHash =
+      GeneratedColumn<Uint8List>(
+        'previous_control_state_hash',
+        aliasedName,
+        true,
+        type: DriftSqlType.blob,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _controlStateHashMeta = const VerificationMeta(
+    'controlStateHash',
+  );
+  @override
+  late final GeneratedColumn<Uint8List> controlStateHash =
+      GeneratedColumn<Uint8List>(
+        'control_state_hash',
+        aliasedName,
+        false,
+        type: DriftSqlType.blob,
+        requiredDuringInsert: true,
+      );
+  static const VerificationMeta _mlsCommitHashMeta = const VerificationMeta(
+    'mlsCommitHash',
+  );
+  @override
+  late final GeneratedColumn<Uint8List> mlsCommitHash =
+      GeneratedColumn<Uint8List>(
+        'mls_commit_hash',
+        aliasedName,
+        true,
+        type: DriftSqlType.blob,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _epochMeta = const VerificationMeta('epoch');
+  @override
+  late final GeneratedColumn<int> epoch = GeneratedColumn<int>(
+    'epoch',
+    aliasedName,
+    false,
+    check: () => ComparableExpr(epoch).isBiggerOrEqualValue(0),
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _signerUserIdMeta = const VerificationMeta(
+    'signerUserId',
+  );
+  @override
+  late final GeneratedColumn<String> signerUserId = GeneratedColumn<String>(
+    'signer_user_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _signerDeviceIdMeta = const VerificationMeta(
+    'signerDeviceId',
+  );
+  @override
+  late final GeneratedColumn<String> signerDeviceId = GeneratedColumn<String>(
+    'signer_device_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _operationKindMeta = const VerificationMeta(
+    'operationKind',
+  );
+  @override
+  late final GeneratedColumn<int> operationKind = GeneratedColumn<int>(
+    'operation_kind',
+    aliasedName,
+    false,
+    check: () => ComparableExpr(operationKind).isBetweenValues(1, 8),
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _canonicalControlMeta = const VerificationMeta(
+    'canonicalControl',
+  );
+  @override
+  late final GeneratedColumn<Uint8List> canonicalControl =
+      GeneratedColumn<Uint8List>(
+        'canonical_control',
+        aliasedName,
+        false,
+        type: DriftSqlType.blob,
+        requiredDuringInsert: true,
+      );
+  static const VerificationMeta _signatureMeta = const VerificationMeta(
+    'signature',
+  );
+  @override
+  late final GeneratedColumn<Uint8List> signature = GeneratedColumn<Uint8List>(
+    'signature',
+    aliasedName,
+    false,
+    type: DriftSqlType.blob,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _applyStateMeta = const VerificationMeta(
+    'applyState',
+  );
+  @override
+  late final GeneratedColumn<int> applyState = GeneratedColumn<int>(
+    'apply_state',
+    aliasedName,
+    false,
+    check: () => ComparableExpr(applyState).isBetweenValues(0, 2),
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _createdMsMeta = const VerificationMeta(
+    'createdMs',
+  );
+  @override
+  late final GeneratedColumn<int> createdMs = GeneratedColumn<int>(
+    'created_ms',
+    aliasedName,
+    false,
+    check: () => ComparableExpr(createdMs).isBiggerOrEqualValue(0),
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    eventId,
+    groupId,
+    revision,
+    previousControlStateHash,
+    controlStateHash,
+    mlsCommitHash,
+    epoch,
+    signerUserId,
+    signerDeviceId,
+    operationKind,
+    canonicalControl,
+    signature,
+    applyState,
+    createdMs,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'group_control_events';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<StoredGroupControlEventRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('event_id')) {
+      context.handle(
+        _eventIdMeta,
+        eventId.isAcceptableOrUnknown(data['event_id']!, _eventIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_eventIdMeta);
+    }
+    if (data.containsKey('group_id')) {
+      context.handle(
+        _groupIdMeta,
+        groupId.isAcceptableOrUnknown(data['group_id']!, _groupIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_groupIdMeta);
+    }
+    if (data.containsKey('revision')) {
+      context.handle(
+        _revisionMeta,
+        revision.isAcceptableOrUnknown(data['revision']!, _revisionMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_revisionMeta);
+    }
+    if (data.containsKey('previous_control_state_hash')) {
+      context.handle(
+        _previousControlStateHashMeta,
+        previousControlStateHash.isAcceptableOrUnknown(
+          data['previous_control_state_hash']!,
+          _previousControlStateHashMeta,
+        ),
+      );
+    }
+    if (data.containsKey('control_state_hash')) {
+      context.handle(
+        _controlStateHashMeta,
+        controlStateHash.isAcceptableOrUnknown(
+          data['control_state_hash']!,
+          _controlStateHashMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_controlStateHashMeta);
+    }
+    if (data.containsKey('mls_commit_hash')) {
+      context.handle(
+        _mlsCommitHashMeta,
+        mlsCommitHash.isAcceptableOrUnknown(
+          data['mls_commit_hash']!,
+          _mlsCommitHashMeta,
+        ),
+      );
+    }
+    if (data.containsKey('epoch')) {
+      context.handle(
+        _epochMeta,
+        epoch.isAcceptableOrUnknown(data['epoch']!, _epochMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_epochMeta);
+    }
+    if (data.containsKey('signer_user_id')) {
+      context.handle(
+        _signerUserIdMeta,
+        signerUserId.isAcceptableOrUnknown(
+          data['signer_user_id']!,
+          _signerUserIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_signerUserIdMeta);
+    }
+    if (data.containsKey('signer_device_id')) {
+      context.handle(
+        _signerDeviceIdMeta,
+        signerDeviceId.isAcceptableOrUnknown(
+          data['signer_device_id']!,
+          _signerDeviceIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_signerDeviceIdMeta);
+    }
+    if (data.containsKey('operation_kind')) {
+      context.handle(
+        _operationKindMeta,
+        operationKind.isAcceptableOrUnknown(
+          data['operation_kind']!,
+          _operationKindMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_operationKindMeta);
+    }
+    if (data.containsKey('canonical_control')) {
+      context.handle(
+        _canonicalControlMeta,
+        canonicalControl.isAcceptableOrUnknown(
+          data['canonical_control']!,
+          _canonicalControlMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_canonicalControlMeta);
+    }
+    if (data.containsKey('signature')) {
+      context.handle(
+        _signatureMeta,
+        signature.isAcceptableOrUnknown(data['signature']!, _signatureMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_signatureMeta);
+    }
+    if (data.containsKey('apply_state')) {
+      context.handle(
+        _applyStateMeta,
+        applyState.isAcceptableOrUnknown(data['apply_state']!, _applyStateMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_applyStateMeta);
+    }
+    if (data.containsKey('created_ms')) {
+      context.handle(
+        _createdMsMeta,
+        createdMs.isAcceptableOrUnknown(data['created_ms']!, _createdMsMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdMsMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {eventId};
+  @override
+  List<Set<GeneratedColumn>> get uniqueKeys => [
+    {groupId, revision},
+  ];
+  @override
+  StoredGroupControlEventRow map(
+    Map<String, dynamic> data, {
+    String? tablePrefix,
+  }) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return StoredGroupControlEventRow(
+      eventId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}event_id'],
+      )!,
+      groupId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}group_id'],
+      )!,
+      revision: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}revision'],
+      )!,
+      previousControlStateHash: attachedDatabase.typeMapping.read(
+        DriftSqlType.blob,
+        data['${effectivePrefix}previous_control_state_hash'],
+      ),
+      controlStateHash: attachedDatabase.typeMapping.read(
+        DriftSqlType.blob,
+        data['${effectivePrefix}control_state_hash'],
+      )!,
+      mlsCommitHash: attachedDatabase.typeMapping.read(
+        DriftSqlType.blob,
+        data['${effectivePrefix}mls_commit_hash'],
+      ),
+      epoch: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}epoch'],
+      )!,
+      signerUserId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}signer_user_id'],
+      )!,
+      signerDeviceId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}signer_device_id'],
+      )!,
+      operationKind: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}operation_kind'],
+      )!,
+      canonicalControl: attachedDatabase.typeMapping.read(
+        DriftSqlType.blob,
+        data['${effectivePrefix}canonical_control'],
+      )!,
+      signature: attachedDatabase.typeMapping.read(
+        DriftSqlType.blob,
+        data['${effectivePrefix}signature'],
+      )!,
+      applyState: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}apply_state'],
+      )!,
+      createdMs: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}created_ms'],
+      )!,
+    );
+  }
+
+  @override
+  $GroupControlEventsTable createAlias(String alias) {
+    return $GroupControlEventsTable(attachedDatabase, alias);
+  }
+}
+
+class StoredGroupControlEventRow extends DataClass
+    implements Insertable<StoredGroupControlEventRow> {
+  final String eventId;
+  final String groupId;
+  final int revision;
+  final Uint8List? previousControlStateHash;
+  final Uint8List controlStateHash;
+  final Uint8List? mlsCommitHash;
+  final int epoch;
+  final String signerUserId;
+  final String signerDeviceId;
+  final int operationKind;
+  final Uint8List canonicalControl;
+  final Uint8List signature;
+  final int applyState;
+  final int createdMs;
+  const StoredGroupControlEventRow({
+    required this.eventId,
+    required this.groupId,
+    required this.revision,
+    this.previousControlStateHash,
+    required this.controlStateHash,
+    this.mlsCommitHash,
+    required this.epoch,
+    required this.signerUserId,
+    required this.signerDeviceId,
+    required this.operationKind,
+    required this.canonicalControl,
+    required this.signature,
+    required this.applyState,
+    required this.createdMs,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['event_id'] = Variable<String>(eventId);
+    map['group_id'] = Variable<String>(groupId);
+    map['revision'] = Variable<int>(revision);
+    if (!nullToAbsent || previousControlStateHash != null) {
+      map['previous_control_state_hash'] = Variable<Uint8List>(
+        previousControlStateHash,
+      );
+    }
+    map['control_state_hash'] = Variable<Uint8List>(controlStateHash);
+    if (!nullToAbsent || mlsCommitHash != null) {
+      map['mls_commit_hash'] = Variable<Uint8List>(mlsCommitHash);
+    }
+    map['epoch'] = Variable<int>(epoch);
+    map['signer_user_id'] = Variable<String>(signerUserId);
+    map['signer_device_id'] = Variable<String>(signerDeviceId);
+    map['operation_kind'] = Variable<int>(operationKind);
+    map['canonical_control'] = Variable<Uint8List>(canonicalControl);
+    map['signature'] = Variable<Uint8List>(signature);
+    map['apply_state'] = Variable<int>(applyState);
+    map['created_ms'] = Variable<int>(createdMs);
+    return map;
+  }
+
+  GroupControlEventsCompanion toCompanion(bool nullToAbsent) {
+    return GroupControlEventsCompanion(
+      eventId: Value(eventId),
+      groupId: Value(groupId),
+      revision: Value(revision),
+      previousControlStateHash: previousControlStateHash == null && nullToAbsent
+          ? const Value.absent()
+          : Value(previousControlStateHash),
+      controlStateHash: Value(controlStateHash),
+      mlsCommitHash: mlsCommitHash == null && nullToAbsent
+          ? const Value.absent()
+          : Value(mlsCommitHash),
+      epoch: Value(epoch),
+      signerUserId: Value(signerUserId),
+      signerDeviceId: Value(signerDeviceId),
+      operationKind: Value(operationKind),
+      canonicalControl: Value(canonicalControl),
+      signature: Value(signature),
+      applyState: Value(applyState),
+      createdMs: Value(createdMs),
+    );
+  }
+
+  factory StoredGroupControlEventRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return StoredGroupControlEventRow(
+      eventId: serializer.fromJson<String>(json['eventId']),
+      groupId: serializer.fromJson<String>(json['groupId']),
+      revision: serializer.fromJson<int>(json['revision']),
+      previousControlStateHash: serializer.fromJson<Uint8List?>(
+        json['previousControlStateHash'],
+      ),
+      controlStateHash: serializer.fromJson<Uint8List>(
+        json['controlStateHash'],
+      ),
+      mlsCommitHash: serializer.fromJson<Uint8List?>(json['mlsCommitHash']),
+      epoch: serializer.fromJson<int>(json['epoch']),
+      signerUserId: serializer.fromJson<String>(json['signerUserId']),
+      signerDeviceId: serializer.fromJson<String>(json['signerDeviceId']),
+      operationKind: serializer.fromJson<int>(json['operationKind']),
+      canonicalControl: serializer.fromJson<Uint8List>(
+        json['canonicalControl'],
+      ),
+      signature: serializer.fromJson<Uint8List>(json['signature']),
+      applyState: serializer.fromJson<int>(json['applyState']),
+      createdMs: serializer.fromJson<int>(json['createdMs']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'eventId': serializer.toJson<String>(eventId),
+      'groupId': serializer.toJson<String>(groupId),
+      'revision': serializer.toJson<int>(revision),
+      'previousControlStateHash': serializer.toJson<Uint8List?>(
+        previousControlStateHash,
+      ),
+      'controlStateHash': serializer.toJson<Uint8List>(controlStateHash),
+      'mlsCommitHash': serializer.toJson<Uint8List?>(mlsCommitHash),
+      'epoch': serializer.toJson<int>(epoch),
+      'signerUserId': serializer.toJson<String>(signerUserId),
+      'signerDeviceId': serializer.toJson<String>(signerDeviceId),
+      'operationKind': serializer.toJson<int>(operationKind),
+      'canonicalControl': serializer.toJson<Uint8List>(canonicalControl),
+      'signature': serializer.toJson<Uint8List>(signature),
+      'applyState': serializer.toJson<int>(applyState),
+      'createdMs': serializer.toJson<int>(createdMs),
+    };
+  }
+
+  StoredGroupControlEventRow copyWith({
+    String? eventId,
+    String? groupId,
+    int? revision,
+    Value<Uint8List?> previousControlStateHash = const Value.absent(),
+    Uint8List? controlStateHash,
+    Value<Uint8List?> mlsCommitHash = const Value.absent(),
+    int? epoch,
+    String? signerUserId,
+    String? signerDeviceId,
+    int? operationKind,
+    Uint8List? canonicalControl,
+    Uint8List? signature,
+    int? applyState,
+    int? createdMs,
+  }) => StoredGroupControlEventRow(
+    eventId: eventId ?? this.eventId,
+    groupId: groupId ?? this.groupId,
+    revision: revision ?? this.revision,
+    previousControlStateHash: previousControlStateHash.present
+        ? previousControlStateHash.value
+        : this.previousControlStateHash,
+    controlStateHash: controlStateHash ?? this.controlStateHash,
+    mlsCommitHash: mlsCommitHash.present
+        ? mlsCommitHash.value
+        : this.mlsCommitHash,
+    epoch: epoch ?? this.epoch,
+    signerUserId: signerUserId ?? this.signerUserId,
+    signerDeviceId: signerDeviceId ?? this.signerDeviceId,
+    operationKind: operationKind ?? this.operationKind,
+    canonicalControl: canonicalControl ?? this.canonicalControl,
+    signature: signature ?? this.signature,
+    applyState: applyState ?? this.applyState,
+    createdMs: createdMs ?? this.createdMs,
+  );
+  StoredGroupControlEventRow copyWithCompanion(
+    GroupControlEventsCompanion data,
+  ) {
+    return StoredGroupControlEventRow(
+      eventId: data.eventId.present ? data.eventId.value : this.eventId,
+      groupId: data.groupId.present ? data.groupId.value : this.groupId,
+      revision: data.revision.present ? data.revision.value : this.revision,
+      previousControlStateHash: data.previousControlStateHash.present
+          ? data.previousControlStateHash.value
+          : this.previousControlStateHash,
+      controlStateHash: data.controlStateHash.present
+          ? data.controlStateHash.value
+          : this.controlStateHash,
+      mlsCommitHash: data.mlsCommitHash.present
+          ? data.mlsCommitHash.value
+          : this.mlsCommitHash,
+      epoch: data.epoch.present ? data.epoch.value : this.epoch,
+      signerUserId: data.signerUserId.present
+          ? data.signerUserId.value
+          : this.signerUserId,
+      signerDeviceId: data.signerDeviceId.present
+          ? data.signerDeviceId.value
+          : this.signerDeviceId,
+      operationKind: data.operationKind.present
+          ? data.operationKind.value
+          : this.operationKind,
+      canonicalControl: data.canonicalControl.present
+          ? data.canonicalControl.value
+          : this.canonicalControl,
+      signature: data.signature.present ? data.signature.value : this.signature,
+      applyState: data.applyState.present
+          ? data.applyState.value
+          : this.applyState,
+      createdMs: data.createdMs.present ? data.createdMs.value : this.createdMs,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('StoredGroupControlEventRow(')
+          ..write('eventId: $eventId, ')
+          ..write('groupId: $groupId, ')
+          ..write('revision: $revision, ')
+          ..write('previousControlStateHash: $previousControlStateHash, ')
+          ..write('controlStateHash: $controlStateHash, ')
+          ..write('mlsCommitHash: $mlsCommitHash, ')
+          ..write('epoch: $epoch, ')
+          ..write('signerUserId: $signerUserId, ')
+          ..write('signerDeviceId: $signerDeviceId, ')
+          ..write('operationKind: $operationKind, ')
+          ..write('canonicalControl: $canonicalControl, ')
+          ..write('signature: $signature, ')
+          ..write('applyState: $applyState, ')
+          ..write('createdMs: $createdMs')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    eventId,
+    groupId,
+    revision,
+    $driftBlobEquality.hash(previousControlStateHash),
+    $driftBlobEquality.hash(controlStateHash),
+    $driftBlobEquality.hash(mlsCommitHash),
+    epoch,
+    signerUserId,
+    signerDeviceId,
+    operationKind,
+    $driftBlobEquality.hash(canonicalControl),
+    $driftBlobEquality.hash(signature),
+    applyState,
+    createdMs,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is StoredGroupControlEventRow &&
+          other.eventId == this.eventId &&
+          other.groupId == this.groupId &&
+          other.revision == this.revision &&
+          $driftBlobEquality.equals(
+            other.previousControlStateHash,
+            this.previousControlStateHash,
+          ) &&
+          $driftBlobEquality.equals(
+            other.controlStateHash,
+            this.controlStateHash,
+          ) &&
+          $driftBlobEquality.equals(other.mlsCommitHash, this.mlsCommitHash) &&
+          other.epoch == this.epoch &&
+          other.signerUserId == this.signerUserId &&
+          other.signerDeviceId == this.signerDeviceId &&
+          other.operationKind == this.operationKind &&
+          $driftBlobEquality.equals(
+            other.canonicalControl,
+            this.canonicalControl,
+          ) &&
+          $driftBlobEquality.equals(other.signature, this.signature) &&
+          other.applyState == this.applyState &&
+          other.createdMs == this.createdMs);
+}
+
+class GroupControlEventsCompanion
+    extends UpdateCompanion<StoredGroupControlEventRow> {
+  final Value<String> eventId;
+  final Value<String> groupId;
+  final Value<int> revision;
+  final Value<Uint8List?> previousControlStateHash;
+  final Value<Uint8List> controlStateHash;
+  final Value<Uint8List?> mlsCommitHash;
+  final Value<int> epoch;
+  final Value<String> signerUserId;
+  final Value<String> signerDeviceId;
+  final Value<int> operationKind;
+  final Value<Uint8List> canonicalControl;
+  final Value<Uint8List> signature;
+  final Value<int> applyState;
+  final Value<int> createdMs;
+  final Value<int> rowid;
+  const GroupControlEventsCompanion({
+    this.eventId = const Value.absent(),
+    this.groupId = const Value.absent(),
+    this.revision = const Value.absent(),
+    this.previousControlStateHash = const Value.absent(),
+    this.controlStateHash = const Value.absent(),
+    this.mlsCommitHash = const Value.absent(),
+    this.epoch = const Value.absent(),
+    this.signerUserId = const Value.absent(),
+    this.signerDeviceId = const Value.absent(),
+    this.operationKind = const Value.absent(),
+    this.canonicalControl = const Value.absent(),
+    this.signature = const Value.absent(),
+    this.applyState = const Value.absent(),
+    this.createdMs = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  GroupControlEventsCompanion.insert({
+    required String eventId,
+    required String groupId,
+    required int revision,
+    this.previousControlStateHash = const Value.absent(),
+    required Uint8List controlStateHash,
+    this.mlsCommitHash = const Value.absent(),
+    required int epoch,
+    required String signerUserId,
+    required String signerDeviceId,
+    required int operationKind,
+    required Uint8List canonicalControl,
+    required Uint8List signature,
+    required int applyState,
+    required int createdMs,
+    this.rowid = const Value.absent(),
+  }) : eventId = Value(eventId),
+       groupId = Value(groupId),
+       revision = Value(revision),
+       controlStateHash = Value(controlStateHash),
+       epoch = Value(epoch),
+       signerUserId = Value(signerUserId),
+       signerDeviceId = Value(signerDeviceId),
+       operationKind = Value(operationKind),
+       canonicalControl = Value(canonicalControl),
+       signature = Value(signature),
+       applyState = Value(applyState),
+       createdMs = Value(createdMs);
+  static Insertable<StoredGroupControlEventRow> custom({
+    Expression<String>? eventId,
+    Expression<String>? groupId,
+    Expression<int>? revision,
+    Expression<Uint8List>? previousControlStateHash,
+    Expression<Uint8List>? controlStateHash,
+    Expression<Uint8List>? mlsCommitHash,
+    Expression<int>? epoch,
+    Expression<String>? signerUserId,
+    Expression<String>? signerDeviceId,
+    Expression<int>? operationKind,
+    Expression<Uint8List>? canonicalControl,
+    Expression<Uint8List>? signature,
+    Expression<int>? applyState,
+    Expression<int>? createdMs,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (eventId != null) 'event_id': eventId,
+      if (groupId != null) 'group_id': groupId,
+      if (revision != null) 'revision': revision,
+      if (previousControlStateHash != null)
+        'previous_control_state_hash': previousControlStateHash,
+      if (controlStateHash != null) 'control_state_hash': controlStateHash,
+      if (mlsCommitHash != null) 'mls_commit_hash': mlsCommitHash,
+      if (epoch != null) 'epoch': epoch,
+      if (signerUserId != null) 'signer_user_id': signerUserId,
+      if (signerDeviceId != null) 'signer_device_id': signerDeviceId,
+      if (operationKind != null) 'operation_kind': operationKind,
+      if (canonicalControl != null) 'canonical_control': canonicalControl,
+      if (signature != null) 'signature': signature,
+      if (applyState != null) 'apply_state': applyState,
+      if (createdMs != null) 'created_ms': createdMs,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  GroupControlEventsCompanion copyWith({
+    Value<String>? eventId,
+    Value<String>? groupId,
+    Value<int>? revision,
+    Value<Uint8List?>? previousControlStateHash,
+    Value<Uint8List>? controlStateHash,
+    Value<Uint8List?>? mlsCommitHash,
+    Value<int>? epoch,
+    Value<String>? signerUserId,
+    Value<String>? signerDeviceId,
+    Value<int>? operationKind,
+    Value<Uint8List>? canonicalControl,
+    Value<Uint8List>? signature,
+    Value<int>? applyState,
+    Value<int>? createdMs,
+    Value<int>? rowid,
+  }) {
+    return GroupControlEventsCompanion(
+      eventId: eventId ?? this.eventId,
+      groupId: groupId ?? this.groupId,
+      revision: revision ?? this.revision,
+      previousControlStateHash:
+          previousControlStateHash ?? this.previousControlStateHash,
+      controlStateHash: controlStateHash ?? this.controlStateHash,
+      mlsCommitHash: mlsCommitHash ?? this.mlsCommitHash,
+      epoch: epoch ?? this.epoch,
+      signerUserId: signerUserId ?? this.signerUserId,
+      signerDeviceId: signerDeviceId ?? this.signerDeviceId,
+      operationKind: operationKind ?? this.operationKind,
+      canonicalControl: canonicalControl ?? this.canonicalControl,
+      signature: signature ?? this.signature,
+      applyState: applyState ?? this.applyState,
+      createdMs: createdMs ?? this.createdMs,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (eventId.present) {
+      map['event_id'] = Variable<String>(eventId.value);
+    }
+    if (groupId.present) {
+      map['group_id'] = Variable<String>(groupId.value);
+    }
+    if (revision.present) {
+      map['revision'] = Variable<int>(revision.value);
+    }
+    if (previousControlStateHash.present) {
+      map['previous_control_state_hash'] = Variable<Uint8List>(
+        previousControlStateHash.value,
+      );
+    }
+    if (controlStateHash.present) {
+      map['control_state_hash'] = Variable<Uint8List>(controlStateHash.value);
+    }
+    if (mlsCommitHash.present) {
+      map['mls_commit_hash'] = Variable<Uint8List>(mlsCommitHash.value);
+    }
+    if (epoch.present) {
+      map['epoch'] = Variable<int>(epoch.value);
+    }
+    if (signerUserId.present) {
+      map['signer_user_id'] = Variable<String>(signerUserId.value);
+    }
+    if (signerDeviceId.present) {
+      map['signer_device_id'] = Variable<String>(signerDeviceId.value);
+    }
+    if (operationKind.present) {
+      map['operation_kind'] = Variable<int>(operationKind.value);
+    }
+    if (canonicalControl.present) {
+      map['canonical_control'] = Variable<Uint8List>(canonicalControl.value);
+    }
+    if (signature.present) {
+      map['signature'] = Variable<Uint8List>(signature.value);
+    }
+    if (applyState.present) {
+      map['apply_state'] = Variable<int>(applyState.value);
+    }
+    if (createdMs.present) {
+      map['created_ms'] = Variable<int>(createdMs.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('GroupControlEventsCompanion(')
+          ..write('eventId: $eventId, ')
+          ..write('groupId: $groupId, ')
+          ..write('revision: $revision, ')
+          ..write('previousControlStateHash: $previousControlStateHash, ')
+          ..write('controlStateHash: $controlStateHash, ')
+          ..write('mlsCommitHash: $mlsCommitHash, ')
+          ..write('epoch: $epoch, ')
+          ..write('signerUserId: $signerUserId, ')
+          ..write('signerDeviceId: $signerDeviceId, ')
+          ..write('operationKind: $operationKind, ')
+          ..write('canonicalControl: $canonicalControl, ')
+          ..write('signature: $signature, ')
+          ..write('applyState: $applyState, ')
+          ..write('createdMs: $createdMs, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $GroupOutboundObjectsTable extends GroupOutboundObjects
+    with TableInfo<$GroupOutboundObjectsTable, StoredGroupOutboundObjectRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $GroupOutboundObjectsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _operationIdMeta = const VerificationMeta(
+    'operationId',
+  );
+  @override
+  late final GeneratedColumn<String> operationId = GeneratedColumn<String>(
+    'operation_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _groupIdMeta = const VerificationMeta(
+    'groupId',
+  );
+  @override
+  late final GeneratedColumn<String> groupId = GeneratedColumn<String>(
+    'group_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES mls_groups (group_id) ON DELETE CASCADE',
+    ),
+  );
+  static const VerificationMeta _eventIdMeta = const VerificationMeta(
+    'eventId',
+  );
+  @override
+  late final GeneratedColumn<String> eventId = GeneratedColumn<String>(
+    'event_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _epochMeta = const VerificationMeta('epoch');
+  @override
+  late final GeneratedColumn<int> epoch = GeneratedColumn<int>(
+    'epoch',
+    aliasedName,
+    false,
+    check: () => ComparableExpr(epoch).isBiggerOrEqualValue(0),
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _mlsObjectMeta = const VerificationMeta(
+    'mlsObject',
+  );
+  @override
+  late final GeneratedColumn<Uint8List> mlsObject = GeneratedColumn<Uint8List>(
+    'mls_object',
+    aliasedName,
+    false,
+    type: DriftSqlType.blob,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _deliveryStateMeta = const VerificationMeta(
+    'deliveryState',
+  );
+  @override
+  late final GeneratedColumn<int> deliveryState = GeneratedColumn<int>(
+    'delivery_state',
+    aliasedName,
+    false,
+    check: () => ComparableExpr(deliveryState).isBetweenValues(0, 2),
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    operationId,
+    groupId,
+    eventId,
+    epoch,
+    mlsObject,
+    deliveryState,
+    createdAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'group_outbound_objects';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<StoredGroupOutboundObjectRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('operation_id')) {
+      context.handle(
+        _operationIdMeta,
+        operationId.isAcceptableOrUnknown(
+          data['operation_id']!,
+          _operationIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_operationIdMeta);
+    }
+    if (data.containsKey('group_id')) {
+      context.handle(
+        _groupIdMeta,
+        groupId.isAcceptableOrUnknown(data['group_id']!, _groupIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_groupIdMeta);
+    }
+    if (data.containsKey('event_id')) {
+      context.handle(
+        _eventIdMeta,
+        eventId.isAcceptableOrUnknown(data['event_id']!, _eventIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_eventIdMeta);
+    }
+    if (data.containsKey('epoch')) {
+      context.handle(
+        _epochMeta,
+        epoch.isAcceptableOrUnknown(data['epoch']!, _epochMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_epochMeta);
+    }
+    if (data.containsKey('mls_object')) {
+      context.handle(
+        _mlsObjectMeta,
+        mlsObject.isAcceptableOrUnknown(data['mls_object']!, _mlsObjectMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_mlsObjectMeta);
+    }
+    if (data.containsKey('delivery_state')) {
+      context.handle(
+        _deliveryStateMeta,
+        deliveryState.isAcceptableOrUnknown(
+          data['delivery_state']!,
+          _deliveryStateMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_deliveryStateMeta);
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {operationId};
+  @override
+  StoredGroupOutboundObjectRow map(
+    Map<String, dynamic> data, {
+    String? tablePrefix,
+  }) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return StoredGroupOutboundObjectRow(
+      operationId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}operation_id'],
+      )!,
+      groupId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}group_id'],
+      )!,
+      eventId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}event_id'],
+      )!,
+      epoch: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}epoch'],
+      )!,
+      mlsObject: attachedDatabase.typeMapping.read(
+        DriftSqlType.blob,
+        data['${effectivePrefix}mls_object'],
+      )!,
+      deliveryState: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}delivery_state'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+    );
+  }
+
+  @override
+  $GroupOutboundObjectsTable createAlias(String alias) {
+    return $GroupOutboundObjectsTable(attachedDatabase, alias);
+  }
+}
+
+class StoredGroupOutboundObjectRow extends DataClass
+    implements Insertable<StoredGroupOutboundObjectRow> {
+  final String operationId;
+  final String groupId;
+  final String eventId;
+  final int epoch;
+  final Uint8List mlsObject;
+  final int deliveryState;
+  final DateTime createdAt;
+  const StoredGroupOutboundObjectRow({
+    required this.operationId,
+    required this.groupId,
+    required this.eventId,
+    required this.epoch,
+    required this.mlsObject,
+    required this.deliveryState,
+    required this.createdAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['operation_id'] = Variable<String>(operationId);
+    map['group_id'] = Variable<String>(groupId);
+    map['event_id'] = Variable<String>(eventId);
+    map['epoch'] = Variable<int>(epoch);
+    map['mls_object'] = Variable<Uint8List>(mlsObject);
+    map['delivery_state'] = Variable<int>(deliveryState);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    return map;
+  }
+
+  GroupOutboundObjectsCompanion toCompanion(bool nullToAbsent) {
+    return GroupOutboundObjectsCompanion(
+      operationId: Value(operationId),
+      groupId: Value(groupId),
+      eventId: Value(eventId),
+      epoch: Value(epoch),
+      mlsObject: Value(mlsObject),
+      deliveryState: Value(deliveryState),
+      createdAt: Value(createdAt),
+    );
+  }
+
+  factory StoredGroupOutboundObjectRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return StoredGroupOutboundObjectRow(
+      operationId: serializer.fromJson<String>(json['operationId']),
+      groupId: serializer.fromJson<String>(json['groupId']),
+      eventId: serializer.fromJson<String>(json['eventId']),
+      epoch: serializer.fromJson<int>(json['epoch']),
+      mlsObject: serializer.fromJson<Uint8List>(json['mlsObject']),
+      deliveryState: serializer.fromJson<int>(json['deliveryState']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'operationId': serializer.toJson<String>(operationId),
+      'groupId': serializer.toJson<String>(groupId),
+      'eventId': serializer.toJson<String>(eventId),
+      'epoch': serializer.toJson<int>(epoch),
+      'mlsObject': serializer.toJson<Uint8List>(mlsObject),
+      'deliveryState': serializer.toJson<int>(deliveryState),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+    };
+  }
+
+  StoredGroupOutboundObjectRow copyWith({
+    String? operationId,
+    String? groupId,
+    String? eventId,
+    int? epoch,
+    Uint8List? mlsObject,
+    int? deliveryState,
+    DateTime? createdAt,
+  }) => StoredGroupOutboundObjectRow(
+    operationId: operationId ?? this.operationId,
+    groupId: groupId ?? this.groupId,
+    eventId: eventId ?? this.eventId,
+    epoch: epoch ?? this.epoch,
+    mlsObject: mlsObject ?? this.mlsObject,
+    deliveryState: deliveryState ?? this.deliveryState,
+    createdAt: createdAt ?? this.createdAt,
+  );
+  StoredGroupOutboundObjectRow copyWithCompanion(
+    GroupOutboundObjectsCompanion data,
+  ) {
+    return StoredGroupOutboundObjectRow(
+      operationId: data.operationId.present
+          ? data.operationId.value
+          : this.operationId,
+      groupId: data.groupId.present ? data.groupId.value : this.groupId,
+      eventId: data.eventId.present ? data.eventId.value : this.eventId,
+      epoch: data.epoch.present ? data.epoch.value : this.epoch,
+      mlsObject: data.mlsObject.present ? data.mlsObject.value : this.mlsObject,
+      deliveryState: data.deliveryState.present
+          ? data.deliveryState.value
+          : this.deliveryState,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('StoredGroupOutboundObjectRow(')
+          ..write('operationId: $operationId, ')
+          ..write('groupId: $groupId, ')
+          ..write('eventId: $eventId, ')
+          ..write('epoch: $epoch, ')
+          ..write('mlsObject: $mlsObject, ')
+          ..write('deliveryState: $deliveryState, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    operationId,
+    groupId,
+    eventId,
+    epoch,
+    $driftBlobEquality.hash(mlsObject),
+    deliveryState,
+    createdAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is StoredGroupOutboundObjectRow &&
+          other.operationId == this.operationId &&
+          other.groupId == this.groupId &&
+          other.eventId == this.eventId &&
+          other.epoch == this.epoch &&
+          $driftBlobEquality.equals(other.mlsObject, this.mlsObject) &&
+          other.deliveryState == this.deliveryState &&
+          other.createdAt == this.createdAt);
+}
+
+class GroupOutboundObjectsCompanion
+    extends UpdateCompanion<StoredGroupOutboundObjectRow> {
+  final Value<String> operationId;
+  final Value<String> groupId;
+  final Value<String> eventId;
+  final Value<int> epoch;
+  final Value<Uint8List> mlsObject;
+  final Value<int> deliveryState;
+  final Value<DateTime> createdAt;
+  final Value<int> rowid;
+  const GroupOutboundObjectsCompanion({
+    this.operationId = const Value.absent(),
+    this.groupId = const Value.absent(),
+    this.eventId = const Value.absent(),
+    this.epoch = const Value.absent(),
+    this.mlsObject = const Value.absent(),
+    this.deliveryState = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  GroupOutboundObjectsCompanion.insert({
+    required String operationId,
+    required String groupId,
+    required String eventId,
+    required int epoch,
+    required Uint8List mlsObject,
+    required int deliveryState,
+    this.createdAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : operationId = Value(operationId),
+       groupId = Value(groupId),
+       eventId = Value(eventId),
+       epoch = Value(epoch),
+       mlsObject = Value(mlsObject),
+       deliveryState = Value(deliveryState);
+  static Insertable<StoredGroupOutboundObjectRow> custom({
+    Expression<String>? operationId,
+    Expression<String>? groupId,
+    Expression<String>? eventId,
+    Expression<int>? epoch,
+    Expression<Uint8List>? mlsObject,
+    Expression<int>? deliveryState,
+    Expression<DateTime>? createdAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (operationId != null) 'operation_id': operationId,
+      if (groupId != null) 'group_id': groupId,
+      if (eventId != null) 'event_id': eventId,
+      if (epoch != null) 'epoch': epoch,
+      if (mlsObject != null) 'mls_object': mlsObject,
+      if (deliveryState != null) 'delivery_state': deliveryState,
+      if (createdAt != null) 'created_at': createdAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  GroupOutboundObjectsCompanion copyWith({
+    Value<String>? operationId,
+    Value<String>? groupId,
+    Value<String>? eventId,
+    Value<int>? epoch,
+    Value<Uint8List>? mlsObject,
+    Value<int>? deliveryState,
+    Value<DateTime>? createdAt,
+    Value<int>? rowid,
+  }) {
+    return GroupOutboundObjectsCompanion(
+      operationId: operationId ?? this.operationId,
+      groupId: groupId ?? this.groupId,
+      eventId: eventId ?? this.eventId,
+      epoch: epoch ?? this.epoch,
+      mlsObject: mlsObject ?? this.mlsObject,
+      deliveryState: deliveryState ?? this.deliveryState,
+      createdAt: createdAt ?? this.createdAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (operationId.present) {
+      map['operation_id'] = Variable<String>(operationId.value);
+    }
+    if (groupId.present) {
+      map['group_id'] = Variable<String>(groupId.value);
+    }
+    if (eventId.present) {
+      map['event_id'] = Variable<String>(eventId.value);
+    }
+    if (epoch.present) {
+      map['epoch'] = Variable<int>(epoch.value);
+    }
+    if (mlsObject.present) {
+      map['mls_object'] = Variable<Uint8List>(mlsObject.value);
+    }
+    if (deliveryState.present) {
+      map['delivery_state'] = Variable<int>(deliveryState.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('GroupOutboundObjectsCompanion(')
+          ..write('operationId: $operationId, ')
+          ..write('groupId: $groupId, ')
+          ..write('eventId: $eventId, ')
+          ..write('epoch: $epoch, ')
+          ..write('mlsObject: $mlsObject, ')
+          ..write('deliveryState: $deliveryState, ')
+          ..write('createdAt: $createdAt, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -8541,6 +10209,17 @@ class $ConversationsTable extends Conversations
         type: DriftSqlType.blob,
         requiredDuringInsert: false,
       );
+  static const VerificationMeta _displayTitleCiphertextMeta =
+      const VerificationMeta('displayTitleCiphertext');
+  @override
+  late final GeneratedColumn<Uint8List> displayTitleCiphertext =
+      GeneratedColumn<Uint8List>(
+        'display_title_ciphertext',
+        aliasedName,
+        true,
+        type: DriftSqlType.blob,
+        requiredDuringInsert: false,
+      );
   @override
   List<GeneratedColumn> get $columns => [
     conversationId,
@@ -8554,6 +10233,7 @@ class $ConversationsTable extends Conversations
     unreadCount,
     mutedUntil,
     draftCiphertext,
+    displayTitleCiphertext,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -8659,6 +10339,15 @@ class $ConversationsTable extends Conversations
         ),
       );
     }
+    if (data.containsKey('display_title_ciphertext')) {
+      context.handle(
+        _displayTitleCiphertextMeta,
+        displayTitleCiphertext.isAcceptableOrUnknown(
+          data['display_title_ciphertext']!,
+          _displayTitleCiphertextMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -8712,6 +10401,10 @@ class $ConversationsTable extends Conversations
         DriftSqlType.blob,
         data['${effectivePrefix}draft_ciphertext'],
       ),
+      displayTitleCiphertext: attachedDatabase.typeMapping.read(
+        DriftSqlType.blob,
+        data['${effectivePrefix}display_title_ciphertext'],
+      ),
     );
   }
 
@@ -8733,6 +10426,7 @@ class Conversation extends DataClass implements Insertable<Conversation> {
   final int unreadCount;
   final DateTime? mutedUntil;
   final Uint8List? draftCiphertext;
+  final Uint8List? displayTitleCiphertext;
   const Conversation({
     required this.conversationId,
     required this.kind,
@@ -8745,6 +10439,7 @@ class Conversation extends DataClass implements Insertable<Conversation> {
     required this.unreadCount,
     this.mutedUntil,
     this.draftCiphertext,
+    this.displayTitleCiphertext,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -8770,6 +10465,11 @@ class Conversation extends DataClass implements Insertable<Conversation> {
     if (!nullToAbsent || draftCiphertext != null) {
       map['draft_ciphertext'] = Variable<Uint8List>(draftCiphertext);
     }
+    if (!nullToAbsent || displayTitleCiphertext != null) {
+      map['display_title_ciphertext'] = Variable<Uint8List>(
+        displayTitleCiphertext,
+      );
+    }
     return map;
   }
 
@@ -8794,6 +10494,9 @@ class Conversation extends DataClass implements Insertable<Conversation> {
       draftCiphertext: draftCiphertext == null && nullToAbsent
           ? const Value.absent()
           : Value(draftCiphertext),
+      displayTitleCiphertext: displayTitleCiphertext == null && nullToAbsent
+          ? const Value.absent()
+          : Value(displayTitleCiphertext),
     );
   }
 
@@ -8818,6 +10521,9 @@ class Conversation extends DataClass implements Insertable<Conversation> {
       unreadCount: serializer.fromJson<int>(json['unreadCount']),
       mutedUntil: serializer.fromJson<DateTime?>(json['mutedUntil']),
       draftCiphertext: serializer.fromJson<Uint8List?>(json['draftCiphertext']),
+      displayTitleCiphertext: serializer.fromJson<Uint8List?>(
+        json['displayTitleCiphertext'],
+      ),
     );
   }
   @override
@@ -8837,6 +10543,9 @@ class Conversation extends DataClass implements Insertable<Conversation> {
       'unreadCount': serializer.toJson<int>(unreadCount),
       'mutedUntil': serializer.toJson<DateTime?>(mutedUntil),
       'draftCiphertext': serializer.toJson<Uint8List?>(draftCiphertext),
+      'displayTitleCiphertext': serializer.toJson<Uint8List?>(
+        displayTitleCiphertext,
+      ),
     };
   }
 
@@ -8852,6 +10561,7 @@ class Conversation extends DataClass implements Insertable<Conversation> {
     int? unreadCount,
     Value<DateTime?> mutedUntil = const Value.absent(),
     Value<Uint8List?> draftCiphertext = const Value.absent(),
+    Value<Uint8List?> displayTitleCiphertext = const Value.absent(),
   }) => Conversation(
     conversationId: conversationId ?? this.conversationId,
     kind: kind ?? this.kind,
@@ -8869,6 +10579,9 @@ class Conversation extends DataClass implements Insertable<Conversation> {
     draftCiphertext: draftCiphertext.present
         ? draftCiphertext.value
         : this.draftCiphertext,
+    displayTitleCiphertext: displayTitleCiphertext.present
+        ? displayTitleCiphertext.value
+        : this.displayTitleCiphertext,
   );
   Conversation copyWithCompanion(ConversationsCompanion data) {
     return Conversation(
@@ -8899,6 +10612,9 @@ class Conversation extends DataClass implements Insertable<Conversation> {
       draftCiphertext: data.draftCiphertext.present
           ? data.draftCiphertext.value
           : this.draftCiphertext,
+      displayTitleCiphertext: data.displayTitleCiphertext.present
+          ? data.displayTitleCiphertext.value
+          : this.displayTitleCiphertext,
     );
   }
 
@@ -8915,7 +10631,8 @@ class Conversation extends DataClass implements Insertable<Conversation> {
           ..write('lastActivityEventId: $lastActivityEventId, ')
           ..write('unreadCount: $unreadCount, ')
           ..write('mutedUntil: $mutedUntil, ')
-          ..write('draftCiphertext: $draftCiphertext')
+          ..write('draftCiphertext: $draftCiphertext, ')
+          ..write('displayTitleCiphertext: $displayTitleCiphertext')
           ..write(')'))
         .toString();
   }
@@ -8933,6 +10650,7 @@ class Conversation extends DataClass implements Insertable<Conversation> {
     unreadCount,
     mutedUntil,
     $driftBlobEquality.hash(draftCiphertext),
+    $driftBlobEquality.hash(displayTitleCiphertext),
   );
   @override
   bool operator ==(Object other) =>
@@ -8954,6 +10672,10 @@ class Conversation extends DataClass implements Insertable<Conversation> {
           $driftBlobEquality.equals(
             other.draftCiphertext,
             this.draftCiphertext,
+          ) &&
+          $driftBlobEquality.equals(
+            other.displayTitleCiphertext,
+            this.displayTitleCiphertext,
           ));
 }
 
@@ -8969,6 +10691,7 @@ class ConversationsCompanion extends UpdateCompanion<Conversation> {
   final Value<int> unreadCount;
   final Value<DateTime?> mutedUntil;
   final Value<Uint8List?> draftCiphertext;
+  final Value<Uint8List?> displayTitleCiphertext;
   final Value<int> rowid;
   const ConversationsCompanion({
     this.conversationId = const Value.absent(),
@@ -8982,6 +10705,7 @@ class ConversationsCompanion extends UpdateCompanion<Conversation> {
     this.unreadCount = const Value.absent(),
     this.mutedUntil = const Value.absent(),
     this.draftCiphertext = const Value.absent(),
+    this.displayTitleCiphertext = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   ConversationsCompanion.insert({
@@ -8996,6 +10720,7 @@ class ConversationsCompanion extends UpdateCompanion<Conversation> {
     this.unreadCount = const Value.absent(),
     this.mutedUntil = const Value.absent(),
     this.draftCiphertext = const Value.absent(),
+    this.displayTitleCiphertext = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : conversationId = Value(conversationId),
        kind = Value(kind),
@@ -9013,6 +10738,7 @@ class ConversationsCompanion extends UpdateCompanion<Conversation> {
     Expression<int>? unreadCount,
     Expression<DateTime>? mutedUntil,
     Expression<Uint8List>? draftCiphertext,
+    Expression<Uint8List>? displayTitleCiphertext,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -9029,6 +10755,8 @@ class ConversationsCompanion extends UpdateCompanion<Conversation> {
       if (unreadCount != null) 'unread_count': unreadCount,
       if (mutedUntil != null) 'muted_until': mutedUntil,
       if (draftCiphertext != null) 'draft_ciphertext': draftCiphertext,
+      if (displayTitleCiphertext != null)
+        'display_title_ciphertext': displayTitleCiphertext,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -9045,6 +10773,7 @@ class ConversationsCompanion extends UpdateCompanion<Conversation> {
     Value<int>? unreadCount,
     Value<DateTime?>? mutedUntil,
     Value<Uint8List?>? draftCiphertext,
+    Value<Uint8List?>? displayTitleCiphertext,
     Value<int>? rowid,
   }) {
     return ConversationsCompanion(
@@ -9060,6 +10789,8 @@ class ConversationsCompanion extends UpdateCompanion<Conversation> {
       unreadCount: unreadCount ?? this.unreadCount,
       mutedUntil: mutedUntil ?? this.mutedUntil,
       draftCiphertext: draftCiphertext ?? this.draftCiphertext,
+      displayTitleCiphertext:
+          displayTitleCiphertext ?? this.displayTitleCiphertext,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -9104,6 +10835,11 @@ class ConversationsCompanion extends UpdateCompanion<Conversation> {
     if (draftCiphertext.present) {
       map['draft_ciphertext'] = Variable<Uint8List>(draftCiphertext.value);
     }
+    if (displayTitleCiphertext.present) {
+      map['display_title_ciphertext'] = Variable<Uint8List>(
+        displayTitleCiphertext.value,
+      );
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -9124,6 +10860,7 @@ class ConversationsCompanion extends UpdateCompanion<Conversation> {
           ..write('unreadCount: $unreadCount, ')
           ..write('mutedUntil: $mutedUntil, ')
           ..write('draftCiphertext: $draftCiphertext, ')
+          ..write('displayTitleCiphertext: $displayTitleCiphertext, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -21513,6 +23250,10 @@ abstract class _$LocalDatabase extends GeneratedDatabase {
   late final $PrekeyMaintenancePlansTable prekeyMaintenancePlans =
       $PrekeyMaintenancePlansTable(this);
   late final $MlsGroupsTable mlsGroups = $MlsGroupsTable(this);
+  late final $GroupControlEventsTable groupControlEvents =
+      $GroupControlEventsTable(this);
+  late final $GroupOutboundObjectsTable groupOutboundObjects =
+      $GroupOutboundObjectsTable(this);
   late final $ConversationsTable conversations = $ConversationsTable(this);
   late final $MembershipsTable memberships = $MembershipsTable(this);
   late final $MessagesTable messages = $MessagesTable(this);
@@ -21580,6 +23321,8 @@ abstract class _$LocalDatabase extends GeneratedDatabase {
     prekeys,
     prekeyMaintenancePlans,
     mlsGroups,
+    groupControlEvents,
+    groupOutboundObjects,
     conversations,
     memberships,
     messages,
@@ -21628,6 +23371,20 @@ abstract class _$LocalDatabase extends GeneratedDatabase {
         limitUpdateKind: UpdateKind.delete,
       ),
       result: [TableUpdate('device_log', kind: UpdateKind.delete)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'mls_groups',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('group_control_events', kind: UpdateKind.delete)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'mls_groups',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('group_outbound_objects', kind: UpdateKind.delete)],
     ),
     WritePropagation(
       on: TableUpdateQuery.onTableName(
@@ -26327,6 +28084,11 @@ typedef $$MlsGroupsTableCreateCompanionBuilder =
       required int acceptedEpoch,
       required int stateVersion,
       Value<int> queueGapRecoveryState,
+      Value<Uint8List?> controlProjectionCiphertext,
+      Value<int> controlRevision,
+      Value<Uint8List?> controlStateHash,
+      Value<int> lifecycle,
+      Value<String?> pendingMutationId,
       Value<int> rowid,
     });
 typedef $$MlsGroupsTableUpdateCompanionBuilder =
@@ -26336,8 +28098,73 @@ typedef $$MlsGroupsTableUpdateCompanionBuilder =
       Value<int> acceptedEpoch,
       Value<int> stateVersion,
       Value<int> queueGapRecoveryState,
+      Value<Uint8List?> controlProjectionCiphertext,
+      Value<int> controlRevision,
+      Value<Uint8List?> controlStateHash,
+      Value<int> lifecycle,
+      Value<String?> pendingMutationId,
       Value<int> rowid,
     });
+
+final class $$MlsGroupsTableReferences
+    extends BaseReferences<_$LocalDatabase, $MlsGroupsTable, MlsGroup> {
+  $$MlsGroupsTableReferences(super.$_db, super.$_table, super.$_typedResult);
+
+  static MultiTypedResultKey<
+    $GroupControlEventsTable,
+    List<StoredGroupControlEventRow>
+  >
+  _groupControlEventsRefsTable(_$LocalDatabase db) =>
+      MultiTypedResultKey.fromTable(
+        db.groupControlEvents,
+        aliasName: 'mls_groups__group_id__group_control_events__group_id',
+      );
+
+  $$GroupControlEventsTableProcessedTableManager get groupControlEventsRefs {
+    final manager =
+        $$GroupControlEventsTableTableManager(
+          $_db,
+          $_db.groupControlEvents,
+        ).filter(
+          (f) => f.groupId.groupId.sqlEquals($_itemColumn<String>('group_id')!),
+        );
+
+    final cache = $_typedResult.readTableOrNull(
+      _groupControlEventsRefsTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<
+    $GroupOutboundObjectsTable,
+    List<StoredGroupOutboundObjectRow>
+  >
+  _groupOutboundObjectsRefsTable(_$LocalDatabase db) =>
+      MultiTypedResultKey.fromTable(
+        db.groupOutboundObjects,
+        aliasName: 'mls_groups__group_id__group_outbound_objects__group_id',
+      );
+
+  $$GroupOutboundObjectsTableProcessedTableManager
+  get groupOutboundObjectsRefs {
+    final manager =
+        $$GroupOutboundObjectsTableTableManager(
+          $_db,
+          $_db.groupOutboundObjects,
+        ).filter(
+          (f) => f.groupId.groupId.sqlEquals($_itemColumn<String>('group_id')!),
+        );
+
+    final cache = $_typedResult.readTableOrNull(
+      _groupOutboundObjectsRefsTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+}
 
 class $$MlsGroupsTableFilterComposer
     extends Composer<_$LocalDatabase, $MlsGroupsTable> {
@@ -26372,6 +28199,82 @@ class $$MlsGroupsTableFilterComposer
     column: $table.queueGapRecoveryState,
     builder: (column) => ColumnFilters(column),
   );
+
+  ColumnFilters<Uint8List> get controlProjectionCiphertext =>
+      $composableBuilder(
+        column: $table.controlProjectionCiphertext,
+        builder: (column) => ColumnFilters(column),
+      );
+
+  ColumnFilters<int> get controlRevision => $composableBuilder(
+    column: $table.controlRevision,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<Uint8List> get controlStateHash => $composableBuilder(
+    column: $table.controlStateHash,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get lifecycle => $composableBuilder(
+    column: $table.lifecycle,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get pendingMutationId => $composableBuilder(
+    column: $table.pendingMutationId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  Expression<bool> groupControlEventsRefs(
+    Expression<bool> Function($$GroupControlEventsTableFilterComposer f) f,
+  ) {
+    final $$GroupControlEventsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.groupId,
+      referencedTable: $db.groupControlEvents,
+      getReferencedColumn: (t) => t.groupId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$GroupControlEventsTableFilterComposer(
+            $db: $db,
+            $table: $db.groupControlEvents,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> groupOutboundObjectsRefs(
+    Expression<bool> Function($$GroupOutboundObjectsTableFilterComposer f) f,
+  ) {
+    final $$GroupOutboundObjectsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.groupId,
+      referencedTable: $db.groupOutboundObjects,
+      getReferencedColumn: (t) => t.groupId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$GroupOutboundObjectsTableFilterComposer(
+            $db: $db,
+            $table: $db.groupOutboundObjects,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
 }
 
 class $$MlsGroupsTableOrderingComposer
@@ -26407,6 +28310,32 @@ class $$MlsGroupsTableOrderingComposer
     column: $table.queueGapRecoveryState,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<Uint8List> get controlProjectionCiphertext =>
+      $composableBuilder(
+        column: $table.controlProjectionCiphertext,
+        builder: (column) => ColumnOrderings(column),
+      );
+
+  ColumnOrderings<int> get controlRevision => $composableBuilder(
+    column: $table.controlRevision,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<Uint8List> get controlStateHash => $composableBuilder(
+    column: $table.controlStateHash,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get lifecycle => $composableBuilder(
+    column: $table.lifecycle,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get pendingMutationId => $composableBuilder(
+    column: $table.pendingMutationId,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$MlsGroupsTableAnnotationComposer
@@ -26440,6 +28369,82 @@ class $$MlsGroupsTableAnnotationComposer
     column: $table.queueGapRecoveryState,
     builder: (column) => column,
   );
+
+  GeneratedColumn<Uint8List> get controlProjectionCiphertext =>
+      $composableBuilder(
+        column: $table.controlProjectionCiphertext,
+        builder: (column) => column,
+      );
+
+  GeneratedColumn<int> get controlRevision => $composableBuilder(
+    column: $table.controlRevision,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<Uint8List> get controlStateHash => $composableBuilder(
+    column: $table.controlStateHash,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get lifecycle =>
+      $composableBuilder(column: $table.lifecycle, builder: (column) => column);
+
+  GeneratedColumn<String> get pendingMutationId => $composableBuilder(
+    column: $table.pendingMutationId,
+    builder: (column) => column,
+  );
+
+  Expression<T> groupControlEventsRefs<T extends Object>(
+    Expression<T> Function($$GroupControlEventsTableAnnotationComposer a) f,
+  ) {
+    final $$GroupControlEventsTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.groupId,
+          referencedTable: $db.groupControlEvents,
+          getReferencedColumn: (t) => t.groupId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$GroupControlEventsTableAnnotationComposer(
+                $db: $db,
+                $table: $db.groupControlEvents,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
+
+  Expression<T> groupOutboundObjectsRefs<T extends Object>(
+    Expression<T> Function($$GroupOutboundObjectsTableAnnotationComposer a) f,
+  ) {
+    final $$GroupOutboundObjectsTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.groupId,
+          referencedTable: $db.groupOutboundObjects,
+          getReferencedColumn: (t) => t.groupId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$GroupOutboundObjectsTableAnnotationComposer(
+                $db: $db,
+                $table: $db.groupOutboundObjects,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
 }
 
 class $$MlsGroupsTableTableManager
@@ -26453,12 +28458,12 @@ class $$MlsGroupsTableTableManager
           $$MlsGroupsTableAnnotationComposer,
           $$MlsGroupsTableCreateCompanionBuilder,
           $$MlsGroupsTableUpdateCompanionBuilder,
-          (
-            MlsGroup,
-            BaseReferences<_$LocalDatabase, $MlsGroupsTable, MlsGroup>,
-          ),
+          (MlsGroup, $$MlsGroupsTableReferences),
           MlsGroup,
-          PrefetchHooks Function()
+          PrefetchHooks Function({
+            bool groupControlEventsRefs,
+            bool groupOutboundObjectsRefs,
+          })
         > {
   $$MlsGroupsTableTableManager(_$LocalDatabase db, $MlsGroupsTable table)
     : super(
@@ -26478,6 +28483,12 @@ class $$MlsGroupsTableTableManager
                 Value<int> acceptedEpoch = const Value.absent(),
                 Value<int> stateVersion = const Value.absent(),
                 Value<int> queueGapRecoveryState = const Value.absent(),
+                Value<Uint8List?> controlProjectionCiphertext =
+                    const Value.absent(),
+                Value<int> controlRevision = const Value.absent(),
+                Value<Uint8List?> controlStateHash = const Value.absent(),
+                Value<int> lifecycle = const Value.absent(),
+                Value<String?> pendingMutationId = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => MlsGroupsCompanion(
                 groupId: groupId,
@@ -26485,6 +28496,11 @@ class $$MlsGroupsTableTableManager
                 acceptedEpoch: acceptedEpoch,
                 stateVersion: stateVersion,
                 queueGapRecoveryState: queueGapRecoveryState,
+                controlProjectionCiphertext: controlProjectionCiphertext,
+                controlRevision: controlRevision,
+                controlStateHash: controlStateHash,
+                lifecycle: lifecycle,
+                pendingMutationId: pendingMutationId,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -26494,6 +28510,12 @@ class $$MlsGroupsTableTableManager
                 required int acceptedEpoch,
                 required int stateVersion,
                 Value<int> queueGapRecoveryState = const Value.absent(),
+                Value<Uint8List?> controlProjectionCiphertext =
+                    const Value.absent(),
+                Value<int> controlRevision = const Value.absent(),
+                Value<Uint8List?> controlStateHash = const Value.absent(),
+                Value<int> lifecycle = const Value.absent(),
+                Value<String?> pendingMutationId = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => MlsGroupsCompanion.insert(
                 groupId: groupId,
@@ -26501,12 +28523,81 @@ class $$MlsGroupsTableTableManager
                 acceptedEpoch: acceptedEpoch,
                 stateVersion: stateVersion,
                 queueGapRecoveryState: queueGapRecoveryState,
+                controlProjectionCiphertext: controlProjectionCiphertext,
+                controlRevision: controlRevision,
+                controlStateHash: controlStateHash,
+                lifecycle: lifecycle,
+                pendingMutationId: pendingMutationId,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$MlsGroupsTableReferences(db, table, e),
+                ),
+              )
               .toList(),
-          prefetchHooksCallback: null,
+          prefetchHooksCallback:
+              ({
+                groupControlEventsRefs = false,
+                groupOutboundObjectsRefs = false,
+              }) {
+                return PrefetchHooks(
+                  db: db,
+                  explicitlyWatchedTables: [
+                    if (groupControlEventsRefs) db.groupControlEvents,
+                    if (groupOutboundObjectsRefs) db.groupOutboundObjects,
+                  ],
+                  addJoins: null,
+                  getPrefetchedDataCallback: (items) async {
+                    return [
+                      if (groupControlEventsRefs)
+                        await $_getPrefetchedData<
+                          MlsGroup,
+                          $MlsGroupsTable,
+                          StoredGroupControlEventRow
+                        >(
+                          currentTable: table,
+                          referencedTable: $$MlsGroupsTableReferences
+                              ._groupControlEventsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$MlsGroupsTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).groupControlEventsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.groupId == item.groupId,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (groupOutboundObjectsRefs)
+                        await $_getPrefetchedData<
+                          MlsGroup,
+                          $MlsGroupsTable,
+                          StoredGroupOutboundObjectRow
+                        >(
+                          currentTable: table,
+                          referencedTable: $$MlsGroupsTableReferences
+                              ._groupOutboundObjectsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$MlsGroupsTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).groupOutboundObjectsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.groupId == item.groupId,
+                              ),
+                          typedResults: items,
+                        ),
+                    ];
+                  },
+                );
+              },
         ),
       );
 }
@@ -26521,9 +28612,912 @@ typedef $$MlsGroupsTableProcessedTableManager =
       $$MlsGroupsTableAnnotationComposer,
       $$MlsGroupsTableCreateCompanionBuilder,
       $$MlsGroupsTableUpdateCompanionBuilder,
-      (MlsGroup, BaseReferences<_$LocalDatabase, $MlsGroupsTable, MlsGroup>),
+      (MlsGroup, $$MlsGroupsTableReferences),
       MlsGroup,
-      PrefetchHooks Function()
+      PrefetchHooks Function({
+        bool groupControlEventsRefs,
+        bool groupOutboundObjectsRefs,
+      })
+    >;
+typedef $$GroupControlEventsTableCreateCompanionBuilder =
+    GroupControlEventsCompanion Function({
+      required String eventId,
+      required String groupId,
+      required int revision,
+      Value<Uint8List?> previousControlStateHash,
+      required Uint8List controlStateHash,
+      Value<Uint8List?> mlsCommitHash,
+      required int epoch,
+      required String signerUserId,
+      required String signerDeviceId,
+      required int operationKind,
+      required Uint8List canonicalControl,
+      required Uint8List signature,
+      required int applyState,
+      required int createdMs,
+      Value<int> rowid,
+    });
+typedef $$GroupControlEventsTableUpdateCompanionBuilder =
+    GroupControlEventsCompanion Function({
+      Value<String> eventId,
+      Value<String> groupId,
+      Value<int> revision,
+      Value<Uint8List?> previousControlStateHash,
+      Value<Uint8List> controlStateHash,
+      Value<Uint8List?> mlsCommitHash,
+      Value<int> epoch,
+      Value<String> signerUserId,
+      Value<String> signerDeviceId,
+      Value<int> operationKind,
+      Value<Uint8List> canonicalControl,
+      Value<Uint8List> signature,
+      Value<int> applyState,
+      Value<int> createdMs,
+      Value<int> rowid,
+    });
+
+final class $$GroupControlEventsTableReferences
+    extends
+        BaseReferences<
+          _$LocalDatabase,
+          $GroupControlEventsTable,
+          StoredGroupControlEventRow
+        > {
+  $$GroupControlEventsTableReferences(
+    super.$_db,
+    super.$_table,
+    super.$_typedResult,
+  );
+
+  static $MlsGroupsTable _groupIdTable(_$LocalDatabase db) => db.mlsGroups
+      .createAlias('group_control_events__group_id__mls_groups__group_id');
+
+  $$MlsGroupsTableProcessedTableManager get groupId {
+    final $_column = $_itemColumn<String>('group_id')!;
+
+    final manager = $$MlsGroupsTableTableManager(
+      $_db,
+      $_db.mlsGroups,
+    ).filter((f) => f.groupId.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_groupIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+}
+
+class $$GroupControlEventsTableFilterComposer
+    extends Composer<_$LocalDatabase, $GroupControlEventsTable> {
+  $$GroupControlEventsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get eventId => $composableBuilder(
+    column: $table.eventId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get revision => $composableBuilder(
+    column: $table.revision,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<Uint8List> get previousControlStateHash => $composableBuilder(
+    column: $table.previousControlStateHash,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<Uint8List> get controlStateHash => $composableBuilder(
+    column: $table.controlStateHash,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<Uint8List> get mlsCommitHash => $composableBuilder(
+    column: $table.mlsCommitHash,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get epoch => $composableBuilder(
+    column: $table.epoch,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get signerUserId => $composableBuilder(
+    column: $table.signerUserId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get signerDeviceId => $composableBuilder(
+    column: $table.signerDeviceId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get operationKind => $composableBuilder(
+    column: $table.operationKind,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<Uint8List> get canonicalControl => $composableBuilder(
+    column: $table.canonicalControl,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<Uint8List> get signature => $composableBuilder(
+    column: $table.signature,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get applyState => $composableBuilder(
+    column: $table.applyState,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get createdMs => $composableBuilder(
+    column: $table.createdMs,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$MlsGroupsTableFilterComposer get groupId {
+    final $$MlsGroupsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.groupId,
+      referencedTable: $db.mlsGroups,
+      getReferencedColumn: (t) => t.groupId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$MlsGroupsTableFilterComposer(
+            $db: $db,
+            $table: $db.mlsGroups,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$GroupControlEventsTableOrderingComposer
+    extends Composer<_$LocalDatabase, $GroupControlEventsTable> {
+  $$GroupControlEventsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get eventId => $composableBuilder(
+    column: $table.eventId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get revision => $composableBuilder(
+    column: $table.revision,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<Uint8List> get previousControlStateHash => $composableBuilder(
+    column: $table.previousControlStateHash,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<Uint8List> get controlStateHash => $composableBuilder(
+    column: $table.controlStateHash,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<Uint8List> get mlsCommitHash => $composableBuilder(
+    column: $table.mlsCommitHash,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get epoch => $composableBuilder(
+    column: $table.epoch,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get signerUserId => $composableBuilder(
+    column: $table.signerUserId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get signerDeviceId => $composableBuilder(
+    column: $table.signerDeviceId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get operationKind => $composableBuilder(
+    column: $table.operationKind,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<Uint8List> get canonicalControl => $composableBuilder(
+    column: $table.canonicalControl,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<Uint8List> get signature => $composableBuilder(
+    column: $table.signature,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get applyState => $composableBuilder(
+    column: $table.applyState,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get createdMs => $composableBuilder(
+    column: $table.createdMs,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$MlsGroupsTableOrderingComposer get groupId {
+    final $$MlsGroupsTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.groupId,
+      referencedTable: $db.mlsGroups,
+      getReferencedColumn: (t) => t.groupId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$MlsGroupsTableOrderingComposer(
+            $db: $db,
+            $table: $db.mlsGroups,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$GroupControlEventsTableAnnotationComposer
+    extends Composer<_$LocalDatabase, $GroupControlEventsTable> {
+  $$GroupControlEventsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get eventId =>
+      $composableBuilder(column: $table.eventId, builder: (column) => column);
+
+  GeneratedColumn<int> get revision =>
+      $composableBuilder(column: $table.revision, builder: (column) => column);
+
+  GeneratedColumn<Uint8List> get previousControlStateHash => $composableBuilder(
+    column: $table.previousControlStateHash,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<Uint8List> get controlStateHash => $composableBuilder(
+    column: $table.controlStateHash,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<Uint8List> get mlsCommitHash => $composableBuilder(
+    column: $table.mlsCommitHash,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get epoch =>
+      $composableBuilder(column: $table.epoch, builder: (column) => column);
+
+  GeneratedColumn<String> get signerUserId => $composableBuilder(
+    column: $table.signerUserId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get signerDeviceId => $composableBuilder(
+    column: $table.signerDeviceId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get operationKind => $composableBuilder(
+    column: $table.operationKind,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<Uint8List> get canonicalControl => $composableBuilder(
+    column: $table.canonicalControl,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<Uint8List> get signature =>
+      $composableBuilder(column: $table.signature, builder: (column) => column);
+
+  GeneratedColumn<int> get applyState => $composableBuilder(
+    column: $table.applyState,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get createdMs =>
+      $composableBuilder(column: $table.createdMs, builder: (column) => column);
+
+  $$MlsGroupsTableAnnotationComposer get groupId {
+    final $$MlsGroupsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.groupId,
+      referencedTable: $db.mlsGroups,
+      getReferencedColumn: (t) => t.groupId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$MlsGroupsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.mlsGroups,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$GroupControlEventsTableTableManager
+    extends
+        RootTableManager<
+          _$LocalDatabase,
+          $GroupControlEventsTable,
+          StoredGroupControlEventRow,
+          $$GroupControlEventsTableFilterComposer,
+          $$GroupControlEventsTableOrderingComposer,
+          $$GroupControlEventsTableAnnotationComposer,
+          $$GroupControlEventsTableCreateCompanionBuilder,
+          $$GroupControlEventsTableUpdateCompanionBuilder,
+          (StoredGroupControlEventRow, $$GroupControlEventsTableReferences),
+          StoredGroupControlEventRow,
+          PrefetchHooks Function({bool groupId})
+        > {
+  $$GroupControlEventsTableTableManager(
+    _$LocalDatabase db,
+    $GroupControlEventsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$GroupControlEventsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$GroupControlEventsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$GroupControlEventsTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> eventId = const Value.absent(),
+                Value<String> groupId = const Value.absent(),
+                Value<int> revision = const Value.absent(),
+                Value<Uint8List?> previousControlStateHash =
+                    const Value.absent(),
+                Value<Uint8List> controlStateHash = const Value.absent(),
+                Value<Uint8List?> mlsCommitHash = const Value.absent(),
+                Value<int> epoch = const Value.absent(),
+                Value<String> signerUserId = const Value.absent(),
+                Value<String> signerDeviceId = const Value.absent(),
+                Value<int> operationKind = const Value.absent(),
+                Value<Uint8List> canonicalControl = const Value.absent(),
+                Value<Uint8List> signature = const Value.absent(),
+                Value<int> applyState = const Value.absent(),
+                Value<int> createdMs = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => GroupControlEventsCompanion(
+                eventId: eventId,
+                groupId: groupId,
+                revision: revision,
+                previousControlStateHash: previousControlStateHash,
+                controlStateHash: controlStateHash,
+                mlsCommitHash: mlsCommitHash,
+                epoch: epoch,
+                signerUserId: signerUserId,
+                signerDeviceId: signerDeviceId,
+                operationKind: operationKind,
+                canonicalControl: canonicalControl,
+                signature: signature,
+                applyState: applyState,
+                createdMs: createdMs,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String eventId,
+                required String groupId,
+                required int revision,
+                Value<Uint8List?> previousControlStateHash =
+                    const Value.absent(),
+                required Uint8List controlStateHash,
+                Value<Uint8List?> mlsCommitHash = const Value.absent(),
+                required int epoch,
+                required String signerUserId,
+                required String signerDeviceId,
+                required int operationKind,
+                required Uint8List canonicalControl,
+                required Uint8List signature,
+                required int applyState,
+                required int createdMs,
+                Value<int> rowid = const Value.absent(),
+              }) => GroupControlEventsCompanion.insert(
+                eventId: eventId,
+                groupId: groupId,
+                revision: revision,
+                previousControlStateHash: previousControlStateHash,
+                controlStateHash: controlStateHash,
+                mlsCommitHash: mlsCommitHash,
+                epoch: epoch,
+                signerUserId: signerUserId,
+                signerDeviceId: signerDeviceId,
+                operationKind: operationKind,
+                canonicalControl: canonicalControl,
+                signature: signature,
+                applyState: applyState,
+                createdMs: createdMs,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$GroupControlEventsTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: ({groupId = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [],
+              addJoins:
+                  <
+                    T extends TableManagerState<
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic
+                    >
+                  >(state) {
+                    if (groupId) {
+                      state =
+                          state.withJoin(
+                                currentTable: table,
+                                currentColumn: table.groupId,
+                                referencedTable:
+                                    $$GroupControlEventsTableReferences
+                                        ._groupIdTable(db),
+                                referencedColumn:
+                                    $$GroupControlEventsTableReferences
+                                        ._groupIdTable(db)
+                                        .groupId,
+                              )
+                              as T;
+                    }
+
+                    return state;
+                  },
+              getPrefetchedDataCallback: (items) async {
+                return [];
+              },
+            );
+          },
+        ),
+      );
+}
+
+typedef $$GroupControlEventsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$LocalDatabase,
+      $GroupControlEventsTable,
+      StoredGroupControlEventRow,
+      $$GroupControlEventsTableFilterComposer,
+      $$GroupControlEventsTableOrderingComposer,
+      $$GroupControlEventsTableAnnotationComposer,
+      $$GroupControlEventsTableCreateCompanionBuilder,
+      $$GroupControlEventsTableUpdateCompanionBuilder,
+      (StoredGroupControlEventRow, $$GroupControlEventsTableReferences),
+      StoredGroupControlEventRow,
+      PrefetchHooks Function({bool groupId})
+    >;
+typedef $$GroupOutboundObjectsTableCreateCompanionBuilder =
+    GroupOutboundObjectsCompanion Function({
+      required String operationId,
+      required String groupId,
+      required String eventId,
+      required int epoch,
+      required Uint8List mlsObject,
+      required int deliveryState,
+      Value<DateTime> createdAt,
+      Value<int> rowid,
+    });
+typedef $$GroupOutboundObjectsTableUpdateCompanionBuilder =
+    GroupOutboundObjectsCompanion Function({
+      Value<String> operationId,
+      Value<String> groupId,
+      Value<String> eventId,
+      Value<int> epoch,
+      Value<Uint8List> mlsObject,
+      Value<int> deliveryState,
+      Value<DateTime> createdAt,
+      Value<int> rowid,
+    });
+
+final class $$GroupOutboundObjectsTableReferences
+    extends
+        BaseReferences<
+          _$LocalDatabase,
+          $GroupOutboundObjectsTable,
+          StoredGroupOutboundObjectRow
+        > {
+  $$GroupOutboundObjectsTableReferences(
+    super.$_db,
+    super.$_table,
+    super.$_typedResult,
+  );
+
+  static $MlsGroupsTable _groupIdTable(_$LocalDatabase db) => db.mlsGroups
+      .createAlias('group_outbound_objects__group_id__mls_groups__group_id');
+
+  $$MlsGroupsTableProcessedTableManager get groupId {
+    final $_column = $_itemColumn<String>('group_id')!;
+
+    final manager = $$MlsGroupsTableTableManager(
+      $_db,
+      $_db.mlsGroups,
+    ).filter((f) => f.groupId.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_groupIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+}
+
+class $$GroupOutboundObjectsTableFilterComposer
+    extends Composer<_$LocalDatabase, $GroupOutboundObjectsTable> {
+  $$GroupOutboundObjectsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get operationId => $composableBuilder(
+    column: $table.operationId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get eventId => $composableBuilder(
+    column: $table.eventId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get epoch => $composableBuilder(
+    column: $table.epoch,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<Uint8List> get mlsObject => $composableBuilder(
+    column: $table.mlsObject,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get deliveryState => $composableBuilder(
+    column: $table.deliveryState,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$MlsGroupsTableFilterComposer get groupId {
+    final $$MlsGroupsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.groupId,
+      referencedTable: $db.mlsGroups,
+      getReferencedColumn: (t) => t.groupId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$MlsGroupsTableFilterComposer(
+            $db: $db,
+            $table: $db.mlsGroups,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$GroupOutboundObjectsTableOrderingComposer
+    extends Composer<_$LocalDatabase, $GroupOutboundObjectsTable> {
+  $$GroupOutboundObjectsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get operationId => $composableBuilder(
+    column: $table.operationId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get eventId => $composableBuilder(
+    column: $table.eventId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get epoch => $composableBuilder(
+    column: $table.epoch,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<Uint8List> get mlsObject => $composableBuilder(
+    column: $table.mlsObject,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get deliveryState => $composableBuilder(
+    column: $table.deliveryState,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$MlsGroupsTableOrderingComposer get groupId {
+    final $$MlsGroupsTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.groupId,
+      referencedTable: $db.mlsGroups,
+      getReferencedColumn: (t) => t.groupId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$MlsGroupsTableOrderingComposer(
+            $db: $db,
+            $table: $db.mlsGroups,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$GroupOutboundObjectsTableAnnotationComposer
+    extends Composer<_$LocalDatabase, $GroupOutboundObjectsTable> {
+  $$GroupOutboundObjectsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get operationId => $composableBuilder(
+    column: $table.operationId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get eventId =>
+      $composableBuilder(column: $table.eventId, builder: (column) => column);
+
+  GeneratedColumn<int> get epoch =>
+      $composableBuilder(column: $table.epoch, builder: (column) => column);
+
+  GeneratedColumn<Uint8List> get mlsObject =>
+      $composableBuilder(column: $table.mlsObject, builder: (column) => column);
+
+  GeneratedColumn<int> get deliveryState => $composableBuilder(
+    column: $table.deliveryState,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  $$MlsGroupsTableAnnotationComposer get groupId {
+    final $$MlsGroupsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.groupId,
+      referencedTable: $db.mlsGroups,
+      getReferencedColumn: (t) => t.groupId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$MlsGroupsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.mlsGroups,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$GroupOutboundObjectsTableTableManager
+    extends
+        RootTableManager<
+          _$LocalDatabase,
+          $GroupOutboundObjectsTable,
+          StoredGroupOutboundObjectRow,
+          $$GroupOutboundObjectsTableFilterComposer,
+          $$GroupOutboundObjectsTableOrderingComposer,
+          $$GroupOutboundObjectsTableAnnotationComposer,
+          $$GroupOutboundObjectsTableCreateCompanionBuilder,
+          $$GroupOutboundObjectsTableUpdateCompanionBuilder,
+          (StoredGroupOutboundObjectRow, $$GroupOutboundObjectsTableReferences),
+          StoredGroupOutboundObjectRow,
+          PrefetchHooks Function({bool groupId})
+        > {
+  $$GroupOutboundObjectsTableTableManager(
+    _$LocalDatabase db,
+    $GroupOutboundObjectsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$GroupOutboundObjectsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$GroupOutboundObjectsTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$GroupOutboundObjectsTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> operationId = const Value.absent(),
+                Value<String> groupId = const Value.absent(),
+                Value<String> eventId = const Value.absent(),
+                Value<int> epoch = const Value.absent(),
+                Value<Uint8List> mlsObject = const Value.absent(),
+                Value<int> deliveryState = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => GroupOutboundObjectsCompanion(
+                operationId: operationId,
+                groupId: groupId,
+                eventId: eventId,
+                epoch: epoch,
+                mlsObject: mlsObject,
+                deliveryState: deliveryState,
+                createdAt: createdAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String operationId,
+                required String groupId,
+                required String eventId,
+                required int epoch,
+                required Uint8List mlsObject,
+                required int deliveryState,
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => GroupOutboundObjectsCompanion.insert(
+                operationId: operationId,
+                groupId: groupId,
+                eventId: eventId,
+                epoch: epoch,
+                mlsObject: mlsObject,
+                deliveryState: deliveryState,
+                createdAt: createdAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$GroupOutboundObjectsTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: ({groupId = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [],
+              addJoins:
+                  <
+                    T extends TableManagerState<
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic
+                    >
+                  >(state) {
+                    if (groupId) {
+                      state =
+                          state.withJoin(
+                                currentTable: table,
+                                currentColumn: table.groupId,
+                                referencedTable:
+                                    $$GroupOutboundObjectsTableReferences
+                                        ._groupIdTable(db),
+                                referencedColumn:
+                                    $$GroupOutboundObjectsTableReferences
+                                        ._groupIdTable(db)
+                                        .groupId,
+                              )
+                              as T;
+                    }
+
+                    return state;
+                  },
+              getPrefetchedDataCallback: (items) async {
+                return [];
+              },
+            );
+          },
+        ),
+      );
+}
+
+typedef $$GroupOutboundObjectsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$LocalDatabase,
+      $GroupOutboundObjectsTable,
+      StoredGroupOutboundObjectRow,
+      $$GroupOutboundObjectsTableFilterComposer,
+      $$GroupOutboundObjectsTableOrderingComposer,
+      $$GroupOutboundObjectsTableAnnotationComposer,
+      $$GroupOutboundObjectsTableCreateCompanionBuilder,
+      $$GroupOutboundObjectsTableUpdateCompanionBuilder,
+      (StoredGroupOutboundObjectRow, $$GroupOutboundObjectsTableReferences),
+      StoredGroupOutboundObjectRow,
+      PrefetchHooks Function({bool groupId})
     >;
 typedef $$ConversationsTableCreateCompanionBuilder =
     ConversationsCompanion Function({
@@ -26538,6 +29532,7 @@ typedef $$ConversationsTableCreateCompanionBuilder =
       Value<int> unreadCount,
       Value<DateTime?> mutedUntil,
       Value<Uint8List?> draftCiphertext,
+      Value<Uint8List?> displayTitleCiphertext,
       Value<int> rowid,
     });
 typedef $$ConversationsTableUpdateCompanionBuilder =
@@ -26553,6 +29548,7 @@ typedef $$ConversationsTableUpdateCompanionBuilder =
       Value<int> unreadCount,
       Value<DateTime?> mutedUntil,
       Value<Uint8List?> draftCiphertext,
+      Value<Uint8List?> displayTitleCiphertext,
       Value<int> rowid,
     });
 
@@ -26687,6 +29683,11 @@ class $$ConversationsTableFilterComposer
 
   ColumnFilters<Uint8List> get draftCiphertext => $composableBuilder(
     column: $table.draftCiphertext,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<Uint8List> get displayTitleCiphertext => $composableBuilder(
+    column: $table.displayTitleCiphertext,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -26829,6 +29830,11 @@ class $$ConversationsTableOrderingComposer
     column: $table.draftCiphertext,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<Uint8List> get displayTitleCiphertext => $composableBuilder(
+    column: $table.displayTitleCiphertext,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$ConversationsTableAnnotationComposer
@@ -26886,6 +29892,11 @@ class $$ConversationsTableAnnotationComposer
 
   GeneratedColumn<Uint8List> get draftCiphertext => $composableBuilder(
     column: $table.draftCiphertext,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<Uint8List> get displayTitleCiphertext => $composableBuilder(
+    column: $table.displayTitleCiphertext,
     builder: (column) => column,
   );
 
@@ -27011,6 +30022,7 @@ class $$ConversationsTableTableManager
                 Value<int> unreadCount = const Value.absent(),
                 Value<DateTime?> mutedUntil = const Value.absent(),
                 Value<Uint8List?> draftCiphertext = const Value.absent(),
+                Value<Uint8List?> displayTitleCiphertext = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => ConversationsCompanion(
                 conversationId: conversationId,
@@ -27024,6 +30036,7 @@ class $$ConversationsTableTableManager
                 unreadCount: unreadCount,
                 mutedUntil: mutedUntil,
                 draftCiphertext: draftCiphertext,
+                displayTitleCiphertext: displayTitleCiphertext,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -27039,6 +30052,7 @@ class $$ConversationsTableTableManager
                 Value<int> unreadCount = const Value.absent(),
                 Value<DateTime?> mutedUntil = const Value.absent(),
                 Value<Uint8List?> draftCiphertext = const Value.absent(),
+                Value<Uint8List?> displayTitleCiphertext = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => ConversationsCompanion.insert(
                 conversationId: conversationId,
@@ -27052,6 +30066,7 @@ class $$ConversationsTableTableManager
                 unreadCount: unreadCount,
                 mutedUntil: mutedUntil,
                 draftCiphertext: draftCiphertext,
+                displayTitleCiphertext: displayTitleCiphertext,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
@@ -35098,6 +38113,10 @@ class $LocalDatabaseManager {
       );
   $$MlsGroupsTableTableManager get mlsGroups =>
       $$MlsGroupsTableTableManager(_db, _db.mlsGroups);
+  $$GroupControlEventsTableTableManager get groupControlEvents =>
+      $$GroupControlEventsTableTableManager(_db, _db.groupControlEvents);
+  $$GroupOutboundObjectsTableTableManager get groupOutboundObjects =>
+      $$GroupOutboundObjectsTableTableManager(_db, _db.groupOutboundObjects);
   $$ConversationsTableTableManager get conversations =>
       $$ConversationsTableTableManager(_db, _db.conversations);
   $$MembershipsTableTableManager get memberships =>

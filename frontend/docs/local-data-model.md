@@ -39,7 +39,9 @@ Names are conceptual; migrations may refine physical layout without changing own
 | `device_log` | Verified signed hash-chain records, last head/hash, fork state, gossip state |
 | `pairwise_sessions` | Opaque crypto-core Double Ratchet state per device pair |
 | `prekeys` | Local private prekey handles and upload/use state |
-| `mls_groups` | Opaque crypto-core MLS state and accepted epoch |
+| `mls_groups` | Opaque crypto-core MLS state, accepted epoch, control revision/hash, lifecycle/quarantine state, and pending mutation CAS marker |
+| `group_control_events` | Deterministic accepted control projection and opaque signed-control bytes |
+| `group_outbound_objects` | Exact prepared opaque group object and send-readiness state; piece 18 never marks development preview data production-ready |
 | `conversations` | DM/group/saved identity and list projection |
 | `memberships` | Decrypted current group roles/policy projection |
 | `messages` | Current logical message projection and status |
@@ -100,9 +102,12 @@ confirmation, after which display material is sanitized and overwritten.
 
 ### MLS state
 
-New MLS state, control event, membership projection, and processed-event marker commit
-atomically. A process crash cannot expose an application message from an epoch whose
-state was not persisted.
+New MLS state, control event, membership projection, conversation projection, and exact
+outbound object commit atomically with a control revision/hash compare-and-swap. A
+process crash or persistence failure cannot expose a group transition or application
+message from an epoch whose complete opaque state was not persisted. Queue gaps and
+invalid or concurrent controls move the projection to a blocking quarantine state
+without guessing or replacing crypto-core state.
 
 ## Migrations
 

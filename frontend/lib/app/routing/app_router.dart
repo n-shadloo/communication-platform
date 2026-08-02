@@ -13,6 +13,7 @@ import 'package:communication_platform/features/bootstrap/presentation/bootstrap
 import 'package:communication_platform/features/contacts/presentation/contact_pages.dart';
 import 'package:communication_platform/features/devices/presentation/device_enrollment_page.dart';
 import 'package:communication_platform/features/devices/presentation/linked_devices_page.dart';
+import 'package:communication_platform/features/groups/presentation/group_pages.dart';
 import 'package:communication_platform/features/messaging/presentation/chat_pages.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
@@ -129,6 +130,45 @@ GoRouter createAppRouter({
             context,
             state,
             SafetyNumberPage(userId: state.pathParameters['userId']!),
+          ),
+        ),
+      ],
+    ),
+    GoRoute(
+      path: '/groups/new',
+      pageBuilder: (context, state) =>
+          _page(context, state, const CreateGroupPage()),
+    ),
+    GoRoute(
+      path: '/groups/:groupId',
+      pageBuilder: (context, state) => _page(
+        context,
+        state,
+        GroupChatPage(groupId: state.pathParameters['groupId']!),
+      ),
+      routes: [
+        GoRoute(
+          path: 'info',
+          pageBuilder: (context, state) => _page(
+            context,
+            state,
+            GroupInfoPage(groupId: state.pathParameters['groupId']!),
+          ),
+        ),
+        GoRoute(
+          path: 'edit',
+          pageBuilder: (context, state) => _page(
+            context,
+            state,
+            EditGroupPage(groupId: state.pathParameters['groupId']!),
+          ),
+        ),
+        GoRoute(
+          path: 'add-members',
+          pageBuilder: (context, state) => _page(
+            context,
+            state,
+            AddGroupMembersPage(groupId: state.pathParameters['groupId']!),
           ),
         ),
       ],
