@@ -168,6 +168,24 @@ revision, previous control-state hash, MLS group ID/epoch, and operation. Client
 the signer was authorized in the previous accepted state. The owner alone may transfer
 ownership; owners/admins may perform only policy-authorized actions.
 
+Closed-beta group transport v3 makes later Welcome/re-add authentication self-contained.
+An Invite carries the complete preceding accepted control transcript plus the current
+signed control, exact deterministic projection, and signer Authentication Service
+proof. The joining device verifies and replays that bounded transcript from no state,
+verifies the current Invite, joins the Welcome, processes the corresponding MLS control,
+and requires the BasicCredential `(user_id, device_id)` roster returned by Rust to equal
+the reconstructed product roster before committing the new opaque state, transcript,
+projections, consumed KeyPackage, and exact outbound work in one transaction. Existing
+members verify the same embedded transcript before advancing. The maximum is 512 control
+entries; missing evidence, a duplicate, chain disagreement, invalid authorization, or a
+roster mismatch fails closed. Long-running groups require a reviewed checkpoint format
+before that bound can be raised.
+
+V2 beta state and queued group objects do not contain sufficient transcript evidence and
+are rejected. They are disposable under ADR-036/ADR-037: participants recreate or
+rejoin the beta group. The client never guesses an upgrade or migrates that state into
+production.
+
 Concurrent MLS commits can fork. The application serializes its own membership mutations
 per group and never emits dependent application data until the resulting MLS state and
 control event commit atomically. A received sibling commit is quarantined rather than

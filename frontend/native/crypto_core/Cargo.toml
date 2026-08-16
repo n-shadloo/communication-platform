@@ -9,8 +9,20 @@ rust-version = "1.97.1"
 [lib]
 crate-type = ["cdylib", "rlib"]
 
+[features]
+default = []
+beta-pq-mls = [
+    "dep:aws-lc-sys",
+    "dep:mls-rs",
+    "dep:mls-rs-codec",
+    "dep:mls-rs-core",
+    "dep:mls-rs-crypto-awslc",
+    "dep:mls-rs-crypto-traits",
+]
+
 [dependencies]
 argon2 = { version = "=0.5.3", default-features = false, features = ["alloc", "zeroize"] }
+aws-lc-sys = { version = "=0.40.0", optional = true, default-features = false, features = ["bindgen"] }
 chacha20poly1305 = { version = "=0.11.0", default-features = false, features = ["alloc", "zeroize"] }
 ed25519-dalek = { version = "=3.0.0", default-features = false, features = ["fast", "zeroize"] }
 getrandom = "=0.4.3"
@@ -19,6 +31,11 @@ hkdf = "=0.13.0"
 # zeroization for its keyed state through Cargo feature unification.
 hmac = { version = "=0.13.0", default-features = false, features = ["zeroize"] }
 libsodium-sys = { package = "libsodium-sys-stable", version = "=1.24.0", default-features = false }
+mls-rs = { version = "=0.55.2", optional = true, default-features = false, features = ["by_ref_proposal", "fast_serialize", "last_resort_key_package_ext", "out_of_order", "prior_epoch", "private_message", "std", "tree_index"] }
+mls-rs-core = { version = "=0.27.0", optional = true, default-features = false, features = ["last_resort_key_package_ext", "post-quantum", "std"] }
+mls-rs-crypto-awslc = { version = "=0.25.0", optional = true, features = ["post-quantum"] }
+mls-rs-crypto-traits = { version = "=0.22.0", optional = true }
+mls-rs-codec = { version = "=0.7.0", optional = true }
 minicbor = { version = "=2.3.0", default-features = false, features = ["alloc", "derive"] }
 sha2 = { version = "=0.11.0", default-features = false, features = ["zeroize"] }
 serde_json = "=1.0.149"

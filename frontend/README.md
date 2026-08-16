@@ -34,6 +34,7 @@ placeholder until final branding is approved:
 | Environment | Dart entry point | Android application ID |
 |---|---|---|
 | Development | `lib/main_development.dart` | `com.example.communication_platform.development` |
+| Closed beta | `lib/main_beta.dart` | `com.example.communication_platform.beta` |
 | Production | `lib/main_production.dart` | `com.example.communication_platform` |
 
 Plain `flutter run` uses `lib/main.dart`, which delegates to development and always
@@ -53,7 +54,15 @@ credentials or private keys):
 - Android only: `<ENVIRONMENT>_PRIMARY_SPKI_SHA256` and
   `<ENVIRONMENT>_BACKUP_SPKI_SHA256` (distinct base64 SHA-256 digests).
 
-`<ENVIRONMENT>` is `DEVELOPMENT` or `PRODUCTION`; one artifact reads only its own prefix.
+`<ENVIRONMENT>` is `DEVELOPMENT`, `BETA`, or `PRODUCTION`; one artifact reads only its own prefix.
+The beta artifact uses a distinct backend origin, Android application ID, and local
+storage namespace. Its closed-beta PQ MLS state is disposable and is never migrated into
+production state. That beta suite is hybrid ML-KEM-768/X25519 on a Private Use
+identifier; it is not the IETF draft suite the production profile selects, and
+`docs/mls-profile.md` records exactly how the two differ.
+Closed-beta MLS transport v3 authenticates later Welcome/re-add with
+the complete bounded signed control transcript. V2 beta groups and queued group objects
+lack that evidence and must be recreated/rejoined rather than silently migrated.
 Android also requires the build-local resource generation described in
 `android/provisioning/README.md`. Web has no CA-install or pinning API: the operator must
 install the private CA into the OS/browser trust store out of band before the page can
@@ -61,6 +70,7 @@ connect, and a trust failure has no bypass.
 
 ```sh
 flutter run --flavor development --target lib/main_development.dart
+flutter build apk --release --flavor beta --target lib/main_beta.dart
 flutter build apk --release --flavor production --target lib/main_production.dart
 flutter build web --release --target lib/main_production.dart
 ```

@@ -36,6 +36,7 @@ final class PairwiseFanoutCoordinator {
     /// For device-to-device recovery, restrict the audience to this exact
     /// already-authenticated device.  A null value preserves normal fan-out.
     String? onlyRecipientDeviceId,
+    bool includeOwnDevices = true,
   }) async {
     if (!_isUuid(currentUserId) ||
         !_isUuid(currentDeviceId) ||
@@ -91,6 +92,7 @@ final class PairwiseFanoutCoordinator {
       peerUserId: peerUserId,
       peerDevices: peerDevices,
       ownDevices: ownDevices,
+      includeOwnDevices: includeOwnDevices,
     );
     if (targetResult case FailureResult(failure: final failure)) {
       return Result.failure(failure);
@@ -148,9 +150,20 @@ final class PairwiseFanoutCoordinator {
         .map((context) => context.deviceState.stateVersion)
         .toSet();
     if (targets.isEmpty) {
-      if (applicationEvent == null || currentUserId != peerUserId) {
+      if (currentUserId != peerUserId) {
         return const Result.failure(
           ValidationFailure(ValidationFailureKind.invalidInput),
+        );
+      }
+      if (applicationEvent == null) {
+        return Result.success(
+          DurablePairwiseOperation(
+            operationId: operationId,
+            eventId: eventId,
+            currentDeviceId: currentDeviceId.toLowerCase(),
+            openedLocalPayload: openedOpaquePayload,
+            targets: const [],
+          ),
         );
       }
       final localCommit = await store.commitLocalApplication(
@@ -313,6 +326,7 @@ final class PairwiseFanoutCoordinator {
     required String peerUserId,
     required List<VerifiedPairwiseLiveDevice> peerDevices,
     required List<VerifiedPairwiseLiveDevice> ownDevices,
+    required bool includeOwnDevices,
   }) {
     if (!_isUuid(currentUserId) ||
         !_isUuid(currentDeviceId) ||
@@ -356,7 +370,9 @@ final class PairwiseFanoutCoordinator {
       foundCurrentDevice |=
           device.deviceId.toLowerCase() == currentDeviceId.toLowerCase();
       if (device.userId != currentUserId ||
-          !add(currentUserId, device, allowCurrent: true)) {
+          !_isUuid(device.deviceId) ||
+          (includeOwnDevices &&
+              !add(currentUserId, device, allowCurrent: true))) {
         return const Result.failure(
           SecurityFailure(SecurityFailureKind.unauthenticatedInput),
         );

@@ -105,6 +105,7 @@ void main() {
         );
       _dropPieceFourteenSchema(versionOne);
       _dropPieceEighteenSchema(versionOne);
+      _dropPieceNineteenSchema(versionOne);
       versionOne.execute('PRAGMA user_version = 1');
       versionOne.close();
 
@@ -187,6 +188,7 @@ void main() {
         );
       _dropPieceFourteenSchema(versionThree);
       _dropPieceEighteenSchema(versionThree);
+      _dropPieceNineteenSchema(versionThree);
       versionThree.execute('PRAGMA user_version = 3');
       versionThree.close();
 
@@ -283,6 +285,7 @@ void main() {
       ..execute('ALTER TABLE conversations DROP COLUMN pinned')
       ..execute('ALTER TABLE messages DROP COLUMN starred');
     _dropPieceEighteenSchema(versionFive);
+    _dropPieceNineteenSchema(versionFive);
     versionFive.execute('PRAGMA user_version = 5');
     versionFive.close();
 
@@ -302,6 +305,137 @@ void main() {
     expect(conversation.read<int>('pinned'), 0);
     await upgraded.close();
   });
+
+  test(
+    'version-eight upgrade preserves data and adds MLS maintenance state',
+    () async {
+      final current = LocalDatabase(NativeDatabase(databaseFile));
+      await current.customSelect('SELECT 1').getSingle();
+      await current.customStatement(
+        "INSERT INTO local_preferences "
+        "(preference_key, value_ciphertext, value_version) "
+        "VALUES ('piece-19-preserved', X'09', 1)",
+      );
+      await current.close();
+
+      final versionEight = sqlite3.open(databaseFile.path);
+      _dropPieceNineteenSchema(versionEight);
+      versionEight.execute('PRAGMA user_version = 8');
+      versionEight.close();
+
+      final upgraded = LocalDatabase(NativeDatabase(databaseFile));
+      await upgraded.customSelect('SELECT 1').getSingle();
+
+      expect(
+        await upgraded
+            .customSelect(
+              "SELECT preference_key FROM local_preferences "
+              "WHERE preference_key = 'piece-19-preserved'",
+            )
+            .getSingle(),
+        isNotNull,
+      );
+      expect(
+        await upgraded
+            .customSelect(
+              "SELECT name FROM sqlite_master WHERE type = 'table' "
+              "AND name = 'mls_key_package_maintenance_states'",
+            )
+            .getSingle(),
+        isNotNull,
+      );
+      expect(
+        await upgraded
+            .customSelect('PRAGMA user_version')
+            .map((row) => row.read<int>('user_version'))
+            .getSingle(),
+        LocalDatabase.currentSchemaVersion,
+      );
+      await upgraded.close();
+    },
+  );
+
+  test('version-nine upgrade adds exact group outbound recipients', () async {
+    final current = LocalDatabase(NativeDatabase(databaseFile));
+    await current.customSelect('SELECT 1').getSingle();
+    await current.customStatement(
+      "INSERT INTO local_preferences "
+      "(preference_key, value_ciphertext, value_version) "
+      "VALUES ('piece-19-v10-preserved', X'0A', 1)",
+    );
+    await current.close();
+
+    final versionNine = sqlite3.open(databaseFile.path);
+    versionNine.execute(
+      'ALTER TABLE group_outbound_objects '
+      'DROP COLUMN recipient_user_ids_json',
+    );
+    versionNine.execute('PRAGMA user_version = 9');
+    versionNine.close();
+
+    final upgraded = LocalDatabase(NativeDatabase(databaseFile));
+    await upgraded.customSelect('SELECT 1').getSingle();
+    expect(
+      await upgraded
+          .customSelect(
+            "SELECT preference_key FROM local_preferences "
+            "WHERE preference_key = 'piece-19-v10-preserved'",
+          )
+          .getSingle(),
+      isNotNull,
+    );
+    final columns = await upgraded
+        .customSelect('PRAGMA table_info(group_outbound_objects)')
+        .map((row) => row.read<String>('name'))
+        .get();
+    expect(columns, contains('recipient_user_ids_json'));
+    expect(
+      await upgraded
+          .customSelect('PRAGMA user_version')
+          .map((row) => row.read<int>('user_version'))
+          .getSingle(),
+      LocalDatabase.currentSchemaVersion,
+    );
+    await upgraded.close();
+  });
+
+  test(
+    'version-ten upgrade adds fail-closed control transcript evidence',
+    () async {
+      final current = LocalDatabase(NativeDatabase(databaseFile));
+      await current.customSelect('SELECT 1').getSingle();
+      await current.close();
+
+      final versionTen = sqlite3.open(databaseFile.path)
+        ..execute(
+          'ALTER TABLE group_control_events '
+          'DROP COLUMN deterministic_projection',
+        )
+        ..execute('ALTER TABLE group_control_events DROP COLUMN signed_payload')
+        ..execute(
+          'ALTER TABLE group_control_events '
+          'DROP COLUMN signer_authentication_proof',
+        )
+        ..execute('PRAGMA user_version = 10');
+      versionTen.close();
+
+      final upgraded = LocalDatabase(NativeDatabase(databaseFile));
+      await upgraded.customSelect('SELECT 1').getSingle();
+      final columns = await upgraded
+          .customSelect('PRAGMA table_info(group_control_events)')
+          .map((row) => row.read<String>('name'))
+          .get();
+      expect(
+        columns,
+        containsAll(<String>[
+          'deterministic_projection',
+          'signed_payload',
+          'signer_authentication_proof',
+        ]),
+      );
+      await upgraded.close();
+    },
+  );
 }
 
 void _dropPieceFourteenSchema(Database database) {
@@ -354,6 +488,10 @@ void _dropPieceEighteenSchema(Database database) {
     ..execute('ALTER TABLE mls_groups DROP COLUMN lifecycle')
     ..execute('ALTER TABLE mls_groups DROP COLUMN pending_mutation_id')
     ..execute('ALTER TABLE conversations DROP COLUMN display_title_ciphertext');
+}
+
+void _dropPieceNineteenSchema(Database database) {
+  database.execute('DROP TABLE mls_key_package_maintenance_states');
 }
 
 final class _FailAfterSchemaCreation extends StorageMigrationHooks {

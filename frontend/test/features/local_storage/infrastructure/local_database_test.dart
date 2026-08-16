@@ -37,6 +37,7 @@ void main() {
       'pairwise_session_alternates',
       'prekeys',
       'prekey_maintenance_plans',
+      'mls_key_package_maintenance_states',
       'mls_groups',
       'group_control_events',
       'group_outbound_objects',

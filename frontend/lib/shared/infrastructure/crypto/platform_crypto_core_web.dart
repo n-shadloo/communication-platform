@@ -3,4 +3,5 @@ import 'package:communication_platform/shared/infrastructure/crypto/crypto_core_
 
 /// Piece 07 is Android-only. Web stays fail-closed until the reviewed Wasm
 /// boundary and cross-target vectors are implemented in a later piece.
-CryptoCorePort createPlatformCryptoCore() => const UnsupportedCryptoCore();
+CryptoCorePort createPlatformCryptoCore({bool betaMlsEnabled = false}) =>
+    const UnsupportedCryptoCore();

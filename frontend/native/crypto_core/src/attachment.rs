@@ -24,6 +24,8 @@ use crate::{
 
 pub const ATTACHMENT_MAX_IO_BYTES: usize = 262_144;
 pub const ATTACHMENT_CHUNK_BYTES: usize = 64 * 1024;
+#[cfg(test)]
+const ATTACHMENT_CHUNK_BYTES_U32: u32 = 64 * 1024;
 pub const ATTACHMENT_HEADER_BYTES: usize = 66;
 pub const ATTACHMENT_BUCKETS: [u64; 6] = [
     65_536, 262_144, 1_048_576, 4_194_304, 16_777_216, 67_108_864,
@@ -47,8 +49,6 @@ struct AttachmentHeader {
     bytes: [u8; ATTACHMENT_HEADER_BYTES],
     plaintext_size: u64,
     stream_size: u64,
-    bucket_size: u64,
-    chunk_size: u32,
 }
 
 enum Session {
@@ -372,14 +372,16 @@ fn make_header(
     bytes[10..14].copy_from_slice(&chunk_size.to_be_bytes());
     bytes[14..22].copy_from_slice(&plaintext_size.to_be_bytes());
     bytes[22..30].copy_from_slice(&stream_size.to_be_bytes());
-    bytes[30..34].copy_from_slice(&(bucket_size as u32).to_be_bytes());
+    bytes[30..34].copy_from_slice(
+        &u32::try_from(bucket_size)
+            .map_err(|_| CryptoError::InputTooLarge)?
+            .to_be_bytes(),
+    );
     bytes[34..66].copy_from_slice(metadata_hash);
     Ok(AttachmentHeader {
         bytes,
         plaintext_size,
         stream_size,
-        bucket_size,
-        chunk_size,
     })
 }
 
@@ -416,9 +418,13 @@ mod tests {
         let mut request = Vec::new();
         request.extend_from_slice(REQUEST_CREATE);
         request.extend_from_slice(&size.to_be_bytes());
-        request.extend_from_slice(&(ATTACHMENT_CHUNK_BYTES as u32).to_be_bytes());
+        request.extend_from_slice(&ATTACHMENT_CHUNK_BYTES_U32.to_be_bytes());
         request.extend_from_slice(&bucket.to_be_bytes());
-        request.extend_from_slice(&(metadata.len() as u32).to_be_bytes());
+        request.extend_from_slice(
+            &u32::try_from(metadata.len())
+                .expect("test metadata length fits u32")
+                .to_be_bytes(),
+        );
         request.extend_from_slice(metadata);
         request
     }
@@ -429,7 +435,11 @@ mod tests {
         request.extend_from_slice(&created[16..48]);
         request.extend_from_slice(&created[48..114]);
         request.extend_from_slice(&created[114..138]);
-        request.extend_from_slice(&(metadata.len() as u32).to_be_bytes());
+        request.extend_from_slice(
+            &u32::try_from(metadata.len())
+                .expect("test metadata length fits u32")
+                .to_be_bytes(),
+        );
         request.extend_from_slice(metadata);
         request
     }
@@ -454,7 +464,7 @@ mod tests {
     fn header_and_stream_round_trip_are_bounded() {
         let plaintext = b"attachment test".to_vec();
         let stream_size =
-            encrypted_stream_size(plaintext.len() as u64, ATTACHMENT_CHUNK_BYTES as u32).unwrap();
+            encrypted_stream_size(plaintext.len() as u64, ATTACHMENT_CHUNK_BYTES_U32).unwrap();
         let bucket = ATTACHMENT_BUCKETS
             .into_iter()
             .find(|bucket| {
@@ -518,7 +528,7 @@ mod tests {
     fn truncation_and_reorder_fail() {
         let plaintext = vec![3u8; ATTACHMENT_CHUNK_BYTES * 2 + 7];
         let stream_size =
-            encrypted_stream_size(plaintext.len() as u64, ATTACHMENT_CHUNK_BYTES as u32).unwrap();
+            encrypted_stream_size(plaintext.len() as u64, ATTACHMENT_CHUNK_BYTES_U32).unwrap();
         let bucket = ATTACHMENT_BUCKETS
             .into_iter()
             .find(|bucket| {

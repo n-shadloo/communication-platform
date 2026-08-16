@@ -187,11 +187,11 @@ fn validate_device_control(input: &[u8]) -> CryptoResult<()> {
                 return Err(CryptoError::MalformedInput);
             }
         }
-        2 => {
+        2 | 4 => {
             if target_device_id == [0; 16] || transfer_id == [0; 16] {
                 return Err(CryptoError::MalformedInput);
             }
-            let _resume_after_batch = reader.u32()?;
+            let _resume_or_confirmed_batch = reader.u32()?;
         }
         3 => {
             if target_device_id == [0; 16] || transfer_id == [0; 16] {
@@ -227,12 +227,6 @@ fn validate_device_control(input: &[u8]) -> CryptoResult<()> {
                     return Err(CryptoError::MalformedInput);
                 }
             }
-        }
-        4 => {
-            if target_device_id == [0; 16] || transfer_id == [0; 16] {
-                return Err(CryptoError::MalformedInput);
-            }
-            let _confirmed_batches = reader.u32()?;
         }
         5 => {
             if target_device_id == [0; 16] || transfer_id == [0; 16] || reader.u8()? > 2 {
@@ -564,6 +558,7 @@ fn encode_event(event: &ApplicationEvent) -> CryptoResult<Vec<u8>> {
     Ok(output)
 }
 
+#[allow(clippy::too_many_lines)] // Keeping every canonical event shape in one encoder makes key ordering auditable.
 fn encode_event_body(encoder: &mut Encoder<&mut Vec<u8>>, body: &EventBody) -> CryptoResult<()> {
     match body {
         EventBody::MessageCreate {

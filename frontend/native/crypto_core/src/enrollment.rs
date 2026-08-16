@@ -123,6 +123,15 @@ struct ParsedDevicePackage<'a> {
     _remainder: &'a [u8],
 }
 
+#[cfg_attr(not(feature = "beta-pq-mls"), allow(dead_code))]
+pub(crate) struct VerifiedClaimedDeviceBundle {
+    pub user_id: [u8; 16],
+    pub device_id: [u8; 16],
+    pub canonical_bundle: Vec<u8>,
+    pub signing_public: [u8; ED25519_PUBLIC_BYTES],
+    pub cross_signature: [u8; ED25519_SIGNATURE_BYTES],
+}
+
 pub fn prepare_device() -> impl FnOnce(&[u8]) -> CryptoResult<Vec<u8>> {
     |user_id| prepare_device_with_provider(&RustCryptoProvider::default(), user_id)
 }
@@ -354,7 +363,7 @@ pub fn seal_device_label(
         &mut header,
         u16::try_from(DEVICE_LABEL_PLAINTEXT_BYTES + 16)?,
     );
-    let aad = device_label_aad(&header, &user_id, &device_id)?;
+    let aad = device_label_aad(&header, &user_id, &device_id);
     let ciphertext = provider.xchacha20poly1305_encrypt(&key, &nonce, &plaintext, &aad)?;
     let mut output = Vec::with_capacity(DEVICE_LABEL_BUCKET_BYTES);
     output.extend_from_slice(&header);
@@ -404,7 +413,7 @@ pub fn open_device_label(
             .try_into()
             .map_err(|_| CryptoError::InternalFailure)?,
     );
-    let aad = device_label_aad(&blob[..header_len], &user_id, &device_id)?;
+    let aad = device_label_aad(&blob[..header_len], &user_id, &device_id);
     let plaintext = provider.xchacha20poly1305_decrypt(&key, &nonce, ciphertext, &aad)?;
     let mut plaintext_reader = Reader::new(plaintext.expose());
     if plaintext_reader.take(DEVICE_LABEL_PLAINTEXT_MAGIC.len())? != DEVICE_LABEL_PLAINTEXT_MAGIC {
@@ -426,17 +435,13 @@ pub fn open_device_label(
     Ok(label.to_vec())
 }
 
-fn device_label_aad(
-    header: &[u8],
-    user_id: &RawUuid,
-    device_id: &RawUuid,
-) -> CryptoResult<Vec<u8>> {
+fn device_label_aad(header: &[u8], user_id: &RawUuid, device_id: &RawUuid) -> Vec<u8> {
     let mut aad = Vec::with_capacity(DEVICE_LABEL_DOMAIN.len() + header.len() + 32);
     aad.extend_from_slice(DEVICE_LABEL_DOMAIN);
     aad.extend_from_slice(header);
     aad.extend_from_slice(user_id.as_bytes());
     aad.extend_from_slice(device_id.as_bytes());
-    Ok(aad)
+    aad
 }
 
 pub fn cross_sign_device(
@@ -627,6 +632,12 @@ pub fn verify_published_identity(input: &[u8]) -> CryptoResult<()> {
 
 /// Verifies the complete claimed device bundle, including both signed prekeys.
 pub fn verify_claimed_device_bundle(input: &[u8]) -> CryptoResult<()> {
+    inspect_verified_claimed_device_bundle(input).map(|_| ())
+}
+
+pub(crate) fn inspect_verified_claimed_device_bundle(
+    input: &[u8],
+) -> CryptoResult<VerifiedClaimedDeviceBundle> {
     let mut reader = Reader::new(input);
     if reader.take(8)? != VERIFY_BUNDLE_MAGIC {
         return Err(CryptoError::MalformedInput);
@@ -684,23 +695,31 @@ pub fn verify_claimed_device_bundle(input: &[u8]) -> CryptoResult<()> {
             signature,
         )?;
     }
+    let bundle = DeviceBundle {
+        user_id,
+        device_id,
+        ik_public,
+        spk_id,
+        spk_public,
+        pq_signed_prekey: pq
+            .as_ref()
+            .map(|(id, public, _)| PublicPrekey { id: *id, public }),
+        registration_id,
+        bundle_version,
+    };
     verify_cross_signature(
         &RustCryptoProvider::default(),
-        &DeviceBundle {
-            user_id,
-            device_id,
-            ik_public,
-            spk_id,
-            spk_public,
-            pq_signed_prekey: pq
-                .as_ref()
-                .map(|(id, public, _)| PublicPrekey { id: *id, public }),
-            registration_id,
-            bundle_version,
-        },
+        &bundle,
         &self_signing_public,
         &cross_signature,
-    )
+    )?;
+    Ok(VerifiedClaimedDeviceBundle {
+        user_id: *user_id.as_bytes(),
+        device_id: *device_id.as_bytes(),
+        canonical_bundle: encode_cross_signature(&bundle)?,
+        signing_public: ik_public.device_signing_public(),
+        cross_signature: *cross_signature.as_bytes(),
+    })
 }
 
 /// Verifies a peer log record with only the peer's authenticated public subkey.

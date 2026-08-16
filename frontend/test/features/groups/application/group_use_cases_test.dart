@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:communication_platform/core/application/ports/time_source.dart';
+import 'package:communication_platform/core/protocol/beta_mls_model.dart';
 import 'package:communication_platform/core/result/failure.dart';
 import 'package:communication_platform/core/result/result.dart';
 import 'package:communication_platform/features/groups/application/group_use_cases.dart';
@@ -160,6 +161,7 @@ void main() {
         crypto: _IncomingFailureCrypto(preview),
         clock: const _Clock(),
         localUserId: _owner,
+        localDeviceId: _device,
       );
 
       final result = await apply(
@@ -250,6 +252,21 @@ final class _MemoryGroupRepository implements GroupRepositoryPort {
   }
 
   @override
+  Future<Result<List<GroupState>>> readGroupsPendingEviction({
+    int limit = 20,
+  }) async => const Result.success([]);
+
+  @override
+  Future<Result<List<GroupOutboundWork>>> readPendingOutbound({
+    int limit = 20,
+  }) async => const Result.success([]);
+
+  @override
+  Future<Result<void>> markOutboundRouted({
+    required String operationId,
+  }) async => const Result.success(null);
+
+  @override
   Stream<GroupState?> watchGroup(String groupId) => Stream.value(state);
 
   @override
@@ -262,17 +279,51 @@ final class _IncomingFailureCrypto implements GroupMlsCryptoPort {
   final GroupMlsCryptoPort delegate;
 
   @override
+  Future<Result<GroupMlsTransportProbe>> probeIncomingTransport(
+    Uint8List mlsObject,
+  ) => delegate.probeIncomingTransport(mlsObject);
+
+  @override
+  Future<Result<PreparedGroupTransition>> inspectIncomingWelcome({
+    required Uint8List mlsObject,
+    required String localUserId,
+    required String localDeviceId,
+  }) => delegate.inspectIncomingWelcome(
+    mlsObject: mlsObject,
+    localUserId: localUserId,
+    localDeviceId: localDeviceId,
+  );
+
+  @override
   Future<Result<PreparedGroupTransition>> inspectIncomingControl({
     required GroupState current,
     required Uint8List currentOpaqueMlsState,
     required Uint8List mlsObject,
+    required String localUserId,
+    required String localDeviceId,
   }) async => const Result.failure(
     SecurityFailure(SecurityFailureKind.malformedServerResponse),
   );
 
   @override
-  Future<Result<List<Uint8List>>> generateKeyPackages({required int count}) =>
-      delegate.generateKeyPackages(count: count);
+  Future<Result<PreparedGroupMessage>> inspectIncomingApplication({
+    required GroupState current,
+    required Uint8List currentOpaqueMlsState,
+    required Uint8List mlsObject,
+    required String localUserId,
+    required String localDeviceId,
+  }) => delegate.inspectIncomingApplication(
+    current: current,
+    currentOpaqueMlsState: currentOpaqueMlsState,
+    mlsObject: mlsObject,
+    localUserId: localUserId,
+    localDeviceId: localDeviceId,
+  );
+
+  @override
+  Future<Result<GeneratedMlsKeyPackages>> generateKeyPackages(
+    MlsKeyPackageGenerationRequest request,
+  ) => delegate.generateKeyPackages(request);
 
   @override
   Future<Result<PreparedGroupTransition>> prepareControl({
@@ -314,14 +365,18 @@ final class _IncomingFailureCrypto implements GroupMlsCryptoPort {
   );
 
   @override
-  Future<Result<PreparedGroupTransition>> reconcileFork({
+  Future<Result<GroupForkResolution>> reconcileFork({
     required GroupState current,
     required Uint8List currentOpaqueMlsState,
     required List<Uint8List> siblingCommits,
+    required String localUserId,
+    required String localDeviceId,
   }) => delegate.reconcileFork(
     current: current,
     currentOpaqueMlsState: currentOpaqueMlsState,
     siblingCommits: siblingCommits,
+    localUserId: localUserId,
+    localDeviceId: localDeviceId,
   );
 }
 

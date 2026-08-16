@@ -40,7 +40,7 @@ Names are conceptual; migrations may refine physical layout without changing own
 | `pairwise_sessions` | Opaque crypto-core Double Ratchet state per device pair |
 | `prekeys` | Local private prekey handles and upload/use state |
 | `mls_groups` | Opaque crypto-core MLS state, accepted epoch, control revision/hash, lifecycle/quarantine state, and pending mutation CAS marker |
-| `group_control_events` | Deterministic accepted control projection and opaque signed-control bytes |
+| `group_control_events` | Deterministic accepted control projection, exact signed-control payload, and signer Authentication Service proof |
 | `group_outbound_objects` | Exact prepared opaque group object and send-readiness state; piece 18 never marks development preview data production-ready |
 | `conversations` | DM/group/saved identity and list projection |
 | `memberships` | Decrypted current group roles/policy projection |
@@ -109,6 +109,12 @@ message from an epoch whose complete opaque state was not persisted. Queue gaps 
 invalid or concurrent controls move the projection to a blocking quarantine state
 without guessing or replacing crypto-core state.
 
+A later closed-beta Welcome transaction additionally consumes the claimed KeyPackage and
+stores the complete verified control transcript with the joined opaque state and roster
+projection. Transcript rows redundantly preserve the deterministic projection, exact
+signed payload, and signer authentication proof so a new device can reconstruct and
+cross-check authorization rather than trusting a server-supplied projection.
+
 ## Migrations
 
 - Every schema change has forward and rollback/restore tests using representative
@@ -118,6 +124,11 @@ without guessing or replacing crypto-core state.
 - A failed migration leaves the previous database recoverable and blocks normal startup
   with a non-destructive error.
 - Release builds never auto-delete a database to "fix" migration failure.
+- Schema version 11 adds nullable deterministic-projection, signed-payload, and signer-
+  proof columns to `group_control_events` while preserving older rows. An older row may
+  remain readable as local history, but absent cryptographic evidence cannot construct a
+  verified v3 Welcome transcript and therefore fails closed. Disposable v2 beta groups
+  must be recreated/rejoined; no opaque MLS state is silently rewritten.
 
 ## Retention and deletion
 

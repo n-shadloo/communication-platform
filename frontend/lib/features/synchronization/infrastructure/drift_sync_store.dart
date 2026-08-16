@@ -1,5 +1,7 @@
 import 'package:communication_platform/core/result/failure.dart';
 import 'package:communication_platform/core/result/result.dart';
+import 'package:communication_platform/features/groups/domain/group_model.dart';
+import 'package:communication_platform/features/groups/infrastructure/drift_group_repository.dart';
 import 'package:communication_platform/features/local_storage/infrastructure/database/local_database.dart';
 import 'package:communication_platform/features/messaging/infrastructure/drift_application_event_projector.dart';
 import 'package:communication_platform/features/pairwise/domain/pairwise_model.dart';
@@ -344,10 +346,31 @@ WHERE c.singleton_id = 1
       );
     }
     final pairwise = inspection.pairwiseCommit;
+    final rawGroup = inspection.groupCommit;
+    if (rawGroup != null && rawGroup is! PreparedGroupInboxCommit) {
+      return const Result.failure(
+        SecurityFailure(SecurityFailureKind.malformedServerResponse),
+      );
+    }
+    final group = rawGroup as PreparedGroupInboxCommit?;
+    if ((group != null) !=
+        (pairwise != null &&
+            inspection.dependency == EnvelopeDependency.potentiallyMls)) {
+      return const Result.failure(
+        SecurityFailure(SecurityFailureKind.malformedServerResponse),
+      );
+    }
     if (pairwise != null) {
-      if (inspection.dependency != EnvelopeDependency.directOrLocal ||
+      final expectedDependency = group == null
+          ? EnvelopeDependency.directOrLocal
+          : EnvelopeDependency.potentiallyMls;
+      if (inspection.dependency != expectedDependency ||
           pairwise.envelopeId != envelopeId ||
           pairwise.opaqueEventId != inspection.opaqueEventId ||
+          (group != null &&
+              (group.opaqueEventId != inspection.opaqueEventId ||
+                  group.senderUserId != pairwise.senderUserId ||
+                  group.senderDeviceId != pairwise.senderDeviceId)) ||
           pairwise.sessionTransition.disposition < 0 ||
           pairwise.sessionTransition.disposition >=
               PairwiseSessionDisposition.values.length ||
@@ -363,91 +386,121 @@ WHERE c.singleton_id = 1
           SecurityFailure(SecurityFailureKind.malformedServerResponse),
         );
       }
-      return DriftPairwiseTransportStore(database).commitPreparedReceive(
-        PairwiseReceiveCommit(
-          envelopeId: pairwise.envelopeId,
-          opaqueEventId: pairwise.opaqueEventId,
-          senderUserId: pairwise.senderUserId,
-          senderDeviceId: pairwise.senderDeviceId,
-          replayMarker: pairwise.replayMarker,
-          openedOpaquePayload: pairwise.openedOpaquePayload,
-          signedPrekeyId: pairwise.signedPrekeyId,
-          pqSignedPrekeyId: pairwise.pqSignedPrekeyId,
-          sessionTransition: PairwiseSessionTransition(
-            localDeviceId: pairwise.sessionTransition.localDeviceId,
-            remoteUserId: pairwise.sessionTransition.remoteUserId,
-            remoteDeviceId: pairwise.sessionTransition.remoteDeviceId,
-            sessionId: pairwise.sessionTransition.sessionId,
-            nextOpaqueState: pairwise.sessionTransition.nextOpaqueState,
-            expectedStateVersion:
-                pairwise.sessionTransition.expectedStateVersion,
-            nextStateVersion: pairwise.sessionTransition.nextStateVersion,
-            nextSkippedKeyCount: pairwise.sessionTransition.nextSkippedKeyCount,
-            disposition: PairwiseSessionDisposition
-                .values[pairwise.sessionTransition.disposition],
-            repairState: PairwiseRepairState
-                .values[pairwise.sessionTransition.repairState],
-            repairAuthorization: pairwise.sessionTransition.repairAuthorization,
-          ),
-          demotedExistingSessionTransition:
-              pairwise.demotedExistingSessionTransition == null
-              ? null
-              : PairwiseSessionTransition(
-                  localDeviceId:
-                      pairwise.demotedExistingSessionTransition!.localDeviceId,
-                  remoteUserId:
-                      pairwise.demotedExistingSessionTransition!.remoteUserId,
-                  remoteDeviceId:
-                      pairwise.demotedExistingSessionTransition!.remoteDeviceId,
-                  sessionId:
-                      pairwise.demotedExistingSessionTransition!.sessionId,
-                  nextOpaqueState: pairwise
-                      .demotedExistingSessionTransition!
-                      .nextOpaqueState,
-                  expectedStateVersion: pairwise
-                      .demotedExistingSessionTransition!
-                      .expectedStateVersion,
-                  nextStateVersion: pairwise
-                      .demotedExistingSessionTransition!
-                      .nextStateVersion,
-                  nextSkippedKeyCount: pairwise
-                      .demotedExistingSessionTransition!
-                      .nextSkippedKeyCount,
-                  disposition:
-                      PairwiseSessionDisposition.values[pairwise
-                          .demotedExistingSessionTransition!
-                          .disposition],
-                  repairState:
-                      PairwiseRepairState.values[pairwise
-                          .demotedExistingSessionTransition!
-                          .repairState],
-                  repairAuthorization: pairwise
-                      .demotedExistingSessionTransition!
-                      .repairAuthorization,
-                ),
-          replacedSessionId: pairwise.replacedSessionId,
-          deviceStateTransition: pairwise.deviceStateTransition == null
-              ? null
-              : PairwiseDeviceStateTransition(
-                  nextOpaqueState:
-                      pairwise.deviceStateTransition!.nextOpaqueState,
-                  expectedStateVersion:
-                      pairwise.deviceStateTransition!.expectedStateVersion,
-                  nextStateVersion:
-                      pairwise.deviceStateTransition!.nextStateVersion,
-                ),
-          consumedOneTimePrekeys: [
-            for (final key in pairwise.consumedOneTimePrekeys)
-              ConsumedPairwiseOneTimePrekey(
-                kind: PairwiseOneTimePrekeyKind.values[key.algorithm],
-                keyId: key.keyId,
-              ),
-          ],
-          applicationEvent: pairwise.applicationEvent,
-          unsupportedApplicationEvent: pairwise.unsupportedApplicationEvent,
-          deviceControlEvent: pairwise.deviceControlEvent,
-          historyApplicationEvents: pairwise.historyApplicationEvents,
+      final receiveCommit = PairwiseReceiveCommit(
+        envelopeId: pairwise.envelopeId,
+        opaqueEventId: pairwise.opaqueEventId,
+        senderUserId: pairwise.senderUserId,
+        senderDeviceId: pairwise.senderDeviceId,
+        replayMarker: pairwise.replayMarker,
+        openedOpaquePayload: pairwise.openedOpaquePayload,
+        signedPrekeyId: pairwise.signedPrekeyId,
+        pqSignedPrekeyId: pairwise.pqSignedPrekeyId,
+        sessionTransition: PairwiseSessionTransition(
+          localDeviceId: pairwise.sessionTransition.localDeviceId,
+          remoteUserId: pairwise.sessionTransition.remoteUserId,
+          remoteDeviceId: pairwise.sessionTransition.remoteDeviceId,
+          sessionId: pairwise.sessionTransition.sessionId,
+          nextOpaqueState: pairwise.sessionTransition.nextOpaqueState,
+          expectedStateVersion: pairwise.sessionTransition.expectedStateVersion,
+          nextStateVersion: pairwise.sessionTransition.nextStateVersion,
+          nextSkippedKeyCount: pairwise.sessionTransition.nextSkippedKeyCount,
+          disposition: PairwiseSessionDisposition
+              .values[pairwise.sessionTransition.disposition],
+          repairState: PairwiseRepairState
+              .values[pairwise.sessionTransition.repairState],
+          repairAuthorization: pairwise.sessionTransition.repairAuthorization,
         ),
+        demotedExistingSessionTransition:
+            pairwise.demotedExistingSessionTransition == null
+            ? null
+            : PairwiseSessionTransition(
+                localDeviceId:
+                    pairwise.demotedExistingSessionTransition!.localDeviceId,
+                remoteUserId:
+                    pairwise.demotedExistingSessionTransition!.remoteUserId,
+                remoteDeviceId:
+                    pairwise.demotedExistingSessionTransition!.remoteDeviceId,
+                sessionId: pairwise.demotedExistingSessionTransition!.sessionId,
+                nextOpaqueState:
+                    pairwise.demotedExistingSessionTransition!.nextOpaqueState,
+                expectedStateVersion: pairwise
+                    .demotedExistingSessionTransition!
+                    .expectedStateVersion,
+                nextStateVersion:
+                    pairwise.demotedExistingSessionTransition!.nextStateVersion,
+                nextSkippedKeyCount: pairwise
+                    .demotedExistingSessionTransition!
+                    .nextSkippedKeyCount,
+                disposition:
+                    PairwiseSessionDisposition.values[pairwise
+                        .demotedExistingSessionTransition!
+                        .disposition],
+                repairState:
+                    PairwiseRepairState.values[pairwise
+                        .demotedExistingSessionTransition!
+                        .repairState],
+                repairAuthorization: pairwise
+                    .demotedExistingSessionTransition!
+                    .repairAuthorization,
+              ),
+        replacedSessionId: pairwise.replacedSessionId,
+        deviceStateTransition: pairwise.deviceStateTransition == null
+            ? null
+            : PairwiseDeviceStateTransition(
+                nextOpaqueState:
+                    pairwise.deviceStateTransition!.nextOpaqueState,
+                expectedStateVersion:
+                    pairwise.deviceStateTransition!.expectedStateVersion,
+                nextStateVersion:
+                    pairwise.deviceStateTransition!.nextStateVersion,
+              ),
+        consumedOneTimePrekeys: [
+          for (final key in pairwise.consumedOneTimePrekeys)
+            ConsumedPairwiseOneTimePrekey(
+              kind: PairwiseOneTimePrekeyKind.values[key.algorithm],
+              keyId: key.keyId,
+            ),
+        ],
+        applicationEvent: pairwise.applicationEvent,
+        unsupportedApplicationEvent: pairwise.unsupportedApplicationEvent,
+        deviceControlEvent: pairwise.deviceControlEvent,
+        historyApplicationEvents: pairwise.historyApplicationEvents,
+      );
+      final pairwiseStore = DriftPairwiseTransportStore(database);
+      if (group == null) {
+        return pairwiseStore.commitPreparedReceive(receiveCommit);
+      }
+      final groupRepository = DriftGroupRepository(database);
+      return pairwiseStore.commitPreparedReceiveWithAdditionalTransaction(
+        commit: receiveCommit,
+        dependency: EnvelopeDependency.potentiallyMls,
+        additionalCommit: () => switch (group) {
+          PreparedGroupInboxTransition(
+            :final expectedPrevious,
+            :final next,
+            :final prepared,
+          ) =>
+            groupRepository.commitTransitionInsideTransaction(
+              expectedPrevious: expectedPrevious,
+              next: next,
+              prepared: prepared,
+              developmentPreviewOnly: false,
+            ),
+          PreparedGroupInboxMessage(:final expectedGroup, :final prepared) =>
+            groupRepository.commitMessageInsideTransaction(
+              expectedGroup: expectedGroup,
+              prepared: prepared,
+              developmentPreviewOnly: false,
+            ),
+          PreparedGroupInboxForkResolution(
+            :final record,
+            :final localBranchRetained,
+          ) =>
+            groupRepository.quarantineInsideTransaction(
+              record,
+              retainLifecycle: localBranchRetained,
+            ),
+        },
       );
     }
     try {

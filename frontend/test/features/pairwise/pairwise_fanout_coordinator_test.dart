@@ -146,6 +146,25 @@ void main() {
     },
   );
 
+  test('can exclude own devices for a later multi-user group fanout', () async {
+    final result = await coordinator.prepareAndQueue(
+      operationId: 'group-user-2',
+      eventId: 'group-event',
+      currentUserId: uuid(currentUserNumber),
+      currentDeviceId: uuid(currentDeviceNumber),
+      peerUserId: uuid(peerUserNumber),
+      openedOpaquePayload: bytes(16, 10),
+      includeOwnDevices: false,
+    );
+
+    expect(result, isA<Success<DurablePairwiseOperation>>());
+    expect(crypto.calls.map((call) => call.recipient.deviceId), [
+      uuid(1),
+      uuid(2),
+    ]);
+    expect(claims.calls.keys, [uuid(peerUserNumber)]);
+  });
+
   test(
     'fails closed if live set changes between resolve and selective claim',
     () async {

@@ -1,8 +1,15 @@
+import 'package:communication_platform/app/config/app_environment.dart';
 import 'package:communication_platform/app/dependencies/contact_providers.dart';
 import 'package:communication_platform/app/dependencies/core_providers.dart';
+import 'package:communication_platform/app/dependencies/group_providers.dart';
 import 'package:communication_platform/app/dependencies/linked_device_providers.dart';
 import 'package:communication_platform/app/dependencies/local_storage_providers.dart';
 import 'package:communication_platform/app/dependencies/messaging_providers.dart';
+import 'package:communication_platform/features/groups/application/group_key_package_maintenance_service.dart';
+import 'package:communication_platform/features/groups/application/group_mls_inbound_coordinator.dart';
+import 'package:communication_platform/features/groups/application/group_outbound_dispatcher.dart';
+import 'package:communication_platform/features/groups/application/group_pending_eviction_service.dart';
+import 'package:communication_platform/features/groups/infrastructure/drift_group_repository.dart';
 import 'package:communication_platform/features/messaging/application/conversation_use_cases.dart';
 import 'package:communication_platform/features/messaging/infrastructure/drift_application_conversation_resolver.dart';
 import 'package:communication_platform/features/messaging/infrastructure/pending_receipt_post_inbox_work.dart';
@@ -47,6 +54,15 @@ final durableSyncEngineProvider =
         peerAuthenticationServiceProvider.future,
       );
       final store = DriftSyncStore(database);
+      final groupKeyPackageMaintenance =
+          ref.watch(appEnvironmentProvider) == AppEnvironment.beta
+          ? await ref.watch(
+              groupKeyPackageMaintenanceServiceProvider((
+                userId: scope.userId,
+                deviceId: scope.deviceId,
+              )).future,
+            )
+          : null;
       final sender = await ref.watch(
         sendConversationEventsProvider((
           userId: scope.userId,
@@ -83,6 +99,12 @@ final durableSyncEngineProvider =
         ),
         currentUserId: scope.userId,
         clock: ref.watch(timeSourceProvider),
+        groupInbound: GroupMlsInboundCoordinator(
+          repository: DriftGroupRepository(database),
+          crypto: await ref.watch(fullyComposedGroupMlsCryptoProvider.future),
+          localUserId: scope.userId,
+          localDeviceId: scope.deviceId,
+        ),
       );
       return DurableSyncEngine(
         store: store,
@@ -92,6 +114,32 @@ final durableSyncEngineProvider =
         clock: ref.watch(timeSourceProvider),
         jitter: FullJitterSource(),
         postInboxCommitWork: _CompositePostInboxWork([
+          if (groupKeyPackageMaintenance != null)
+            _GroupKeyPackagePostInboxWork(
+              groupKeyPackageMaintenance,
+              currentUserId: scope.userId,
+              currentDeviceId: scope.deviceId,
+            ),
+          _GroupPendingEvictionPostInboxWork(
+            GroupPendingEvictionService(
+              repository: DriftGroupRepository(database),
+              mutate: (await ref.watch(
+                groupUseCasesProvider.future,
+              )).mutate.call,
+              currentUserId: scope.userId,
+              currentDeviceId: scope.deviceId,
+            ),
+          ),
+          _GroupOutboundPostInboxWork(
+            await ref.watch(
+              groupOutboundDispatcherProvider((
+                userId: scope.userId,
+                deviceId: scope.deviceId,
+              )).future,
+            ),
+            currentUserId: scope.userId,
+            currentDeviceId: scope.deviceId,
+          ),
           PendingReceiptPostInboxWork(
             FlushPendingDeliveredReceipts(
               repository: await ref.watch(
@@ -105,6 +153,62 @@ final durableSyncEngineProvider =
         ]),
       );
     });
+
+final class _GroupKeyPackagePostInboxWork implements PostInboxCommitWorkPort {
+  const _GroupKeyPackagePostInboxWork(
+    this.maintenance, {
+    required this.currentUserId,
+    required this.currentDeviceId,
+  });
+
+  final GroupKeyPackageMaintenanceService maintenance;
+  final String currentUserId;
+  final String currentDeviceId;
+
+  @override
+  Future<void> run() async {
+    await maintenance.maintain(
+      userId: currentUserId,
+      deviceId: currentDeviceId,
+    );
+  }
+}
+
+final class _GroupPendingEvictionPostInboxWork
+    implements PostInboxCommitWorkPort {
+  const _GroupPendingEvictionPostInboxWork(this.eviction);
+
+  final GroupPendingEvictionService eviction;
+
+  @override
+  Future<void> run() async {
+    // Runs before outbound dispatch so a freshly prepared eviction Commit is
+    // fanned out in the same drain that observed the leave.
+    await eviction.evictDepartedMembers();
+  }
+}
+
+final class _GroupOutboundPostInboxWork implements PostInboxCommitWorkPort {
+  const _GroupOutboundPostInboxWork(
+    this.dispatcher, {
+    required this.currentUserId,
+    required this.currentDeviceId,
+  });
+
+  final GroupOutboundDispatcher dispatcher;
+  final String currentUserId;
+  final String currentDeviceId;
+
+  @override
+  Future<void> run() async {
+    // Work remains durable when authentication, crypto, or storage is
+    // temporarily unavailable; the next sync run retries exact MLS bytes.
+    await dispatcher.dispatchPending(
+      currentUserId: currentUserId,
+      currentDeviceId: currentDeviceId,
+    );
+  }
+}
 
 final class _CompositePostInboxWork implements PostInboxCommitWorkPort {
   const _CompositePostInboxWork(this.work);

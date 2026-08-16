@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 
+import 'package:communication_platform/core/protocol/beta_mls_model.dart';
 import 'package:communication_platform/core/result/failure.dart';
 import 'package:communication_platform/core/result/result.dart';
 import 'package:communication_platform/features/groups/application/ports/group_ports.dart';
@@ -13,9 +14,21 @@ final class UnsupportedGroupMlsCrypto implements GroupMlsCryptoPort {
   );
 
   @override
+  Future<Result<GroupMlsTransportProbe>> probeIncomingTransport(
+    Uint8List mlsObject,
+  ) => _closed();
+
+  @override
   Future<Result<PreparedGroupTransition>> prepareCreate(
     GroupCreationIntent intent,
   ) => _closed();
+
+  @override
+  Future<Result<PreparedGroupTransition>> inspectIncomingWelcome({
+    required Uint8List mlsObject,
+    required String localUserId,
+    required String localDeviceId,
+  }) => _closed();
 
   @override
   Future<Result<PreparedGroupTransition>> prepareControl({
@@ -32,6 +45,8 @@ final class UnsupportedGroupMlsCrypto implements GroupMlsCryptoPort {
     required GroupState current,
     required Uint8List currentOpaqueMlsState,
     required Uint8List mlsObject,
+    required String localUserId,
+    required String localDeviceId,
   }) => _closed();
 
   @override
@@ -45,13 +60,25 @@ final class UnsupportedGroupMlsCrypto implements GroupMlsCryptoPort {
   }) => _closed();
 
   @override
-  Future<Result<List<Uint8List>>> generateKeyPackages({required int count}) =>
-      _closed();
+  Future<Result<PreparedGroupMessage>> inspectIncomingApplication({
+    required GroupState current,
+    required Uint8List currentOpaqueMlsState,
+    required Uint8List mlsObject,
+    required String localUserId,
+    required String localDeviceId,
+  }) => _closed();
 
   @override
-  Future<Result<PreparedGroupTransition>> reconcileFork({
+  Future<Result<GeneratedMlsKeyPackages>> generateKeyPackages(
+    MlsKeyPackageGenerationRequest request,
+  ) => _closed();
+
+  @override
+  Future<Result<GroupForkResolution>> reconcileFork({
     required GroupState current,
     required Uint8List currentOpaqueMlsState,
     required List<Uint8List> siblingCommits,
+    required String localUserId,
+    required String localDeviceId,
   }) => _closed();
 }

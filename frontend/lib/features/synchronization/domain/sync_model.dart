@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 
+import 'package:communication_platform/core/protocol/group_sync_model.dart';
 import 'package:communication_platform/core/protocol/pairwise_sync_model.dart';
 
 enum EnvelopeDependency { directOrLocal, potentiallyMls }
@@ -90,11 +91,13 @@ final class OpaqueEnvelopeInspection {
     required this.opaqueEventId,
     required this.dependency,
     this.pairwiseCommit,
+    this.groupCommit,
   });
 
   final String opaqueEventId;
   final EnvelopeDependency dependency;
   final PairwiseSyncReceiveCommit? pairwiseCommit;
+  final GroupSyncReceiveCommit? groupCommit;
 }
 
 final class PreparedOutboxTarget {

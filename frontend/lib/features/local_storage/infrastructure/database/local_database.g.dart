@@ -7993,6 +7993,529 @@ class PrekeyMaintenancePlansCompanion
   }
 }
 
+class $MlsKeyPackageMaintenanceStatesTable
+    extends MlsKeyPackageMaintenanceStates
+    with
+        TableInfo<
+          $MlsKeyPackageMaintenanceStatesTable,
+          StoredMlsKeyPackageMaintenanceState
+        > {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $MlsKeyPackageMaintenanceStatesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _deviceIdMeta = const VerificationMeta(
+    'deviceId',
+  );
+  @override
+  late final GeneratedColumn<String> deviceId = GeneratedColumn<String>(
+    'device_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _stageMeta = const VerificationMeta('stage');
+  @override
+  late final GeneratedColumn<int> stage = GeneratedColumn<int>(
+    'stage',
+    aliasedName,
+    false,
+    check: () => ComparableExpr(stage).isBetweenValues(0, 3),
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _expectedStateRevisionMeta =
+      const VerificationMeta('expectedStateRevision');
+  @override
+  late final GeneratedColumn<int> expectedStateRevision = GeneratedColumn<int>(
+    'expected_state_revision',
+    aliasedName,
+    false,
+    check: () => ComparableExpr(expectedStateRevision).isBiggerOrEqualValue(0),
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _plannedKindMeta = const VerificationMeta(
+    'plannedKind',
+  );
+  @override
+  late final GeneratedColumn<int> plannedKind = GeneratedColumn<int>(
+    'planned_kind',
+    aliasedName,
+    true,
+    check: () =>
+        plannedKind.isNull() |
+        ComparableExpr(plannedKind).isBetweenValues(0, 1),
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _exactUploadProjectionMeta =
+      const VerificationMeta('exactUploadProjection');
+  @override
+  late final GeneratedColumn<Uint8List> exactUploadProjection =
+      GeneratedColumn<Uint8List>(
+        'exact_upload_projection',
+        aliasedName,
+        true,
+        type: DriftSqlType.blob,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _lastResortUploadedMeta =
+      const VerificationMeta('lastResortUploaded');
+  @override
+  late final GeneratedColumn<bool> lastResortUploaded = GeneratedColumn<bool>(
+    'last_resort_uploaded',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("last_resort_uploaded" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    deviceId,
+    stage,
+    expectedStateRevision,
+    plannedKind,
+    exactUploadProjection,
+    lastResortUploaded,
+    updatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'mls_key_package_maintenance_states';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<StoredMlsKeyPackageMaintenanceState> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('device_id')) {
+      context.handle(
+        _deviceIdMeta,
+        deviceId.isAcceptableOrUnknown(data['device_id']!, _deviceIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_deviceIdMeta);
+    }
+    if (data.containsKey('stage')) {
+      context.handle(
+        _stageMeta,
+        stage.isAcceptableOrUnknown(data['stage']!, _stageMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_stageMeta);
+    }
+    if (data.containsKey('expected_state_revision')) {
+      context.handle(
+        _expectedStateRevisionMeta,
+        expectedStateRevision.isAcceptableOrUnknown(
+          data['expected_state_revision']!,
+          _expectedStateRevisionMeta,
+        ),
+      );
+    }
+    if (data.containsKey('planned_kind')) {
+      context.handle(
+        _plannedKindMeta,
+        plannedKind.isAcceptableOrUnknown(
+          data['planned_kind']!,
+          _plannedKindMeta,
+        ),
+      );
+    }
+    if (data.containsKey('exact_upload_projection')) {
+      context.handle(
+        _exactUploadProjectionMeta,
+        exactUploadProjection.isAcceptableOrUnknown(
+          data['exact_upload_projection']!,
+          _exactUploadProjectionMeta,
+        ),
+      );
+    }
+    if (data.containsKey('last_resort_uploaded')) {
+      context.handle(
+        _lastResortUploadedMeta,
+        lastResortUploaded.isAcceptableOrUnknown(
+          data['last_resort_uploaded']!,
+          _lastResortUploadedMeta,
+        ),
+      );
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {deviceId};
+  @override
+  StoredMlsKeyPackageMaintenanceState map(
+    Map<String, dynamic> data, {
+    String? tablePrefix,
+  }) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return StoredMlsKeyPackageMaintenanceState(
+      deviceId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}device_id'],
+      )!,
+      stage: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}stage'],
+      )!,
+      expectedStateRevision: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}expected_state_revision'],
+      )!,
+      plannedKind: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}planned_kind'],
+      ),
+      exactUploadProjection: attachedDatabase.typeMapping.read(
+        DriftSqlType.blob,
+        data['${effectivePrefix}exact_upload_projection'],
+      ),
+      lastResortUploaded: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}last_resort_uploaded'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+    );
+  }
+
+  @override
+  $MlsKeyPackageMaintenanceStatesTable createAlias(String alias) {
+    return $MlsKeyPackageMaintenanceStatesTable(attachedDatabase, alias);
+  }
+}
+
+class StoredMlsKeyPackageMaintenanceState extends DataClass
+    implements Insertable<StoredMlsKeyPackageMaintenanceState> {
+  final String deviceId;
+  final int stage;
+  final int expectedStateRevision;
+  final int? plannedKind;
+  final Uint8List? exactUploadProjection;
+  final bool lastResortUploaded;
+  final DateTime updatedAt;
+  const StoredMlsKeyPackageMaintenanceState({
+    required this.deviceId,
+    required this.stage,
+    required this.expectedStateRevision,
+    this.plannedKind,
+    this.exactUploadProjection,
+    required this.lastResortUploaded,
+    required this.updatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['device_id'] = Variable<String>(deviceId);
+    map['stage'] = Variable<int>(stage);
+    map['expected_state_revision'] = Variable<int>(expectedStateRevision);
+    if (!nullToAbsent || plannedKind != null) {
+      map['planned_kind'] = Variable<int>(plannedKind);
+    }
+    if (!nullToAbsent || exactUploadProjection != null) {
+      map['exact_upload_projection'] = Variable<Uint8List>(
+        exactUploadProjection,
+      );
+    }
+    map['last_resort_uploaded'] = Variable<bool>(lastResortUploaded);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    return map;
+  }
+
+  MlsKeyPackageMaintenanceStatesCompanion toCompanion(bool nullToAbsent) {
+    return MlsKeyPackageMaintenanceStatesCompanion(
+      deviceId: Value(deviceId),
+      stage: Value(stage),
+      expectedStateRevision: Value(expectedStateRevision),
+      plannedKind: plannedKind == null && nullToAbsent
+          ? const Value.absent()
+          : Value(plannedKind),
+      exactUploadProjection: exactUploadProjection == null && nullToAbsent
+          ? const Value.absent()
+          : Value(exactUploadProjection),
+      lastResortUploaded: Value(lastResortUploaded),
+      updatedAt: Value(updatedAt),
+    );
+  }
+
+  factory StoredMlsKeyPackageMaintenanceState.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return StoredMlsKeyPackageMaintenanceState(
+      deviceId: serializer.fromJson<String>(json['deviceId']),
+      stage: serializer.fromJson<int>(json['stage']),
+      expectedStateRevision: serializer.fromJson<int>(
+        json['expectedStateRevision'],
+      ),
+      plannedKind: serializer.fromJson<int?>(json['plannedKind']),
+      exactUploadProjection: serializer.fromJson<Uint8List?>(
+        json['exactUploadProjection'],
+      ),
+      lastResortUploaded: serializer.fromJson<bool>(json['lastResortUploaded']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'deviceId': serializer.toJson<String>(deviceId),
+      'stage': serializer.toJson<int>(stage),
+      'expectedStateRevision': serializer.toJson<int>(expectedStateRevision),
+      'plannedKind': serializer.toJson<int?>(plannedKind),
+      'exactUploadProjection': serializer.toJson<Uint8List?>(
+        exactUploadProjection,
+      ),
+      'lastResortUploaded': serializer.toJson<bool>(lastResortUploaded),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+    };
+  }
+
+  StoredMlsKeyPackageMaintenanceState copyWith({
+    String? deviceId,
+    int? stage,
+    int? expectedStateRevision,
+    Value<int?> plannedKind = const Value.absent(),
+    Value<Uint8List?> exactUploadProjection = const Value.absent(),
+    bool? lastResortUploaded,
+    DateTime? updatedAt,
+  }) => StoredMlsKeyPackageMaintenanceState(
+    deviceId: deviceId ?? this.deviceId,
+    stage: stage ?? this.stage,
+    expectedStateRevision: expectedStateRevision ?? this.expectedStateRevision,
+    plannedKind: plannedKind.present ? plannedKind.value : this.plannedKind,
+    exactUploadProjection: exactUploadProjection.present
+        ? exactUploadProjection.value
+        : this.exactUploadProjection,
+    lastResortUploaded: lastResortUploaded ?? this.lastResortUploaded,
+    updatedAt: updatedAt ?? this.updatedAt,
+  );
+  StoredMlsKeyPackageMaintenanceState copyWithCompanion(
+    MlsKeyPackageMaintenanceStatesCompanion data,
+  ) {
+    return StoredMlsKeyPackageMaintenanceState(
+      deviceId: data.deviceId.present ? data.deviceId.value : this.deviceId,
+      stage: data.stage.present ? data.stage.value : this.stage,
+      expectedStateRevision: data.expectedStateRevision.present
+          ? data.expectedStateRevision.value
+          : this.expectedStateRevision,
+      plannedKind: data.plannedKind.present
+          ? data.plannedKind.value
+          : this.plannedKind,
+      exactUploadProjection: data.exactUploadProjection.present
+          ? data.exactUploadProjection.value
+          : this.exactUploadProjection,
+      lastResortUploaded: data.lastResortUploaded.present
+          ? data.lastResortUploaded.value
+          : this.lastResortUploaded,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('StoredMlsKeyPackageMaintenanceState(')
+          ..write('deviceId: $deviceId, ')
+          ..write('stage: $stage, ')
+          ..write('expectedStateRevision: $expectedStateRevision, ')
+          ..write('plannedKind: $plannedKind, ')
+          ..write('exactUploadProjection: $exactUploadProjection, ')
+          ..write('lastResortUploaded: $lastResortUploaded, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    deviceId,
+    stage,
+    expectedStateRevision,
+    plannedKind,
+    $driftBlobEquality.hash(exactUploadProjection),
+    lastResortUploaded,
+    updatedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is StoredMlsKeyPackageMaintenanceState &&
+          other.deviceId == this.deviceId &&
+          other.stage == this.stage &&
+          other.expectedStateRevision == this.expectedStateRevision &&
+          other.plannedKind == this.plannedKind &&
+          $driftBlobEquality.equals(
+            other.exactUploadProjection,
+            this.exactUploadProjection,
+          ) &&
+          other.lastResortUploaded == this.lastResortUploaded &&
+          other.updatedAt == this.updatedAt);
+}
+
+class MlsKeyPackageMaintenanceStatesCompanion
+    extends UpdateCompanion<StoredMlsKeyPackageMaintenanceState> {
+  final Value<String> deviceId;
+  final Value<int> stage;
+  final Value<int> expectedStateRevision;
+  final Value<int?> plannedKind;
+  final Value<Uint8List?> exactUploadProjection;
+  final Value<bool> lastResortUploaded;
+  final Value<DateTime> updatedAt;
+  final Value<int> rowid;
+  const MlsKeyPackageMaintenanceStatesCompanion({
+    this.deviceId = const Value.absent(),
+    this.stage = const Value.absent(),
+    this.expectedStateRevision = const Value.absent(),
+    this.plannedKind = const Value.absent(),
+    this.exactUploadProjection = const Value.absent(),
+    this.lastResortUploaded = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  MlsKeyPackageMaintenanceStatesCompanion.insert({
+    required String deviceId,
+    required int stage,
+    this.expectedStateRevision = const Value.absent(),
+    this.plannedKind = const Value.absent(),
+    this.exactUploadProjection = const Value.absent(),
+    this.lastResortUploaded = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : deviceId = Value(deviceId),
+       stage = Value(stage);
+  static Insertable<StoredMlsKeyPackageMaintenanceState> custom({
+    Expression<String>? deviceId,
+    Expression<int>? stage,
+    Expression<int>? expectedStateRevision,
+    Expression<int>? plannedKind,
+    Expression<Uint8List>? exactUploadProjection,
+    Expression<bool>? lastResortUploaded,
+    Expression<DateTime>? updatedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (deviceId != null) 'device_id': deviceId,
+      if (stage != null) 'stage': stage,
+      if (expectedStateRevision != null)
+        'expected_state_revision': expectedStateRevision,
+      if (plannedKind != null) 'planned_kind': plannedKind,
+      if (exactUploadProjection != null)
+        'exact_upload_projection': exactUploadProjection,
+      if (lastResortUploaded != null)
+        'last_resort_uploaded': lastResortUploaded,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  MlsKeyPackageMaintenanceStatesCompanion copyWith({
+    Value<String>? deviceId,
+    Value<int>? stage,
+    Value<int>? expectedStateRevision,
+    Value<int?>? plannedKind,
+    Value<Uint8List?>? exactUploadProjection,
+    Value<bool>? lastResortUploaded,
+    Value<DateTime>? updatedAt,
+    Value<int>? rowid,
+  }) {
+    return MlsKeyPackageMaintenanceStatesCompanion(
+      deviceId: deviceId ?? this.deviceId,
+      stage: stage ?? this.stage,
+      expectedStateRevision:
+          expectedStateRevision ?? this.expectedStateRevision,
+      plannedKind: plannedKind ?? this.plannedKind,
+      exactUploadProjection:
+          exactUploadProjection ?? this.exactUploadProjection,
+      lastResortUploaded: lastResortUploaded ?? this.lastResortUploaded,
+      updatedAt: updatedAt ?? this.updatedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (deviceId.present) {
+      map['device_id'] = Variable<String>(deviceId.value);
+    }
+    if (stage.present) {
+      map['stage'] = Variable<int>(stage.value);
+    }
+    if (expectedStateRevision.present) {
+      map['expected_state_revision'] = Variable<int>(
+        expectedStateRevision.value,
+      );
+    }
+    if (plannedKind.present) {
+      map['planned_kind'] = Variable<int>(plannedKind.value);
+    }
+    if (exactUploadProjection.present) {
+      map['exact_upload_projection'] = Variable<Uint8List>(
+        exactUploadProjection.value,
+      );
+    }
+    if (lastResortUploaded.present) {
+      map['last_resort_uploaded'] = Variable<bool>(lastResortUploaded.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('MlsKeyPackageMaintenanceStatesCompanion(')
+          ..write('deviceId: $deviceId, ')
+          ..write('stage: $stage, ')
+          ..write('expectedStateRevision: $expectedStateRevision, ')
+          ..write('plannedKind: $plannedKind, ')
+          ..write('exactUploadProjection: $exactUploadProjection, ')
+          ..write('lastResortUploaded: $lastResortUploaded, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 class $MlsGroupsTable extends MlsGroups
     with TableInfo<$MlsGroupsTable, MlsGroup> {
   @override
@@ -8818,6 +9341,17 @@ class $GroupControlEventsTable extends GroupControlEvents
     type: DriftSqlType.int,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _deterministicProjectionMeta =
+      const VerificationMeta('deterministicProjection');
+  @override
+  late final GeneratedColumn<String> deterministicProjection =
+      GeneratedColumn<String>(
+        'deterministic_projection',
+        aliasedName,
+        true,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+      );
   static const VerificationMeta _canonicalControlMeta = const VerificationMeta(
     'canonicalControl',
   );
@@ -8841,6 +9375,29 @@ class $GroupControlEventsTable extends GroupControlEvents
     type: DriftSqlType.blob,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _signedPayloadMeta = const VerificationMeta(
+    'signedPayload',
+  );
+  @override
+  late final GeneratedColumn<Uint8List> signedPayload =
+      GeneratedColumn<Uint8List>(
+        'signed_payload',
+        aliasedName,
+        true,
+        type: DriftSqlType.blob,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _signerAuthenticationProofMeta =
+      const VerificationMeta('signerAuthenticationProof');
+  @override
+  late final GeneratedColumn<Uint8List> signerAuthenticationProof =
+      GeneratedColumn<Uint8List>(
+        'signer_authentication_proof',
+        aliasedName,
+        true,
+        type: DriftSqlType.blob,
+        requiredDuringInsert: false,
+      );
   static const VerificationMeta _applyStateMeta = const VerificationMeta(
     'applyState',
   );
@@ -8877,8 +9434,11 @@ class $GroupControlEventsTable extends GroupControlEvents
     signerUserId,
     signerDeviceId,
     operationKind,
+    deterministicProjection,
     canonicalControl,
     signature,
+    signedPayload,
+    signerAuthenticationProof,
     applyState,
     createdMs,
   ];
@@ -8988,6 +9548,15 @@ class $GroupControlEventsTable extends GroupControlEvents
     } else if (isInserting) {
       context.missing(_operationKindMeta);
     }
+    if (data.containsKey('deterministic_projection')) {
+      context.handle(
+        _deterministicProjectionMeta,
+        deterministicProjection.isAcceptableOrUnknown(
+          data['deterministic_projection']!,
+          _deterministicProjectionMeta,
+        ),
+      );
+    }
     if (data.containsKey('canonical_control')) {
       context.handle(
         _canonicalControlMeta,
@@ -9006,6 +9575,24 @@ class $GroupControlEventsTable extends GroupControlEvents
       );
     } else if (isInserting) {
       context.missing(_signatureMeta);
+    }
+    if (data.containsKey('signed_payload')) {
+      context.handle(
+        _signedPayloadMeta,
+        signedPayload.isAcceptableOrUnknown(
+          data['signed_payload']!,
+          _signedPayloadMeta,
+        ),
+      );
+    }
+    if (data.containsKey('signer_authentication_proof')) {
+      context.handle(
+        _signerAuthenticationProofMeta,
+        signerAuthenticationProof.isAcceptableOrUnknown(
+          data['signer_authentication_proof']!,
+          _signerAuthenticationProofMeta,
+        ),
+      );
     }
     if (data.containsKey('apply_state')) {
       context.handle(
@@ -9079,6 +9666,10 @@ class $GroupControlEventsTable extends GroupControlEvents
         DriftSqlType.int,
         data['${effectivePrefix}operation_kind'],
       )!,
+      deterministicProjection: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}deterministic_projection'],
+      ),
       canonicalControl: attachedDatabase.typeMapping.read(
         DriftSqlType.blob,
         data['${effectivePrefix}canonical_control'],
@@ -9087,6 +9678,14 @@ class $GroupControlEventsTable extends GroupControlEvents
         DriftSqlType.blob,
         data['${effectivePrefix}signature'],
       )!,
+      signedPayload: attachedDatabase.typeMapping.read(
+        DriftSqlType.blob,
+        data['${effectivePrefix}signed_payload'],
+      ),
+      signerAuthenticationProof: attachedDatabase.typeMapping.read(
+        DriftSqlType.blob,
+        data['${effectivePrefix}signer_authentication_proof'],
+      ),
       applyState: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}apply_state'],
@@ -9116,8 +9715,11 @@ class StoredGroupControlEventRow extends DataClass
   final String signerUserId;
   final String signerDeviceId;
   final int operationKind;
+  final String? deterministicProjection;
   final Uint8List canonicalControl;
   final Uint8List signature;
+  final Uint8List? signedPayload;
+  final Uint8List? signerAuthenticationProof;
   final int applyState;
   final int createdMs;
   const StoredGroupControlEventRow({
@@ -9131,8 +9733,11 @@ class StoredGroupControlEventRow extends DataClass
     required this.signerUserId,
     required this.signerDeviceId,
     required this.operationKind,
+    this.deterministicProjection,
     required this.canonicalControl,
     required this.signature,
+    this.signedPayload,
+    this.signerAuthenticationProof,
     required this.applyState,
     required this.createdMs,
   });
@@ -9155,8 +9760,21 @@ class StoredGroupControlEventRow extends DataClass
     map['signer_user_id'] = Variable<String>(signerUserId);
     map['signer_device_id'] = Variable<String>(signerDeviceId);
     map['operation_kind'] = Variable<int>(operationKind);
+    if (!nullToAbsent || deterministicProjection != null) {
+      map['deterministic_projection'] = Variable<String>(
+        deterministicProjection,
+      );
+    }
     map['canonical_control'] = Variable<Uint8List>(canonicalControl);
     map['signature'] = Variable<Uint8List>(signature);
+    if (!nullToAbsent || signedPayload != null) {
+      map['signed_payload'] = Variable<Uint8List>(signedPayload);
+    }
+    if (!nullToAbsent || signerAuthenticationProof != null) {
+      map['signer_authentication_proof'] = Variable<Uint8List>(
+        signerAuthenticationProof,
+      );
+    }
     map['apply_state'] = Variable<int>(applyState);
     map['created_ms'] = Variable<int>(createdMs);
     return map;
@@ -9178,8 +9796,18 @@ class StoredGroupControlEventRow extends DataClass
       signerUserId: Value(signerUserId),
       signerDeviceId: Value(signerDeviceId),
       operationKind: Value(operationKind),
+      deterministicProjection: deterministicProjection == null && nullToAbsent
+          ? const Value.absent()
+          : Value(deterministicProjection),
       canonicalControl: Value(canonicalControl),
       signature: Value(signature),
+      signedPayload: signedPayload == null && nullToAbsent
+          ? const Value.absent()
+          : Value(signedPayload),
+      signerAuthenticationProof:
+          signerAuthenticationProof == null && nullToAbsent
+          ? const Value.absent()
+          : Value(signerAuthenticationProof),
       applyState: Value(applyState),
       createdMs: Value(createdMs),
     );
@@ -9205,10 +9833,17 @@ class StoredGroupControlEventRow extends DataClass
       signerUserId: serializer.fromJson<String>(json['signerUserId']),
       signerDeviceId: serializer.fromJson<String>(json['signerDeviceId']),
       operationKind: serializer.fromJson<int>(json['operationKind']),
+      deterministicProjection: serializer.fromJson<String?>(
+        json['deterministicProjection'],
+      ),
       canonicalControl: serializer.fromJson<Uint8List>(
         json['canonicalControl'],
       ),
       signature: serializer.fromJson<Uint8List>(json['signature']),
+      signedPayload: serializer.fromJson<Uint8List?>(json['signedPayload']),
+      signerAuthenticationProof: serializer.fromJson<Uint8List?>(
+        json['signerAuthenticationProof'],
+      ),
       applyState: serializer.fromJson<int>(json['applyState']),
       createdMs: serializer.fromJson<int>(json['createdMs']),
     );
@@ -9229,8 +9864,15 @@ class StoredGroupControlEventRow extends DataClass
       'signerUserId': serializer.toJson<String>(signerUserId),
       'signerDeviceId': serializer.toJson<String>(signerDeviceId),
       'operationKind': serializer.toJson<int>(operationKind),
+      'deterministicProjection': serializer.toJson<String?>(
+        deterministicProjection,
+      ),
       'canonicalControl': serializer.toJson<Uint8List>(canonicalControl),
       'signature': serializer.toJson<Uint8List>(signature),
+      'signedPayload': serializer.toJson<Uint8List?>(signedPayload),
+      'signerAuthenticationProof': serializer.toJson<Uint8List?>(
+        signerAuthenticationProof,
+      ),
       'applyState': serializer.toJson<int>(applyState),
       'createdMs': serializer.toJson<int>(createdMs),
     };
@@ -9247,8 +9889,11 @@ class StoredGroupControlEventRow extends DataClass
     String? signerUserId,
     String? signerDeviceId,
     int? operationKind,
+    Value<String?> deterministicProjection = const Value.absent(),
     Uint8List? canonicalControl,
     Uint8List? signature,
+    Value<Uint8List?> signedPayload = const Value.absent(),
+    Value<Uint8List?> signerAuthenticationProof = const Value.absent(),
     int? applyState,
     int? createdMs,
   }) => StoredGroupControlEventRow(
@@ -9266,8 +9911,17 @@ class StoredGroupControlEventRow extends DataClass
     signerUserId: signerUserId ?? this.signerUserId,
     signerDeviceId: signerDeviceId ?? this.signerDeviceId,
     operationKind: operationKind ?? this.operationKind,
+    deterministicProjection: deterministicProjection.present
+        ? deterministicProjection.value
+        : this.deterministicProjection,
     canonicalControl: canonicalControl ?? this.canonicalControl,
     signature: signature ?? this.signature,
+    signedPayload: signedPayload.present
+        ? signedPayload.value
+        : this.signedPayload,
+    signerAuthenticationProof: signerAuthenticationProof.present
+        ? signerAuthenticationProof.value
+        : this.signerAuthenticationProof,
     applyState: applyState ?? this.applyState,
     createdMs: createdMs ?? this.createdMs,
   );
@@ -9297,10 +9951,19 @@ class StoredGroupControlEventRow extends DataClass
       operationKind: data.operationKind.present
           ? data.operationKind.value
           : this.operationKind,
+      deterministicProjection: data.deterministicProjection.present
+          ? data.deterministicProjection.value
+          : this.deterministicProjection,
       canonicalControl: data.canonicalControl.present
           ? data.canonicalControl.value
           : this.canonicalControl,
       signature: data.signature.present ? data.signature.value : this.signature,
+      signedPayload: data.signedPayload.present
+          ? data.signedPayload.value
+          : this.signedPayload,
+      signerAuthenticationProof: data.signerAuthenticationProof.present
+          ? data.signerAuthenticationProof.value
+          : this.signerAuthenticationProof,
       applyState: data.applyState.present
           ? data.applyState.value
           : this.applyState,
@@ -9321,8 +9984,11 @@ class StoredGroupControlEventRow extends DataClass
           ..write('signerUserId: $signerUserId, ')
           ..write('signerDeviceId: $signerDeviceId, ')
           ..write('operationKind: $operationKind, ')
+          ..write('deterministicProjection: $deterministicProjection, ')
           ..write('canonicalControl: $canonicalControl, ')
           ..write('signature: $signature, ')
+          ..write('signedPayload: $signedPayload, ')
+          ..write('signerAuthenticationProof: $signerAuthenticationProof, ')
           ..write('applyState: $applyState, ')
           ..write('createdMs: $createdMs')
           ..write(')'))
@@ -9341,8 +10007,11 @@ class StoredGroupControlEventRow extends DataClass
     signerUserId,
     signerDeviceId,
     operationKind,
+    deterministicProjection,
     $driftBlobEquality.hash(canonicalControl),
     $driftBlobEquality.hash(signature),
+    $driftBlobEquality.hash(signedPayload),
+    $driftBlobEquality.hash(signerAuthenticationProof),
     applyState,
     createdMs,
   );
@@ -9366,11 +10035,17 @@ class StoredGroupControlEventRow extends DataClass
           other.signerUserId == this.signerUserId &&
           other.signerDeviceId == this.signerDeviceId &&
           other.operationKind == this.operationKind &&
+          other.deterministicProjection == this.deterministicProjection &&
           $driftBlobEquality.equals(
             other.canonicalControl,
             this.canonicalControl,
           ) &&
           $driftBlobEquality.equals(other.signature, this.signature) &&
+          $driftBlobEquality.equals(other.signedPayload, this.signedPayload) &&
+          $driftBlobEquality.equals(
+            other.signerAuthenticationProof,
+            this.signerAuthenticationProof,
+          ) &&
           other.applyState == this.applyState &&
           other.createdMs == this.createdMs);
 }
@@ -9387,8 +10062,11 @@ class GroupControlEventsCompanion
   final Value<String> signerUserId;
   final Value<String> signerDeviceId;
   final Value<int> operationKind;
+  final Value<String?> deterministicProjection;
   final Value<Uint8List> canonicalControl;
   final Value<Uint8List> signature;
+  final Value<Uint8List?> signedPayload;
+  final Value<Uint8List?> signerAuthenticationProof;
   final Value<int> applyState;
   final Value<int> createdMs;
   final Value<int> rowid;
@@ -9403,8 +10081,11 @@ class GroupControlEventsCompanion
     this.signerUserId = const Value.absent(),
     this.signerDeviceId = const Value.absent(),
     this.operationKind = const Value.absent(),
+    this.deterministicProjection = const Value.absent(),
     this.canonicalControl = const Value.absent(),
     this.signature = const Value.absent(),
+    this.signedPayload = const Value.absent(),
+    this.signerAuthenticationProof = const Value.absent(),
     this.applyState = const Value.absent(),
     this.createdMs = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -9420,8 +10101,11 @@ class GroupControlEventsCompanion
     required String signerUserId,
     required String signerDeviceId,
     required int operationKind,
+    this.deterministicProjection = const Value.absent(),
     required Uint8List canonicalControl,
     required Uint8List signature,
+    this.signedPayload = const Value.absent(),
+    this.signerAuthenticationProof = const Value.absent(),
     required int applyState,
     required int createdMs,
     this.rowid = const Value.absent(),
@@ -9448,8 +10132,11 @@ class GroupControlEventsCompanion
     Expression<String>? signerUserId,
     Expression<String>? signerDeviceId,
     Expression<int>? operationKind,
+    Expression<String>? deterministicProjection,
     Expression<Uint8List>? canonicalControl,
     Expression<Uint8List>? signature,
+    Expression<Uint8List>? signedPayload,
+    Expression<Uint8List>? signerAuthenticationProof,
     Expression<int>? applyState,
     Expression<int>? createdMs,
     Expression<int>? rowid,
@@ -9466,8 +10153,13 @@ class GroupControlEventsCompanion
       if (signerUserId != null) 'signer_user_id': signerUserId,
       if (signerDeviceId != null) 'signer_device_id': signerDeviceId,
       if (operationKind != null) 'operation_kind': operationKind,
+      if (deterministicProjection != null)
+        'deterministic_projection': deterministicProjection,
       if (canonicalControl != null) 'canonical_control': canonicalControl,
       if (signature != null) 'signature': signature,
+      if (signedPayload != null) 'signed_payload': signedPayload,
+      if (signerAuthenticationProof != null)
+        'signer_authentication_proof': signerAuthenticationProof,
       if (applyState != null) 'apply_state': applyState,
       if (createdMs != null) 'created_ms': createdMs,
       if (rowid != null) 'rowid': rowid,
@@ -9485,8 +10177,11 @@ class GroupControlEventsCompanion
     Value<String>? signerUserId,
     Value<String>? signerDeviceId,
     Value<int>? operationKind,
+    Value<String?>? deterministicProjection,
     Value<Uint8List>? canonicalControl,
     Value<Uint8List>? signature,
+    Value<Uint8List?>? signedPayload,
+    Value<Uint8List?>? signerAuthenticationProof,
     Value<int>? applyState,
     Value<int>? createdMs,
     Value<int>? rowid,
@@ -9503,8 +10198,13 @@ class GroupControlEventsCompanion
       signerUserId: signerUserId ?? this.signerUserId,
       signerDeviceId: signerDeviceId ?? this.signerDeviceId,
       operationKind: operationKind ?? this.operationKind,
+      deterministicProjection:
+          deterministicProjection ?? this.deterministicProjection,
       canonicalControl: canonicalControl ?? this.canonicalControl,
       signature: signature ?? this.signature,
+      signedPayload: signedPayload ?? this.signedPayload,
+      signerAuthenticationProof:
+          signerAuthenticationProof ?? this.signerAuthenticationProof,
       applyState: applyState ?? this.applyState,
       createdMs: createdMs ?? this.createdMs,
       rowid: rowid ?? this.rowid,
@@ -9546,11 +10246,24 @@ class GroupControlEventsCompanion
     if (operationKind.present) {
       map['operation_kind'] = Variable<int>(operationKind.value);
     }
+    if (deterministicProjection.present) {
+      map['deterministic_projection'] = Variable<String>(
+        deterministicProjection.value,
+      );
+    }
     if (canonicalControl.present) {
       map['canonical_control'] = Variable<Uint8List>(canonicalControl.value);
     }
     if (signature.present) {
       map['signature'] = Variable<Uint8List>(signature.value);
+    }
+    if (signedPayload.present) {
+      map['signed_payload'] = Variable<Uint8List>(signedPayload.value);
+    }
+    if (signerAuthenticationProof.present) {
+      map['signer_authentication_proof'] = Variable<Uint8List>(
+        signerAuthenticationProof.value,
+      );
     }
     if (applyState.present) {
       map['apply_state'] = Variable<int>(applyState.value);
@@ -9577,8 +10290,11 @@ class GroupControlEventsCompanion
           ..write('signerUserId: $signerUserId, ')
           ..write('signerDeviceId: $signerDeviceId, ')
           ..write('operationKind: $operationKind, ')
+          ..write('deterministicProjection: $deterministicProjection, ')
           ..write('canonicalControl: $canonicalControl, ')
           ..write('signature: $signature, ')
+          ..write('signedPayload: $signedPayload, ')
+          ..write('signerAuthenticationProof: $signerAuthenticationProof, ')
           ..write('applyState: $applyState, ')
           ..write('createdMs: $createdMs, ')
           ..write('rowid: $rowid')
@@ -9650,6 +10366,18 @@ class $GroupOutboundObjectsTable extends GroupOutboundObjects
     type: DriftSqlType.blob,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _recipientUserIdsJsonMeta =
+      const VerificationMeta('recipientUserIdsJson');
+  @override
+  late final GeneratedColumn<String> recipientUserIdsJson =
+      GeneratedColumn<String>(
+        'recipient_user_ids_json',
+        aliasedName,
+        false,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+        defaultValue: const Constant('[]'),
+      );
   static const VerificationMeta _deliveryStateMeta = const VerificationMeta(
     'deliveryState',
   );
@@ -9681,6 +10409,7 @@ class $GroupOutboundObjectsTable extends GroupOutboundObjects
     eventId,
     epoch,
     mlsObject,
+    recipientUserIdsJson,
     deliveryState,
     createdAt,
   ];
@@ -9739,6 +10468,15 @@ class $GroupOutboundObjectsTable extends GroupOutboundObjects
     } else if (isInserting) {
       context.missing(_mlsObjectMeta);
     }
+    if (data.containsKey('recipient_user_ids_json')) {
+      context.handle(
+        _recipientUserIdsJsonMeta,
+        recipientUserIdsJson.isAcceptableOrUnknown(
+          data['recipient_user_ids_json']!,
+          _recipientUserIdsJsonMeta,
+        ),
+      );
+    }
     if (data.containsKey('delivery_state')) {
       context.handle(
         _deliveryStateMeta,
@@ -9788,6 +10526,10 @@ class $GroupOutboundObjectsTable extends GroupOutboundObjects
         DriftSqlType.blob,
         data['${effectivePrefix}mls_object'],
       )!,
+      recipientUserIdsJson: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}recipient_user_ids_json'],
+      )!,
       deliveryState: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}delivery_state'],
@@ -9812,6 +10554,7 @@ class StoredGroupOutboundObjectRow extends DataClass
   final String eventId;
   final int epoch;
   final Uint8List mlsObject;
+  final String recipientUserIdsJson;
   final int deliveryState;
   final DateTime createdAt;
   const StoredGroupOutboundObjectRow({
@@ -9820,6 +10563,7 @@ class StoredGroupOutboundObjectRow extends DataClass
     required this.eventId,
     required this.epoch,
     required this.mlsObject,
+    required this.recipientUserIdsJson,
     required this.deliveryState,
     required this.createdAt,
   });
@@ -9831,6 +10575,7 @@ class StoredGroupOutboundObjectRow extends DataClass
     map['event_id'] = Variable<String>(eventId);
     map['epoch'] = Variable<int>(epoch);
     map['mls_object'] = Variable<Uint8List>(mlsObject);
+    map['recipient_user_ids_json'] = Variable<String>(recipientUserIdsJson);
     map['delivery_state'] = Variable<int>(deliveryState);
     map['created_at'] = Variable<DateTime>(createdAt);
     return map;
@@ -9843,6 +10588,7 @@ class StoredGroupOutboundObjectRow extends DataClass
       eventId: Value(eventId),
       epoch: Value(epoch),
       mlsObject: Value(mlsObject),
+      recipientUserIdsJson: Value(recipientUserIdsJson),
       deliveryState: Value(deliveryState),
       createdAt: Value(createdAt),
     );
@@ -9859,6 +10605,9 @@ class StoredGroupOutboundObjectRow extends DataClass
       eventId: serializer.fromJson<String>(json['eventId']),
       epoch: serializer.fromJson<int>(json['epoch']),
       mlsObject: serializer.fromJson<Uint8List>(json['mlsObject']),
+      recipientUserIdsJson: serializer.fromJson<String>(
+        json['recipientUserIdsJson'],
+      ),
       deliveryState: serializer.fromJson<int>(json['deliveryState']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
     );
@@ -9872,6 +10621,7 @@ class StoredGroupOutboundObjectRow extends DataClass
       'eventId': serializer.toJson<String>(eventId),
       'epoch': serializer.toJson<int>(epoch),
       'mlsObject': serializer.toJson<Uint8List>(mlsObject),
+      'recipientUserIdsJson': serializer.toJson<String>(recipientUserIdsJson),
       'deliveryState': serializer.toJson<int>(deliveryState),
       'createdAt': serializer.toJson<DateTime>(createdAt),
     };
@@ -9883,6 +10633,7 @@ class StoredGroupOutboundObjectRow extends DataClass
     String? eventId,
     int? epoch,
     Uint8List? mlsObject,
+    String? recipientUserIdsJson,
     int? deliveryState,
     DateTime? createdAt,
   }) => StoredGroupOutboundObjectRow(
@@ -9891,6 +10642,7 @@ class StoredGroupOutboundObjectRow extends DataClass
     eventId: eventId ?? this.eventId,
     epoch: epoch ?? this.epoch,
     mlsObject: mlsObject ?? this.mlsObject,
+    recipientUserIdsJson: recipientUserIdsJson ?? this.recipientUserIdsJson,
     deliveryState: deliveryState ?? this.deliveryState,
     createdAt: createdAt ?? this.createdAt,
   );
@@ -9905,6 +10657,9 @@ class StoredGroupOutboundObjectRow extends DataClass
       eventId: data.eventId.present ? data.eventId.value : this.eventId,
       epoch: data.epoch.present ? data.epoch.value : this.epoch,
       mlsObject: data.mlsObject.present ? data.mlsObject.value : this.mlsObject,
+      recipientUserIdsJson: data.recipientUserIdsJson.present
+          ? data.recipientUserIdsJson.value
+          : this.recipientUserIdsJson,
       deliveryState: data.deliveryState.present
           ? data.deliveryState.value
           : this.deliveryState,
@@ -9920,6 +10675,7 @@ class StoredGroupOutboundObjectRow extends DataClass
           ..write('eventId: $eventId, ')
           ..write('epoch: $epoch, ')
           ..write('mlsObject: $mlsObject, ')
+          ..write('recipientUserIdsJson: $recipientUserIdsJson, ')
           ..write('deliveryState: $deliveryState, ')
           ..write('createdAt: $createdAt')
           ..write(')'))
@@ -9933,6 +10689,7 @@ class StoredGroupOutboundObjectRow extends DataClass
     eventId,
     epoch,
     $driftBlobEquality.hash(mlsObject),
+    recipientUserIdsJson,
     deliveryState,
     createdAt,
   );
@@ -9945,6 +10702,7 @@ class StoredGroupOutboundObjectRow extends DataClass
           other.eventId == this.eventId &&
           other.epoch == this.epoch &&
           $driftBlobEquality.equals(other.mlsObject, this.mlsObject) &&
+          other.recipientUserIdsJson == this.recipientUserIdsJson &&
           other.deliveryState == this.deliveryState &&
           other.createdAt == this.createdAt);
 }
@@ -9956,6 +10714,7 @@ class GroupOutboundObjectsCompanion
   final Value<String> eventId;
   final Value<int> epoch;
   final Value<Uint8List> mlsObject;
+  final Value<String> recipientUserIdsJson;
   final Value<int> deliveryState;
   final Value<DateTime> createdAt;
   final Value<int> rowid;
@@ -9965,6 +10724,7 @@ class GroupOutboundObjectsCompanion
     this.eventId = const Value.absent(),
     this.epoch = const Value.absent(),
     this.mlsObject = const Value.absent(),
+    this.recipientUserIdsJson = const Value.absent(),
     this.deliveryState = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -9975,6 +10735,7 @@ class GroupOutboundObjectsCompanion
     required String eventId,
     required int epoch,
     required Uint8List mlsObject,
+    this.recipientUserIdsJson = const Value.absent(),
     required int deliveryState,
     this.createdAt = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -9990,6 +10751,7 @@ class GroupOutboundObjectsCompanion
     Expression<String>? eventId,
     Expression<int>? epoch,
     Expression<Uint8List>? mlsObject,
+    Expression<String>? recipientUserIdsJson,
     Expression<int>? deliveryState,
     Expression<DateTime>? createdAt,
     Expression<int>? rowid,
@@ -10000,6 +10762,8 @@ class GroupOutboundObjectsCompanion
       if (eventId != null) 'event_id': eventId,
       if (epoch != null) 'epoch': epoch,
       if (mlsObject != null) 'mls_object': mlsObject,
+      if (recipientUserIdsJson != null)
+        'recipient_user_ids_json': recipientUserIdsJson,
       if (deliveryState != null) 'delivery_state': deliveryState,
       if (createdAt != null) 'created_at': createdAt,
       if (rowid != null) 'rowid': rowid,
@@ -10012,6 +10776,7 @@ class GroupOutboundObjectsCompanion
     Value<String>? eventId,
     Value<int>? epoch,
     Value<Uint8List>? mlsObject,
+    Value<String>? recipientUserIdsJson,
     Value<int>? deliveryState,
     Value<DateTime>? createdAt,
     Value<int>? rowid,
@@ -10022,6 +10787,7 @@ class GroupOutboundObjectsCompanion
       eventId: eventId ?? this.eventId,
       epoch: epoch ?? this.epoch,
       mlsObject: mlsObject ?? this.mlsObject,
+      recipientUserIdsJson: recipientUserIdsJson ?? this.recipientUserIdsJson,
       deliveryState: deliveryState ?? this.deliveryState,
       createdAt: createdAt ?? this.createdAt,
       rowid: rowid ?? this.rowid,
@@ -10046,6 +10812,11 @@ class GroupOutboundObjectsCompanion
     if (mlsObject.present) {
       map['mls_object'] = Variable<Uint8List>(mlsObject.value);
     }
+    if (recipientUserIdsJson.present) {
+      map['recipient_user_ids_json'] = Variable<String>(
+        recipientUserIdsJson.value,
+      );
+    }
     if (deliveryState.present) {
       map['delivery_state'] = Variable<int>(deliveryState.value);
     }
@@ -10066,6 +10837,7 @@ class GroupOutboundObjectsCompanion
           ..write('eventId: $eventId, ')
           ..write('epoch: $epoch, ')
           ..write('mlsObject: $mlsObject, ')
+          ..write('recipientUserIdsJson: $recipientUserIdsJson, ')
           ..write('deliveryState: $deliveryState, ')
           ..write('createdAt: $createdAt, ')
           ..write('rowid: $rowid')
@@ -23249,6 +24021,8 @@ abstract class _$LocalDatabase extends GeneratedDatabase {
   late final $PrekeysTable prekeys = $PrekeysTable(this);
   late final $PrekeyMaintenancePlansTable prekeyMaintenancePlans =
       $PrekeyMaintenancePlansTable(this);
+  late final $MlsKeyPackageMaintenanceStatesTable
+  mlsKeyPackageMaintenanceStates = $MlsKeyPackageMaintenanceStatesTable(this);
   late final $MlsGroupsTable mlsGroups = $MlsGroupsTable(this);
   late final $GroupControlEventsTable groupControlEvents =
       $GroupControlEventsTable(this);
@@ -23320,6 +24094,7 @@ abstract class _$LocalDatabase extends GeneratedDatabase {
     pairwiseSessionAlternates,
     prekeys,
     prekeyMaintenancePlans,
+    mlsKeyPackageMaintenanceStates,
     mlsGroups,
     groupControlEvents,
     groupOutboundObjects,
@@ -28077,6 +28852,271 @@ typedef $$PrekeyMaintenancePlansTableProcessedTableManager =
       StoredPrekeyMaintenancePlan,
       PrefetchHooks Function()
     >;
+typedef $$MlsKeyPackageMaintenanceStatesTableCreateCompanionBuilder =
+    MlsKeyPackageMaintenanceStatesCompanion Function({
+      required String deviceId,
+      required int stage,
+      Value<int> expectedStateRevision,
+      Value<int?> plannedKind,
+      Value<Uint8List?> exactUploadProjection,
+      Value<bool> lastResortUploaded,
+      Value<DateTime> updatedAt,
+      Value<int> rowid,
+    });
+typedef $$MlsKeyPackageMaintenanceStatesTableUpdateCompanionBuilder =
+    MlsKeyPackageMaintenanceStatesCompanion Function({
+      Value<String> deviceId,
+      Value<int> stage,
+      Value<int> expectedStateRevision,
+      Value<int?> plannedKind,
+      Value<Uint8List?> exactUploadProjection,
+      Value<bool> lastResortUploaded,
+      Value<DateTime> updatedAt,
+      Value<int> rowid,
+    });
+
+class $$MlsKeyPackageMaintenanceStatesTableFilterComposer
+    extends Composer<_$LocalDatabase, $MlsKeyPackageMaintenanceStatesTable> {
+  $$MlsKeyPackageMaintenanceStatesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get deviceId => $composableBuilder(
+    column: $table.deviceId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get stage => $composableBuilder(
+    column: $table.stage,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get expectedStateRevision => $composableBuilder(
+    column: $table.expectedStateRevision,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get plannedKind => $composableBuilder(
+    column: $table.plannedKind,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<Uint8List> get exactUploadProjection => $composableBuilder(
+    column: $table.exactUploadProjection,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get lastResortUploaded => $composableBuilder(
+    column: $table.lastResortUploaded,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$MlsKeyPackageMaintenanceStatesTableOrderingComposer
+    extends Composer<_$LocalDatabase, $MlsKeyPackageMaintenanceStatesTable> {
+  $$MlsKeyPackageMaintenanceStatesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get deviceId => $composableBuilder(
+    column: $table.deviceId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get stage => $composableBuilder(
+    column: $table.stage,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get expectedStateRevision => $composableBuilder(
+    column: $table.expectedStateRevision,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get plannedKind => $composableBuilder(
+    column: $table.plannedKind,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<Uint8List> get exactUploadProjection => $composableBuilder(
+    column: $table.exactUploadProjection,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get lastResortUploaded => $composableBuilder(
+    column: $table.lastResortUploaded,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$MlsKeyPackageMaintenanceStatesTableAnnotationComposer
+    extends Composer<_$LocalDatabase, $MlsKeyPackageMaintenanceStatesTable> {
+  $$MlsKeyPackageMaintenanceStatesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get deviceId =>
+      $composableBuilder(column: $table.deviceId, builder: (column) => column);
+
+  GeneratedColumn<int> get stage =>
+      $composableBuilder(column: $table.stage, builder: (column) => column);
+
+  GeneratedColumn<int> get expectedStateRevision => $composableBuilder(
+    column: $table.expectedStateRevision,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get plannedKind => $composableBuilder(
+    column: $table.plannedKind,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<Uint8List> get exactUploadProjection => $composableBuilder(
+    column: $table.exactUploadProjection,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get lastResortUploaded => $composableBuilder(
+    column: $table.lastResortUploaded,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+}
+
+class $$MlsKeyPackageMaintenanceStatesTableTableManager
+    extends
+        RootTableManager<
+          _$LocalDatabase,
+          $MlsKeyPackageMaintenanceStatesTable,
+          StoredMlsKeyPackageMaintenanceState,
+          $$MlsKeyPackageMaintenanceStatesTableFilterComposer,
+          $$MlsKeyPackageMaintenanceStatesTableOrderingComposer,
+          $$MlsKeyPackageMaintenanceStatesTableAnnotationComposer,
+          $$MlsKeyPackageMaintenanceStatesTableCreateCompanionBuilder,
+          $$MlsKeyPackageMaintenanceStatesTableUpdateCompanionBuilder,
+          (
+            StoredMlsKeyPackageMaintenanceState,
+            BaseReferences<
+              _$LocalDatabase,
+              $MlsKeyPackageMaintenanceStatesTable,
+              StoredMlsKeyPackageMaintenanceState
+            >,
+          ),
+          StoredMlsKeyPackageMaintenanceState,
+          PrefetchHooks Function()
+        > {
+  $$MlsKeyPackageMaintenanceStatesTableTableManager(
+    _$LocalDatabase db,
+    $MlsKeyPackageMaintenanceStatesTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$MlsKeyPackageMaintenanceStatesTableFilterComposer(
+                $db: db,
+                $table: table,
+              ),
+          createOrderingComposer: () =>
+              $$MlsKeyPackageMaintenanceStatesTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$MlsKeyPackageMaintenanceStatesTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> deviceId = const Value.absent(),
+                Value<int> stage = const Value.absent(),
+                Value<int> expectedStateRevision = const Value.absent(),
+                Value<int?> plannedKind = const Value.absent(),
+                Value<Uint8List?> exactUploadProjection = const Value.absent(),
+                Value<bool> lastResortUploaded = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => MlsKeyPackageMaintenanceStatesCompanion(
+                deviceId: deviceId,
+                stage: stage,
+                expectedStateRevision: expectedStateRevision,
+                plannedKind: plannedKind,
+                exactUploadProjection: exactUploadProjection,
+                lastResortUploaded: lastResortUploaded,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String deviceId,
+                required int stage,
+                Value<int> expectedStateRevision = const Value.absent(),
+                Value<int?> plannedKind = const Value.absent(),
+                Value<Uint8List?> exactUploadProjection = const Value.absent(),
+                Value<bool> lastResortUploaded = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => MlsKeyPackageMaintenanceStatesCompanion.insert(
+                deviceId: deviceId,
+                stage: stage,
+                expectedStateRevision: expectedStateRevision,
+                plannedKind: plannedKind,
+                exactUploadProjection: exactUploadProjection,
+                lastResortUploaded: lastResortUploaded,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$MlsKeyPackageMaintenanceStatesTableProcessedTableManager =
+    ProcessedTableManager<
+      _$LocalDatabase,
+      $MlsKeyPackageMaintenanceStatesTable,
+      StoredMlsKeyPackageMaintenanceState,
+      $$MlsKeyPackageMaintenanceStatesTableFilterComposer,
+      $$MlsKeyPackageMaintenanceStatesTableOrderingComposer,
+      $$MlsKeyPackageMaintenanceStatesTableAnnotationComposer,
+      $$MlsKeyPackageMaintenanceStatesTableCreateCompanionBuilder,
+      $$MlsKeyPackageMaintenanceStatesTableUpdateCompanionBuilder,
+      (
+        StoredMlsKeyPackageMaintenanceState,
+        BaseReferences<
+          _$LocalDatabase,
+          $MlsKeyPackageMaintenanceStatesTable,
+          StoredMlsKeyPackageMaintenanceState
+        >,
+      ),
+      StoredMlsKeyPackageMaintenanceState,
+      PrefetchHooks Function()
+    >;
 typedef $$MlsGroupsTableCreateCompanionBuilder =
     MlsGroupsCompanion Function({
       required String groupId,
@@ -28631,8 +29671,11 @@ typedef $$GroupControlEventsTableCreateCompanionBuilder =
       required String signerUserId,
       required String signerDeviceId,
       required int operationKind,
+      Value<String?> deterministicProjection,
       required Uint8List canonicalControl,
       required Uint8List signature,
+      Value<Uint8List?> signedPayload,
+      Value<Uint8List?> signerAuthenticationProof,
       required int applyState,
       required int createdMs,
       Value<int> rowid,
@@ -28649,8 +29692,11 @@ typedef $$GroupControlEventsTableUpdateCompanionBuilder =
       Value<String> signerUserId,
       Value<String> signerDeviceId,
       Value<int> operationKind,
+      Value<String?> deterministicProjection,
       Value<Uint8List> canonicalControl,
       Value<Uint8List> signature,
+      Value<Uint8List?> signedPayload,
+      Value<Uint8List?> signerAuthenticationProof,
       Value<int> applyState,
       Value<int> createdMs,
       Value<int> rowid,
@@ -28741,6 +29787,11 @@ class $$GroupControlEventsTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
+  ColumnFilters<String> get deterministicProjection => $composableBuilder(
+    column: $table.deterministicProjection,
+    builder: (column) => ColumnFilters(column),
+  );
+
   ColumnFilters<Uint8List> get canonicalControl => $composableBuilder(
     column: $table.canonicalControl,
     builder: (column) => ColumnFilters(column),
@@ -28748,6 +29799,16 @@ class $$GroupControlEventsTableFilterComposer
 
   ColumnFilters<Uint8List> get signature => $composableBuilder(
     column: $table.signature,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<Uint8List> get signedPayload => $composableBuilder(
+    column: $table.signedPayload,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<Uint8List> get signerAuthenticationProof => $composableBuilder(
+    column: $table.signerAuthenticationProof,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -28839,6 +29900,11 @@ class $$GroupControlEventsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get deterministicProjection => $composableBuilder(
+    column: $table.deterministicProjection,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<Uint8List> get canonicalControl => $composableBuilder(
     column: $table.canonicalControl,
     builder: (column) => ColumnOrderings(column),
@@ -28848,6 +29914,17 @@ class $$GroupControlEventsTableOrderingComposer
     column: $table.signature,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<Uint8List> get signedPayload => $composableBuilder(
+    column: $table.signedPayload,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<Uint8List> get signerAuthenticationProof =>
+      $composableBuilder(
+        column: $table.signerAuthenticationProof,
+        builder: (column) => ColumnOrderings(column),
+      );
 
   ColumnOrderings<int> get applyState => $composableBuilder(
     column: $table.applyState,
@@ -28931,6 +30008,11 @@ class $$GroupControlEventsTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<String> get deterministicProjection => $composableBuilder(
+    column: $table.deterministicProjection,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<Uint8List> get canonicalControl => $composableBuilder(
     column: $table.canonicalControl,
     builder: (column) => column,
@@ -28938,6 +30020,17 @@ class $$GroupControlEventsTableAnnotationComposer
 
   GeneratedColumn<Uint8List> get signature =>
       $composableBuilder(column: $table.signature, builder: (column) => column);
+
+  GeneratedColumn<Uint8List> get signedPayload => $composableBuilder(
+    column: $table.signedPayload,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<Uint8List> get signerAuthenticationProof =>
+      $composableBuilder(
+        column: $table.signerAuthenticationProof,
+        builder: (column) => column,
+      );
 
   GeneratedColumn<int> get applyState => $composableBuilder(
     column: $table.applyState,
@@ -29015,8 +30108,12 @@ class $$GroupControlEventsTableTableManager
                 Value<String> signerUserId = const Value.absent(),
                 Value<String> signerDeviceId = const Value.absent(),
                 Value<int> operationKind = const Value.absent(),
+                Value<String?> deterministicProjection = const Value.absent(),
                 Value<Uint8List> canonicalControl = const Value.absent(),
                 Value<Uint8List> signature = const Value.absent(),
+                Value<Uint8List?> signedPayload = const Value.absent(),
+                Value<Uint8List?> signerAuthenticationProof =
+                    const Value.absent(),
                 Value<int> applyState = const Value.absent(),
                 Value<int> createdMs = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
@@ -29031,8 +30128,11 @@ class $$GroupControlEventsTableTableManager
                 signerUserId: signerUserId,
                 signerDeviceId: signerDeviceId,
                 operationKind: operationKind,
+                deterministicProjection: deterministicProjection,
                 canonicalControl: canonicalControl,
                 signature: signature,
+                signedPayload: signedPayload,
+                signerAuthenticationProof: signerAuthenticationProof,
                 applyState: applyState,
                 createdMs: createdMs,
                 rowid: rowid,
@@ -29050,8 +30150,12 @@ class $$GroupControlEventsTableTableManager
                 required String signerUserId,
                 required String signerDeviceId,
                 required int operationKind,
+                Value<String?> deterministicProjection = const Value.absent(),
                 required Uint8List canonicalControl,
                 required Uint8List signature,
+                Value<Uint8List?> signedPayload = const Value.absent(),
+                Value<Uint8List?> signerAuthenticationProof =
+                    const Value.absent(),
                 required int applyState,
                 required int createdMs,
                 Value<int> rowid = const Value.absent(),
@@ -29066,8 +30170,11 @@ class $$GroupControlEventsTableTableManager
                 signerUserId: signerUserId,
                 signerDeviceId: signerDeviceId,
                 operationKind: operationKind,
+                deterministicProjection: deterministicProjection,
                 canonicalControl: canonicalControl,
                 signature: signature,
+                signedPayload: signedPayload,
+                signerAuthenticationProof: signerAuthenticationProof,
                 applyState: applyState,
                 createdMs: createdMs,
                 rowid: rowid,
@@ -29148,6 +30255,7 @@ typedef $$GroupOutboundObjectsTableCreateCompanionBuilder =
       required String eventId,
       required int epoch,
       required Uint8List mlsObject,
+      Value<String> recipientUserIdsJson,
       required int deliveryState,
       Value<DateTime> createdAt,
       Value<int> rowid,
@@ -29159,6 +30267,7 @@ typedef $$GroupOutboundObjectsTableUpdateCompanionBuilder =
       Value<String> eventId,
       Value<int> epoch,
       Value<Uint8List> mlsObject,
+      Value<String> recipientUserIdsJson,
       Value<int> deliveryState,
       Value<DateTime> createdAt,
       Value<int> rowid,
@@ -29221,6 +30330,11 @@ class $$GroupOutboundObjectsTableFilterComposer
 
   ColumnFilters<Uint8List> get mlsObject => $composableBuilder(
     column: $table.mlsObject,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get recipientUserIdsJson => $composableBuilder(
+    column: $table.recipientUserIdsJson,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -29287,6 +30401,11 @@ class $$GroupOutboundObjectsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get recipientUserIdsJson => $composableBuilder(
+    column: $table.recipientUserIdsJson,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<int> get deliveryState => $composableBuilder(
     column: $table.deliveryState,
     builder: (column) => ColumnOrderings(column),
@@ -29343,6 +30462,11 @@ class $$GroupOutboundObjectsTableAnnotationComposer
 
   GeneratedColumn<Uint8List> get mlsObject =>
       $composableBuilder(column: $table.mlsObject, builder: (column) => column);
+
+  GeneratedColumn<String> get recipientUserIdsJson => $composableBuilder(
+    column: $table.recipientUserIdsJson,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<int> get deliveryState => $composableBuilder(
     column: $table.deliveryState,
@@ -29417,6 +30541,7 @@ class $$GroupOutboundObjectsTableTableManager
                 Value<String> eventId = const Value.absent(),
                 Value<int> epoch = const Value.absent(),
                 Value<Uint8List> mlsObject = const Value.absent(),
+                Value<String> recipientUserIdsJson = const Value.absent(),
                 Value<int> deliveryState = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
@@ -29426,6 +30551,7 @@ class $$GroupOutboundObjectsTableTableManager
                 eventId: eventId,
                 epoch: epoch,
                 mlsObject: mlsObject,
+                recipientUserIdsJson: recipientUserIdsJson,
                 deliveryState: deliveryState,
                 createdAt: createdAt,
                 rowid: rowid,
@@ -29437,6 +30563,7 @@ class $$GroupOutboundObjectsTableTableManager
                 required String eventId,
                 required int epoch,
                 required Uint8List mlsObject,
+                Value<String> recipientUserIdsJson = const Value.absent(),
                 required int deliveryState,
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
@@ -29446,6 +30573,7 @@ class $$GroupOutboundObjectsTableTableManager
                 eventId: eventId,
                 epoch: epoch,
                 mlsObject: mlsObject,
+                recipientUserIdsJson: recipientUserIdsJson,
                 deliveryState: deliveryState,
                 createdAt: createdAt,
                 rowid: rowid,
@@ -38110,6 +39238,12 @@ class $LocalDatabaseManager {
       $$PrekeyMaintenancePlansTableTableManager(
         _db,
         _db.prekeyMaintenancePlans,
+      );
+  $$MlsKeyPackageMaintenanceStatesTableTableManager
+  get mlsKeyPackageMaintenanceStates =>
+      $$MlsKeyPackageMaintenanceStatesTableTableManager(
+        _db,
+        _db.mlsKeyPackageMaintenanceStates,
       );
   $$MlsGroupsTableTableManager get mlsGroups =>
       $$MlsGroupsTableTableManager(_db, _db.mlsGroups);

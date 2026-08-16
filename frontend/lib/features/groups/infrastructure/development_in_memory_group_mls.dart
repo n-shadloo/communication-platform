@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:communication_platform/app/config/group_production_gate.dart';
+import 'package:communication_platform/core/protocol/beta_mls_model.dart';
 import 'package:communication_platform/core/result/failure.dart';
 import 'package:communication_platform/core/result/result.dart';
 import 'package:communication_platform/features/groups/application/ports/group_ports.dart';
@@ -20,6 +21,13 @@ final class DevelopmentInMemoryGroupMls implements GroupMlsCryptoPort {
   int _counter;
 
   @override
+  Future<Result<GroupMlsTransportProbe>> probeIncomingTransport(
+    Uint8List mlsObject,
+  ) async => const Result.failure(
+    UnsupportedProtocolFailure(UnsupportedProtocolFailureKind.capability),
+  );
+
+  @override
   Future<Result<PreparedGroupTransition>> prepareCreate(
     GroupCreationIntent intent,
   ) async {
@@ -35,14 +43,24 @@ final class DevelopmentInMemoryGroupMls implements GroupMlsCryptoPort {
         groupId: groupId,
         revision: 1,
         previousHash: null,
-        epoch: 0,
+        epoch: 1,
         operation: operation,
         actorUserId: intent.creatorUserId,
         actorDeviceId: intent.creatorDeviceId,
         createdMs: intent.createdMs,
+        recipientUserIds: intent.members.map((member) => member.userId),
       ),
     );
   }
+
+  @override
+  Future<Result<PreparedGroupTransition>> inspectIncomingWelcome({
+    required Uint8List mlsObject,
+    required String localUserId,
+    required String localDeviceId,
+  }) async => const Result.failure(
+    UnsupportedProtocolFailure(UnsupportedProtocolFailureKind.capability),
+  );
 
   @override
   Future<Result<PreparedGroupTransition>> prepareControl({
@@ -68,6 +86,7 @@ final class DevelopmentInMemoryGroupMls implements GroupMlsCryptoPort {
         actorUserId: actorUserId,
         actorDeviceId: actorDeviceId,
         createdMs: createdMs,
+        recipientUserIds: current.activeMembers.map((member) => member.userId),
       ),
     );
   }
@@ -81,6 +100,7 @@ final class DevelopmentInMemoryGroupMls implements GroupMlsCryptoPort {
     required String actorUserId,
     required String actorDeviceId,
     required int createdMs,
+    required Iterable<String> recipientUserIds,
   }) {
     final event = GroupControlEvent(
       eventId: _nextHex(16, 'event'),
@@ -120,6 +140,7 @@ final class DevelopmentInMemoryGroupMls implements GroupMlsCryptoPort {
         utf8.encode('DEVELOPMENT-PREVIEW-CONTROL|$controlHash'),
       ),
       mutationId: 'preview-control-${event.eventId}',
+      recipientUserIds: recipientUserIds,
     );
   }
 
@@ -160,31 +181,47 @@ final class DevelopmentInMemoryGroupMls implements GroupMlsCryptoPort {
           utf8.encode('DEVELOPMENT-PREVIEW-MESSAGE|$marker'),
         ),
         operationId: 'preview-message-$messageId',
+        recipientUserIds: current.activeMembers.map((member) => member.userId),
       ),
     );
   }
+
+  @override
+  Future<Result<PreparedGroupMessage>> inspectIncomingApplication({
+    required GroupState current,
+    required Uint8List currentOpaqueMlsState,
+    required Uint8List mlsObject,
+    required String localUserId,
+    required String localDeviceId,
+  }) async => const Result.failure(
+    UnsupportedProtocolFailure(UnsupportedProtocolFailureKind.capability),
+  );
 
   @override
   Future<Result<PreparedGroupTransition>> inspectIncomingControl({
     required GroupState current,
     required Uint8List currentOpaqueMlsState,
     required Uint8List mlsObject,
+    required String localUserId,
+    required String localDeviceId,
   }) async => const Result.failure(
     UnsupportedProtocolFailure(UnsupportedProtocolFailureKind.capability),
   );
 
   @override
-  Future<Result<List<Uint8List>>> generateKeyPackages({
-    required int count,
-  }) async => const Result.failure(
+  Future<Result<GeneratedMlsKeyPackages>> generateKeyPackages(
+    MlsKeyPackageGenerationRequest request,
+  ) async => const Result.failure(
     UnsupportedProtocolFailure(UnsupportedProtocolFailureKind.capability),
   );
 
   @override
-  Future<Result<PreparedGroupTransition>> reconcileFork({
+  Future<Result<GroupForkResolution>> reconcileFork({
     required GroupState current,
     required Uint8List currentOpaqueMlsState,
     required List<Uint8List> siblingCommits,
+    required String localUserId,
+    required String localDeviceId,
   }) async => const Result.failure(
     UnsupportedProtocolFailure(UnsupportedProtocolFailureKind.capability),
   );

@@ -31,7 +31,9 @@ Future<void> bootstrap(AppEnvironment environment) async {
     platform: platform,
   );
   final configurationResult = await configurationPort.load();
-  final cryptoCore = createPlatformCryptoCore();
+  final cryptoCore = createPlatformCryptoCore(
+    betaMlsEnabled: environment == AppEnvironment.beta,
+  );
   final enrollmentCrypto = cryptoCore is EnrollmentCryptoPort
       ? cryptoCore as EnrollmentCryptoPort
       : const UnsupportedEnrollmentCrypto();

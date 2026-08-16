@@ -300,6 +300,7 @@ final class ApplyIncomingGroupControl {
     required this.crypto,
     required this.clock,
     required this.localUserId,
+    required this.localDeviceId,
     this.stateMachine = const GroupControlStateMachine(),
   });
 
@@ -307,6 +308,7 @@ final class ApplyIncomingGroupControl {
   final GroupMlsCryptoPort crypto;
   final TimeSource clock;
   final String localUserId;
+  final String localDeviceId;
   final GroupControlStateMachine stateMachine;
 
   Future<Result<GroupControlApplyResult>> call({
@@ -338,6 +340,8 @@ final class ApplyIncomingGroupControl {
       current: current,
       currentOpaqueMlsState: state,
       mlsObject: mlsObject,
+      localUserId: localUserId,
+      localDeviceId: localDeviceId,
     );
     if (inspected case FailureResult(failure: final failure)) {
       final reason =
@@ -396,14 +400,140 @@ final class ApplyIncomingGroupControl {
   }
 }
 
+final class ApplyIncomingGroupMessage {
+  const ApplyIncomingGroupMessage({
+    required this.repository,
+    required this.crypto,
+  });
+
+  final GroupRepositoryPort repository;
+  final GroupMlsCryptoPort crypto;
+
+  Future<Result<GroupMessage>> call({
+    required String groupId,
+    required Uint8List mlsObject,
+    required String localUserId,
+    required String localDeviceId,
+  }) async {
+    final groupResult = await repository.readGroup(groupId);
+    if (groupResult case FailureResult(failure: final failure)) {
+      return Result.failure(failure);
+    }
+    final current = (groupResult as Success<GroupState?>).value;
+    if (current == null) {
+      return const Result.failure(
+        ValidationFailure(ValidationFailureKind.invalidInput),
+      );
+    }
+    final stateResult = await repository.readOpaqueMlsState(groupId);
+    if (stateResult case FailureResult(failure: final failure)) {
+      return Result.failure(failure);
+    }
+    final state = (stateResult as Success<Uint8List?>).value;
+    if (state == null) {
+      return const Result.failure(
+        SecurityFailure(SecurityFailureKind.integrityCheckFailed),
+      );
+    }
+    final inspected = await crypto.inspectIncomingApplication(
+      current: current,
+      currentOpaqueMlsState: state,
+      mlsObject: mlsObject,
+      localUserId: localUserId.toLowerCase(),
+      localDeviceId: localDeviceId.toLowerCase(),
+    );
+    if (inspected case FailureResult(failure: final failure)) {
+      return Result.failure(failure);
+    }
+    final prepared = (inspected as Success<PreparedGroupMessage>).value;
+    if (prepared.outbound) {
+      return const Result.failure(
+        SecurityFailure(SecurityFailureKind.integrityCheckFailed),
+      );
+    }
+    final committed = await repository.commitMessage(
+      expectedGroup: current,
+      prepared: prepared,
+      developmentPreviewOnly: false,
+    );
+    return committed.fold(
+      onSuccess: (_) => Result.success(
+        GroupMessage(
+          messageId: prepared.messageId,
+          groupId: prepared.groupId,
+          senderUserId: prepared.senderUserId,
+          text: prepared.text,
+          createdMs: prepared.createdMs,
+          localPreviewOnly: false,
+        ),
+      ),
+      onFailure: Result.failure,
+    );
+  }
+}
+
+final class AcceptGroupWelcome {
+  const AcceptGroupWelcome({
+    required this.repository,
+    required this.crypto,
+    this.stateMachine = const GroupControlStateMachine(),
+  });
+
+  final GroupRepositoryPort repository;
+  final GroupMlsCryptoPort crypto;
+  final GroupControlStateMachine stateMachine;
+
+  Future<Result<GroupState>> call({
+    required Uint8List mlsObject,
+    required String localUserId,
+    required String localDeviceId,
+  }) async {
+    final inspected = await crypto.inspectIncomingWelcome(
+      mlsObject: mlsObject,
+      localUserId: localUserId.toLowerCase(),
+      localDeviceId: localDeviceId.toLowerCase(),
+    );
+    if (inspected case FailureResult(failure: final failure)) {
+      return Result.failure(failure);
+    }
+    final prepared = (inspected as Success<PreparedGroupTransition>).value;
+    final applied = stateMachine.apply(
+      previous: null,
+      signedControl: prepared.signedControl,
+      localUserId: localUserId,
+    );
+    if (applied is! GroupControlAccepted ||
+        prepared.consumedKeyPackageState == null ||
+        prepared.outbound) {
+      return const Result.failure(
+        SecurityFailure(SecurityFailureKind.integrityCheckFailed),
+      );
+    }
+    final committed = await repository.commitTransition(
+      expectedPrevious: null,
+      next: applied.state,
+      prepared: prepared,
+      developmentPreviewOnly: false,
+    );
+    return committed.fold(
+      onSuccess: (_) => Result.success(applied.state),
+      onFailure: Result.failure,
+    );
+  }
+}
+
 final class GroupUseCases {
   const GroupUseCases({
     required this.create,
     required this.mutate,
     required this.sendMessage,
+    required this.acceptWelcome,
+    required this.applyIncomingMessage,
   });
 
   final CreateGroup create;
   final MutateGroup mutate;
   final SendGroupMessage sendMessage;
+  final AcceptGroupWelcome acceptWelcome;
+  final ApplyIncomingGroupMessage applyIncomingMessage;
 }

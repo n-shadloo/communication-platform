@@ -309,6 +309,29 @@ class PrekeyMaintenancePlans extends Table {
   Set<Column<Object>> get primaryKey => {deviceId};
 }
 
+@DataClassName('StoredMlsKeyPackageMaintenanceState')
+class MlsKeyPackageMaintenanceStates extends Table {
+  @override
+  String get tableName => 'mls_key_package_maintenance_states';
+
+  TextColumn get deviceId => text()();
+  // 0 idle, 1 prepared, 2 consumable attempt started, 3 ambiguous.
+  IntColumn get stage => integer().check(stage.isBetweenValues(0, 3))();
+  IntColumn get expectedStateRevision => integer()
+      .withDefault(const Constant(0))
+      .check(expectedStateRevision.isBiggerOrEqualValue(0))();
+  IntColumn get plannedKind => integer().nullable().check(
+    plannedKind.isNull() | plannedKind.isBetweenValues(0, 1),
+  )();
+  BlobColumn get exactUploadProjection => blob().nullable()();
+  BoolColumn get lastResortUploaded =>
+      boolean().withDefault(const Constant(false))();
+  DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
+
+  @override
+  Set<Column<Object>> get primaryKey => {deviceId};
+}
+
 class MlsGroups extends Table {
   @override
   String get tableName => 'mls_groups';
@@ -353,8 +376,11 @@ class GroupControlEvents extends Table {
   TextColumn get signerDeviceId => text()();
   IntColumn get operationKind =>
       integer().check(operationKind.isBetweenValues(1, 8))();
+  TextColumn get deterministicProjection => text().nullable()();
   BlobColumn get canonicalControl => blob()();
   BlobColumn get signature => blob()();
+  BlobColumn get signedPayload => blob().nullable()();
+  BlobColumn get signerAuthenticationProof => blob().nullable()();
   IntColumn get applyState =>
       integer().check(applyState.isBetweenValues(0, 2))();
   IntColumn get createdMs =>
@@ -380,7 +406,10 @@ class GroupOutboundObjects extends Table {
   TextColumn get eventId => text()();
   IntColumn get epoch => integer().check(epoch.isBiggerOrEqualValue(0))();
   BlobColumn get mlsObject => blob()();
-  // 0 development preview only, 1 blocked by production gate, 2 ready for piece 19.
+  TextColumn get recipientUserIdsJson =>
+      text().withDefault(const Constant('[]'))();
+  // 0 development preview only and never dispatched, 1 committed and awaiting
+  // recipient-bound pairwise fan-out, 2 routed into the durable pairwise outbox.
   IntColumn get deliveryState =>
       integer().check(deliveryState.isBetweenValues(0, 2))();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
@@ -925,6 +954,7 @@ class StorageMigrationHooks {
     PairwiseSessionAlternates,
     Prekeys,
     PrekeyMaintenancePlans,
+    MlsKeyPackageMaintenanceStates,
     MlsGroups,
     GroupControlEvents,
     GroupOutboundObjects,
@@ -959,7 +989,7 @@ final class LocalDatabase extends _$LocalDatabase {
   LocalDatabase(super.executor, {StorageMigrationHooks? migrationHooks})
     : _migrationHooks = migrationHooks ?? const StorageMigrationHooks();
 
-  static const currentSchemaVersion = 8;
+  static const currentSchemaVersion = 11;
   final StorageMigrationHooks _migrationHooks;
 
   @override
@@ -1233,6 +1263,46 @@ final class LocalDatabase extends _$LocalDatabase {
           );
           await migrator.createTable(groupControlEvents);
           await migrator.createTable(groupOutboundObjects);
+        }
+        if (from < 9) {
+          await migrator.createTable(mlsKeyPackageMaintenanceStates);
+        }
+        if (from < 10) {
+          final columns = await customSelect(
+            'PRAGMA table_info(group_outbound_objects)',
+          ).get();
+          final hasRecipientColumn = columns.any(
+            (row) => row.read<String>('name') == 'recipient_user_ids_json',
+          );
+          if (!hasRecipientColumn) {
+            await migrator.addColumn(
+              groupOutboundObjects,
+              groupOutboundObjects.recipientUserIdsJson,
+            );
+          }
+        }
+        if (from >= 8 && from < 11) {
+          final columns = await customSelect(
+            'PRAGMA table_info(group_control_events)',
+          ).map((row) => row.read<String>('name')).get();
+          if (!columns.contains('deterministic_projection')) {
+            await migrator.addColumn(
+              groupControlEvents,
+              groupControlEvents.deterministicProjection,
+            );
+          }
+          if (!columns.contains('signed_payload')) {
+            await migrator.addColumn(
+              groupControlEvents,
+              groupControlEvents.signedPayload,
+            );
+          }
+          if (!columns.contains('signer_authentication_proof')) {
+            await migrator.addColumn(
+              groupControlEvents,
+              groupControlEvents.signerAuthenticationProof,
+            );
+          }
         }
         await _migrationHooks.afterUpgrade(from, to);
       });

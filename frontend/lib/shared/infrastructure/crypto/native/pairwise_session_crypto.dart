@@ -7,6 +7,7 @@ import 'package:communication_platform/core/protocol/identity_protocol_model.dar
 import 'package:communication_platform/core/protocol/pairwise_crypto_model.dart';
 import 'package:communication_platform/core/result/failure.dart';
 import 'package:communication_platform/core/result/result.dart';
+import 'package:communication_platform/shared/infrastructure/crypto/native/verified_bundle_request.dart';
 
 final class NativePairwiseSessionCrypto implements PairwiseSessionCryptoPort {
   const NativePairwiseSessionCrypto(this.crypto);
@@ -73,7 +74,7 @@ final class NativePairwiseSessionCrypto implements PairwiseSessionCryptoPort {
       if (!_same(bundleDeviceId, recipientDeviceId)) {
         return _integrityFailure();
       }
-      final bundle = _encodeVerifiedBundle(
+      final bundle = encodeVerifiedClaimedBundleRequest(
         userId: recipientUserId,
         deviceId: recipientDeviceId,
         selfSigningPublic: recipientSelfSigningPublic,
@@ -533,44 +534,6 @@ PreparedPairwiseEnvelope _parsePreparedEnvelope(
       skippedKeyCount: skipped,
     ),
   );
-}
-
-Uint8List _encodeVerifiedBundle({
-  required Uint8List userId,
-  required Uint8List deviceId,
-  required Uint8List selfSigningPublic,
-  required ClaimedPrekeyBundle bundle,
-}) {
-  final pqId = bundle.pqSignedPrekeyId;
-  final pqPublic = bundle.pqSignedPrekeyPublic;
-  final pqSignature = bundle.pqSignedPrekeySignature;
-  if (bundle.bundleVersion <= 0 ||
-      !_validKeyId(bundle.signedPrekeyId) ||
-      bundle.signedPrekeyPublic.length != 32 ||
-      pqId == null ||
-      !_validKeyId(pqId) ||
-      pqPublic == null ||
-      pqPublic.length != 1184 ||
-      pqSignature == null) {
-    throw const PairwiseCryptoFormatException();
-  }
-  return (_Writer()
-        ..bytes(ascii.encode('CPBRV001'))
-        ..bytes(userId)
-        ..bytes(deviceId)
-        ..bytes(selfSigningPublic)
-        ..bytes(bundle.identityPublic)
-        ..u32(bundle.signedPrekeyId)
-        ..frame(bundle.signedPrekeyPublic)
-        ..bytes(bundle.signedPrekeySignature)
-        ..boolean(true)
-        ..u32(pqId)
-        ..frame(pqPublic)
-        ..bytes(pqSignature)
-        ..u32(bundle.registrationId)
-        ..u32(bundle.bundleVersion)
-        ..bytes(bundle.crossSignature))
-      .takeBytes();
 }
 
 Uint8List _encodeAuthenticatedSenderProjection(

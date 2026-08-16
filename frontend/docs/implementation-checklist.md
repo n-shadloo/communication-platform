@@ -40,7 +40,7 @@ opaque/client-owned; **Pending** = Flutter implementation not started.
 | Register/list/label/revoke devices | Ready; two-phase enrollment contract | Pieces 10/17 complete enrollment plus authenticated own-device ETag listing, account-private encrypted labels, relabel, explicit remote/self revocation, crash-resumable log-first removal, secure self cleanup, and Linked Devices UI |
 | Peer device lists, ETags, signed device log | Ready opaque transport | Pieces 10/11/17 complete authenticated own/peer device sets, canonical signed-log verification and extension, exact predicted-sequence confirmation, concurrent append recovery, encrypted pairwise head gossip, and persistent global fork/equivocation blocking |
 | Hybrid X25519 + ML-KEM prekeys | Ready public distribution | Pending reviewed PQXDH core; no classical fallback |
-| PQ MLS key packages | 4096/16384 buckets + last-resort ready | Candidate selected; blocked on IANA ID, maintained OpenMLS/provider support, vectors, and review |
+| PQ MLS key packages | 4096/16384 buckets + last-resort ready | Candidate selected; blocked on the unassigned MLS suite identifier, the hybrid KEM's expiring draft reference, maintained OpenMLS/provider support, vectors, and review |
 | SAS/QR master-key verification | Client protocol | Piece 11 exact-two-master-key SAS/QR, explicit out-of-band confirmation, user-signing attestation, and persistent verified/change states complete; messaging remains withheld on every non-verified state |
 | Recovery onboarding | Identity backup API ready | Piece 10 one-time checksummed secret, Rust Argon2id/XChaCha backup, first upload, later restore, wrong-secret handling, and honest no-history notice complete |
 
@@ -67,14 +67,15 @@ opaque/client-owned; **Pending** = Flutter implementation not started.
 
 | Capability | Backend | Flutter |
 |---|---|---|
-| Key-package claim | Ready | Piece 18 defines the crypto port only; production generation/claim remains disabled pending every MLS profile gate and piece 19 |
-| Group ciphertext delivery | Envelope transport ready | Piece 18 transactional state/outbound boundaries complete; production encryption/send remains disabled pending MLS + pairwise wrapping in piece 19 |
-| Group creation/membership | Client protocol | Piece 18 deterministic intents, membership projections, repository/use-case boundary, and development-preview UI complete; production transport is fail-closed |
-| Owner/admin/member roles | Client protocol | Piece 18 role hierarchy, permission evaluation, deterministic control projection, concurrent-change rejection, and role-aware UI complete; native signing/verification remains piece 19 |
-| Invite/remove/leave | Client protocol | Piece 18 authorization, owner-transfer rule, intent/state transitions, and UI complete; production MLS commits remain gated |
-| Encrypted metadata | Opaque envelope transport ready | Piece 18 metadata/policy domain and atomic opaque-state/projection storage complete; production MLS encryption remains gated |
-| History for new members | Envelope transport ready; no server history | Piece 18 policy and honest opt-in re-share wording complete; cryptographic client re-share remains piece 19 and never implies server history |
-| Fork/conflict handling | Client protocol | Piece 18 stale/sibling/malformed/unauthorized control and queue-gap quarantine/blocking complete; reviewed crypto-core convergence remains a release gate |
+| Key-package claim | Ready | Piece 19 has real closed-beta generation, replenishment, consumable claim, and separately uploaded last-resort lifecycle wiring; backend bucket/consumption contract execution remains pending and production upload is disabled |
+| Group ciphertext delivery | Envelope transport ready | Piece 19 routes every closed-beta MLS object through durable recipient-bound Double Ratchet fan-out, including own other devices, with exact ciphertext retry; production remains disabled |
+| Group creation/membership | Client protocol | Piece 19 implements real closed-beta create, authenticated later Welcome/re-add, membership controls, opaque state, and piece-18 CAS storage; remaining recovery/concurrency matrices keep production fail-closed |
+| Owner/admin/member roles | Client protocol | Piece 19 signs and verifies deterministic controls with device authentication proofs and replays the authenticated transcript; full adversarial/device matrix and independent review remain pending |
+| Invite/remove/leave | Client protocol | Closed-beta Invite/re-add, remove, and ADR-039 two-phase leave with automatic owner-side eviction are integrated; the queue-gap remove/re-add matrix remains Piece 19 work and production MLS commits remain gated |
+| Encrypted metadata | Opaque envelope transport ready | Closed beta processes metadata/policy controls inside authenticated MLS transport and the atomic state/projection boundary; production remains gated |
+| History for new members | Envelope transport ready; no server history | Policy and authenticated Welcome are integrated; bounded cryptographic history re-share validation remains pending and never implies server history |
+| Fork/conflict handling | Client protocol | ADR-038 canonical same-revision convergence is implemented and tested: siblings are authenticated and replayed against the shared parent, the smallest control state hash wins, and a superseded branch fork-quarantines atomically for remove/re-add. Multi-device execution against the real crypto core remains pending |
+| Leave coordination | Client protocol | ADR-039 two-phase departure is implemented and tested: the leaver signs a non-membership announcement at the current epoch and the active owner automatically commits the `Remove` that evicts the leaves. Covered by a Rust descriptor test and 16 Dart tests; multi-device execution against real devices remains pending |
 
 ## Attachments and recovery
 
@@ -144,10 +145,31 @@ opaque/client-owned; **Pending** = Flutter implementation not started.
 - [ ] Android `mlkem_native` passes identical FIPS/PQXDH vectors; no educational or
   pure-Dart ML-KEM is present.
 - [ ] Hybrid PQXDH/Double Ratchet composition is independently reviewed.
-- [ ] The selected PQ MLS candidate receives an IANA ID and maintained
-  OpenMLS/provider support; 4096/16384 wrappers, last-resort behavior, Android
-  persistence, and fork handling then pass interoperability tests. Web persistence is
-  post-v1.
+- [ ] Piece 19 Phase-A production prerequisites pass. The former combined
+  specification/identifier prerequisite is now two separately evidenced rows, because the
+  primitive mapping and the MLS suite value sit in different registries with different
+  owners, registration policies, and completion paths. As rechecked against primary
+  sources on 2026-08-16, all five remain blocked. (1) The primitive mapping is blocked on
+  one identifier of five: hybrid KEM `0x647A` is assigned in the IANA HPKE KEM registry
+  (last updated 2026-04-16) but its only reference there is
+  `draft-connolly-cfrg-xwing-kem-06`, a superseded Independent-stream draft now at `-10`
+  and expiring 2026-09-03, while KDF `0x0002`, AEAD `0x0002`, hash SHA-384, and signature
+  `ed25519` `0x0807` already rest on published standards. (2) The MLS suite identifier is
+  blocked outright: `draft-ietf-mls-pq-ciphersuites-06` is an expiring Internet-Draft that
+  the working group has already flagged as needing another revision, its IANA
+  Considerations touch only the MLS Cipher Suites registry, and `TBD2` has no assignment
+  there (that registry, last updated 2025-11-17, still holds only RFC 9420
+  `0x0001`-`0x0007`, GREASE, and Private Use). (3) OpenMLS 0.8.1 stable and 0.9.0-rc.2
+  still document only the three classical suites and their post-quantum work targets
+  X-Wing rather than the selected mapping, (4) the MLS Working Group vector repository
+  still publishes only classical fixtures, and (5) no qualified independent reviewer is
+  retained. Draft-06 still defines `TBD2` with the exact recorded primitive mapping, so no
+  suite/ADR stop-and-decide is triggered. Separately re-verified on 2026-08-16 against the
+  pinned vendored crate sources: the closed beta implements `TBD2`'s signature, AEAD, KDF,
+  and hash choices but not its KEM `0x647a`, so beta groups are not `TBD2`-conformant and
+  are not `TBD2` interoperability evidence. The per-identifier registry evidence and both
+  evidence tables are in `docs/mls-profile.md`; production now has seven mandatory gates
+  rather than six, and none is satisfied. Web support remains post-v1.
 - [x] Piece 10 first/later-device two-phase enrollment is crash-safe and resumable;
   registration response loss never causes a blind duplicate; recoverable unsigned
   orphans are adopted or revoked; every intermediate state remains withheld through the
@@ -194,6 +216,43 @@ opaque/client-owned; **Pending** = Flutter implementation not started.
   2026-08-02. Development uses an explicitly non-cryptographic in-memory preview;
   production is compile-time fail-closed with no KeyPackage, suite ID, or group
   ciphertext path. All cryptographic production enablement remains piece 19.
+- [ ] Piece 19 real closed-beta PQ MLS implementation is complete and production-ready.
+  The dark implementation currently uses locked maintained `mls-rs 0.55.2` and
+  `mls-rs-crypto-awslc 0.25.0` with the draft-06 candidate's symmetric and signature
+  mapping over that provider's own pre-standard hybrid KEM — not draft-06's KEM `0x647a`,
+  as recorded in `docs/mls-profile.md` — and Private Use identifier `0xFE4C`; implements
+  authenticated BasicCredential/device proof binding,
+  KeyPackage maintenance and last-resort separation, create/Welcome/Proposal/Commit/
+  PrivateMessage processing, signed deterministic controls, later-member authenticated
+  transcript replay, member add/remove, epoch/exporter state, opaque state-format
+  versioning, and durable per-recipient pairwise fan-out through the piece-18 atomic CAS
+  boundary. Transport v3 and schema v11 reject insufficient v2 transcript state rather
+  than silently migrating it. The production fail-closed audit is covered by
+  five `test/architecture/group_production_gate_test.dart` assertions, including the
+  fully composed port that the use cases and sync engine actually consume, the closed
+  KeyPackage-maintenance path, and every `GroupMlsCryptoPort` method on the unsupported
+  adapter. The Windows host toolchain carries the MSVC C++ build tools, LLVM, NASM, and
+  Ninja that the pinned `x86_64-pc-windows-msvc` host requires, so the **entire** Rust
+  validation stack executes. Verified on 2026-08-16: `cargo fmt --all -- --check`,
+  `cargo test --locked` (49), `cargo test --locked --all-features` (60, including the
+  `mls_beta` suite), `cargo clippy --locked --all-targets --all-features -- -D warnings`,
+  `dart format --set-exit-if-changed lib test` (310 files, 0 changed),
+  `flutter analyze --fatal-infos` (no issues), the full Flutter suite (403 tests), and
+  `flutter build apk --release --flavor production`. Packaged Android builds of **both**
+  the foundation and beta profiles cover all three ABIs (arm64-v8a, armeabi-v7a, x86_64)
+  with the export allowlist, 16 KiB alignment, and static-libsodium checks. Artifact-level
+  fail-closed evidence: `llvm-nm -D --defined-only` on the native libraries extracted from
+  the built **production release APK** reports exactly the 15-symbol foundation allowlist
+  on every ABI and zero `cp_crypto_v1_beta_mls_operation` symbols, which exist only in the
+  separate `beta` artifact, so a production build contains no PQ MLS code path at all.
+  ADR-038 canonical fork convergence and ADR-039
+  two-phase leave are both implemented and tested. Remaining blockers are the full
+  queue-gap remove/re-add/history matrix, upstream/project interoperability and
+  bucket/backend contract execution against a running backend, multi-device and
+  process-death/fault matrices on real hardware, migration fuzzing, and independent
+  cryptographic review. Production still resolves the unsupported adapter,
+  `GroupProductionGate` remains false, and production KeyPackage/group creation remains
+  impossible.
 - [x] Android reproduces the backend `cross_sig`, `master_sig`, `spk_sig`, and
   `pq_spk_sig` golden vectors, including optional fields and the 64-byte `ik_pub` layout
   (Piece 08: Rust vectors, strict Clippy, Flutter tests, three-ABI native package build,

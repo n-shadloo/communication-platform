@@ -35,7 +35,8 @@ final appEnvironmentProvider = Provider<AppEnvironment>(
 typedef CryptoCoreFactory = CryptoCorePort Function();
 
 final cryptoCoreFactoryProvider = Provider<CryptoCoreFactory>(
-  (ref) => createPlatformCryptoCore,
+  (ref) =>
+      () => createPlatformCryptoCore(),
 );
 
 final cryptoCoreProvider = Provider<CryptoCorePort>((ref) {

@@ -59,19 +59,60 @@ library statically links the signed libsodium 1.0.22 source archive, compiles
 unexpected toolchain, archive hash/signature, dynamic libsodium dependency, ELF load
 alignment, or exported symbol.
 
-ABI version 1's exact export allowlist is `cp_crypto_v1_abi_version`,
+ABI version 1's exact export allowlist for the `foundation` crypto profile — the profile
+packaged into the development and production flavors — is `cp_crypto_v1_abi_version`,
+`cp_crypto_v1_application_operation`, `cp_crypto_v1_attachment_operation`,
 `cp_crypto_v1_attest_peer_master`, `cp_crypto_v1_capabilities`,
 `cp_crypto_v1_create_device_log_record`, `cp_crypto_v1_cross_sign_device`,
 `cp_crypto_v1_identity_operation`, `cp_crypto_v1_inspect_device_log_record`,
-`cp_crypto_v1_prepare_device`, `cp_crypto_v1_prepare_first_identity`,
-`cp_crypto_v1_restore_identity`, `cp_crypto_v1_sanitize_identity`, and
-`cp_crypto_v1_self_test`. Its public status range is the payload-free integer set 0
+`cp_crypto_v1_pairwise_operation`, `cp_crypto_v1_prepare_device`,
+`cp_crypto_v1_prepare_first_identity`, `cp_crypto_v1_restore_identity`,
+`cp_crypto_v1_sanitize_identity`, and `cp_crypto_v1_self_test`.
+
+The isolated `beta` crypto profile is the same list plus exactly one additional symbol,
+`cp_crypto_v1_beta_mls_operation`, produced only by the non-default `beta-pq-mls` Cargo
+feature and packaged only into the separate `beta` flavor's `jniLibs` source set. The
+build script fails the build on any deviation from either list, so a production artifact
+that exported the closed-beta PQ MLS entry point could not be produced. Its public status
+range is the payload-free integer set 0
 through 14 frozen in `native/crypto_core/include/communication_crypto.h`. Enrollment,
 peer identity/device/prekey/log verification, safety fingerprints, and user-signing
 attestation cross only through these bounded typed operations; private key material
 remains inside opaque Rust identity packages. Rust-owned `SecretBytes` and `SecretVec` values are
 non-`Debug`, non-`Clone`, and zeroized on drop, while the testable provider owns secure
 randomness, allocation/input bounds, and primitive implementations.
+
+### Windows host prerequisites
+
+Cargo compiles build scripts and proc-macros for the **host** even when
+cross-compiling, so every gate — including the Android cross-builds — needs a
+complete host toolchain. `rust-toolchain.toml` pins Rust 1.97.1 and the host is
+`x86_64-pc-windows-msvc`, so install these once and use the pinned toolchain
+unmodified. Do not override `RUSTUP_TOOLCHAIN`.
+
+| Prerequisite | Needed by | Install |
+|---|---|---|
+| VS 2022 Build Tools, `VC.Tools.x86.x64` + Windows SDK | host `link.exe`/`cl.exe`; without it nothing links | `winget install Microsoft.VisualStudio.2022.BuildTools --override "--quiet --wait --norestart --add Microsoft.VisualStudio.Workload.VCTools --add Microsoft.VisualStudio.Component.VC.Tools.x86.x64 --add Microsoft.VisualStudio.Component.Windows11SDK.22621"` |
+| LLVM (`libclang.dll`) | the `aws-lc-sys` `bindgen` feature used by the beta profile | `winget install LLVM.LLVM`, then set `LIBCLANG_PATH=C:\Program Files\LLVM\bin` |
+| NASM | `aws-lc-sys` x86-64 assembly when building the beta feature for the host | `winget install NASM.NASM` |
+| Ninja | CMake generator for AWS-LC; Windows CMake otherwise picks a Visual Studio generator that cannot drive the NDK cross-compiler | `winget install Ninja-build.Ninja` |
+| CMake, Android NDK 28.2.13676358 | AWS-LC configure; Android targets | Android Studio SDK manager / CMake installer |
+
+Put `%USERPROFILE%\.cargo\bin`, `C:\Program Files\LLVM\bin`, the NASM directory,
+and `%LOCALAPPDATA%\Microsoft\WinGet\Links` on `PATH`, and Git's `bash.exe` must
+be resolvable for the POSIX build scripts.
+
+Two cross-compilation details are handled by the build scripts rather than the
+environment. `libsodium-sys-stable` 1.24.0 picks its link name with
+`cfg!(target_env = "msvc")`, which a build script evaluates against the host
+instead of the target, so `build_libsodium_android.sh` installs the archive as
+both `libsodium.a` and `liblibsodium.a`. `aws-lc-sys` needs a target C++
+compiler, `ANDROID_NDK_ROOT`, and an explicit generator, so
+`build_rust_android.sh` exports `CXX_<target>`, `ANDROID_NDK_ROOT`,
+`ANDROID_NDK`, and `CMAKE_GENERATOR=Ninja` for the beta profile.
+
+CMake caches its generator in the build directory. After changing generators,
+delete `build/rust-android/<profile>` before rebuilding.
 
 Verification on 2026-07-28 passed:
 

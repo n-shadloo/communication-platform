@@ -10,8 +10,10 @@ import 'package:communication_platform/features/messaging/domain/conversation_mo
 import 'package:drift/drift.dart';
 
 final class DriftGroupRepository extends DriftRepositoryBase
-    implements GroupRepositoryPort {
+    implements GroupRepositoryPort, GroupControlTranscriptPort {
   const DriftGroupRepository(super.database);
+
+  static const _keyPackageStateSecretId = 'beta-pq-mls-key-packages-v1';
 
   @override
   Stream<GroupState?> watchGroup(String groupId) {
@@ -99,20 +101,134 @@ final class DriftGroupRepository extends DriftRepositoryBase
   }
 
   @override
+  Future<Result<List<GroupControlTranscriptEntry>>> readVerifiedTranscript(
+    String groupId,
+  ) async {
+    try {
+      final rows =
+          await (database.select(database.groupControlEvents)
+                ..where((row) => row.groupId.equals(groupId))
+                ..orderBy([(row) => OrderingTerm.asc(row.revision)]))
+              .get();
+      final transcript = <GroupControlTranscriptEntry>[];
+      for (final row in rows) {
+        final projection = row.deterministicProjection;
+        final signedPayload = row.signedPayload;
+        final signerProof = row.signerAuthenticationProof;
+        if (projection == null ||
+            signedPayload == null ||
+            signerProof == null) {
+          return const Result.failure(
+            SecurityFailure(SecurityFailureKind.integrityCheckFailed),
+          );
+        }
+        final event = GroupControlEvent.fromDeterministicProjection(projection);
+        if (event.groupId != row.groupId ||
+            event.eventId != row.eventId ||
+            event.revision != row.revision ||
+            event.mlsEpoch != row.epoch ||
+            event.signerUserId != row.signerUserId ||
+            event.signerDeviceId != row.signerDeviceId ||
+            event.operation.code != row.operationKind ||
+            event.previousControlStateHash !=
+                _optionalHex(row.previousControlStateHash) ||
+            event.mlsCommitHash != _optionalHex(row.mlsCommitHash)) {
+          return const Result.failure(
+            SecurityFailure(SecurityFailureKind.integrityCheckFailed),
+          );
+        }
+        transcript.add(
+          GroupControlTranscriptEntry(
+            signedControl: SignedGroupControlEvent(
+              event: event,
+              controlStateHash: _bytesHex(row.controlStateHash),
+              canonicalBytes: row.canonicalControl,
+              signature: row.signature,
+            ),
+            signedPayload: signedPayload,
+            signerAuthenticationProof: signerProof,
+          ),
+        );
+      }
+      return Result.success(List.unmodifiable(transcript));
+    } on FormatException {
+      return const Result.failure(
+        SecurityFailure(SecurityFailureKind.integrityCheckFailed),
+      );
+    } on Object {
+      return const Result.failure(
+        StorageFailure(StorageFailureKind.unavailable),
+      );
+    }
+  }
+
+  @override
   Future<Result<void>> commitTransition({
     required GroupState? expectedPrevious,
     required GroupState next,
     required PreparedGroupTransition prepared,
     required bool developmentPreviewOnly,
-  }) => _runGroupWrite(() async {
+  }) => _runGroupWrite(
+    () => commitTransitionInsideTransaction(
+      expectedPrevious: expectedPrevious,
+      next: next,
+      prepared: prepared,
+      developmentPreviewOnly: developmentPreviewOnly,
+    ),
+  );
+
+  /// Used only by the durable inbox transaction after pairwise preparation.
+  Future<void> commitTransitionInsideTransaction({
+    required GroupState? expectedPrevious,
+    required GroupState next,
+    required PreparedGroupTransition prepared,
+    required bool developmentPreviewOnly,
+  }) async {
     final event = prepared.signedControl.event;
     if (event.groupId != next.groupId ||
         prepared.signedControl.controlStateHash != next.controlStateHash ||
         event.revision != next.controlRevision) {
       throw const _GroupIntegrityFailure();
     }
+    _validateControlTranscript(expectedPrevious, prepared);
 
     if (expectedPrevious == null) {
+      final consumption = prepared.consumedKeyPackageState;
+      if (consumption != null) {
+        final currentDevice =
+            await (database.select(database.devices)..where(
+                  (row) =>
+                      row.deviceId.equals(consumption.deviceId) &
+                      row.isCurrentDevice.equals(true),
+                ))
+                .getSingleOrNull();
+        final maintenance =
+            await (database.select(database.mlsKeyPackageMaintenanceStates)
+                  ..where((row) => row.deviceId.equals(consumption.deviceId)))
+                .getSingleOrNull();
+        if (currentDevice == null ||
+            maintenance == null ||
+            maintenance.stage != 0) {
+          throw const _GroupConflict();
+        }
+        final updatedSecret =
+            await (database.update(database.secureSecrets)..where(
+                  (row) =>
+                      row.secretId.equals(_keyPackageStateSecretId) &
+                      row.stateRevision.equals(
+                        consumption.expectedStateRevision,
+                      ),
+                ))
+                .write(
+                  SecureSecretsCompanion(
+                    wrappedCiphertextOrOpaqueHandle: Value(
+                      consumption.nextSealedState,
+                    ),
+                    stateRevision: Value(consumption.expectedStateRevision + 1),
+                  ),
+                );
+        if (updatedSecret != 1) throw const _GroupConflict();
+      }
       final existing = await (database.select(
         database.mlsGroups,
       )..where((row) => row.groupId.equals(next.groupId))).getSingleOrNull();
@@ -206,6 +322,37 @@ final class DriftGroupRepository extends DriftRepositoryBase
             ),
           );
     }
+    for (final entry in prepared.precedingControlTranscript) {
+      await _insertControlEvent(entry.signedControl, entry);
+    }
+    await _insertControlEvent(
+      prepared.signedControl,
+      prepared.controlTranscriptEntry,
+    );
+    if (prepared.outbound) {
+      await database
+          .into(database.groupOutboundObjects)
+          .insert(
+            GroupOutboundObjectsCompanion.insert(
+              operationId: prepared.mutationId,
+              groupId: next.groupId,
+              eventId: event.eventId,
+              epoch: next.acceptedEpoch,
+              mlsObject: prepared.mlsObject,
+              recipientUserIdsJson: Value(
+                jsonEncode(prepared.recipientUserIds),
+              ),
+              deliveryState: developmentPreviewOnly ? 0 : 1,
+            ),
+          );
+    }
+  }
+
+  Future<void> _insertControlEvent(
+    SignedGroupControlEvent signed,
+    GroupControlTranscriptEntry? transcript,
+  ) async {
+    final event = signed.event;
     await database
         .into(database.groupControlEvents)
         .insert(
@@ -218,7 +365,7 @@ final class DriftGroupRepository extends DriftRepositoryBase
                   ? null
                   : _hexBytes(event.previousControlStateHash!),
             ),
-            controlStateHash: _hexBytes(next.controlStateHash),
+            controlStateHash: _hexBytes(signed.controlStateHash),
             mlsCommitHash: Value(
               event.mlsCommitHash == null
                   ? null
@@ -228,36 +375,43 @@ final class DriftGroupRepository extends DriftRepositoryBase
             signerUserId: event.signerUserId,
             signerDeviceId: event.signerDeviceId,
             operationKind: event.operation.code,
-            canonicalControl: prepared.signedControl.canonicalBytes,
-            signature: prepared.signedControl.signature,
+            deterministicProjection: Value(
+              transcript == null ? null : event.deterministicProjection,
+            ),
+            canonicalControl: signed.canonicalBytes,
+            signature: signed.signature,
+            signedPayload: Value(transcript?.signedPayload),
+            signerAuthenticationProof: Value(
+              transcript?.signerAuthenticationProof,
+            ),
             applyState: 0,
             createdMs: event.createdMs,
           ),
         );
-    if (prepared.outbound) {
-      await database
-          .into(database.groupOutboundObjects)
-          .insert(
-            GroupOutboundObjectsCompanion.insert(
-              operationId: prepared.mutationId,
-              groupId: next.groupId,
-              eventId: event.eventId,
-              epoch: next.acceptedEpoch,
-              mlsObject: prepared.mlsObject,
-              deliveryState: developmentPreviewOnly ? 0 : 1,
-            ),
-          );
-    }
-  });
+  }
 
   @override
   Future<Result<void>> commitMessage({
     required GroupState expectedGroup,
     required PreparedGroupMessage prepared,
     required bool developmentPreviewOnly,
-  }) => _runGroupWrite(() async {
+  }) => _runGroupWrite(
+    () => commitMessageInsideTransaction(
+      expectedGroup: expectedGroup,
+      prepared: prepared,
+      developmentPreviewOnly: developmentPreviewOnly,
+    ),
+  );
+
+  /// Used only by the durable inbox transaction after pairwise preparation.
+  Future<void> commitMessageInsideTransaction({
+    required GroupState expectedGroup,
+    required PreparedGroupMessage prepared,
+    required bool developmentPreviewOnly,
+  }) async {
     if (prepared.groupId != expectedGroup.groupId ||
-        prepared.epoch != expectedGroup.acceptedEpoch) {
+        prepared.epoch != expectedGroup.acceptedEpoch ||
+        (!prepared.outbound && developmentPreviewOnly)) {
       throw const _GroupIntegrityFailure();
     }
     final hash = _hexBytes(expectedGroup.controlStateHash);
@@ -296,7 +450,9 @@ final class DriftGroupRepository extends DriftRepositoryBase
             projectionCiphertext: Uint8List.fromList(
               utf8.encode(prepared.text),
             ),
-            status: developmentPreviewOnly
+            status: !prepared.outbound
+                ? MessageTransportState.received.index
+                : developmentPreviewOnly
                 ? MessageTransportState.localOnly.index
                 : MessageTransportState.queued.index,
             revision: 0,
@@ -325,18 +481,23 @@ final class DriftGroupRepository extends DriftRepositoryBase
             ),
           ),
         );
-    await database
-        .into(database.groupOutboundObjects)
-        .insert(
-          GroupOutboundObjectsCompanion.insert(
-            operationId: prepared.operationId,
-            groupId: prepared.groupId,
-            eventId: prepared.messageId,
-            epoch: prepared.epoch,
-            mlsObject: prepared.mlsObject,
-            deliveryState: developmentPreviewOnly ? 0 : 1,
-          ),
-        );
+    if (prepared.outbound) {
+      await database
+          .into(database.groupOutboundObjects)
+          .insert(
+            GroupOutboundObjectsCompanion.insert(
+              operationId: prepared.operationId,
+              groupId: prepared.groupId,
+              eventId: prepared.messageId,
+              epoch: prepared.epoch,
+              mlsObject: prepared.mlsObject,
+              recipientUserIdsJson: Value(
+                jsonEncode(prepared.recipientUserIds),
+              ),
+              deliveryState: developmentPreviewOnly ? 0 : 1,
+            ),
+          );
+    }
     await (database.update(
       database.conversations,
     )..where((row) => row.conversationId.equals(prepared.groupId))).write(
@@ -348,44 +509,177 @@ final class DriftGroupRepository extends DriftRepositoryBase
         lastActivityEventId: Value(prepared.messageId),
       ),
     );
-  });
+  }
 
   @override
   Future<Result<void>> quarantine(GroupQuarantineRecord record) =>
-      _runGroupWrite(() async {
-        final row =
-            await (database.select(database.mlsGroups)
-                  ..where((item) => item.groupId.equals(record.groupId)))
-                .getSingleOrNull();
-        if (row == null || row.controlProjectionCiphertext == null) {
-          throw const _GroupIntegrityFailure();
-        }
-        final state = _decodeState(row.controlProjectionCiphertext!);
-        final lifecycle = record.reason == GroupQuarantineReason.siblingCommit
-            ? GroupLifecycle.forkQuarantined
-            : GroupLifecycle.controlQuarantined;
-        final quarantined = state.copyWith(
-          lifecycle: lifecycle,
-          quarantineReason: record.reason,
-        );
-        await (database.update(
-          database.mlsGroups,
-        )..where((item) => item.groupId.equals(record.groupId))).write(
-          MlsGroupsCompanion(
-            controlProjectionCiphertext: Value(_encodeState(quarantined)),
-            lifecycle: Value(lifecycle.index),
+      _runGroupWrite(() => quarantineInsideTransaction(record));
+
+  /// Same durable effect as [quarantine], but joins the caller's transaction so
+  /// a fork outcome commits atomically with the inbox envelope that carried it.
+  Future<void> quarantineInsideTransaction(
+    GroupQuarantineRecord record, {
+    bool retainLifecycle = false,
+  }) async {
+    final row = await (database.select(
+      database.mlsGroups,
+    )..where((item) => item.groupId.equals(record.groupId))).getSingleOrNull();
+    if (row == null || row.controlProjectionCiphertext == null) {
+      throw const _GroupIntegrityFailure();
+    }
+    if (!retainLifecycle) {
+      final state = _decodeState(row.controlProjectionCiphertext!);
+      final lifecycle = record.reason == GroupQuarantineReason.siblingCommit
+          ? GroupLifecycle.forkQuarantined
+          : GroupLifecycle.controlQuarantined;
+      final quarantined = state.copyWith(
+        lifecycle: lifecycle,
+        quarantineReason: record.reason,
+      );
+      await (database.update(
+        database.mlsGroups,
+      )..where((item) => item.groupId.equals(record.groupId))).write(
+        MlsGroupsCompanion(
+          controlProjectionCiphertext: Value(_encodeState(quarantined)),
+          lifecycle: Value(lifecycle.index),
+        ),
+      );
+    }
+    await database
+        .into(database.quarantineRecords)
+        .insert(
+          QuarantineRecordsCompanion.insert(
+            reasonCode: 32 + record.reason.index,
+            opaqueDigest: record.opaqueDigest,
+            receivedAt: Value(record.receivedAt.toUtc()),
           ),
         );
-        await database
-            .into(database.quarantineRecords)
-            .insert(
-              QuarantineRecordsCompanion.insert(
-                reasonCode: 32 + record.reason.index,
-                opaqueDigest: record.opaqueDigest,
-                receivedAt: Value(record.receivedAt.toUtc()),
-              ),
+  }
+
+  @override
+  Future<Result<List<GroupState>>> readGroupsPendingEviction({
+    int limit = 20,
+  }) async {
+    if (limit < 1 || limit > 100) {
+      return const Result.failure(
+        ValidationFailure(ValidationFailureKind.invalidInput),
+      );
+    }
+    try {
+      final rows =
+          await (database.select(database.mlsGroups)
+                ..where(
+                  (row) => row.lifecycle.equals(GroupLifecycle.active.index),
+                )
+                ..orderBy([(row) => OrderingTerm.asc(row.groupId)]))
+              .get();
+      final pending = <GroupState>[];
+      for (final row in rows) {
+        final projection = row.controlProjectionCiphertext;
+        if (projection == null) continue;
+        final state = _overlayQueueGap(
+          _decodeState(projection),
+          row.queueGapRecoveryState,
+        );
+        if (state.lifecycle != GroupLifecycle.active) continue;
+        final departed = state.members.any(
+          (member) => member.membership == GroupMembershipState.left,
+        );
+        if (!departed) continue;
+        pending.add(state);
+        if (pending.length == limit) break;
+      }
+      return Result.success(List.unmodifiable(pending));
+    } on FormatException {
+      return const Result.failure(
+        SecurityFailure(SecurityFailureKind.integrityCheckFailed),
+      );
+    } on Object {
+      return const Result.failure(
+        StorageFailure(StorageFailureKind.unavailable),
+      );
+    }
+  }
+
+  @override
+  Future<Result<List<GroupOutboundWork>>> readPendingOutbound({
+    int limit = 20,
+  }) async {
+    if (limit < 1 || limit > 100) {
+      return const Result.failure(
+        ValidationFailure(ValidationFailureKind.invalidInput),
+      );
+    }
+    try {
+      final query = database.select(database.groupOutboundObjects)
+        ..where((row) => row.deliveryState.equals(1))
+        ..orderBy([(row) => OrderingTerm.asc(row.createdAt)])
+        ..limit(limit);
+      final rows = await query.get();
+      return Result.success([
+        for (final row in rows)
+          GroupOutboundWork(
+            operationId: row.operationId,
+            groupId: row.groupId,
+            eventId: row.eventId,
+            epoch: row.epoch,
+            openedMlsPayload: row.mlsObject,
+            recipientUserIds: _decodeRecipientUserIds(row.recipientUserIdsJson),
+          ),
+      ]);
+    } on FormatException {
+      return const Result.failure(
+        SecurityFailure(SecurityFailureKind.integrityCheckFailed),
+      );
+    } on Object {
+      return const Result.failure(
+        StorageFailure(StorageFailureKind.unavailable),
+      );
+    }
+  }
+
+  @override
+  Future<Result<void>> markOutboundRouted({required String operationId}) async {
+    if (operationId.isEmpty) {
+      return const Result.failure(
+        ValidationFailure(ValidationFailureKind.invalidInput),
+      );
+    }
+    try {
+      final current = await (database.select(
+        database.groupOutboundObjects,
+      )..where((row) => row.operationId.equals(operationId))).getSingleOrNull();
+      if (current == null) {
+        return const Result.failure(
+          ValidationFailure(ValidationFailureKind.conflict),
+        );
+      }
+      if (current.deliveryState == 2) return const Result.success(null);
+      if (current.deliveryState != 1) {
+        return const Result.failure(
+          SecurityFailure(SecurityFailureKind.policyBlocked),
+        );
+      }
+      final updated =
+          await (database.update(database.groupOutboundObjects)..where(
+                (row) =>
+                    row.operationId.equals(operationId) &
+                    row.deliveryState.equals(1),
+              ))
+              .write(
+                const GroupOutboundObjectsCompanion(deliveryState: Value(2)),
+              );
+      return updated == 1
+          ? const Result.success(null)
+          : const Result.failure(
+              ValidationFailure(ValidationFailureKind.conflict),
             );
-      });
+    } on Object {
+      return const Result.failure(
+        StorageFailure(StorageFailureKind.unavailable),
+      );
+    }
+  }
 
   Future<Result<void>> _runGroupWrite(Future<void> Function() operation) async {
     try {
@@ -417,6 +711,25 @@ final class DriftGroupRepository extends DriftRepositoryBase
       clearQuarantineReason: true,
     );
   }
+}
+
+List<String> _decodeRecipientUserIds(String input) {
+  final decoded = jsonDecode(input);
+  if (decoded is! List<Object?> || decoded.isEmpty) {
+    throw const FormatException('invalid group outbound recipients');
+  }
+  final values = decoded
+      .map((value) {
+        if (value is! String || value.isEmpty || value != value.toLowerCase()) {
+          throw const FormatException('invalid group outbound recipient');
+        }
+        return value;
+      })
+      .toList(growable: false);
+  if (values.toSet().length != values.length) {
+    throw const FormatException('duplicate group outbound recipient');
+  }
+  return values;
 }
 
 Uint8List _encodeState(GroupState state) => Uint8List.fromList(
@@ -506,6 +819,41 @@ Uint8List _hexBytes(String value) {
     for (var index = 0; index < value.length; index += 2)
       int.parse(value.substring(index, index + 2), radix: 16),
   ]);
+}
+
+String _bytesHex(Uint8List value) =>
+    value.map((byte) => byte.toRadixString(16).padLeft(2, '0')).join();
+
+String? _optionalHex(Uint8List? value) =>
+    value == null ? null : _bytesHex(value);
+
+void _validateControlTranscript(
+  GroupState? expectedPrevious,
+  PreparedGroupTransition prepared,
+) {
+  final event = prepared.signedControl.event;
+  if (expectedPrevious != null) {
+    if (prepared.precedingControlTranscript.isNotEmpty) {
+      throw const _GroupIntegrityFailure();
+    }
+    return;
+  }
+  String? previousHash;
+  var revision = 1;
+  for (final entry in prepared.precedingControlTranscript) {
+    final prior = entry.signedControl.event;
+    if (prior.groupId != event.groupId ||
+        prior.revision != revision ||
+        prior.previousControlStateHash != previousHash) {
+      throw const _GroupIntegrityFailure();
+    }
+    previousHash = entry.signedControl.controlStateHash;
+    revision += 1;
+  }
+  if (event.revision != revision ||
+      event.previousControlStateHash != previousHash) {
+    throw const _GroupIntegrityFailure();
+  }
 }
 
 bool _bytesEqual(Uint8List? left, Uint8List right) {

@@ -70,6 +70,10 @@ abstract final class ApiContractLimits {
     maximumRequestBytes: 256 * 1024,
     maximumResponseBytes: 64 * 1024,
   );
+  static const keyPackageJson = PayloadLimits(
+    maximumRequestBytes: 3 * 1024 * 1024,
+    maximumResponseBytes: 3 * 1024 * 1024,
+  );
   static const envelopeBatchJson = PayloadLimits(
     maximumRequestBytes: 90 * 1024 * 1024,
     maximumResponseBytes: 64 * 1024,

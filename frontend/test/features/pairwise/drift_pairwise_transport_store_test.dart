@@ -292,6 +292,53 @@ void main() {
   );
 
   test(
+    'additional MLS write failure rolls back the pairwise receive transaction',
+    () async {
+      final sync = DriftSyncStore(database);
+      await inspectEnvelope(sync, 55);
+
+      final result = await store.commitPreparedReceiveWithAdditionalTransaction(
+        commit: receiveCommit(
+          envelopeNumber: 55,
+          stateMarker: 2,
+          replayMarker: bytes(32, 55),
+        ),
+        dependency: EnvelopeDependency.potentiallyMls,
+        additionalCommit: () async {
+          await database
+              .into(database.conversations)
+              .insert(
+                ConversationsCompanion.insert(
+                  conversationId: 'must-roll-back',
+                  kind: ConversationKind.group.index,
+                  listProjectionCiphertext: bytes(1, 1),
+                  sortKey: 1,
+                ),
+              );
+          throw StateError('injected MLS transaction failure');
+        },
+      );
+
+      expect(result, isA<FailureResult<bool>>());
+      expect(await database.select(database.pairwiseSessions).get(), isEmpty);
+      expect(
+        await database.select(database.pairwiseReplayMarkers).get(),
+        isEmpty,
+      );
+      expect(
+        await database.select(database.pairwiseOpenedPayloads).get(),
+        isEmpty,
+      );
+      expect(await database.select(database.conversations).get(), isEmpty);
+      expect(
+        (await database.select(database.inboxEnvelopes).getSingle())
+            .processingState,
+        InboxProcessingState.inspecting.index,
+      );
+    },
+  );
+
+  test(
     'receive fault rolls back ratchet, device state, replay, and OTPK deletion',
     () async {
       final sync = DriftSyncStore(database);

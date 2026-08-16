@@ -376,9 +376,36 @@ final class DriftPairwiseTransportStore implements PairwiseTransportStore {
   }
 
   @override
-  Future<Result<bool>> commitPreparedReceive(
-    PairwiseReceiveCommit commit,
-  ) async {
+  Future<Result<bool>> commitPreparedReceive(PairwiseReceiveCommit commit) =>
+      _commitPreparedReceive(
+        commit,
+        dependency: EnvelopeDependency.directOrLocal,
+      );
+
+  Future<Result<bool>> commitPreparedReceiveWithAdditionalTransaction({
+    required PairwiseReceiveCommit commit,
+    required EnvelopeDependency dependency,
+    required Future<void> Function() additionalCommit,
+  }) {
+    if (dependency != EnvelopeDependency.potentiallyMls) {
+      return Future.value(
+        const Result.failure(
+          ValidationFailure(ValidationFailureKind.invalidInput),
+        ),
+      );
+    }
+    return _commitPreparedReceive(
+      commit,
+      dependency: dependency,
+      additionalCommit: additionalCommit,
+    );
+  }
+
+  Future<Result<bool>> _commitPreparedReceive(
+    PairwiseReceiveCommit commit, {
+    required EnvelopeDependency dependency,
+    Future<void> Function()? additionalCommit,
+  }) async {
     if (!_validReceive(commit)) {
       return const Result.failure(
         ValidationFailure(ValidationFailureKind.invalidInput),
@@ -507,7 +534,7 @@ final class DriftPairwiseTransportStore implements PairwiseTransportStore {
               InboxEventDeduplicationsCompanion.insert(
                 opaqueEventId: commit.opaqueEventId,
                 firstEnvelopeId: commit.envelopeId,
-                dependencyClass: EnvelopeDependency.directOrLocal.index,
+                dependencyClass: dependency.index,
               ),
               mode: InsertMode.insertOrIgnore,
             );
@@ -538,12 +565,13 @@ final class DriftPairwiseTransportStore implements PairwiseTransportStore {
           ).retainUnsupportedInsideTransaction(unsupported);
         }
         await _commitDeviceControl(commit);
+        await additionalCommit?.call();
         await (database.update(
           database.inboxEnvelopes,
         )..where((row) => row.envelopeId.equals(commit.envelopeId))).write(
           InboxEnvelopesCompanion(
             opaqueEventId: Value(commit.opaqueEventId),
-            dependencyClass: Value(EnvelopeDependency.directOrLocal.index),
+            dependencyClass: Value(dependency.index),
             processingState: Value(
               InboxProcessingState.readyToAcknowledge.index,
             ),

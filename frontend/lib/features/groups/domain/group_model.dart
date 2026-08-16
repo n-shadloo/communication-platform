@@ -2,6 +2,8 @@ import 'dart:collection';
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:communication_platform/core/protocol/group_sync_model.dart';
+
 enum GroupRole { owner, admin, member }
 
 enum GroupMembershipState { active, removed, left }
@@ -251,6 +253,13 @@ abstract final class GroupAuthorization {
       return const {GroupPermission.viewHistory};
     }
 
+    return _activeMemberPermissions(state, member);
+  }
+
+  static Set<GroupPermission> _activeMemberPermissions(
+    GroupState state,
+    GroupMember member,
+  ) {
     final permissions = <GroupPermission>{
       GroupPermission.viewHistory,
       GroupPermission.sendMessages,
@@ -281,18 +290,36 @@ abstract final class GroupAuthorization {
     GroupPermission permission,
   ) => permissionsFor(state, actorUserId).contains(permission);
 
+  /// Evaluates a signed control actor against the historical global roster.
+  /// Local lifecycle is intentionally irrelevant during transcript replay.
+  static bool allowsControl(
+    GroupState state,
+    String actorUserId,
+    GroupPermission permission,
+  ) {
+    final member = state.member(actorUserId);
+    return member != null &&
+        member.isActive &&
+        _activeMemberPermissions(state, member).contains(permission);
+  }
+
   static bool canRemove(
     GroupState state, {
     required String actorUserId,
     required String targetUserId,
+    bool forControl = false,
   }) {
     if (actorUserId.toLowerCase() == targetUserId.toLowerCase() ||
-        !allows(state, actorUserId, GroupPermission.removeMembers)) {
+        !(forControl ? allowsControl : allows)(
+          state,
+          actorUserId,
+          GroupPermission.removeMembers,
+        )) {
       return false;
     }
     final actor = state.member(actorUserId);
     final target = state.member(targetUserId);
-    if (actor == null || target == null || !target.isActive) return false;
+    if (actor == null || target == null || !isEvictable(target)) return false;
     if (target.role == GroupRole.owner) return false;
     return actor.role == GroupRole.owner || target.role == GroupRole.member;
   }
@@ -302,18 +329,40 @@ abstract final class GroupAuthorization {
     required String actorUserId,
     required String targetUserId,
     required GroupRole role,
+    bool forControl = false,
   }) {
     if (role == GroupRole.owner ||
         actorUserId.toLowerCase() == targetUserId.toLowerCase() ||
-        !allows(state, actorUserId, GroupPermission.changeRoles)) {
+        !(forControl ? allowsControl : allows)(
+          state,
+          actorUserId,
+          GroupPermission.changeRoles,
+        )) {
       return false;
     }
     final target = state.member(targetUserId);
     return target != null && target.isActive && target.role != GroupRole.owner;
   }
 
-  static bool canLeave(GroupState state, String actorUserId) {
-    if (!allows(state, actorUserId, GroupPermission.leave)) return false;
+  /// A member who announced a leave is still in the MLS tree and still holds
+  /// the current epoch secret until a remaining member commits its `Remove`.
+  /// Eviction must therefore stay authorized for [GroupMembershipState.left],
+  /// while an already-evicted member is not a valid target again.
+  static bool isEvictable(GroupMember member) =>
+      member.membership != GroupMembershipState.removed;
+
+  static bool canLeave(
+    GroupState state,
+    String actorUserId, {
+    bool forControl = false,
+  }) {
+    if (!(forControl ? allowsControl : allows)(
+      state,
+      actorUserId,
+      GroupPermission.leave,
+    )) {
+      return false;
+    }
     final actor = state.member(actorUserId)!;
     return actor.role != GroupRole.owner || state.activeMembers.length == 1;
   }
@@ -445,8 +494,16 @@ final class LeaveGroupOperation extends GroupControlOperation {
 
   @override
   int get code => 6;
+
+  /// A leave carries no Commit of its own.
+  ///
+  /// RFC 9420 section 12.4 forbids a Commit that removes its own committer, so
+  /// a departing member cannot evict itself. The leave is an authenticated
+  /// announcement at the current epoch that moves the member to
+  /// [GroupMembershipState.left]; a remaining member then commits the `Remove`
+  /// that evicts the leaf and moves it to [GroupMembershipState.removed].
   @override
-  bool get changesMembership => true;
+  bool get changesMembership => false;
   @override
   GroupPermission get requiredPermission => GroupPermission.leave;
   @override
@@ -518,6 +575,23 @@ final class GroupControlEvent {
     }
   }
 
+  factory GroupControlEvent.fromDeterministicProjection(String projection) {
+    final fields = _projectionList(jsonDecode(projection), 11);
+    return GroupControlEvent(
+      protocolVersion: _projectionInteger(fields[0]),
+      eventId: _projectionString(fields[1]),
+      groupId: _projectionString(fields[2]),
+      revision: _projectionInteger(fields[3]),
+      previousControlStateHash: _projectionOptionalString(fields[4]),
+      mlsEpoch: _projectionInteger(fields[5]),
+      mlsCommitHash: _projectionOptionalString(fields[6]),
+      signerUserId: _projectionString(fields[7]),
+      signerDeviceId: _projectionString(fields[8]),
+      createdMs: _projectionInteger(fields[9]),
+      operation: _projectionOperation(fields[10]),
+    );
+  }
+
   final int protocolVersion;
   final String eventId;
   final String groupId;
@@ -570,6 +644,28 @@ final class SignedGroupControlEvent {
   final String controlStateHash;
   final Uint8List canonicalBytes;
   final Uint8List signature;
+}
+
+final class GroupControlTranscriptEntry {
+  GroupControlTranscriptEntry({
+    required this.signedControl,
+    required Uint8List signedPayload,
+    required Uint8List signerAuthenticationProof,
+  }) : signedPayload = Uint8List.fromList(signedPayload),
+       signerAuthenticationProof = Uint8List.fromList(
+         signerAuthenticationProof,
+       ) {
+    if (this.signedPayload.length < 8 ||
+        this.signedPayload.length > 64 * 1024 ||
+        this.signerAuthenticationProof.length < 8 ||
+        this.signerAuthenticationProof.length > 16 * 1024) {
+      throw const FormatException('invalid group control transcript entry');
+    }
+  }
+
+  final SignedGroupControlEvent signedControl;
+  final Uint8List signedPayload;
+  final Uint8List signerAuthenticationProof;
 }
 
 sealed class GroupControlApplyResult {
@@ -642,7 +738,11 @@ final class GroupControlStateMachine {
     if (actor == null ||
         !actor.isActive ||
         permission == null ||
-        !GroupAuthorization.allows(previous, event.signerUserId, permission)) {
+        !GroupAuthorization.allowsControl(
+          previous,
+          event.signerUserId,
+          permission,
+        )) {
       return GroupControlQuarantined(
         previous,
         GroupQuarantineReason.unauthorizedControl,
@@ -687,7 +787,7 @@ final class GroupControlStateMachine {
     if (operation is! CreateGroupOperation ||
         event.revision != 1 ||
         event.previousControlStateHash != null ||
-        event.mlsEpoch != 0 ||
+        event.mlsEpoch != 1 ||
         !operation.metadata.isValid ||
         operation.initialMembers.isEmpty ||
         operation.initialMembers.length > GroupState.maximumMembers) {
@@ -716,7 +816,7 @@ final class GroupControlStateMachine {
           members: operation.initialMembers,
           controlRevision: 1,
           controlStateHash: controlStateHash,
-          acceptedEpoch: 0,
+          acceptedEpoch: 1,
           lifecycle:
               operation.initialMembers.any(
                 (member) =>
@@ -752,7 +852,7 @@ final class GroupControlStateMachine {
         :final invitationPolicy,
         :final historySharingPolicy,
       ):
-        if (!GroupAuthorization.allows(
+        if (!GroupAuthorization.allowsControl(
           previous,
           actorId,
           GroupPermission.editHistorySharingPolicy,
@@ -778,11 +878,17 @@ final class GroupControlStateMachine {
           if (!ids.add(member.userId.toLowerCase())) return null;
           mutable.members.add(member);
         }
+        if (members.any(
+          (member) => member.userId.toLowerCase() == localUserId.toLowerCase(),
+        )) {
+          mutable.lifecycle = GroupLifecycle.active;
+        }
       case RemoveGroupMemberOperation(:final targetUserId):
         if (!GroupAuthorization.canRemove(
           previous,
           actorUserId: actorId,
           targetUserId: targetUserId,
+          forControl: true,
         )) {
           return null;
         }
@@ -794,7 +900,9 @@ final class GroupControlStateMachine {
           mutable.lifecycle = GroupLifecycle.removed;
         }
       case LeaveGroupOperation():
-        if (!GroupAuthorization.canLeave(previous, actorId)) return null;
+        if (!GroupAuthorization.canLeave(previous, actorId, forControl: true)) {
+          return null;
+        }
         mutable.replaceMember(
           actorId,
           (member) => member.copyWith(membership: GroupMembershipState.left),
@@ -808,6 +916,7 @@ final class GroupControlStateMachine {
           actorUserId: actorId,
           targetUserId: targetUserId,
           role: role,
+          forControl: true,
         )) {
           return null;
         }
@@ -820,7 +929,7 @@ final class GroupControlStateMachine {
         if (target == null ||
             !target.isActive ||
             target.role == GroupRole.owner ||
-            !GroupAuthorization.allows(
+            !GroupAuthorization.allowsControl(
               previous,
               actorId,
               GroupPermission.transferOwnership,
@@ -867,12 +976,32 @@ final class PreparedGroupTransition {
     required Uint8List newOpaqueMlsState,
     required Uint8List mlsObject,
     required this.mutationId,
+    required Iterable<String> recipientUserIds,
     this.outbound = true,
+    this.consumedKeyPackageState,
+    this.controlTranscriptEntry,
+    Iterable<GroupControlTranscriptEntry> precedingControlTranscript = const [],
   }) : newOpaqueMlsState = Uint8List.fromList(newOpaqueMlsState),
-       mlsObject = Uint8List.fromList(mlsObject) {
+       mlsObject = Uint8List.fromList(mlsObject),
+       precedingControlTranscript = List.unmodifiable(
+         precedingControlTranscript,
+       ),
+       recipientUserIds = List.unmodifiable(
+         recipientUserIds.map((value) => value.toLowerCase()).toSet(),
+       ) {
     if (this.newOpaqueMlsState.isEmpty ||
         this.mlsObject.isEmpty ||
-        mutationId.isEmpty) {
+        mutationId.isEmpty ||
+        this.precedingControlTranscript.length > 512 ||
+        (this.precedingControlTranscript.isNotEmpty && outbound) ||
+        (controlTranscriptEntry != null &&
+            !_sameSignedControl(
+              controlTranscriptEntry!.signedControl,
+              signedControl,
+            )) ||
+        (consumedKeyPackageState != null &&
+            (outbound || !signedControl.event.operation.changesMembership)) ||
+        (outbound && this.recipientUserIds.isEmpty)) {
       throw const FormatException('invalid prepared group transition');
     }
   }
@@ -881,8 +1010,36 @@ final class PreparedGroupTransition {
   final Uint8List newOpaqueMlsState;
   final Uint8List mlsObject;
   final String mutationId;
+  final List<String> recipientUserIds;
   final bool outbound;
+  final ConsumedGroupKeyPackageState? consumedKeyPackageState;
+  final GroupControlTranscriptEntry? controlTranscriptEntry;
+  final List<GroupControlTranscriptEntry> precedingControlTranscript;
 }
+
+final class ConsumedGroupKeyPackageState {
+  ConsumedGroupKeyPackageState({
+    required this.deviceId,
+    required this.expectedStateRevision,
+    required Uint8List nextSealedState,
+  }) : nextSealedState = Uint8List.fromList(nextSealedState) {
+    if (!_groupUuid.hasMatch(deviceId) ||
+        deviceId != deviceId.toLowerCase() ||
+        expectedStateRevision <= 0 ||
+        this.nextSealedState.isEmpty ||
+        this.nextSealedState.length > 1024 * 1024) {
+      throw const FormatException('invalid consumed KeyPackage state');
+    }
+  }
+
+  final String deviceId;
+  final int expectedStateRevision;
+  final Uint8List nextSealedState;
+}
+
+final RegExp _groupUuid = RegExp(
+  r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',
+);
 
 final class PreparedGroupMessage {
   PreparedGroupMessage({
@@ -896,8 +1053,18 @@ final class PreparedGroupMessage {
     required Uint8List newOpaqueMlsState,
     required Uint8List mlsObject,
     required this.operationId,
+    required Iterable<String> recipientUserIds,
+    this.outbound = true,
   }) : newOpaqueMlsState = Uint8List.fromList(newOpaqueMlsState),
-       mlsObject = Uint8List.fromList(mlsObject);
+       mlsObject = Uint8List.fromList(mlsObject),
+       recipientUserIds = List.unmodifiable(
+         recipientUserIds.map((value) => value.toLowerCase()).toSet(),
+       ) {
+    if ((outbound && this.recipientUserIds.isEmpty) ||
+        (!outbound && this.recipientUserIds.isNotEmpty)) {
+      throw const FormatException('group message requires recipients');
+    }
+  }
 
   final String groupId;
   final String messageId;
@@ -909,6 +1076,133 @@ final class PreparedGroupMessage {
   final Uint8List newOpaqueMlsState;
   final Uint8List mlsObject;
   final String operationId;
+  final List<String> recipientUserIds;
+  final bool outbound;
+}
+
+enum GroupMlsTransportKind { welcome, control, application }
+
+final class GroupMlsTransportProbe {
+  GroupMlsTransportProbe({
+    required this.kind,
+    required this.groupId,
+    this.joinCapable = false,
+  }) {
+    if (!_isHex(groupId, 32)) {
+      throw const FormatException('invalid group transport probe');
+    }
+  }
+
+  final GroupMlsTransportKind kind;
+  final String groupId;
+  final bool joinCapable;
+}
+
+sealed class PreparedGroupInboxCommit implements GroupSyncReceiveCommit {
+  const PreparedGroupInboxCommit();
+
+  @override
+  String get opaqueEventId;
+  @override
+  String get senderUserId;
+  @override
+  String get senderDeviceId;
+}
+
+final class PreparedGroupInboxTransition extends PreparedGroupInboxCommit {
+  const PreparedGroupInboxTransition({
+    required this.expectedPrevious,
+    required this.next,
+    required this.prepared,
+  });
+
+  final GroupState? expectedPrevious;
+  final GroupState next;
+  final PreparedGroupTransition prepared;
+
+  @override
+  String get opaqueEventId =>
+      'group-control:${prepared.signedControl.event.eventId}';
+  @override
+  String get senderUserId => prepared.signedControl.event.signerUserId;
+  @override
+  String get senderDeviceId => prepared.signedControl.event.signerDeviceId;
+}
+
+/// A same-revision sibling control was authenticated and ordered.
+///
+/// When the local branch is canonical the sibling is recorded and dropped and
+/// the group keeps running. When it is superseded the group is fork-quarantined
+/// and waits for remove/re-add, because an applied MLS commit cannot be rewound.
+final class PreparedGroupInboxForkResolution extends PreparedGroupInboxCommit {
+  const PreparedGroupInboxForkResolution({
+    required this.resolution,
+    required this.record,
+    required this.siblingEventId,
+    required this.siblingSignerUserId,
+    required this.siblingSignerDeviceId,
+  });
+
+  final GroupForkResolution resolution;
+  final GroupQuarantineRecord record;
+  final String siblingEventId;
+  final String siblingSignerUserId;
+  final String siblingSignerDeviceId;
+
+  bool get localBranchRetained => resolution is GroupForkLocalBranchCanonical;
+
+  @override
+  String get opaqueEventId => 'group-fork:$siblingEventId';
+  @override
+  String get senderUserId => siblingSignerUserId;
+  @override
+  String get senderDeviceId => siblingSignerDeviceId;
+}
+
+final class PreparedGroupInboxMessage extends PreparedGroupInboxCommit {
+  const PreparedGroupInboxMessage({
+    required this.expectedGroup,
+    required this.prepared,
+  });
+
+  final GroupState expectedGroup;
+  final PreparedGroupMessage prepared;
+
+  @override
+  String get opaqueEventId => 'group-application:${prepared.messageId}';
+  @override
+  String get senderUserId => prepared.senderUserId;
+  @override
+  String get senderDeviceId => prepared.senderDeviceId;
+}
+
+final class GroupOutboundWork {
+  GroupOutboundWork({
+    required this.operationId,
+    required this.groupId,
+    required this.eventId,
+    required this.epoch,
+    required Uint8List openedMlsPayload,
+    required Iterable<String> recipientUserIds,
+  }) : openedMlsPayload = Uint8List.fromList(openedMlsPayload),
+       recipientUserIds = List.unmodifiable(recipientUserIds) {
+    if (operationId.isEmpty ||
+        groupId.isEmpty ||
+        eventId.isEmpty ||
+        epoch < 0 ||
+        this.openedMlsPayload.isEmpty ||
+        this.recipientUserIds.isEmpty ||
+        this.recipientUserIds.toSet().length != this.recipientUserIds.length) {
+      throw const FormatException('invalid group outbound work');
+    }
+  }
+
+  final String operationId;
+  final String groupId;
+  final String eventId;
+  final int epoch;
+  final Uint8List openedMlsPayload;
+  final List<String> recipientUserIds;
 }
 
 final class GroupMessage {
@@ -927,6 +1221,75 @@ final class GroupMessage {
   final String text;
   final int createdMs;
   final bool localPreviewOnly;
+}
+
+/// Canonical ordering for two control branches accepted at the same revision.
+///
+/// The backend is an untrusted relay and group objects ride per-recipient
+/// pairwise envelopes, so there is no delivery-service commit order to break the
+/// tie. Both branches carry a control state hash over the full signed control
+/// descriptor, so every honest device independently derives the same winner:
+/// the lexicographically smallest hash. The rule is total, deterministic, and
+/// needs no extra round trip.
+abstract final class GroupForkCanonicalOrder {
+  /// True when [candidateControlStateHash] outranks every hash in [rivals].
+  ///
+  /// Equal hashes mean the same control, which is not a fork.
+  static bool outranks(
+    String candidateControlStateHash,
+    Iterable<String> rivals,
+  ) {
+    final candidate = candidateControlStateHash.toLowerCase();
+    return rivals.every(
+      (rival) => candidate.compareTo(rival.toLowerCase()) < 0,
+    );
+  }
+
+  static String canonical(Iterable<String> controlStateHashes) {
+    final sorted =
+        controlStateHashes
+            .map((value) => value.toLowerCase())
+            .toList(growable: false)
+          ..sort();
+    if (sorted.isEmpty) {
+      throw const FormatException('no control branch to order');
+    }
+    return sorted.first;
+  }
+}
+
+/// Outcome of comparing the locally accepted control branch against sibling
+/// controls another device accepted at the same revision.
+///
+/// An applied MLS commit cannot be rewound: the previous epoch secrets are gone
+/// by construction. A superseded local branch is therefore recovered by
+/// quarantine plus remove/re-add, never by rollback.
+sealed class GroupForkResolution {
+  const GroupForkResolution();
+}
+
+/// The local branch wins. Every sibling is stale and is dropped.
+final class GroupForkLocalBranchCanonical extends GroupForkResolution {
+  GroupForkLocalBranchCanonical({required Iterable<String> supersededEventIds})
+    : supersededEventIds = List.unmodifiable(
+        supersededEventIds.map((value) => value.toLowerCase()).toSet().toList()
+          ..sort(),
+      );
+
+  final List<String> supersededEventIds;
+}
+
+/// A sibling branch wins. The local group must stop and be re-admitted.
+final class GroupForkLocalBranchSuperseded extends GroupForkResolution {
+  const GroupForkLocalBranchSuperseded({
+    required this.canonicalEventId,
+    required this.canonicalControlStateHash,
+    required this.canonicalSignerUserId,
+  });
+
+  final String canonicalEventId;
+  final String canonicalControlStateHash;
+  final String canonicalSignerUserId;
 }
 
 final class GroupQuarantineRecord {
@@ -1003,4 +1366,117 @@ bool _listEquals<T>(List<T> left, List<T> right) {
     if (left[index] != right[index]) return false;
   }
   return true;
+}
+
+bool _sameSignedControl(
+  SignedGroupControlEvent left,
+  SignedGroupControlEvent right,
+) =>
+    left.event.deterministicProjection == right.event.deterministicProjection &&
+    left.controlStateHash == right.controlStateHash &&
+    _byteListEquals(left.canonicalBytes, right.canonicalBytes) &&
+    _byteListEquals(left.signature, right.signature);
+
+bool _byteListEquals(List<int> left, List<int> right) {
+  if (left.length != right.length) return false;
+  for (var index = 0; index < left.length; index += 1) {
+    if (left[index] != right[index]) return false;
+  }
+  return true;
+}
+
+GroupControlOperation _projectionOperation(Object? value) {
+  final fields = _projectionList(value);
+  if (fields.isEmpty) throw const FormatException('missing group operation');
+  return switch (_projectionInteger(fields[0])) {
+    1 => CreateGroupOperation(
+      metadata: _projectionMetadata(fields, 1),
+      invitationPolicy: _projectionEnum(
+        GroupInvitationPolicy.values,
+        fields[4],
+      ),
+      historySharingPolicy: _projectionEnum(
+        GroupHistorySharingPolicy.values,
+        fields[5],
+      ),
+      initialMembers: _projectionMembers(fields[6]),
+    ),
+    2 => UpdateGroupMetadataOperation(_projectionMetadata(fields, 1)),
+    3 => UpdateGroupPoliciesOperation(
+      invitationPolicy: _projectionEnum(
+        GroupInvitationPolicy.values,
+        fields[1],
+      ),
+      historySharingPolicy: _projectionEnum(
+        GroupHistorySharingPolicy.values,
+        fields[2],
+      ),
+    ),
+    4 => InviteGroupMembersOperation(_projectionMembers(fields[1])),
+    5 => RemoveGroupMemberOperation(_projectionString(fields[1])),
+    6 => const LeaveGroupOperation(),
+    7 => ChangeGroupRoleOperation(
+      targetUserId: _projectionString(fields[1]),
+      role: _projectionEnum(GroupRole.values, fields[2]),
+    ),
+    8 => TransferGroupOwnershipOperation(_projectionString(fields[1])),
+    _ => throw const FormatException('unsupported group operation'),
+  };
+}
+
+GroupMetadata _projectionMetadata(List<Object?> fields, int offset) =>
+    GroupMetadata(
+      name: _projectionString(fields[offset]),
+      description: _projectionString(fields[offset + 1]),
+      photoCapability: _projectionOptionalString(fields[offset + 2]),
+    );
+
+List<GroupMember> _projectionMembers(Object? value) => [
+  for (final member in _projectionList(value)) _projectionMember(member),
+];
+
+GroupMember _projectionMember(Object? value) {
+  final fields = _projectionList(value, 6);
+  return GroupMember(
+    userId: _projectionString(fields[0]),
+    displayName: _projectionString(fields[1]),
+    role: _projectionEnum(GroupRole.values, fields[2]),
+    membership: _projectionEnum(GroupMembershipState.values, fields[3]),
+    verified: fields[4] is bool
+        ? fields[4]! as bool
+        : throw const FormatException('invalid verified member flag'),
+    deviceIds: [
+      for (final deviceId in _projectionList(fields[5]))
+        _projectionString(deviceId),
+    ],
+  );
+}
+
+List<Object?> _projectionList(Object? value, [int? exactLength]) {
+  if (value is! List<Object?> ||
+      (exactLength != null && value.length != exactLength)) {
+    throw const FormatException('invalid group control projection');
+  }
+  return value;
+}
+
+int _projectionInteger(Object? value) {
+  if (value is! int) throw const FormatException('invalid integer');
+  return value;
+}
+
+String _projectionString(Object? value) {
+  if (value is! String) throw const FormatException('invalid string');
+  return value;
+}
+
+String? _projectionOptionalString(Object? value) =>
+    value == null ? null : _projectionString(value);
+
+T _projectionEnum<T>(List<T> values, Object? value) {
+  final index = _projectionInteger(value);
+  if (index < 0 || index >= values.length) {
+    throw const FormatException('invalid enum');
+  }
+  return values[index];
 }

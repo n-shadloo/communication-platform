@@ -5,14 +5,18 @@ plugins {
 }
 
 val nativeCryptoRoot = rootProject.layout.buildDirectory.dir("rust-android").get().asFile
-val nativeCryptoJniLibs = nativeCryptoRoot.resolve("jniLibs")
+val nativeCryptoFoundationJniLibs = nativeCryptoRoot.resolve("foundation/jniLibs")
+val nativeCryptoBetaJniLibs = nativeCryptoRoot.resolve("beta/jniLibs")
 val isWindowsHost = System.getProperty("os.name").lowercase().contains("windows")
 
-val buildRustCryptoAndroid by tasks.registering(Exec::class) {
+fun registerRustCryptoBuild(
+    taskName: String,
+    cryptoProfile: String,
+    outputDirectory: File,
+) = tasks.register<Exec>(taskName) {
     group = "build"
-    description = "Builds the pinned Rust cryptographic core for all supported Android ABIs."
+    description = "Builds the pinned $cryptoProfile Rust cryptographic core for Android."
     workingDir = rootProject.projectDir.parentFile
-
     val toolDirectory = rootProject.projectDir.parentFile.resolve("tool")
     val nativeDirectory = rootProject.projectDir.parentFile.resolve("native/crypto_core")
     inputs.files(
@@ -29,7 +33,7 @@ val buildRustCryptoAndroid by tasks.registering(Exec::class) {
     )
     inputs.dir(nativeDirectory.resolve("src"))
     inputs.dir(nativeDirectory.resolve("vendor/mlkem-native/mlkem"))
-    outputs.dir(nativeCryptoJniLibs)
+    outputs.dir(outputDirectory)
 
     if (isWindowsHost) {
         commandLine(
@@ -40,15 +44,28 @@ val buildRustCryptoAndroid by tasks.registering(Exec::class) {
             "-File",
             toolDirectory.resolve("build_rust_android.ps1").absolutePath,
             "all",
+            cryptoProfile,
         )
     } else {
         commandLine(
             "bash",
             toolDirectory.resolve("build_rust_android.sh").absolutePath,
             "all",
+            cryptoProfile,
         )
     }
 }
+
+val buildRustCryptoAndroid = registerRustCryptoBuild(
+    "buildRustCryptoAndroid",
+    "foundation",
+    nativeCryptoFoundationJniLibs,
+)
+val buildRustCryptoAndroidBeta = registerRustCryptoBuild(
+    "buildRustCryptoAndroidBeta",
+    "beta",
+    nativeCryptoBetaJniLibs,
+)
 
 android {
     namespace = "com.example.communication_platform"
@@ -78,8 +95,6 @@ android {
         }
     }
 
-    sourceSets.getByName("main").jniLibs.srcDir(nativeCryptoJniLibs)
-
     flavorDimensions += "environment"
     productFlavors {
         create("development") {
@@ -87,12 +102,21 @@ android {
             applicationId = "$placeholderProductionApplicationId.development"
             resValue("string", "app_name", "Communication Platform (Development)")
         }
+        create("beta") {
+            dimension = "environment"
+            applicationId = "$placeholderProductionApplicationId.beta"
+            resValue("string", "app_name", "Communication Platform (Closed Beta)")
+        }
         create("production") {
             dimension = "environment"
             applicationId = placeholderProductionApplicationId
             resValue("string", "app_name", "Communication Platform")
         }
     }
+
+    sourceSets.getByName("development").jniLibs.srcDir(nativeCryptoFoundationJniLibs)
+    sourceSets.getByName("production").jniLibs.srcDir(nativeCryptoFoundationJniLibs)
+    sourceSets.getByName("beta").jniLibs.srcDir(nativeCryptoBetaJniLibs)
 
     buildTypes {
         release {
@@ -110,7 +134,13 @@ dependencies {
 
 tasks.configureEach {
     if (name.startsWith("merge") && name.endsWith("JniLibFolders")) {
-        dependsOn(buildRustCryptoAndroid)
+        dependsOn(
+            if (name.startsWith("mergeBeta")) {
+                buildRustCryptoAndroidBeta
+            } else {
+                buildRustCryptoAndroid
+            },
+        )
     }
 }
 
