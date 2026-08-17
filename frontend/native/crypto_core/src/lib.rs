@@ -7,6 +7,8 @@ mod cbor;
 pub mod device_signatures;
 pub mod enrollment;
 mod error;
+#[cfg(test)]
+mod mlkem_vectors;
 #[cfg(feature = "beta-pq-mls")]
 mod mls_beta;
 mod pairwise;
