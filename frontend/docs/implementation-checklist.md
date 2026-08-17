@@ -164,12 +164,18 @@ opaque/client-owned; **Pending** = Flutter implementation not started.
   X-Wing rather than the selected mapping, (4) the MLS Working Group vector repository
   still publishes only classical fixtures, and (5) no qualified independent reviewer is
   retained. Draft-06 still defines `TBD2` with the exact recorded primitive mapping, so no
-  suite/ADR stop-and-decide is triggered. Separately re-verified on 2026-08-16 against the
-  pinned vendored crate sources: the closed beta implements `TBD2`'s signature, AEAD, KDF,
-  and hash choices but not its KEM `0x647a`, so beta groups are not `TBD2`-conformant and
-  are not `TBD2` interoperability evidence. The per-identifier registry evidence and both
-  evidence tables are in `docs/mls-profile.md`; production now has seven mandatory gates
-  rather than six, and none is satisfied. Web support remains post-v1.
+  suite/ADR stop-and-decide is triggered. Separately re-verified on 2026-08-17 against the
+  pinned vendored crate sources and the X-Wing draft text: the closed beta implements
+  `TBD2`'s signature, AEAD, KDF, and hash choices but not its KEM `0x647a`, so beta groups
+  are not `TBD2`-conformant and are not `TBD2` interoperability evidence. The divergence is
+  now recorded as a complete ten-row set (D1-D10) with per-row file-and-line evidence, and
+  **ADR-040 resolves that the beta KEM is not changed**: the pinned `mls-rs` crypto crates
+  are already the newest published versions so no maintained fix exists, no maintained
+  provider implements `TBD2` at all, and supplying a conformant KEM through `mls-rs`'s
+  public extension points would be a project-local cryptographic fork because
+  `AwsLcCipherSuite` cannot be re-parameterized. The per-identifier registry evidence and
+  every evidence table are in `docs/mls-profile.md`; production has seven mandatory gates,
+  and ADR-040 opens none of them. Web support remains post-v1.
 - [x] Piece 10 first/later-device two-phase enrollment is crash-safe and resumable;
   registration response loss never causes a blind duplicate; recoverable unsigned
   orphans are adopted or revoked; every intermediate state remains withheld through the
@@ -246,7 +252,10 @@ opaque/client-owned; **Pending** = Flutter implementation not started.
   on every ABI and zero `cp_crypto_v1_beta_mls_operation` symbols, which exist only in the
   separate `beta` artifact, so a production build contains no PQ MLS code path at all.
   ADR-038 canonical fork convergence and ADR-039
-  two-phase leave are both implemented and tested. Remaining blockers are the full
+  two-phase leave are both implemented and tested. ADR-040 (2026-08-17) keeps this KEM
+  mapping unchanged, so no beta state, sealed snapshot, KeyPackage, or group is
+  reinitialized by that decision; it also records what a later KEM change would cost.
+  Remaining blockers are the full
   queue-gap remove/re-add/history matrix, upstream/project interoperability and
   bucket/backend contract execution against a running backend, multi-device and
   process-death/fault matrices on real hardware, migration fuzzing, and independent

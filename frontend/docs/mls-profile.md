@@ -6,35 +6,45 @@ This document owns the Flutter client's group-ciphersuite decision. The algorith
 profile is selected, but it is not yet a production wire contract. ADR-036 permits a
 real isolated closed-beta implementation with disposable state and a Private Use suite
 identifier. That closed beta implements the selected profile's symmetric and signature
-choices but not its hybrid KEM, which "Closed-beta KEM divergence from TBD2" records in
-full. Production still resolves the unsupported adapter, keeps the source-only production
-gate closed, and cannot create a group or upload a KeyPackage.
+choices but not its hybrid KEM. ADR-040 resolves that the beta KEM is not changed;
+"Closed-beta KEM divergence from TBD2" is the complete, binding record of the difference
+and "Why the beta KEM is not being corrected in place" is the summary of that decision.
+Production still resolves the unsupported adapter, keeps the source-only production gate
+closed, and cannot create a group or upload a KeyPackage.
 
-Status last verified on 2026-08-16 against IETF draft revision 06, the IANA MLS
+Status last verified on 2026-08-17 against IETF draft revision 06, the IANA MLS
 ciphersuite registry, the IANA HPKE KEM, KDF, and AEAD registries, the IANA TLS
 SignatureScheme registry, NIST FIPS 180-4, `draft-ietf-hpke-pq`,
 `draft-irtf-cfrg-concrete-hybrid-kems`, `draft-connolly-cfrg-xwing-kem`, the pinned
-vendored `mls-rs` crate sources, the OpenMLS supported-ciphersuite list, the `mls-rs`
-release index, and the MLS Working Group interoperability-vector repository.
+vendored `mls-rs` crate sources, the crates.io version index for `mls-rs`, `openmls`, and
+the `mls-rs` crypto crates, the OpenMLS supported-ciphersuite list, and the MLS Working
+Group interoperability-vector repository. Every Phase-A prerequisite result below is
+unchanged from the 2026-08-16 audit; the 2026-08-17 pass re-verified the KEM divergence
+against the draft text and the pinned sources line by line and extended it (rows D5, D7,
+D8, and the no-upstream-fix finding are new).
 
-### Phase-A external preflight (2026-08-16)
+### Phase-A external preflight (2026-08-16; re-verified unchanged 2026-08-17)
 
 These prerequisites exist outside this implementation and cannot be made true by adding
 more project code. All five remain blocked. The single row that previously combined "final
 stable specification and IANA-assigned suite identifier" is now two rows, because the
 primitive mapping and the MLS suite value are held in different registries with different
 owners, different registration policies, and independent completion paths; that split
-changes evidence granularity only. No prerequisite result has changed since 2026-08-09.
+changes evidence granularity only. No prerequisite result has changed since 2026-08-09; the
+2026-08-17 recheck of the IANA MLS and HPKE registries, `draft-ietf-mls-pq-ciphersuites`,
+`draft-ietf-hpke-pq`, `draft-irtf-cfrg-concrete-hybrid-kems`,
+`draft-connolly-cfrg-xwing-kem`, and the crates.io indexes for `openmls` and the `mls-rs`
+crates found all five still blocked, with the same evidence.
 
 | External prerequisite | Current primary-source evidence | Result | Consequence |
 |---|---|---|---|
 | Stable published specification and registry assignment for every primitive in the selected mapping | Four of the five primitives already rest on published, non-expiring standards and are assigned in registries this project does not control: KDF `0x0002` (HKDF-SHA384, reference RFC 5869) and AEAD `0x0002` (AES-256-GCM, reference NIST SP 800-38D) in the IANA HPKE registries, last updated 2026-04-16; signature `ed25519` `0x0807` (`Recommended = Y`, reference RFC 9846) in the IANA TLS SignatureScheme registry, last updated 2026-08-10; and hash SHA-384, which carries no code point at all and is named directly from NIST FIPS 180-4. The hybrid KEM is the exception. `0x647A` is assigned in the IANA HPKE KEM Identifiers registry, but the only normative reference recorded there is `draft-connolly-cfrg-xwing-kem-06`, an Independent-submission Internet-Draft; that draft has since advanced to `-10` (2026-03-02, expiring 2026-09-03) without the registry reference following it, and the chain draft-06 uses to reach it — `draft-ietf-hpke-pq-05` and `draft-irtf-cfrg-concrete-hybrid-kems-04`, the latter in datatracker state `I-D Exists::Revised I-D Needed` — is still moving. | **Blocked** (one primitive of five) | The mapping cannot be frozen as a production wire contract while its KEM rests on a superseded, expiring draft revision. This prerequisite blocks and clears independently of any MLS Cipher Suites action, which is why it is evidenced separately from the row below. |
 | Final MLS specification and an IANA-assigned MLS ciphersuite value | `draft-ietf-mls-pq-ciphersuites-06`, published 2026-07-21, is still an expiring Standards Track Internet-Draft (expires 2027-01-22). Its datatracker state is "I-D Exists", annotated "Waiting for WG Chair Go-Ahead" and "Revised I-D Needed - Issue raised by WG", so the text is expected to change again. Its IANA Considerations request entries in the "MLS Cipher Suites" registry only and request nothing in the HPKE registries. The selected suite is still `TBD2`; that registry, last updated 2025-11-17, contains only `0x0000` RESERVED, RFC 9420 values `0x0001`-`0x0007`, the GREASE values, and Private Use `0xF000`-`0xFFFF`. No post-quantum suite is registered. | **Blocked** | No production suite value, KeyPackage, or group may be emitted. The registry's Specification Required policy is not a route this project may take: ADR-026 forbids assigning a production identifier locally, so this closes only when the working group's document becomes a stable specification and IANA assigns the value that replaces `TBD2`. No amount of primitive-level progress advances it. |
-| Maintained non-project-local OpenMLS/provider support for the exact final Android mapping | OpenMLS 0.8.1 (2026-02-13) remains the newest stable release and 0.9.0-rc.2 (2026-08-06) is still a release candidate; both still document only the three classical RFC 9420 suites. OpenMLS's published post-quantum work targets X-Wing (`MLS_256_XWING_CHACHA20POLY1305_SHA256_Ed25519`, experimental `0x004D`, with no IANA code point), whose AEAD, KDF, and hash differ from `TBD2`; its KEM does not differ, because `TBD2`'s own KEM `0x647a` *is* X-Wing. `mls-rs` exposes `CipherSuite::ML_KEM_768_X25519` at Private Use `0xFE4C`, but the mapping this project assembles through the maintained public `AwsLcCipherSuiteBuilder` API is not `TBD2`: its symmetric half matches and its hybrid KEM does not, as evidenced under "Closed-beta KEM divergence" below. | **Blocked** | The closed beta may use the locked maintained `mls-rs` provider under ADR-036, but composing the mapping ourselves does not satisfy the production OpenMLS/provider gate. No project-local cryptographic fork is permitted. |
+| Maintained non-project-local OpenMLS/provider support for the exact final Android mapping | OpenMLS 0.8.1 (2026-02-13) remains the newest stable release and 0.9.0-rc.2 (2026-08-06) is still a release candidate; both still document only the three classical RFC 9420 suites. OpenMLS's published post-quantum work targets X-Wing (`MLS_256_XWING_CHACHA20POLY1305_SHA256_Ed25519`, experimental `0x004D`, with no IANA code point), whose AEAD, KDF, and hash differ from `TBD2`; its KEM does not differ, because `TBD2`'s own KEM `0x647a` *is* X-Wing. `mls-rs` exposes `CipherSuite::ML_KEM_768_X25519` at Private Use `0xFE4C`, but the mapping this project assembles through the maintained public `AwsLcCipherSuiteBuilder` API is not `TBD2`: its symmetric half matches and its hybrid KEM does not, as evidenced under "Closed-beta KEM divergence" below. Neither maintained provider implements `TBD2`: OpenMLS has the right KEM (X-Wing *is* `0x647a`) on the wrong AEAD/KDF/hash, and `mls-rs` has the right AEAD/KDF/hash on a pre-standard KEM. The pinned `mls-rs` crypto crates are already the newest published versions (checked on crates.io 2026-08-17), so no upstream fix is available to adopt. | **Blocked** | The closed beta may use the locked maintained `mls-rs` provider under ADR-036, but composing the mapping ourselves does not satisfy the production OpenMLS/provider gate. No project-local cryptographic fork is permitted, and ADR-040 records that supplying a conformant KEM through `mls-rs`'s public extension points would be one — the maintained cipher suite cannot be re-parameterized, so the project would have to author the KEM itself. |
 | Usable upstream interoperability vectors for the selected suite | The MLS Working Group vector repository still exposes only its classical fixture set (`crypto-basics`, `key-schedule`, `message-protection`, `messages`, `passive-client-*`, `psk_secret`, `secret-tree`, `transcript-hashes`, `tree-*`, `treekem`, `welcome`). No ML-KEM/PQ fixture set exists. | **Blocked** | Project lifecycle fixtures are useful beta evidence but cannot substitute for independent upstream interoperability. |
 | Qualified independent reviewer available for the final implementation | No named, retained reviewer, scope of work, or review schedule is recorded for this project. | **Blocked** | Review-dependent production gates cannot close until a qualified reviewer is engaged and all blocking findings are resolved. |
 
-#### Per-identifier registry evidence (verified 2026-08-16)
+#### Per-identifier registry evidence (verified 2026-08-16; the HPKE KEM/KDF/AEAD and MLS ciphersuite rows re-verified unchanged 2026-08-17)
 
 Every identifier in the selected mapping was checked against the registry that owns it. The
 first two Phase-A rows are split along the boundary this table makes visible: five primitive
@@ -71,60 +81,138 @@ it is never adapted silently.
 That statement is about the recorded *candidate*, not about what the closed beta builds.
 The two are not the same, and the next section is the binding record of the difference.
 
-### Closed-beta KEM divergence from TBD2 (verified 2026-08-16)
+### Closed-beta KEM divergence from TBD2 (complete set, verified 2026-08-17)
 
 The closed beta does not implement `TBD2`, and no beta artifact ever has. Its signature,
-AEAD, KDF, and hash choices match `TBD2` exactly; its hybrid KEM does not.
+AEAD, KDF, and hash choices match `TBD2` exactly; its hybrid KEM does not. **ADR-040
+resolves that the beta KEM is not changed** and makes this section the binding record of
+the divergence. Nothing in it opens, weakens, or partially satisfies a production gate.
 
 `TBD2` names HPKE KEM `0x647a`. The normative chain for that code point is
 `draft-ietf-mls-pq-ciphersuites-06`, which takes its hybrid KEMs from
 `draft-ietf-hpke-pq-05` (2026-07-06); that draft registers `0x647a` as `MLKEM768-X25519`
 with `Nsecret` 32, `Nenc` 1120, `Npk` 1216, and defers the algorithms to
-`draft-irtf-cfrg-concrete-hybrid-kems-03`, which states the construction "is identical to
-the X-Wing construction". The IANA HPKE KEM Identifiers registry, last updated
-2026-04-16, records `0x647A` as X-Wing with reference `draft-connolly-cfrg-xwing-kem-06`
-and leaves `0x0001`-`0x000F` unassigned.
+`draft-irtf-cfrg-concrete-hybrid-kems` — cited there at `-03`, now at `-04` (2026-07-06,
+expires 2027-01-07, datatracker state `I-D Exists::Revised I-D Needed`), which states the
+construction "is identical to the X-Wing construction" and references
+`draft-connolly-cfrg-xwing-kem-10`. The IANA HPKE KEM Identifiers registry, last updated
+2026-04-16, still records `0x647A` as X-Wing with reference
+`draft-connolly-cfrg-xwing-kem-06` and leaves `0x0001`-`0x000F` unassigned.
 
 The beta provider is assembled in `native/crypto_core/src/mls_beta.rs` from
 `mls-rs-crypto-awslc 0.25.0`, which delegates the combiner to `mls-rs-crypto-hpke 0.21.0`.
-The rows below were read from the pinned vendored crate sources in the local cargo
-registry, not from published documentation.
+Every "vendored" row below was read from the pinned crate sources in the local cargo
+registry, not from published documentation; every `TBD2` row was read from the X-Wing draft
+text itself. `-06` (the revision IANA records for `0x647a`) and `-10` (current) agree on
+every row in this table. In the evidence column an unqualified filename means
+`mls-rs-crypto-hpke-0.21.0/src/`; anything in the aws-lc crate is spelled out in full.
 
-| Property | `TBD2` KEM `0x647a` (X-Wing) | Vendored `mls-rs` combiner | Evidence |
-|---|---|---|---|
-| Combiner input order | `SHA3-256(ss_M, ss_X, ct_X, pk_X, XWingLabel)` — label last | `SHA3-256(label, ss_mlkem, ss_2, enc_2, pk_2)` — label first | `mls-rs-crypto-hpke-0.21.0/src/kem_combiner/xwing.rs:100-115` |
-| Label bytes | 6 bytes, `5c2e2f2f5e5c` | 7 bytes, `5c2e2f0a2f5e5c` (an embedded `0x0a`) | `mls-rs-crypto-hpke-0.21.0/src/kem_combiner/xwing.rs:107` |
-| Traditional contribution | the raw X25519 output | a DHKEM(X25519, HKDF-SHA256) secret: labeled extract-then-expand over the ECDH with `kem_context = enc \|\| pk` under suite ID `"KEM" \|\| 0x0020` | `mls-rs-crypto-hpke-0.21.0/src/dhkem.rs:111-130`; `mls-rs-crypto-awslc-0.25.0/src/lib.rs:377-383` |
-| HPKE `kem_id` | `0x647a` | `15` (`0x000F`), carrying the upstream comment `// TODO not set by any RFC` | `mls-rs-crypto-hpke-0.21.0/src/kem_combiner/xwing.rs:149-152` |
-| Seed expansion | SHAKE-256 to 96 bytes; the X25519 third is used as the raw scalar | SHAKE-128 to 96 bytes; the X25519 third goes through RFC 9180 `DeriveKeyPair` | `mls-rs-crypto-hpke-0.21.0/src/kem_combiner/xwing.rs:300-313`; `mls-rs-crypto-awslc-0.25.0/src/kdf.rs:144-177`; `mls-rs-crypto-hpke-0.21.0/src/dhkem.rs:208-220` |
-| Revision targeted | `-06`, the revision IANA references for `0x647a` | `draft-connolly-cfrg-xwing-kem-01` (2024-01-22), per the combiner's own doc comment | `mls-rs-crypto-hpke-0.21.0/src/kem_combiner/xwing.rs:97` |
+| # | Property | `TBD2` KEM `0x647a` (X-Wing) | Vendored `mls-rs` combiner | Evidence |
+|---|---|---|---|---|
+| D1 | Combiner input order | `SHA3-256(ss_M, ss_X, ct_X, pk_X, XWingLabel)` — label last in both `-06` and `-10` | `SHA3-256(label, ss_mlkem, ss_2, enc_2, pk_2)` — label first, the pre-`-05` layout | `xwing.rs:100-115`; X-Wing `-06`/`-10` Combiner; `-10` changelog G.4 "Move label at the end" |
+| D2 | Label bytes | 6 bytes, `5c2e2f2f5e5c` | 7 bytes, `5c2e2f0a2f5e5c` (an embedded `0x0a`) | `xwing.rs:107`; X-Wing `-10` "XWingLabel is given by `5c2e2f2f5e5c`" |
+| D3 | Traditional contribution `ss_X` | the raw X25519 output, `X25519(ek_X, pk_X)` | a DHKEM(X25519, HKDF-SHA256) secret: `LabeledExpand(LabeledExtract("", "eae_prk", dh), "shared_secret", enc \|\| pk, 32)` under suite ID `"KEM" \|\| 0x0020` with the `HPKE-v1` prefix | `dhkem.rs:111-130`; `kdf.rs:76-86`; `mls-rs-crypto-awslc-0.25.0/src/lib.rs:377-383`; `mls-rs-crypto-traits-0.22.0/src/kem.rs:86` |
+| D4 | HPKE `kem_id` | `25722` (`0x647a`) | `15` (`0x000F`), unassigned at IANA, carrying the upstream comment `// TODO not set by any RFC` | `xwing.rs:149-152`; IANA HPKE KEM registry (2026-04-16); X-Wing `-10` `kem_id` 25722 |
+| D5 | `DeriveKeyPair` structure | `GenerateKeyPairDerand(SHAKE256(ikm, 32))` — no HPKE `dkp_prk` step exists | an extra `dkp_prk = LabeledExtract("", "dkp_prk", ikm)` under `"KEM" \|\| 0x000F` with HKDF-SHA384, then the seed expansion below | `hpke.rs:208-213`; `kdf.rs:39-51`; X-Wing `-10` `DeriveKeyPair` |
+| D6 | Seed expansion | `SHAKE256(sk, 96)`, split `[0:32]`/`[32:64]`/`[64:96]` | `SHAKE-128(dkp_prk, 96)`, split `64`/`32` | `xwing.rs:300-313`; `mls-rs-crypto-awslc-0.25.0/src/kdf.rs:144-177` (`EVP_shake128`); X-Wing `-10` `expandDecapsulationKey` |
+| D7 | X25519 key derivation | `sk_X = expanded[64:96]`, used directly as the scalar | the 32-byte half goes through RFC 9180 `DeriveKeyPair`, `LabeledExpand(·, "sk", "", 32)` under `"KEM" \|\| 0x0020` | `dhkem.rs:208-220`; `dhkem.rs:82-91`; X-Wing `-10` `expandDecapsulationKey` |
+| D8 | Encapsulation-key check | "ML-KEM-768.Encaps(pk_M) **MUST** perform the encapsulation key check of [MLKEM] §7.2 and raise an error if it fails" | the combined KEM performs no validation of its own — `public_key_validate` returns `Ok(())` with `// TODO Not clear how to do this for Kyber`; whatever checking occurs is whatever `aws_lc_rs::kem::EncapsulationKey::new` does internally at encap time, and the MLS-visible validation hook is a no-op | `xwing.rs:242-245`; `mls-rs-crypto-awslc-0.25.0/src/kem/ml_kem.rs:79,142-144`; X-Wing `-10` §4 |
+| D9 | Serialized private key | `Nsk` 32 (a seed; the decapsulation key is re-expanded or cached) | 2,432 bytes of expanded material: ML-KEM-768 `dk` 2,400 `\|\|` X25519 32. Local state only; never on the wire | `mls-rs-crypto-awslc-0.25.0/src/kem/ml_kem.rs:167-173`; `xwing.rs:271-290` |
+| D10 | Revision targeted | `-06` is what IANA records for `0x647a`; `-10` (2026-03-02) is current | `draft-connolly-cfrg-xwing-kem-01`, per the combiner's own doc comment — five revisions behind `-06`, nine behind `-10` | `xwing.rs:97` |
 
-The `kem_id` divergence is the widest-reaching one. `0x000F` is bound into the HPKE
-`suite_id` (`"HPKE" || kem_id || kdf_id || aead_id`) that every key-schedule
-`LabeledExtract`/`LabeledExpand` uses, and into the KEM suite ID (`"KEM" || kem_id`) that
-derives `dkp_prk` for every HPKE key pair
-(`mls-rs-crypto-hpke-0.21.0/src/hpke.rs:89-103` and `:208-213`). Beta Welcome,
-update-path, and application key schedules therefore differ from `TBD2` even where the
-ML-KEM-768 and X25519 components agree.
+`kem_id` (D4) is the widest-reaching divergence, and it is the reason the others cannot be
+treated as cosmetic. `0x000F` is bound into the HPKE `suite_id`
+(`"HPKE" || kem_id || kdf_id || aead_id`) that every key-schedule
+`LabeledExtract`/`LabeledExpand` consumes, and into the KEM suite ID (`"KEM" || kem_id`)
+that derives `dkp_prk` for every HPKE key pair (`hpke.rs:89-103` and `:208-213`). It
+therefore reaches every beta Welcome, every update-path node key, every KeyPackage init
+key, and every HPKE export — so beta key schedules differ from `TBD2` even where the
+ML-KEM-768 and X25519 components agree. The inner DHKEM keeps its own correct
+`"KEM" || 0x0020` suite ID (`dhkem.rs:51`), so `0x000F` sits only at the outer layer —
+which is the layer MLS actually uses.
 
-What does match `TBD2`: signature Ed25519, AEAD AES-256-GCM (`0x0002`), KDF HKDF-SHA384
-(`0x0002`), hash SHA-384, ML-KEM-768 as the post-quantum component, SHA3-256 as the
-combiner hash, the ML-KEM-then-X25519 concatenation order, and the `Npk` 1216 / `Nenc`
-1120 / `Nsecret` 32 sizes. The serialized private key differs (2,432 bytes of expanded
-key material rather than `Nsk` 32 seed bytes), which is local state only and never
-reaches the wire.
+What does match `TBD2`, re-verified on 2026-08-17: signature Ed25519, AEAD AES-256-GCM
+(`0x0002`), KDF HKDF-SHA384 (`0x0002`), hash SHA-384, ML-KEM-768 as the post-quantum
+component seeded from a 64-byte `(d ‖ z)` input through aws-lc's deterministic ML-KEM
+keygen, SHA3-256 as the combiner hash, the ML-KEM-then-X25519 concatenation order,
+`enc = ct_M ‖ ct_X` with `ct_X` the ephemeral X25519 public key, and the `Npk` 1216 /
+`Nenc` 1120 / `Nsecret` 32 sizes. Because those sizes are byte-identical between the two
+constructions, the divergence is silent on the wire: a mismatched peer or a stale stored
+key fails at decryption, never at parsing, so the beta state-format version — not any
+length check — is what must reject incompatible state.
+
+The divergence cannot be closed by moving the dependency pin. Checked against crates.io on
+2026-08-17, the pinned `mls-rs-crypto-hpke 0.21.0`, `mls-rs-crypto-awslc 0.25.0`, and
+`mls-rs-crypto-traits 0.22.0` are each the newest published version of their crate (all
+published 2026-04-21), so the newest maintained `mls-rs` provider still ships the
+`draft-01` combiner and `kem_id` 15. `mls-rs 0.55.3` (2026-08-07) supersedes the locked
+`0.55.2`, but its crypto crates are unchanged; moving that lock is a separate reviewed
+dependency decision and is not required by any production gate.
 
 Consequences. The beta is a hybrid ML-KEM-768 + X25519 group implementation on a Private
-Use identifier; it is not a `TBD2` implementation and cannot be offered as `TBD2`
+Use identifier; it is not a `TBD2` implementation and MUST NOT be offered as `TBD2`
 interoperability evidence. Nothing here weakens or satisfies a production gate: all seven
 below remain closed, and adopting the real `TBD2` later is a full protocol migration with
 group reinitialization, not a relabelling. Verified against the primary sources listed at
-the end of this document on 2026-08-16.
+the end of this document on 2026-08-17.
 
-`mls-rs 0.55.3` was published on 2026-08-07. The closed beta deliberately stays on the
-locked `0.55.2`/`mls-rs-crypto-awslc 0.25.0` pair; moving the lock is a separate reviewed
-dependency decision and is not required by any production gate, all of which remain
-blocked above.
+Because ADR-040 changes nothing, no reinitialization is triggered now: the beta state
+format, transport v3, schema v11, sealed key-package snapshots, sealed group state, and
+existing beta groups all stay valid. Whenever the KEM does change — by adopting `0x647a`
+or by migrating providers — the cost is fixed by D4, D5, and D9 above and is the same in
+either direction:
+
+- every stored HPKE key pair is bound to `kem_id 0x000F` through `dkp_prk`, and every
+  epoch's key schedule is bound to it through the HPKE `suite_id`, so no stored beta key
+  or epoch secret survives;
+- the serialized private-key layout changes (2,432 bytes to `Nsk` 32), so sealed
+  key-package and group snapshots must be reinitialized, not migrated;
+- uploaded beta KeyPackages, consumable and last-resort, must be replaced rather than
+  reused, and in-flight queued group objects must be dropped;
+- every beta group must be recreated and re-invited; and
+- the beta state-format version must reject the old state explicitly, because `Npk` and
+  `Nenc` are unchanged and nothing would fail at parse time.
+
+This is the disposability rule ADR-036 established and ADR-037 already exercised for
+v2 to v3. It is a closed-beta reinitialization, never a production migration.
+
+### Why the beta KEM is not being corrected in place (ADR-040, 2026-08-17)
+
+A conformant `0x647a` KEM cannot be reached through the maintained provider. The public
+extension points that do exist — `mls_rs::CryptoProvider`,
+`mls_rs_core::crypto::CipherSuiteProvider`, `mls_rs_crypto_traits::{KemType, DhType, Hash,
+VariableLengthHash}`, `CombinedKem::new_custom` with a project `SharedSecretHashInput`, and
+the public aws-lc primitive constructors including the 64-byte `(d ‖ z)` deterministic
+ML-KEM keygen — are real and would not require editing one line of vendored source. They
+are nevertheless not a route this project may take:
+
+- `AwsLcCipherSuite` cannot be re-parameterized. Its fields are private and the
+  `AwsLcHpke` enum is private (`mls-rs-crypto-awslc-0.25.0/src/lib.rs:80`); both hybrid
+  builder entry points hard-code `CombinedKem::new_xwing` (`:243-290`). There is no way to
+  hand the maintained cipher suite a different KEM, so the project would have to implement
+  the ~25-method `CipherSuiteProvider` itself, at the most security-sensitive layer in the
+  build.
+- That needs `mls_rs_crypto_hpke::{hpke::Hpke, context::{ContextS, ContextR}}`, which
+  `mls-rs-crypto-awslc` imports privately and does not re-export (`:38-42`, `:51`), so it
+  requires a new direct dependency; and `HpkeKdf` is `pub(crate)`, so the labeled-KDF
+  helpers would have to be rewritten too.
+- SHAKE-256 (D6) is not reachable from any current dependency's safe API — the awslc crate
+  exposes only `AwsLcShake128` — so it would require project-local `unsafe` FFI against
+  `aws-lc-sys`.
+
+Under gate 3 that route is a project-local cryptographic fork even though no vendored file
+would change, because gate 3 requires that *a maintained provider implements* the mapping,
+and here the project would author and own the combiner, the raw-X25519 KEM, the SHAKE-256
+expansion, and the encapsulation-key check. It would not be invented cryptography — X-Wing
+is specified and has published vectors — but it is exactly the "custom, unaudited
+cryptographic implementation" ADR-017 names, and ADR-036 permits only maintained external
+implementations. Selecting and composing maintained primitives, which is what
+`combined_hpke` already does, stays on the right side of that line; authoring a KEM's own
+algorithm steps does not. ADR-040 carries the full reasoning and the rejected alternatives.
+
+The reversal trigger is written down and is an upstream event, not a project task: a
+maintained provider implements `TBD2`'s KEM `0x647a` against a stable, non-expiring
+specification. That is gates 1 and 3 below.
 
 ### Beta convergence and leave semantics (2026-08-16)
 
@@ -198,7 +286,8 @@ transactional storage boundary, and UI. Piece 19's closed-beta track implements 
 existing port and transaction boundary using locked `mls-rs 0.55.2` and
 `mls-rs-crypto-awslc 0.25.0` dependencies, draft-06's symmetric and signature mapping over
 that provider's own pre-standard hybrid KEM, and Private Use identifier `0xFE4C`. The KEM
-is not draft-06's `0x647a`; see "Closed-beta KEM divergence" above. It uses the real beta
+is not draft-06's `0x647a`; see "Closed-beta KEM divergence" above. ADR-040 keeps that
+mapping unchanged and records the reinitialization cost of ever changing it. It uses the real beta
 backend contracts and durable
 recipient-bound pairwise outbox; no MLS secret or shared/raw MLS ciphertext is exposed
 to Dart projections or backend metadata.

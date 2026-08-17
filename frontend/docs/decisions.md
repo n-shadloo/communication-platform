@@ -44,6 +44,174 @@ is not silently edited out of history.
 | ADR-037 | Accepted | Closed-beta MLS transport v3 carries the complete authenticated control transcript needed for later Welcome and re-add; v2 beta groups are recreated, never silently upgraded (2026-08-09) | A later member cannot authenticate the product roster from only the current Invite. V3 therefore binds every prior deterministic control projection to its exact signed payload and signer Authentication Service proof, replays the bounded transcript from the initial state, joins the Welcome, and compares the Rust-returned BasicCredential roster with the reconstructed product roster before one atomic commit. Existing members verify the same transcript. The transcript is capped at 512 entries and fails closed on absence, disagreement, replay, authorization failure, or malformed credentials. V2 state and queued objects are disposable closed-beta data and must be recreated/rejoined; this is not a production migration or permission to open the production gate. |
 | ADR-038 | Accepted | Same-revision control forks converge on the lexicographically smallest control state hash; a superseded branch is recovered by remove/re-add, never by rollback (2026-08-16) | RFC 9420 assumes a delivery service that serializes commits and rejects the losers. This project's backend is an untrusted relay and group objects ride per-recipient pairwise envelopes, so no server order exists. Every branch already carries a control state hash over its full signed descriptor, so ordering by that hash is total, deterministic, and needs no extra round trip or server trust. A sibling is authenticated, replayed against the reconstructed shared parent, and authorized before it may influence the decision, so a hostile relay cannot force a quarantine with an invented low-ordering branch. An applied MLS commit cannot be rewound because the previous epoch secrets are gone by construction; a superseded local branch is therefore fork-quarantined and rejoins through the existing remove/re-add path. This is closed-beta convergence behavior and does not open any production gate. |
 | ADR-039 | Accepted | Leave is a two-phase departure: a non-membership announcement by the leaver, then the active owner's Remove commit that evicts the leaf (2026-08-16) | RFC 9420 section 12.4 states "A Commit MUST NOT remove the committer", because the committer must know the new epoch secrets; `remove_members_operation` already enforces this and rejects self-removal. The beta control model nevertheless classified `Leave` as membership-changing in both `group_model.dart` and `mls_beta.rs`, and `read_group_control_descriptor` rejects a membership-changing control without a commit hash, so a leaver was required to produce a Commit it is forbidden to produce. `Leave` is therefore reclassified as non-membership in both places. **Phase 1:** the departing member signs a leave at the current epoch, carrying no Commit; every device projects the member to `left`, which means "departure announced, eviction pending", and the leaver's own projection moves to `GroupLifecycle.left`. Because no Commit is involved the leaver is still cryptographically present at that epoch and processes its own announcement like everyone else, so `removedLocally` covers `Remove` only. **Phase 2:** the active owner commits the `Remove` that actually evicts the leaves and rotates the epoch, moving the member to `removed`. The owner is the deterministic committer because `canLeave` only permits an owner to leave as the last active member, so any group that still has members still has exactly one active owner; restricting eviction to that single committer keeps concurrent eviction commits, and the fork they would cause, off the wire. `GroupAuthorization.isEvictable` keeps `left` a valid Remove target — a departed leaf still holds the epoch secret, so eviction is a security obligation, not bookkeeping — while an already `removed` member is not a target again. `GroupPendingEvictionService` runs as post-inbox work, evicting at most one member per group per pass so a partial sweep is always resumable, and treating a concurrent-control conflict as a retry rather than an error. A sole owner leaving needs no committer: nobody remains to be protected from. |
+| ADR-040 | Accepted | The closed-beta hybrid KEM is not changed; the complete divergence from `TBD2`'s KEM `0x647a` is recorded, and supplying a conformant KEM through `mls-rs`'s public extension points would be a project-local cryptographic fork (2026-08-17) | The beta already delivers everything ADR-036 asked of it — hybrid ML-KEM-768/X25519 confidentiality from a maintained implementation, `TBD2`'s exact signature/AEAD/KDF/hash mapping, no classical fallback, disposable state on Private Use `0xFE4C` — and the KEM divergence costs only `TBD2` interoperability, which no gate can consume while `TBD2` has no IANA suite value and no upstream PQ vectors exist. The pinned `mls-rs` crypto crates are already the newest published versions, so no maintained fix exists to adopt, and no maintained provider implements `TBD2` at all. Correcting the KEM in place would mean authoring the combiner, the raw-X25519 KEM, the SHAKE-256 expansion, and the encapsulation-key check in project code, because `AwsLcCipherSuite` cannot be re-parameterized — which is what production gate 3 and ADR-017 exclude, closes no gate, and would be written against a specification still in motion. Full reasoning, the ten-row divergence set, and the rejected alternatives are in "ADR-040 in full" below and in `docs/mls-profile.md`. This decision opens no production gate. |
+
+## ADR-040 in full — closed-beta hybrid KEM (2026-08-17)
+
+**Status:** Accepted. Closed-beta protocol decision. **Opens no production gate.**
+
+### Question
+
+Must the closed-beta hybrid KEM be changed to match the selected candidate suite's KEM,
+and what exactly is the divergence?
+
+### Divergence set
+
+Ten divergences, each independently verified on 2026-08-17 against the pinned crate sources
+in the local cargo registry and against the X-Wing draft text: combiner input order (label
+last in `-06`/`-10`, label first in the vendored combiner), label bytes (6 vs 7, with an
+embedded `0x0a`), the traditional contribution (raw X25519 vs a DHKEM(X25519, HKDF-SHA256)
+secret), HPKE `kem_id` (`0x647a` vs `15`, unassigned at IANA), `DeriveKeyPair` structure (no
+`dkp_prk` step vs an extra HKDF-SHA384 `dkp_prk` extraction), seed expansion (SHAKE-256 vs
+SHAKE-128), X25519 key derivation (raw scalar vs RFC 9180 labeled expand), the mandatory
+ML-KEM encapsulation-key check (required vs no-op), the serialized private key (`Nsk` 32 vs
+2,432 bytes), and the targeted revision (`-06`/`-10` vs `draft-01`). `docs/mls-profile.md`
+holds the table with per-row file-and-line evidence as rows D1-D10; that table is the
+binding record and this ADR does not restate it.
+
+`kem_id` is the divergence that makes the rest non-cosmetic: `0x000F` is bound into the
+HPKE `suite_id` every key-schedule `LabeledExtract`/`LabeledExpand` consumes and into the
+`"KEM" || kem_id` suite ID that derives `dkp_prk` for every HPKE key pair, so it reaches
+every beta Welcome, update-path node key, KeyPackage init key, and HPKE export. `Npk`,
+`Nenc`, and `Nsecret` are byte-identical between the two constructions, so the divergence
+is silent on the wire and fails at decryption rather than at parsing.
+
+### Specification stability of the candidate KEM
+
+`TBD2` names HPKE KEM `0x647a`. That code point is assigned in the IANA HPKE KEM registry
+(last updated 2026-04-16) with `draft-connolly-cfrg-xwing-kem-06` as its only normative
+reference, while the draft itself has advanced to `-10` (2026-03-02, Independent stream,
+expires 2026-09-03) and moved the combiner label between those revisions.
+`draft-ietf-hpke-pq-05` (2026-07-06) defers the algorithms to
+`draft-irtf-cfrg-concrete-hybrid-kems`, cited there at `-03` and now at `-04` in
+datatracker state `I-D Exists::Revised I-D Needed`. `draft-ietf-mls-pq-ciphersuites-06`
+(2026-07-21, expires 2027-01-22) is annotated "Waiting for WG Chair Go-Ahead" and "Revised
+I-D Needed - Issue raised by WG", and `TBD2` still has no value in the IANA MLS Cipher
+Suites registry (last updated 2025-11-17). The candidate KEM is therefore defined by a
+superseded, expiring Internet-Draft revision whose successor already differs, under a
+chain that is still moving.
+
+### Extension points, and why using them is a fork
+
+The extension points are real. `mls_rs::CryptoProvider` and
+`mls_rs_core::crypto::CipherSuiteProvider` are public traits; the project already
+implements the former. `mls_rs_crypto_traits::{KemType, DhType, Hash, VariableLengthHash}`
+are public; `CombinedKem::new_custom` and the `SharedSecretHashInput` trait are public, so
+the correct 6-byte label and label-last order are expressible; and aws-lc's ML-KEM,
+X25519, and SHA3-256 are reachable through public constructors, including the 64-byte
+`(d ‖ z)` deterministic ML-KEM keygen X-Wing needs. None of this requires editing vendored
+source.
+
+They are still not usable here. `AwsLcCipherSuite` cannot be re-parameterized: its fields
+are private, the `AwsLcHpke` enum is private, and both hybrid builder entry points
+hard-code `CombinedKem::new_xwing`. So the project would have to implement the ~25-method
+`CipherSuiteProvider` itself; that needs `mls_rs_crypto_hpke::{hpke::Hpke,
+context::{ContextS, ContextR}}`, which `mls-rs-crypto-awslc` imports privately and does not
+re-export, so it also needs a new direct dependency, and `HpkeKdf` is `pub(crate)` so the
+labeled-KDF helpers would be rewritten too. SHAKE-256 is not exposed by any current
+dependency's safe API, so it would need project-local `unsafe` FFI against `aws-lc-sys`.
+
+**Explicit reasoning on the fork question.** Read narrowly, "project-local cryptographic
+fork" means a patched copy of upstream source, and this route is not one. That reading does
+not survive contact with the gate the phrase belongs to. Production gate 3 requires that
+*a maintained OpenMLS/provider combination implements* the final KEM, KDF, AEAD, hash, and
+signature mappings; the operative question is who implements the KEM, not how the code is
+delivered. On this route upstream would ship `new_xwing` unchanged and the project would
+author and own the combiner, the raw-X25519 KEM, the SHAKE-256 expansion, the `(d ‖ z)`
+split, the encapsulation-key check, and the whole cipher-suite provider — code no upstream
+maintainer tests, versions, fuzzes, or patches. That is the condition gate 3 exists to
+exclude, is what ADR-017 calls "a custom, unaudited cryptographic implementation", is what
+ADR-036 excludes by permitting "only maintained external cryptographic implementations",
+and is what prompt 19 names directly. So the answer is yes: it is a project-local
+cryptographic fork for the purposes of AGENTS.md and gate 3, even though no vendored file
+would change.
+
+Two qualifications, so the finding is not overstated. It would **not** be invented
+cryptography — X-Wing is a specified construction with published vectors, and transcribing
+a specification is not invention; the prohibition that bites is the maintained-provider and
+reviewed-core one. And selecting and composing maintained primitives is **not** a fork:
+`combined_hpke(...)` selects among upstream constructions, which is what the beta does
+today and is legitimate. The line is crossed when the project authors a KEM's own algorithm
+steps.
+
+### Options evaluated
+
+**1. Retain the current combiner and document the divergence — CHOSEN.** The beta's purpose
+under ADR-036 is to exercise the real lifecycle — authenticated credentials, KeyPackage
+maintenance, Welcome and transcript replay, epoch and exporter state, sealed state,
+pairwise fan-out, ADR-038 convergence, ADR-039 leave — on a Private Use identifier with
+disposable state. It was never wire-compatible with anything, and nothing in that purpose
+depends on the KEM's code point. Every property the beta needs it already has: hybrid
+ML-KEM-768 + X25519 confidentiality from a maintained implementation, `TBD2`'s exact
+signature, AEAD, KDF, and hash mapping, and no classical fallback. The divergence costs
+exactly one thing, `TBD2` interoperability, and no gate can consume it: gate 2 has no suite
+value to be interoperable on, and gate 4's upstream vectors do not exist for any
+post-quantum suite. Retaining is also the only option that leaves the KEM in maintained
+hands, which is the state gate 3 requires.
+
+**2. Implement a conformant KEM through supported extension points — REJECTED.** It is a
+project-local cryptographic fork under gate 3, ADR-017, ADR-036, and prompt 19, for the
+reasons stated above. It closes no gate: gates 1, 2, 4, and 7 are untouched, and gate 3
+moves away from satisfaction, because the implementation becomes project-local rather than
+maintained. It enlarges the reviewable surface at the most sensitive layer in the build,
+replacing a maintained cipher-suite provider with a project one. It requires a new direct
+dependency and project-local `unsafe` FFI, each a reviewed decision in its own right. It
+targets a specification still in motion — `-06` and `-10` differ in label position and the
+chain beneath is mid-revision — so the code would be written to a revision expected to
+change and then discarded. And it would buy nothing even if perfect: the MLS suite
+identifier stays Private Use `0xFE4C`, no counterparty implements `TBD2`, and the change
+would still cost the full beta reinitialization below.
+
+**3. Migrate to a different maintained MLS provider — REJECTED.** OpenMLS stable is 0.8.1
+(2026-02-13) and 0.9.0-rc.2 (2026-08-06) is still a release candidate; both document only
+the three classical RFC 9420 suites. Its post-quantum work targets
+`MLS_256_XWING_CHACHA20POLY1305_SHA256_Ed25519` at experimental `0x004D` with no IANA code
+point. That provider has the right KEM and the wrong AEAD, KDF, and hash; `mls-rs` has the
+right AEAD, KDF, and hash and the wrong KEM. Migrating trades one divergence set for
+another of the same class while discarding a working, tested beta stack and reinitializing
+every beta group. No maintained provider implements `TBD2`. OpenMLS remains the production
+preference precisely because its X-Wing path could one day satisfy gate 3 with maintained,
+formally verified primitives — but on a different suite, and not today.
+
+**4. Defer entirely — REJECTED.** The divergence is not prospective: it is on disk, in
+built beta artifacts, and already governs every beta key schedule. ADR-036's 2026-08-16
+correction of fact recorded *that* the KEM diverges but did not resolve *whether it must
+change*, and the divergence set it referenced was incomplete — it lacked the
+`DeriveKeyPair` structural difference, the missing encapsulation-key check, and the finding
+that no newer maintained crate exists. Deferring leaves an unresolved protocol question
+attached to live beta state and makes the next auditor re-derive the same evidence.
+Deciding "no change, here is the complete set, here is the cost of changing" resolves it
+and stays reversible, because the reversal trigger is written down.
+
+### Consequences
+
+No reinitialization is triggered by this decision. `BETA_STATE_FORMAT_VERSION`, transport
+v3, schema v11, sealed key-package snapshots, sealed group state, existing beta groups, and
+queued beta group objects all remain valid, and the ciphersuite identifier stays Private
+Use `0xFE4C`. Whenever the KEM does change, in either direction, the cost is fixed by the
+divergence set: no stored beta HPKE key pair or epoch secret survives, because every one is
+bound to `kem_id 0x000F` through `dkp_prk` and the HPKE `suite_id`; the serialized
+private-key layout changes, so sealed snapshots must be reinitialized rather than migrated;
+uploaded consumable and last-resort beta KeyPackages must be replaced; in-flight queued
+group objects must be dropped; every beta group must be recreated and re-invited; and the
+state-format version must reject old state explicitly, because `Npk` and `Nenc` are
+unchanged and nothing fails at parse time. That is the ADR-036 disposability rule already
+exercised for v2 to v3 under ADR-037, and it is a closed-beta reinitialization, never a
+production migration.
+
+The beta remains a hybrid ML-KEM-768 + X25519 group implementation that is **not** a
+`TBD2` implementation and MUST NOT be offered as `TBD2` interoperability evidence.
+
+**This decision does not open any production gate.** All seven gates in
+`docs/mls-profile.md` remain closed and none is weakened or partially satisfied. It does
+not satisfy or relax ADR-017 or ADR-026, does not authorize a classical fallback, a
+production ciphersuite identifier, or a production KeyPackage path. Production continues to
+resolve the unsupported adapter, `GroupProductionGate.releaseAssertion` stays closed, and
+production KeyPackage generation and group creation remain impossible.
+
+**Reversal trigger.** Re-open this decision when a maintained provider implements `TBD2`'s
+KEM `0x647a` against a stable, non-expiring specification — production gates 1 and 3. That
+is an upstream event, not a task this project can perform.
 
 ## Dependency opinion
 

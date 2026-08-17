@@ -6,9 +6,10 @@
 //! This suite is modelled on `draft-ietf-mls-pq-ciphersuites-06` TBD2; it does not
 //! implement it. The signature, AEAD, KDF, and hash choices match TBD2 exactly, but the
 //! hybrid KEM does not, so beta groups are not wire-compatible with TBD2 and never have
-//! been. `BetaMlsCryptoProvider::cipher_suite_provider` records the exact divergences
-//! and `docs/mls-profile.md` carries the dated evidence. Replacing any mapping is an
-//! explicit protocol/ADR change and requires reinitializing all beta groups.
+//! been. `BetaMlsCryptoProvider::cipher_suite_provider` summarizes the divergences;
+//! `docs/mls-profile.md` rows D1-D10 are the complete binding set with per-row evidence,
+//! and ADR-040 (2026-08-17) resolves that this KEM is not changed. Replacing any mapping
+//! is an explicit protocol/ADR change and requires reinitializing all beta groups.
 
 use std::{
     collections::BTreeMap,
@@ -131,24 +132,35 @@ impl CryptoProvider for BetaMlsCryptoProvider {
             .hmac(AwsLcHmac::new(sha384_suite)?)
             .hash(AwsLcHash::new(sha384_suite)?)
             // The KEM does not. TBD2 names HPKE KEM 0x647a, which draft-ietf-hpke-pq-05
-            // defines as MLKEM768-X25519 and draft-irtf-cfrg-concrete-hybrid-kems-03
+            // defines as MLKEM768-X25519 and draft-irtf-cfrg-concrete-hybrid-kems
             // states is identical to X-Wing. This call builds something else. Verified
-            // on 2026-08-16 against the vendored mls-rs-crypto-hpke 0.21.0 sources:
+            // on 2026-08-17 against the vendored mls-rs-crypto-hpke 0.21.0 sources and
+            // the X-Wing draft text, which agrees at -06 and -10 on every point below:
             //
             // - the combiner hashes label || ss_mlkem || ss_x || enc_x || pk_x, label
             //   first, where X-Wing appends its label last (kem_combiner/xwing.rs:100);
             // - that label is the 7 bytes 5c2e2f0a2f5e5c, not XWingLabel's 6 bytes
             //   5c2e2f2f5e5c (kem_combiner/xwing.rs:107);
             // - ss_x is a DHKEM(X25519, HKDF-SHA256) secret, not the raw X25519 output
-            //   X-Wing requires (dhkem.rs:111); and
+            //   X-Wing requires (dhkem.rs:111);
+            // - key generation adds an HPKE dkp_prk extraction X-Wing does not have
+            //   (hpke.rs:208), expands with SHAKE-128 rather than SHAKE-256
+            //   (kem_combiner/xwing.rs:300), and labeled-expands the X25519 scalar
+            //   instead of using it raw (dhkem.rs:208);
+            // - no encapsulation-key check is performed, though X-Wing makes the ML-KEM
+            //   check a MUST (kem_combiner/xwing.rs:242); and
             // - the combined KEM reports HPKE kem_id 15 (0x000F, unassigned at IANA)
             //   rather than 0x647a (kem_combiner/xwing.rs:149). That value is bound into
             //   the HPKE suite_id and the KEM dkp_prk label (hpke.rs:89), so it reaches
             //   every beta key schedule and every derived HPKE key pair.
             //
             // The upstream combiner also cites X-Wing draft-01, five revisions behind
-            // the draft-06 that IANA references for 0x647a. Do not describe any of this
-            // as TBD2 conformance; docs/mls-profile.md holds the full comparison.
+            // the draft-06 that IANA references for 0x647a and nine behind the current
+            // -10. These pinned crypto crates are already the newest published ones, so
+            // no maintained upstream fix exists; ADR-040 keeps this mapping and rejects
+            // authoring a conformant KEM here, which would be a project-local fork.
+            // Do not describe any of this as TBD2 conformance; rows D1-D10 of
+            // docs/mls-profile.md hold the full comparison.
             .combined_hpke(
                 CipherSuite::CURVE25519_AES128,
                 MlKem::MlKem768,
