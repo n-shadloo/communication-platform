@@ -3,6 +3,8 @@
 mod application;
 mod attachment;
 #[cfg(all(test, feature = "beta-pq-mls"))]
+mod beta_kem_vectors;
+#[cfg(all(test, feature = "beta-pq-mls"))]
 mod beta_suite_vectors;
 mod bounds;
 mod cbor;

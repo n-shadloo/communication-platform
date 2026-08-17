@@ -41,7 +41,7 @@ crates found all five still blocked, with the same evidence.
 | Stable published specification and registry assignment for every primitive in the selected mapping | Four of the five primitives already rest on published, non-expiring standards and are assigned in registries this project does not control: KDF `0x0002` (HKDF-SHA384, reference RFC 5869) and AEAD `0x0002` (AES-256-GCM, reference NIST SP 800-38D) in the IANA HPKE registries, last updated 2026-04-16; signature `ed25519` `0x0807` (`Recommended = Y`, reference RFC 9846) in the IANA TLS SignatureScheme registry, last updated 2026-08-10; and hash SHA-384, which carries no code point at all and is named directly from NIST FIPS 180-4. The hybrid KEM is the exception. `0x647A` is assigned in the IANA HPKE KEM Identifiers registry, but the only normative reference recorded there is `draft-connolly-cfrg-xwing-kem-06`, an Independent-submission Internet-Draft; that draft has since advanced to `-10` (2026-03-02, expiring 2026-09-03) without the registry reference following it, and the chain draft-06 uses to reach it — `draft-ietf-hpke-pq-05` and `draft-irtf-cfrg-concrete-hybrid-kems-04`, the latter in datatracker state `I-D Exists::Revised I-D Needed` — is still moving. | **Blocked** (one primitive of five) | The mapping cannot be frozen as a production wire contract while its KEM rests on a superseded, expiring draft revision. This prerequisite blocks and clears independently of any MLS Cipher Suites action, which is why it is evidenced separately from the row below. |
 | Final MLS specification and an IANA-assigned MLS ciphersuite value | `draft-ietf-mls-pq-ciphersuites-06`, published 2026-07-21, is still an expiring Standards Track Internet-Draft (expires 2027-01-22). Its datatracker state is "I-D Exists", annotated "Waiting for WG Chair Go-Ahead" and "Revised I-D Needed - Issue raised by WG", so the text is expected to change again. Its IANA Considerations request entries in the "MLS Cipher Suites" registry only and request nothing in the HPKE registries. The selected suite is still `TBD2`; that registry, last updated 2025-11-17, contains only `0x0000` RESERVED, RFC 9420 values `0x0001`-`0x0007`, the GREASE values, and Private Use `0xF000`-`0xFFFF`. No post-quantum suite is registered. | **Blocked** | No production suite value, KeyPackage, or group may be emitted. The registry's Specification Required policy is not a route this project may take: ADR-026 forbids assigning a production identifier locally, so this closes only when the working group's document becomes a stable specification and IANA assigns the value that replaces `TBD2`. No amount of primitive-level progress advances it. |
 | Maintained non-project-local OpenMLS/provider support for the exact final Android mapping | OpenMLS 0.8.1 (2026-02-13) remains the newest stable release and 0.9.0-rc.2 (2026-08-06) is still a release candidate; both still document only the three classical RFC 9420 suites. OpenMLS's published post-quantum work targets X-Wing (`MLS_256_XWING_CHACHA20POLY1305_SHA256_Ed25519`, experimental `0x004D`, with no IANA code point), whose AEAD, KDF, and hash differ from `TBD2`; its KEM does not differ, because `TBD2`'s own KEM `0x647a` *is* X-Wing. `mls-rs` exposes `CipherSuite::ML_KEM_768_X25519` at Private Use `0xFE4C`, but the mapping this project assembles through the maintained public `AwsLcCipherSuiteBuilder` API is not `TBD2`: its symmetric half matches and its hybrid KEM does not, as evidenced under "Closed-beta KEM divergence" below. Neither maintained provider implements `TBD2`: OpenMLS has the right KEM (X-Wing *is* `0x647a`) on the wrong AEAD/KDF/hash, and `mls-rs` has the right AEAD/KDF/hash on a pre-standard KEM. The pinned `mls-rs` crypto crates are already the newest published versions (checked on crates.io 2026-08-17), so no upstream fix is available to adopt. | **Blocked** | The closed beta may use the locked maintained `mls-rs` provider under ADR-036, but composing the mapping ourselves does not satisfy the production OpenMLS/provider gate. No project-local cryptographic fork is permitted, and ADR-040 records that supplying a conformant KEM through `mls-rs`'s public extension points would be one — the maintained cipher suite cannot be re-parameterized, so the project would have to author the KEM itself. |
-| Usable upstream interoperability vectors for the selected suite | The MLS Working Group vector repository still exposes only its classical fixture set (`crypto-basics`, `key-schedule`, `message-protection`, `messages`, `passive-client-*`, `psk_secret`, `secret-tree`, `transcript-hashes`, `tree-*`, `treekem`, `welcome`). No ML-KEM/PQ fixture set exists. | **Blocked** | Project lifecycle fixtures are useful beta evidence but cannot substitute for independent upstream interoperability. |
+| Usable upstream interoperability vectors for the selected suite | The MLS Working Group vector repository still exposes only its classical fixture set (`crypto-basics`, `key-schedule`, `message-protection`, `messages`, `passive-client-*`, `psk_secret`, `secret-tree`, `transcript-hashes`, `tree-*`, `treekem`, `welcome`). No ML-KEM/PQ fixture set exists. | **Blocked** | Project lifecycle fixtures are useful beta evidence but cannot substitute for independent upstream interoperability. The construction-level project vectors added on 2026-08-17 (see "Known-answer coverage of the divergent construction") do not change this: they are project-generated regression pins for a construction no external party publishes vectors for, so they are not upstream vectors and do not advance this prerequisite. |
 | Qualified independent reviewer available for the final implementation | No named, retained reviewer, scope of work, or review schedule is recorded for this project. | **Blocked** | Review-dependent production gates cannot close until a qualified reviewer is engaged and all blocking findings are resolved. |
 
 #### Per-identifier registry evidence (verified 2026-08-16; the HPKE KEM/KDF/AEAD and MLS ciphersuite rows re-verified unchanged 2026-08-17)
@@ -175,6 +175,38 @@ either direction:
 
 This is the disposability rule ADR-036 established and ADR-037 already exercised for
 v2 to v3. It is a closed-beta reinitialization, never a production migration.
+
+#### Known-answer coverage of the divergent construction (2026-08-17)
+
+The divergence above is now pinned by tests rather than only recorded in prose.
+`native/crypto_core/vectors/beta-hybrid-kem-project-kats.json` and
+`native/crypto_core/src/beta_kem_vectors.rs` add construction-level coverage of the
+hybrid KEM and its HPKE integration: `kem_derive` to exact bytes, a full
+deterministic encapsulation, key schedule, ciphertext, and exporter output, and
+probes that demonstrate D1, D2, D3, D4, and D8 as computed facts.
+
+**Those vectors are project-generated and are not external conformance evidence.**
+Official construction-level vectors do not exist for this construction and cannot
+be obtained, because the construction is not a published one — that is what rows
+D1-D10 say. There is no registry entry, RFC, or Internet-Draft whose vectors it is
+supposed to reproduce, and RFC 9180's DHKEM vectors do not reach it either, since
+the inner `DHKEM(X25519, HKDF-SHA256)` is wrapped by a combiner whose `kem_id` is
+`0x000F`. ADR-040 makes that gap permanent for the closed beta rather than pending,
+so the vectors are a regression pin: they detect change in a construction that is
+silent on the wire and would otherwise fail only at decryption. They must never be
+cited as `TBD2`, `0x647a`, X-Wing, or RFC 9180 conformance or interoperability
+evidence, and they close no production gate.
+
+What keeps them auditable rather than circular is that every expected value is
+re-derivable from the case inputs, and the tests re-derive it on ML-KEM-768,
+X25519, and HKDF implementations that are not AWS-LC — `mlkem-native`,
+`x25519-dalek`, and the RustCrypto `hkdf`/`sha2` crates — with the reference
+sealing the ciphertext the implementation then opens. The reproduction confirmed
+the implementation performs exactly the construction rows D1-D10 describe; no
+mismatch was found and no cryptographic code was changed. One step is pinned but
+not reproduced: the SHAKE-128 seed expansion of D6, because no dependency exposes
+SHAKE and ADR-040 declines project-local `unsafe` FFI to reach it.
+`native/crypto_core/vectors/README.md` states per test what is and is not proven.
 
 ### Why the beta KEM is not being corrected in place (ADR-040, 2026-08-17)
 

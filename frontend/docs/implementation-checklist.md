@@ -255,7 +255,16 @@ opaque/client-owned; **Pending** = Flutter implementation not started.
   two-phase leave are both implemented and tested. ADR-040 (2026-08-17) keeps this KEM
   mapping unchanged, so no beta state, sealed snapshot, KeyPackage, or group is
   reinitialized by that decision; it also records what a later KEM change would cost.
-  Remaining blockers are the full
+  The divergent hybrid KEM and its HPKE integration now carry construction-level
+  known-answer coverage (`vectors/beta-hybrid-kem-project-kats.json`,
+  `src/beta_kem_vectors.rs`, 10 tests): exact `kem_derive` bytes, a deterministic
+  encapsulation, key schedule, ciphertext and exporter output, and probes that
+  demonstrate D1-D4 and D8 by computation. **Those vectors are project-generated and are
+  not external conformance evidence** — official construction vectors do not exist for
+  this construction and cannot, because it is not a published one — so they close no gate
+  and do not advance the upstream-vector prerequisite. They found no mismatch: the
+  implementation performs exactly the construction D1-D10 describe. Remaining blockers are
+  the full
   queue-gap remove/re-add/history matrix, upstream/project interoperability and
   bucket/backend contract execution against a running backend, multi-device and
   process-death/fault matrices on real hardware, migration fuzzing, and independent

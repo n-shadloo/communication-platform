@@ -4,6 +4,16 @@ Every file here is a checked-in artifact. Nothing in this directory is fetched
 or regenerated during a build or a test run, so the crate keeps building and
 testing with no network access.
 
+**Two kinds of file live here, and the difference is load-bearing.**
+`mlkem768-acvp-fips203.json` and `beta-suite-kats.json` are *official* vectors:
+every value is a verbatim published constant from NIST or the RFC Editor, so a
+passing test is conformance evidence for that primitive.
+`pairwise-v1.json`, `attachment-header-v1.json`, and
+`beta-hybrid-kem-project-kats.json` are *project* vectors: their expected values
+were produced here, so a passing test is regression evidence only and proves
+nothing about conformance or interoperability. Each section below states which
+kind it is. Never cite a project vector as external validation.
+
 ## `pairwise-v1.json` — pairwise protocol vectors
 
 `pairwise-v1.json` freezes the byte-level hybrid composition and Double
@@ -215,6 +225,121 @@ the published sources and reviewed; nothing writes them from an implementation's
 output, precisely so a regression cannot rewrite its own expected values, and
 nothing fetches them, so offline builds keep working. To audit the file, open
 each source above and compare field by field.
+
+## `beta-hybrid-kem-project-kats.json` — project vectors for the hybrid KEM
+
+### These are project vectors. They are not external conformance evidence.
+
+Every expected byte in this file was produced by this repository. Nothing in it
+is published by NIST, the IETF, the MLS working group, `mls-rs`, or any other
+external party, and no such publication exists to compare against. The file is a
+**regression pin**: it detects change in the construction. It cannot demonstrate
+conformance or interoperability with `draft-ietf-mls-pq-ciphersuites` `TBD2`,
+HPKE KEM `0x647a`, X-Wing, or anything else, and must never be offered as such.
+`src/beta_kem_vectors.rs` drives it.
+
+### Why no official vectors exist for this construction
+
+Official construction-level vectors exist only for constructions somebody
+published. The beta hybrid KEM is not one. It was re-verified on 2026-08-17
+directly against the pinned crate sources — `mls-rs-crypto-hpke-0.21.0`
+(`kem_combiner/xwing.rs`, `dhkem.rs`, `kdf.rs`, `hpke.rs`) and
+`mls-rs-crypto-awslc-0.25.0` (`lib.rs`, `kem/ml_kem.rs`, `kdf.rs`) — and it
+differs from X-Wing in ten recorded ways. `docs/mls-profile.md` rows D1-D10 are
+the binding record; the three that matter most for vectors are:
+
+- the combiner hashes `label ‖ ss_mlkem ‖ ss_dhkem ‖ enc_x ‖ pk_x`, with a
+  seven-byte label containing an embedded `0x0a`, where X-Wing hashes
+  `ss_M ‖ ss_X ‖ ct_X ‖ pk_X ‖ XWingLabel` with a six-byte label (D1, D2);
+- the classical contribution is a `DHKEM(X25519, HKDF-SHA256)` secret, not the
+  raw X25519 output X-Wing uses (D3); and
+- the combined KEM reports HPKE `kem_id` `15` (`0x000F`), which is unassigned in
+  the IANA HPKE KEM registry, rather than `0x647a` (D4).
+
+So there is no registry entry, RFC, or Internet-Draft whose test vectors this
+construction is supposed to reproduce. RFC 9180's DHKEM vectors do not apply
+either: they cover `DHKEM(X25519, HKDF-SHA256)` inside an HPKE suite whose
+`suite_id` carries `kem_id 0x0020`, while here that DHKEM is an interior
+component wrapped by a combiner whose `kem_id` is `0x000F`. ADR-040 resolves that
+the divergence stays, so this gap is permanent for the closed beta, not pending.
+
+### Provenance
+
+| | |
+| --- | --- |
+| Produced by | this repository, `native/crypto_core` |
+| Produced on | 2026-08-17 |
+| Construction | `mls-rs` `CombinedKem::new_xwing(MlKemKem(ML-KEM-768), DhKem(X25519, HKDF-SHA256), SHA3-256, SHAKE-128)` inside `Hpke` with HKDF-SHA384 and AES-256-GCM |
+| Assembled by | `src/mls_beta.rs`, `BetaMlsCryptoProvider::cipher_suite_provider` |
+| Generator | a one-off module, run by hand and then deleted |
+
+The generator is deliberately not part of the crate. As with the official
+fixtures, no build step and no test run may write this file, so a production-code
+regression can never rewrite its own expected values.
+
+Every value is nevertheless **re-derivable from the case inputs alone**, which is
+what keeps a project fixture auditable. Encapsulation is made deterministic:
+`mlkemEncapsulationSeed` fixes the ML-KEM-768 encapsulation randomness and
+`ephemeralX25519Secret` fixes the X25519 ephemeral, so a reviewer can rebuild
+every derived field. `src/beta_kem_vectors.rs` does exactly that on every test
+run, using `mlkem-native`, `x25519-dalek`, and the RustCrypto `hkdf`/`sha2`
+crates — none of which is AWS-LC — so the reproduction is a cross-implementation
+check rather than a restatement. SHA3-256 and AES-256-GCM have no second
+implementation in this crate and come from the same AWS-LC entry points, each
+already anchored to official vectors by `beta-suite-kats.json`.
+
+### Contents
+
+| Group | Cases | Pins |
+| --- | --- | --- |
+| `kemDerive` | 3 | `kem_derive(ikm)` to its exact 2,432-byte secret and 1,216-byte public key, plus the independently recomputed `dkp_prk` |
+| `hpke` | 2 | a full deterministic encapsulation, key schedule, ciphertext, and exporter output, plus the X-Wing contrast value |
+
+Three `kemDerive` cases cover an all-zero 32-byte ikm, a counter 32-byte ikm, and
+an 8-byte ikm; the ikm reaches the construction only through an HKDF extract, so
+its length is the one input dimension worth varying and additional cases would
+re-exercise identical straight-line code. The two `hpke` cases cover the two
+shapes the AEAD and key schedule actually distinguish: one with associated data,
+a 27-byte `info`, and a four-block plaintext, and one with `info`, associated
+data, plaintext, and exporter context all empty. Each `hpke` case also derives a
+fourth and fifth recipient key pair, so five distinct ikms are covered in total.
+
+### What the tests prove, and what they do not
+
+| Test | Proves | Does not prove |
+| --- | --- | --- |
+| `beta_hybrid_kem_derive_pins_project_vector_bytes` | the derivation chain is byte-stable and deterministic: the `dkp_prk` extract under `"KEM" ‖ 0x000F` (D5), the SHAKE-128 expansion and its 64/32 split (D6), ML-KEM-768 deterministic keygen, the labeled X25519 scalar expansion (D7), and the 2,432-byte private key (D9) | that any of it is correct, standard, or interoperable — the expected bytes came from this implementation |
+| `beta_hybrid_kem_derive_structure_is_independently_reproducible` | `dkp_prk` recomputed on RustCrypto matches; the derived `dk` is a well-formed FIPS 203 key whose embedded `ek` is the returned public half and whose `H(ek)` is the real SHA3-256 digest; `mlkem-native` round-trips against the AWS-LC-derived pair; `x25519-dalek` confirms the classical halves match | the SHAKE-128 expansion itself — see the gap below |
+| `beta_hpke_open_matches_project_vector_bytes` | the implementation opens a ciphertext built from the documented construction, and pins the exporter; the AEAD rejects a modified ciphertext, a modified `enc`, and modified associated data | conformance; the ciphertext was produced for this construction by this repository |
+| `beta_hpke_values_are_reproducible_from_the_documented_construction` | every pinned value rebuilds from the case inputs on non-AWS-LC primitives, so the documented construction is the one the implementation performs | that the construction is a published one |
+| `beta_hpke_seal_is_decryptable_by_the_reference_construction` | the implementation's own randomized `hpke_seal` is decryptable by the reference, covering the encapsulation direction a static fixture cannot | anything about specification conformance |
+| `beta_hybrid_kem_is_not_the_xwing_construction` | the beta shared secret is not X-Wing's over identical components, and each of D1, D2, and D3 changes the result on its own | that the contrast value is X-Wing's correct answer; it is this repository's reading of the draft, present only for contrast |
+| `beta_hpke_suite_id_binds_the_unassigned_kem_id` | substituting `0x647a` for `0x000F` in the HPKE `suite_id` alone changes the AEAD key, base nonce, and exporter secret, and the pinned ciphertext stops opening — D4 is not cosmetic | what a real `0x647a` implementation would produce; only the `suite_id` is varied |
+| `beta_hybrid_kem_public_key_validation_is_a_no_op` | `kem_public_key_validate` accepts an all-zero, a truncated, and an empty key, which is D8 as a computed fact | that beta traffic is exploitable; it pins current behaviour so an upstream fix or a regression is visible |
+| `beta_hybrid_kem_parameterization_matches_the_project_vectors` | the built suite still has the sizes and identifiers the reference construction assumes | — |
+| `beta_hybrid_kem_project_vector_fixture_is_well_formed` | field widths, recorded identifiers, the retained case shapes, and the provenance disclaimer are all still in place | — |
+
+### The remaining gap
+
+**SHAKE-128 (D6) is not reproduced.** `mls-rs-crypto-awslc 0.25.0` does not export
+`AwsLcShake128` and no other dependency of this crate exposes SHAKE, so the seed
+expansion cannot be recomputed here. Its output is therefore pinned rather than
+rebuilt, and one third of it is cross-checked indirectly: FIPS 203 stores `z` in
+`dk`, so the `z` half of the expansion is observable, while `d` is not.
+Reproducing it properly needs either an exported SHAKE or project-local `unsafe`
+FFI against `aws-lc-sys`, and ADR-040 declines the latter. Upstream carries its
+own FIPS 202 SHAKE-128 test at `mls-rs-crypto-awslc-0.25.0/src/kdf.rs`.
+
+This gap is not on a production path: the beta suite is behind the non-default
+`beta-pq-mls` feature and `docs/mls-profile.md`'s production gates remain closed.
+
+### Regenerating
+
+Do not regenerate casually. Any change to these bytes means the construction
+changed, which under ADR-040 is a protocol decision with a reinitialization cost,
+not a fixture refresh. Audit the file instead: rebuild each value from the case
+inputs by following the construction recorded in the file's own `construction`
+block, which is what `src/beta_kem_vectors.rs` already does on every run.
 
 ## Differential coverage and its limits
 
