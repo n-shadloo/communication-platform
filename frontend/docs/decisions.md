@@ -42,9 +42,150 @@ is not silently edited out of history.
 | ADR-035 | Accepted | A verified monotonic prekey rotation under an unchanged device identity does not reset master-key verification (2026-07-29) | Routine seven-day rotation necessarily changes `cross_sig`. Requiring user SAS/QR every week would make safe rotation unusable. Only exact `bundle_version + 1` rotations with valid prekey/device signatures and an extending device log are routine; every other signature change remains blocking. |
 | ADR-036 | Accepted | Build draft PQ MLS as a real, isolated closed-beta track while keeping the production gate closed (2026-08-02) | Phase A found that the selected suite is still an Internet-Draft with no IANA ciphersuite value, no exact maintained OpenMLS provider, no upstream MLS vectors, and no retained independent reviewer. Closed beta may nevertheless integrate the draft-06 mapping as closely as a maintained provider offers it, behind a source-only beta permit, using only maintained external cryptographic implementations and the real backend/pairwise transport. Correction of fact recorded 2026-08-16, decision unchanged: verification against the pinned vendored sources established that this yields draft-06 `TBD2`'s signature, AEAD, KDF, and hash choices but **not** its KEM `0x647a`, because `mls-rs-crypto-hpke 0.21.0` ships a pre-standard X-Wing variant that reports an unassigned HPKE `kem_id`. Beta groups are hybrid ML-KEM-768/X25519 but are not `TBD2`-conformant and are not `TBD2` interoperability evidence; `docs/mls-profile.md` holds the evidence table. Beta uses an MLS Private Use identifier, a distinct Android application ID and provisioning namespace, and disposable state that must be reinitialized rather than silently migrated when the draft or identifier changes. This decision does not satisfy or weaken ADR-017/ADR-026, does not authorize a classical fallback or production KeyPackage path, and production continues to resolve the unsupported adapter until all seven production gates are evidenced (six until 2026-08-16, when the combined specification/identifier gate was split into separately evidenced primitive-mapping and MLS-suite-identifier gates; nothing was merged away or marked satisfied). |
 | ADR-037 | Accepted | Closed-beta MLS transport v3 carries the complete authenticated control transcript needed for later Welcome and re-add; v2 beta groups are recreated, never silently upgraded (2026-08-09) | A later member cannot authenticate the product roster from only the current Invite. V3 therefore binds every prior deterministic control projection to its exact signed payload and signer Authentication Service proof, replays the bounded transcript from the initial state, joins the Welcome, and compares the Rust-returned BasicCredential roster with the reconstructed product roster before one atomic commit. Existing members verify the same transcript. The transcript is capped at 512 entries and fails closed on absence, disagreement, replay, authorization failure, or malformed credentials. V2 state and queued objects are disposable closed-beta data and must be recreated/rejoined; this is not a production migration or permission to open the production gate. |
-| ADR-038 | Accepted | Same-revision control forks converge on the lexicographically smallest control state hash; a superseded branch is recovered by remove/re-add, never by rollback (2026-08-16) | RFC 9420 assumes a delivery service that serializes commits and rejects the losers. This project's backend is an untrusted relay and group objects ride per-recipient pairwise envelopes, so no server order exists. Every branch already carries a control state hash over its full signed descriptor, so ordering by that hash is total, deterministic, and needs no extra round trip or server trust. A sibling is authenticated, replayed against the reconstructed shared parent, and authorized before it may influence the decision, so a hostile relay cannot force a quarantine with an invented low-ordering branch. An applied MLS commit cannot be rewound because the previous epoch secrets are gone by construction; a superseded local branch is therefore fork-quarantined and rejoins through the existing remove/re-add path. This is closed-beta convergence behavior and does not open any production gate. |
+| ADR-038 | Superseded by ADR-041 (2026-08-17) | Same-revision control forks converge on the lexicographically smallest control state hash; a superseded branch is recovered by remove/re-add, never by rollback (2026-08-16) | RFC 9420 assumes a delivery service that serializes commits and rejects the losers. This project's backend is an untrusted relay and group objects ride per-recipient pairwise envelopes, so no server order exists. Every branch already carries a control state hash over its full signed descriptor, so ordering by that hash is total, deterministic, and needs no extra round trip or server trust. A sibling is authenticated, replayed against the reconstructed shared parent, and authorized before it may influence the decision, so a hostile relay cannot force a quarantine with an invented low-ordering branch. An applied MLS commit cannot be rewound because the previous epoch secrets are gone by construction; a superseded local branch is therefore fork-quarantined and rejoins through the existing remove/re-add path. This is closed-beta convergence behavior and does not open any production gate. |
 | ADR-039 | Accepted | Leave is a two-phase departure: a non-membership announcement by the leaver, then the active owner's Remove commit that evicts the leaf (2026-08-16) | RFC 9420 section 12.4 states "A Commit MUST NOT remove the committer", because the committer must know the new epoch secrets; `remove_members_operation` already enforces this and rejects self-removal. The beta control model nevertheless classified `Leave` as membership-changing in both `group_model.dart` and `mls_beta.rs`, and `read_group_control_descriptor` rejects a membership-changing control without a commit hash, so a leaver was required to produce a Commit it is forbidden to produce. `Leave` is therefore reclassified as non-membership in both places. **Phase 1:** the departing member signs a leave at the current epoch, carrying no Commit; every device projects the member to `left`, which means "departure announced, eviction pending", and the leaver's own projection moves to `GroupLifecycle.left`. Because no Commit is involved the leaver is still cryptographically present at that epoch and processes its own announcement like everyone else, so `removedLocally` covers `Remove` only. **Phase 2:** the active owner commits the `Remove` that actually evicts the leaves and rotates the epoch, moving the member to `removed`. The owner is the deterministic committer because `canLeave` only permits an owner to leave as the last active member, so any group that still has members still has exactly one active owner; restricting eviction to that single committer keeps concurrent eviction commits, and the fork they would cause, off the wire. `GroupAuthorization.isEvictable` keeps `left` a valid Remove target — a departed leaf still holds the epoch secret, so eviction is a security obligation, not bookkeeping — while an already `removed` member is not a target again. `GroupPendingEvictionService` runs as post-inbox work, evicting at most one member per group per pass so a partial sweep is always resumable, and treating a concurrent-control conflict as a retry rather than an error. A sole owner leaving needs no committer: nobody remains to be protected from. |
 | ADR-040 | Accepted | The closed-beta hybrid KEM is not changed; the complete divergence from `TBD2`'s KEM `0x647a` is recorded, and supplying a conformant KEM through `mls-rs`'s public extension points would be a project-local cryptographic fork (2026-08-17) | The beta already delivers everything ADR-036 asked of it — hybrid ML-KEM-768/X25519 confidentiality from a maintained implementation, `TBD2`'s exact signature/AEAD/KDF/hash mapping, no classical fallback, disposable state on Private Use `0xFE4C` — and the KEM divergence costs only `TBD2` interoperability, which no gate can consume while `TBD2` has no IANA suite value and no upstream PQ vectors exist. The pinned `mls-rs` crypto crates are already the newest published versions, so no maintained fix exists to adopt, and no maintained provider implements `TBD2` at all. Correcting the KEM in place would mean authoring the combiner, the raw-X25519 KEM, the SHAKE-256 expansion, and the encapsulation-key check in project code, because `AwsLcCipherSuite` cannot be re-parameterized — which is what production gate 3 and ADR-017 exclude, closes no gate, and would be written against a specification still in motion. Full reasoning, the ten-row divergence set, and the rejected alternatives are in "ADR-040 in full" below and in `docs/mls-profile.md`. This decision opens no production gate. |
+
+| ADR-041 | Accepted | Same-revision control forks converge on an ordering key the branch author cannot vary — operation precedence class, then the signer's authority in the shared parent, then the signer's authenticated user and device id, then the control state hash; supersedes ADR-038 (2026-08-17) | ADR-038 ordered siblings by the control state hash alone. That hash is SHA-256 over the signed descriptor, and the descriptor's 16-byte event id is free author-chosen entropy that nothing binds, `created_ms` is an unvalidated `u64`, and Ed25519 is deterministic, so one grinding trial is one signature plus one hash and produces an independent uniform ordering value. Measured on the shipped signing path: about 24,500 candidate branches per second per core, and 9 trials to land below one known rival. A member facing eviction sees the `Remove` first, so it could undercut it for well under a millisecond of work and quarantine the evicting owner instead. Ordering now reads the operation's precedence class first, so an eviction cannot lose to a metadata edit, an invite, or a leave; then the signer's role in the reconstructed shared parent, so an evicted admin's counter-`Remove` loses to the owner's; then the authenticated signer identity. The hash is reached only between two branches from one device, where ordering decides nothing that author could not decide by choosing which branch to send. Every input is either fixed by the shared parent or bound to an authenticated device credential, so no participant can bias the outcome, and the rule stays total, deterministic, server-independent and free of extra round trips. Sibling authentication, replay against the reconstructed parent, and authorization are unchanged, and a superseded branch is still recovered by fork-quarantine plus remove/re-add. This is closed-beta convergence behavior and opens no production gate. |
+
+## ADR-041 in full — same-revision fork ordering (2026-08-17)
+
+**Status:** Accepted. Closed-beta protocol decision. Supersedes ADR-038. **Opens no
+production gate.**
+
+### Question
+
+Can the branch author bias ADR-038's same-revision tie-break, and if so what ordering rule
+replaces it?
+
+### Finding: confirmed, and cheap
+
+The ordered value was the control state hash, computed in
+`native/crypto_core/src/mls_beta.rs` as
+`SHA-256("chat:v1:group-control-state" ‖ frame(canonical) ‖ frame(signature))`. Its inputs
+are the CBOR canonical descriptor — event id, group id, revision, previous control state
+hash, MLS epoch, commit hash, signer user and device id, `created_ms`, operation — and the
+Ed25519 signature over that descriptor.
+
+Of those, the author freely chooses the 16-byte `event_id` (nothing derives, binds, or
+range-checks it; honest clients draw it at random), `created_ms` (read as a bare `u64`,
+validated against no clock), and the operation payload's own text. `ed25519-dalek 3.0.0`
+signs per RFC 8032, deterministically, so one descriptor yields exactly one signature and
+one hash — grinding therefore means re-signing under a fresh event id, at a cost of one
+Ed25519 signature plus one SHA-256 per candidate, with a fresh uniform 256-bit result each
+time.
+
+Measured on 2026-08-17 through the shipped signing path on this workstation (release,
+x86-64): **1,000 candidate branches in 40.8 ms — about 24,500 per second per core — and 9
+trials to place a branch below one known rival.** Against a *known* rival hash `H` the
+expected trial count is `2^256 / H`, whose median over uniform rivals is two. Against an
+*unknown* future rival, grinding `N` candidates and keeping the smallest loses only with
+probability about `1/N`: one second of one core is `N ≈ 24,500`, or 99.996 %. The standing
+evidence is the Rust test
+`an_author_grinds_the_control_state_hash_below_a_known_rival`, which reproduces the shipped
+hash byte for byte, grinds, and then re-signs the winning event id through the real
+operation entry point.
+
+### Finding: who could use it, and against what
+
+A competing branch at the shared parent revision must pass authentication, replay against
+the reconstructed parent, and `GroupControlStateMachine` authorization. Enumerating what
+each role may author there:
+
+| Role of the member facing eviction | Branches it can author at the parent | Under ADR-038 |
+|---|---|---|
+| Owner | not evictable at all — `GroupAuthorization.canRemove` refuses an owner target | n/a |
+| Admin | `UpdateMetadata` at every revision, `Leave` once, `Invite` where the policy allows, and its own `Remove` of a plain member | defeats the eviction indefinitely |
+| Member, `allMembers` invitations | `Invite` at every revision, `Leave` once | defeats the eviction indefinitely |
+| Member, `ownerOnly`/`ownerAndAdmins` | `Leave` once | defeats one eviction |
+
+A departing member's own `Leave` is the sharpest case: every active member holds
+`GroupPermission.leave`, it carries no Commit, and under ADR-038 a ground `Leave` displaced
+the `Remove` that was evicting its author. Because `GroupPendingEvictionService` retries the
+eviction on the next drain, any role with a repeatable authorized operation — an admin's
+metadata edit, a member's invite under `allMembers` — could repeat the grind at every
+revision and never be evicted, while each round either fork-quarantined the evicting owner
+or left the attacker in the group holding the current epoch secret. So: **confirmed,
+exploitable by the eviction target itself, and repeatable for two of the four cases.**
+
+### The rule
+
+Sibling branches are compared on a tuple, smallest first:
+
+1. `GroupControlPrecedence` of the operation — `eviction`, then `authority`
+   (`ChangeRole`, `TransferOwnership`, `UpdatePolicies`, `Create`), then `membership`
+   (`Invite`, `Leave`), then `descriptive` (`UpdateMetadata`).
+2. The signer's role **in the reconstructed shared parent** — owner, admin, member.
+3. The signer's authenticated user id, then device id.
+4. The control state hash.
+
+Key 1 removes the class of attack outright: the target of an eviction cannot reach the
+eviction class, because reaching it means holding `removeMembers`, which is the same check
+the branch already has to pass. Key 2 closes the one remaining case, an admin under
+eviction issuing its own `Remove`: `canRemove` only lets an owner evict an admin, so the
+competing branch is always the owner's and always outranks it. Neither key is variable by
+the author — the class follows from the permission it actually holds, and the role comes
+from the parent roster, not from the branch's claims about itself, so an operation that
+promotes its own signer cannot promote its own ordering. Key 3 is bound by the device
+credential the sibling was authenticated against.
+
+Key 4 survives only as the last resort, and it is reached only when two branches agree on
+class, role, user and device — that is, when one device signed two controls at one
+revision. Grinding there reorders the equivocating author's own branches, which it could
+already do by choosing which one to send, so it wins nothing.
+
+The order stays **total** (four keys over a finite domain, with the hash total on the
+remainder), **deterministic** (every input is carried in the authenticated branch or the
+replayed parent), and needs **no server order and no extra round trip**. Sibling
+authentication, replay against the reconstructed parent, and authorization are unchanged;
+`branchOf` additionally refuses to place a signer that is not an active member of the shared
+parent, which fails closed rather than ordering a branch on its own claims.
+
+### Options evaluated
+
+**1. Precedence class, then parent authority, then signer identity, then hash — CHOSEN.**
+Removes the grindable input from every position that can decide a real conflict, states the
+security property directly ("an eviction is not displaced by a convenience operation"), and
+keeps convergence total and server-independent.
+
+**2. Keep the hash but bind the event id to something unchosen — REJECTED.** There is
+nothing to bind it to that the author does not also control: the parent hash, revision and
+epoch are shared constants at a fork, so any derivation still leaves `created_ms` and the
+operation payload free. It would also make the wire format's event id derived rather than
+opaque, for no gain.
+
+**3. Order by a key derived from the epoch secret — REJECTED.** Every member knows the
+epoch secret, so the attacker computes the same PRF and grinds exactly as before. It only
+hides the order from non-members, who are already unable to place a branch.
+
+**4. Prefer the branch that carries an MLS Commit — REJECTED.** `Invite` also carries one,
+and every member holds `inviteMembers` under `allMembers`, so it would hand the same
+displacement back to the same attacker.
+
+**5. Order by signer identity alone — REJECTED.** It is not author-variable per fork, but
+it is grindable at account registration and it says nothing about what the branches do: a
+low-id member's metadata edit would still beat a high-id owner's eviction.
+
+### Consequences
+
+No state, schema, or wire format changes: the ordering key is derived from data every
+branch already carries. `BETA_STATE_FORMAT_VERSION`, transport v3, the control descriptor,
+and the control state hash are all unchanged — the hash keeps its jobs as branch identity,
+chain link, and audit digest, and only stops being the deciding input. No reinitialization
+is triggered.
+
+Honest concurrent branches of the same class and authority now converge on the lower signer
+id instead of the lower hash. Both were arbitrary; this one is stable and explains itself in
+the quarantine record. A superseded branch is still recovered by fork-quarantine plus
+remove/re-add, because an applied MLS commit cannot be rewound.
+
+**This decision does not open any production gate.** All seven gates in
+`docs/mls-profile.md` remain closed. It does not touch the production adapter,
+`GroupProductionGate`, ADR-017, or ADR-026.
+
+**Reversal trigger.** Re-open if a future control operation cannot be honestly placed in one
+of the four precedence classes, or if a delivery service that serializes commits is ever
+introduced, which would remove the need for a client-side tie-break entirely.
 
 ## ADR-040 in full — closed-beta hybrid KEM (2026-08-17)
 

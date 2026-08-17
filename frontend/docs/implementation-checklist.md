@@ -74,7 +74,7 @@ opaque/client-owned; **Pending** = Flutter implementation not started.
 | Invite/remove/leave | Client protocol | Closed-beta Invite/re-add, remove, and ADR-039 two-phase leave with automatic owner-side eviction are integrated; the queue-gap remove/re-add matrix remains Piece 19 work and production MLS commits remain gated |
 | Encrypted metadata | Opaque envelope transport ready | Closed beta processes metadata/policy controls inside authenticated MLS transport and the atomic state/projection boundary; production remains gated |
 | History for new members | Envelope transport ready; no server history | Policy and authenticated Welcome are integrated; bounded cryptographic history re-share validation remains pending and never implies server history |
-| Fork/conflict handling | Client protocol | ADR-038 canonical same-revision convergence is implemented and tested: siblings are authenticated and replayed against the shared parent, the smallest control state hash wins, and a superseded branch fork-quarantines atomically for remove/re-add. Multi-device execution against the real crypto core remains pending |
+| Fork/conflict handling | Client protocol | ADR-041 canonical same-revision convergence is implemented and tested: siblings are authenticated and replayed against the shared parent, and the winner is decided by operation precedence class, then the signer's authority in that parent, then the authenticated signer identity, so no branch author can bias the outcome; a superseded branch fork-quarantines atomically for remove/re-add. ADR-038's hash-only order was superseded on 2026-08-17 after the hash was measured to be author-grindable at about 24,500 candidate branches per second per core. Covered by a Rust grinding measurement and 32 Dart tests, including an adversarial sweep over every role and invitation policy. Multi-device execution against the real crypto core remains pending |
 | Leave coordination | Client protocol | ADR-039 two-phase departure is implemented and tested: the leaver signs a non-membership announcement at the current epoch and the active owner automatically commits the `Remove` that evicts the leaves. Covered by a Rust descriptor test and 16 Dart tests; multi-device execution against real devices remains pending |
 
 ## Attachments and recovery
@@ -251,7 +251,7 @@ opaque/client-owned; **Pending** = Flutter implementation not started.
   the built **production release APK** reports exactly the 15-symbol foundation allowlist
   on every ABI and zero `cp_crypto_v1_beta_mls_operation` symbols, which exist only in the
   separate `beta` artifact, so a production build contains no PQ MLS code path at all.
-  ADR-038 canonical fork convergence and ADR-039
+  ADR-041 canonical fork convergence (superseding ADR-038) and ADR-039
   two-phase leave are both implemented and tested. ADR-040 (2026-08-17) keeps this KEM
   mapping unchanged, so no beta state, sealed snapshot, KeyPackage, or group is
   reinitialized by that decision; it also records what a later KEM change would cost.

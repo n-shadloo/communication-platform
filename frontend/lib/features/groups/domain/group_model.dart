@@ -375,12 +375,40 @@ abstract final class GroupAuthorization {
       };
 }
 
+/// How a control operation ranks when two branches are accepted at the same
+/// revision. Declaration order is the precedence order: the earlier value wins.
+///
+/// The classes exist so that a protective operation can never be displaced by a
+/// convenience one. The class of a branch is fixed by the operation its author
+/// was authorized to perform, so reaching a stronger class means holding the
+/// permission for it, which is the same check the branch already passed.
+enum GroupControlPrecedence {
+  /// Withdraws a member's access to future epochs. This is the only answer the
+  /// group has to a hostile or compromised member, so it must outrank anything
+  /// its own target could author.
+  eviction,
+
+  /// Changes who holds authority: roles, ownership, and the invitation policy
+  /// that decides who may add members.
+  authority,
+
+  /// Adds members or announces a departure without withdrawing anyone.
+  membership,
+
+  /// Descriptive only; changes no one's rights.
+  descriptive,
+}
+
 sealed class GroupControlOperation {
   const GroupControlOperation();
 
   int get code;
   bool get changesMembership;
   GroupPermission? get requiredPermission;
+
+  /// Ordering class used when this operation forks against a sibling at the
+  /// same revision. See [GroupForkCanonicalOrder].
+  GroupControlPrecedence get precedence;
   List<Object?> get canonicalFields;
 }
 
@@ -403,6 +431,12 @@ final class CreateGroupOperation extends GroupControlOperation {
   bool get changesMembership => true;
   @override
   GroupPermission? get requiredPermission => null;
+
+  /// A create establishes the roster and its owner. It can only ever fork
+  /// against another create, because revision 1 is the only revision without a
+  /// parent.
+  @override
+  GroupControlPrecedence get precedence => GroupControlPrecedence.authority;
   @override
   List<Object?> get canonicalFields => [
     code,
@@ -425,6 +459,8 @@ final class UpdateGroupMetadataOperation extends GroupControlOperation {
   bool get changesMembership => false;
   @override
   GroupPermission get requiredPermission => GroupPermission.editMetadata;
+  @override
+  GroupControlPrecedence get precedence => GroupControlPrecedence.descriptive;
   @override
   List<Object?> get canonicalFields => [
     code,
@@ -449,6 +485,11 @@ final class UpdateGroupPoliciesOperation extends GroupControlOperation {
   @override
   GroupPermission get requiredPermission =>
       GroupPermission.editInvitationPolicy;
+
+  /// The invitation policy decides who may add members, so a policy change is an
+  /// authority change rather than a descriptive one.
+  @override
+  GroupControlPrecedence get precedence => GroupControlPrecedence.authority;
   @override
   List<Object?> get canonicalFields => [
     code,
@@ -469,6 +510,8 @@ final class InviteGroupMembersOperation extends GroupControlOperation {
   @override
   GroupPermission get requiredPermission => GroupPermission.inviteMembers;
   @override
+  GroupControlPrecedence get precedence => GroupControlPrecedence.membership;
+  @override
   List<Object?> get canonicalFields => [
     code,
     [for (final member in members) member.canonicalFields],
@@ -485,6 +528,13 @@ final class RemoveGroupMemberOperation extends GroupControlOperation {
   bool get changesMembership => true;
   @override
   GroupPermission get requiredPermission => GroupPermission.removeMembers;
+
+  /// Eviction is the highest precedence class. A member that is about to lose
+  /// its access must not be able to author a branch that displaces the removal,
+  /// and [GroupAuthorization.canRemove] never lets a target counter-remove its
+  /// own evictor.
+  @override
+  GroupControlPrecedence get precedence => GroupControlPrecedence.eviction;
   @override
   List<Object?> get canonicalFields => [code, targetUserId.toLowerCase()];
 }
@@ -506,6 +556,11 @@ final class LeaveGroupOperation extends GroupControlOperation {
   bool get changesMembership => false;
   @override
   GroupPermission get requiredPermission => GroupPermission.leave;
+
+  /// A leave announces a departure; the `Remove` that actually evicts the leaf
+  /// is the protective half, so a leave never outranks one.
+  @override
+  GroupControlPrecedence get precedence => GroupControlPrecedence.membership;
   @override
   List<Object?> get canonicalFields => [code];
 }
@@ -525,6 +580,8 @@ final class ChangeGroupRoleOperation extends GroupControlOperation {
   @override
   GroupPermission get requiredPermission => GroupPermission.changeRoles;
   @override
+  GroupControlPrecedence get precedence => GroupControlPrecedence.authority;
+  @override
   List<Object?> get canonicalFields => [
     code,
     targetUserId.toLowerCase(),
@@ -542,6 +599,8 @@ final class TransferGroupOwnershipOperation extends GroupControlOperation {
   bool get changesMembership => false;
   @override
   GroupPermission get requiredPermission => GroupPermission.transferOwnership;
+  @override
+  GroupControlPrecedence get precedence => GroupControlPrecedence.authority;
   @override
   List<Object?> get canonicalFields => [code, targetUserId.toLowerCase()];
 }
@@ -1223,39 +1282,162 @@ final class GroupMessage {
   final bool localPreviewOnly;
 }
 
+/// One authenticated branch reduced to the values that order it.
+///
+/// Every ordering field is either fixed by the shared parent state or bound to
+/// the signer's authenticated device, so the branch author cannot vary any of
+/// them to move itself up the order. [controlStateHash] identifies the branch
+/// and is the last resort only; see [GroupForkCanonicalOrder].
+final class GroupForkBranch {
+  GroupForkBranch({
+    required this.eventId,
+    required String controlStateHash,
+    required this.precedence,
+    required this.signerRole,
+    required String signerUserId,
+    required String signerDeviceId,
+  }) : controlStateHash = controlStateHash.toLowerCase(),
+       signerUserId = signerUserId.toLowerCase(),
+       signerDeviceId = signerDeviceId.toLowerCase() {
+    if (!_isHex(eventId, 16) || !_isHex(this.controlStateHash, 32)) {
+      throw const FormatException('invalid fork branch');
+    }
+  }
+
+  final String eventId;
+  final String controlStateHash;
+  final GroupControlPrecedence precedence;
+
+  /// The signer's role **in the shared parent**, never in its own branch: an
+  /// operation may change roles, and a branch does not get to promote itself.
+  final GroupRole signerRole;
+  final String signerUserId;
+  final String signerDeviceId;
+}
+
 /// Canonical ordering for two control branches accepted at the same revision.
 ///
 /// The backend is an untrusted relay and group objects ride per-recipient
 /// pairwise envelopes, so there is no delivery-service commit order to break the
-/// tie. Both branches carry a control state hash over the full signed control
-/// descriptor, so every honest device independently derives the same winner:
-/// the lexicographically smallest hash. The rule is total, deterministic, and
-/// needs no extra round trip.
+/// tie. Every device therefore derives the same winner from the branches
+/// themselves, with no extra round trip and no server-supplied order.
+///
+/// The deciding inputs are compared in this order, smallest first:
+///
+/// 1. [GroupControlPrecedence] of the operation. A protective operation must
+///    never lose to a convenience one; in particular an eviction must never
+///    lose to a metadata edit, an invite, or a leave.
+/// 2. The signer's role in the shared parent: owner, then admin, then member.
+/// 3. The signer's authenticated user id, then device id.
+/// 4. The control state hash.
+///
+/// Keys 1-3 are the whole rule in practice, and none of them can be varied by
+/// the branch author: the class follows from the permission the author actually
+/// holds, and the role and identity come from the parent roster and the
+/// authenticated device credential. Key 4 is reached only when two branches
+/// share a class, a role, a user and a device — that is, when one device signed
+/// two different controls at one revision. Grinding there only reorders the
+/// equivocating author's own branches, which it could have done by choosing
+/// which one to send, so it wins nothing.
+///
+/// ADR-041 (2026-08-17) supersedes ADR-038, which ordered on the control state
+/// hash alone. That hash is a SHA-256 over the signed descriptor, and the
+/// descriptor's 16-byte event id and `created_ms` are free author-chosen fields,
+/// so re-signing under a fresh event id was one Ed25519 signature plus one
+/// SHA-256 (measured: about 24,500 candidate branches per second per core) and
+/// yielded an independent uniform ordering value. An author who had already seen
+/// a competing branch could undercut it in a handful of trials.
 abstract final class GroupForkCanonicalOrder {
-  /// True when [candidateControlStateHash] outranks every hash in [rivals].
-  ///
-  /// Equal hashes mean the same control, which is not a fork.
-  static bool outranks(
-    String candidateControlStateHash,
-    Iterable<String> rivals,
-  ) {
-    final candidate = candidateControlStateHash.toLowerCase();
-    return rivals.every(
-      (rival) => candidate.compareTo(rival.toLowerCase()) < 0,
-    );
+  /// Negative when [left] outranks [right]; zero only for the same branch.
+  static int compare(GroupForkBranch left, GroupForkBranch right) {
+    final byClass = _precedenceRank(
+      left.precedence,
+    ).compareTo(_precedenceRank(right.precedence));
+    if (byClass != 0) return byClass;
+    final byAuthority = _authorityRank(
+      left.signerRole,
+    ).compareTo(_authorityRank(right.signerRole));
+    if (byAuthority != 0) return byAuthority;
+    final bySigner = left.signerUserId.compareTo(right.signerUserId);
+    if (bySigner != 0) return bySigner;
+    final byDevice = left.signerDeviceId.compareTo(right.signerDeviceId);
+    if (byDevice != 0) return byDevice;
+    return left.controlStateHash.compareTo(right.controlStateHash);
   }
 
-  static String canonical(Iterable<String> controlStateHashes) {
-    final sorted =
-        controlStateHashes
-            .map((value) => value.toLowerCase())
-            .toList(growable: false)
-          ..sort();
+  /// True when [candidate] outranks every branch in [rivals].
+  ///
+  /// An equal comparison means the same branch, which is not a fork.
+  static bool outranks(
+    GroupForkBranch candidate,
+    Iterable<GroupForkBranch> rivals,
+  ) => rivals.every((rival) => compare(candidate, rival) < 0);
+
+  static GroupForkBranch canonical(Iterable<GroupForkBranch> branches) {
+    final sorted = branches.toList(growable: false)..sort(compare);
     if (sorted.isEmpty) {
       throw const FormatException('no control branch to order');
     }
     return sorted.first;
   }
+
+  /// Reduces one authenticated branch to its ordering key.
+  ///
+  /// [parent] is the reconstructed state both branches descend from, which is
+  /// the only place the signer's authority may be read from. Returns null when
+  /// the signer is not an active member there, so a caller that cannot place a
+  /// branch fails closed instead of ordering it on its own claims. At revision 1
+  /// there is no parent and the roster is the create's own, which is exactly the
+  /// roster [GroupControlStateMachine] authorized the branch against.
+  static GroupForkBranch? branchOf({
+    required GroupState? parent,
+    required SignedGroupControlEvent signedControl,
+  }) {
+    final event = signedControl.event;
+    final operation = event.operation;
+    final GroupMember? signer;
+    if (parent != null) {
+      signer = parent.member(event.signerUserId);
+    } else if (operation is CreateGroupOperation) {
+      final normalized = event.signerUserId.toLowerCase();
+      final matches = operation.initialMembers
+          .where((member) => member.userId.toLowerCase() == normalized)
+          .toList(growable: false);
+      signer = matches.length == 1 ? matches.single : null;
+    } else {
+      signer = null;
+    }
+    if (signer == null || !signer.isActive) return null;
+    try {
+      return GroupForkBranch(
+        eventId: event.eventId,
+        controlStateHash: signedControl.controlStateHash,
+        precedence: operation.precedence,
+        signerRole: signer.role,
+        signerUserId: event.signerUserId,
+        signerDeviceId: event.signerDeviceId,
+      );
+    } on FormatException {
+      return null;
+    }
+  }
+
+  /// Stated explicitly so that reordering [GroupControlPrecedence] for any other
+  /// reason cannot silently change which branch a group converges on.
+  static int _precedenceRank(GroupControlPrecedence precedence) =>
+      switch (precedence) {
+        GroupControlPrecedence.eviction => 0,
+        GroupControlPrecedence.authority => 1,
+        GroupControlPrecedence.membership => 2,
+        GroupControlPrecedence.descriptive => 3,
+      };
+
+  /// Likewise stated explicitly rather than read from [GroupRole.index].
+  static int _authorityRank(GroupRole role) => switch (role) {
+    GroupRole.owner => 0,
+    GroupRole.admin => 1,
+    GroupRole.member => 2,
+  };
 }
 
 /// Outcome of comparing the locally accepted control branch against sibling

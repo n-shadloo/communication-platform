@@ -16,41 +16,158 @@ final _siblingEventId = 'cd' * 16;
 final _canonicalEventId = 'ef' * 16;
 
 void main() {
+  // ADR-041 replaced ADR-038's hash-only order. These cases were rewritten for
+  // the ordering key, because a rule that reads only the control state hash is
+  // exactly the defect: the hash is author-chosen entropy, not evidence.
   group('canonical fork order', () {
-    test('is total and antisymmetric across two branches', () {
-      const low = 'aa11';
-      const high = 'bb22';
+    test('an eviction outranks a non-security sibling with a lower hash', () {
+      final eviction = _branch(
+        hash: 'ff' * 32,
+        precedence: GroupControlPrecedence.eviction,
+        role: GroupRole.owner,
+      );
+      final ground = _branch(
+        hash: '00' * 32,
+        precedence: GroupControlPrecedence.descriptive,
+        role: GroupRole.admin,
+      );
 
-      expect(GroupForkCanonicalOrder.outranks(low, const [high]), isTrue);
-      expect(GroupForkCanonicalOrder.outranks(high, const [low]), isFalse);
-      expect(GroupForkCanonicalOrder.canonical(const [high, low]), low);
-      expect(GroupForkCanonicalOrder.canonical(const [low, high]), low);
+      expect(GroupForkCanonicalOrder.outranks(eviction, [ground]), isTrue);
+      expect(GroupForkCanonicalOrder.outranks(ground, [eviction]), isFalse);
+      expect(GroupForkCanonicalOrder.canonical([ground, eviction]), eviction);
+    });
+
+    test('within one class the parent roster authority decides', () {
+      final owner = _branch(
+        hash: 'ff' * 32,
+        precedence: GroupControlPrecedence.eviction,
+        role: GroupRole.owner,
+        user: _bob,
+      );
+      final admin = _branch(
+        hash: '00' * 32,
+        precedence: GroupControlPrecedence.eviction,
+        role: GroupRole.admin,
+        user: _alice,
+      );
+
+      expect(GroupForkCanonicalOrder.outranks(owner, [admin]), isTrue);
+      expect(GroupForkCanonicalOrder.outranks(admin, [owner]), isFalse);
+    });
+
+    test('is total and antisymmetric across two branches', () {
+      final low = _branch(hash: 'aa' * 32, user: _alice);
+      final high = _branch(hash: 'bb' * 32, user: _bob);
+
+      expect(GroupForkCanonicalOrder.outranks(low, [high]), isTrue);
+      expect(GroupForkCanonicalOrder.outranks(high, [low]), isFalse);
+      expect(GroupForkCanonicalOrder.canonical([high, low]), low);
+      expect(GroupForkCanonicalOrder.canonical([low, high]), low);
     });
 
     test('is case insensitive so hex casing cannot flip the winner', () {
-      expect(GroupForkCanonicalOrder.outranks('AA11', const ['bb22']), isTrue);
-      expect(GroupForkCanonicalOrder.outranks('BB22', const ['aa11']), isFalse);
-      expect(GroupForkCanonicalOrder.canonical(const ['BB22', 'Aa11']), 'aa11');
+      final upper = _branch(hash: 'AA' * 32, user: _alice.toUpperCase());
+      final lower = _branch(hash: 'bb' * 32, user: _bob);
+
+      expect(GroupForkCanonicalOrder.outranks(upper, [lower]), isTrue);
+      expect(GroupForkCanonicalOrder.outranks(lower, [upper]), isFalse);
+      expect(GroupForkCanonicalOrder.canonical([lower, upper]), upper);
     });
 
-    test('an identical hash never outranks itself', () {
-      expect(GroupForkCanonicalOrder.outranks('aa11', const ['aa11']), isFalse);
+    test('an identical branch never outranks itself', () {
+      final branch = _branch(hash: 'aa' * 32);
+      expect(GroupForkCanonicalOrder.outranks(branch, [branch]), isFalse);
+    });
+
+    test('the hash decides only when one device signed both branches', () {
+      final low = _branch(hash: '02' * 32, eventId: '01' * 16);
+      final high = _branch(hash: 'c3' * 32, eventId: '02' * 16);
+
+      expect(GroupForkCanonicalOrder.outranks(low, [high]), isTrue);
+      expect(GroupForkCanonicalOrder.canonical([high, low]), low);
+      // Same class, role, user and device: both branches are the equivocating
+      // device's own, so ordering them decides nothing an author could not
+      // already decide by choosing which one to send.
+      expect(low.signerUserId, high.signerUserId);
+      expect(low.signerDeviceId, high.signerDeviceId);
     });
 
     test('every device picks the same winner regardless of arrival order', () {
-      const branches = ['ff', '10', '7a', '02', 'c3'];
-      final orders = [
+      final branches = [
+        _branch(hash: 'ff' * 32, user: _alice),
+        _branch(
+          hash: '10' * 32,
+          precedence: GroupControlPrecedence.eviction,
+          role: GroupRole.admin,
+          user: _bob,
+        ),
+        _branch(hash: '02' * 32, user: _bob),
+        _branch(
+          hash: 'c3' * 32,
+          precedence: GroupControlPrecedence.membership,
+          user: _alice,
+        ),
+      ];
+      final winners = [
         GroupForkCanonicalOrder.canonical(branches),
         GroupForkCanonicalOrder.canonical(branches.reversed),
-        GroupForkCanonicalOrder.canonical(branches.toList()..sort()),
+        GroupForkCanonicalOrder.canonical(
+          branches.toList()..sort(GroupForkCanonicalOrder.compare),
+        ),
       ];
-      expect(orders.toSet(), {'02'});
+      expect(winners.map((branch) => branch.eventId).toSet(), hasLength(1));
+      expect(winners.first.precedence, GroupControlPrecedence.eviction);
     });
 
     test('rejects an empty branch set instead of inventing a winner', () {
       expect(
         () => GroupForkCanonicalOrder.canonical(const []),
         throwsFormatException,
+      );
+    });
+  });
+
+  group('fork branch keys', () {
+    test('read authority from the parent, never from the branch', () {
+      final parent = _state();
+      final signed = _signedControl(
+        parent: parent,
+        signerUserId: _alice,
+        signerDeviceId: _aliceDevice,
+        operation: const TransferGroupOwnershipOperation(_bob),
+        controlStateHash: '11' * 32,
+      );
+
+      final branch = GroupForkCanonicalOrder.branchOf(
+        parent: parent,
+        signedControl: signed,
+      );
+
+      // The operation demotes its own signer, but ordering uses the role the
+      // signer held in the shared parent.
+      expect(branch, isNotNull);
+      expect(branch!.signerRole, GroupRole.owner);
+      expect(branch.precedence, GroupControlPrecedence.authority);
+    });
+
+    test('refuse a signer that is not an active member of the parent', () {
+      final parent = _state();
+      final stranger = _signedControl(
+        parent: parent,
+        signerUserId: '90000000-0000-4000-8000-000000000001',
+        signerDeviceId: '91000000-0000-4000-8000-000000000001',
+        operation: const UpdateGroupMetadataOperation(
+          GroupMetadata(name: 'Renamed'),
+        ),
+        controlStateHash: '00' * 32,
+      );
+
+      expect(
+        GroupForkCanonicalOrder.branchOf(
+          parent: parent,
+          signedControl: stranger,
+        ),
+        isNull,
       );
     });
   });
@@ -121,6 +238,46 @@ void main() {
     });
   });
 }
+
+GroupForkBranch _branch({
+  required String hash,
+  String? eventId,
+  GroupControlPrecedence precedence = GroupControlPrecedence.descriptive,
+  GroupRole role = GroupRole.member,
+  String user = _alice,
+  String device = _aliceDevice,
+}) => GroupForkBranch(
+  eventId: eventId ?? _canonicalEventId,
+  controlStateHash: hash,
+  precedence: precedence,
+  signerRole: role,
+  signerUserId: user,
+  signerDeviceId: device,
+);
+
+SignedGroupControlEvent _signedControl({
+  required GroupState parent,
+  required String signerUserId,
+  required String signerDeviceId,
+  required GroupControlOperation operation,
+  required String controlStateHash,
+}) => SignedGroupControlEvent(
+  event: GroupControlEvent(
+    eventId: _canonicalEventId,
+    groupId: parent.groupId,
+    revision: parent.controlRevision + 1,
+    previousControlStateHash: parent.controlStateHash,
+    mlsEpoch: parent.acceptedEpoch + (operation.changesMembership ? 1 : 0),
+    mlsCommitHash: operation.changesMembership ? 'c0' * 32 : null,
+    signerUserId: signerUserId,
+    signerDeviceId: signerDeviceId,
+    createdMs: 1,
+    operation: operation,
+  ),
+  controlStateHash: controlStateHash,
+  canonicalBytes: Uint8List.fromList(const [1]),
+  signature: Uint8List.fromList(const [2]),
+);
 
 GroupMlsInboundCoordinator _coordinator(_ForkCrypto crypto) =>
     GroupMlsInboundCoordinator(

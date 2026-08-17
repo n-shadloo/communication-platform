@@ -3083,8 +3083,8 @@ mod tests {
         OP_SIGN_GROUP_CONTROL, OP_VERIFY_GROUP_CONTROL, OPERATION_REQUEST_MAGIC,
         OPERATION_RESPONSE_MAGIC, OPERATION_VERSION, OpaqueKeyPackageStorage,
         OpaqueMlsStateStorage, SEALED_STATE_MAGIC, SealedStateKind, derive_state_key,
-        generate_key_packages, open_secret_snapshot, operation, unwrap_key_package,
-        wrap_key_package, wrap_key_package_in_bucket,
+        generate_key_packages, open_secret_snapshot, operation, sign_group_control_operation,
+        unwrap_key_package, wrap_key_package, wrap_key_package_in_bucket,
     };
 
     const OPERATION_DAY: u32 = 20_302;
@@ -4099,7 +4099,7 @@ mod tests {
             enrolled_operation_device(OPERATION_USER, OPERATION_DEVICE, 163);
 
         let mut request = operation_prefix(&device_state, &local_bundle, &[]);
-        push_leave_control_descriptor(&mut request, false);
+        push_leave_control_descriptor(&mut request, LEAVE_EVENT_ID, false);
         let signed = operation(OP_SIGN_GROUP_CONTROL, &request)
             .expect("a departing member signs a leave without a Commit");
         let (canonical, signature, state_hash, payload, signer_user, signer_device) =
@@ -4113,7 +4113,7 @@ mod tests {
         let mut verify_request = operation_prefix(&device_state, &local_bundle, &[]);
         push_frame(&mut verify_request, &signer_user).expect("signer user frame");
         push_frame(&mut verify_request, &signer_device).expect("signer device frame");
-        push_leave_control_descriptor(&mut verify_request, false);
+        push_leave_control_descriptor(&mut verify_request, LEAVE_EVENT_ID, false);
         push_frame(&mut verify_request, &payload).expect("signed control payload frame");
         let verified = operation(OP_VERIFY_GROUP_CONTROL, &verify_request)
             .expect("a remaining member verifies the leave");
@@ -4124,7 +4124,7 @@ mod tests {
         assert_eq!(verified_hash, state_hash);
 
         let mut claimed_commit = operation_prefix(&device_state, &local_bundle, &[]);
-        push_leave_control_descriptor(&mut claimed_commit, true);
+        push_leave_control_descriptor(&mut claimed_commit, LEAVE_EVENT_ID, true);
         assert_eq!(
             operation(OP_SIGN_GROUP_CONTROL, &claimed_commit),
             Err(crate::error::CryptoError::MalformedInput),
@@ -4132,8 +4132,103 @@ mod tests {
         );
     }
 
-    fn push_leave_control_descriptor(request: &mut Vec<u8>, claim_commit: bool) {
-        push_frame(request, &[0xA2; 16]).expect("event id frame");
+    /// The control state hash is a value the branch author fully controls.
+    ///
+    /// Nothing binds the 16-byte event id to anything outside the author's
+    /// choice, `created_ms` is an unchecked `u64`, and Ed25519 is deterministic
+    /// (RFC 8032 section 5.1.6), so one grinding trial is exactly one signature
+    /// plus one SHA-256 over the same descriptor and yields an independent
+    /// uniform 256-bit ordering value. This test runs that inner loop, proves it
+    /// reproduces the shipped hash byte for byte, and counts how few trials
+    /// place a branch below a *known* rival hash.
+    ///
+    /// It is the standing evidence behind ADR-041: the same-revision fork order
+    /// must never read this hash as its deciding input, because an author who
+    /// has already seen a competing branch can undercut it for the price of a
+    /// handful of signatures.
+    #[test]
+    fn an_author_grinds_the_control_state_hash_below_a_known_rival() {
+        let (device_state, local_bundle) =
+            enrolled_operation_device(OPERATION_USER, OPERATION_DEVICE, 167);
+        let mut rival_request = operation_prefix(&device_state, &local_bundle, &[]);
+        push_leave_control_descriptor(&mut rival_request, LEAVE_EVENT_ID, false);
+        let rival = operation(OP_SIGN_GROUP_CONTROL, &rival_request)
+            .expect("the rival branch signs through the shipped entry point");
+        let (_, _, rival_hash, ..) = decode_group_control_response(OP_SIGN_GROUP_CONTROL, &rival);
+
+        // The attacker's inner loop: its own authenticated signer, re-signing a
+        // descriptor that differs only in the event id it is free to choose.
+        let authentication = BetaMlsAuthenticationContext::from_verified_bundle_requests(
+            &device_state,
+            OPERATION_DAY,
+            &local_bundle,
+            &[],
+        )
+        .expect("the author authenticates its own device");
+        let provider = RustCryptoProvider::default();
+        let ground_hash = |event_id: [u8; 16]| {
+            let mut descriptor = Vec::new();
+            push_leave_control_descriptor(&mut descriptor, event_id, false);
+            let mut reader = Reader::new(&descriptor);
+            let signed = sign_group_control_operation(
+                OP_SIGN_GROUP_CONTROL,
+                &provider,
+                &authentication,
+                &mut reader,
+            )
+            .expect("the author signs its own candidate branch");
+            let (_, _, hash, ..) = decode_group_control_response(OP_SIGN_GROUP_CONTROL, &signed);
+            hash
+        };
+        assert_eq!(
+            ground_hash(LEAVE_EVENT_ID),
+            rival_hash,
+            "the grinding loop must be the shipped signing path, not an approximation"
+        );
+
+        let mut trials: u32 = 0;
+        let winner = loop {
+            trials += 1;
+            let mut event_id = [0x5A; 16];
+            event_id[..4].copy_from_slice(&trials.to_be_bytes());
+            if ground_hash(event_id) < rival_hash {
+                break event_id;
+            }
+            assert!(
+                trials < 4_096,
+                "grinding did not converge, which cannot happen for a uniform 256-bit rival"
+            );
+        };
+        // Measured on 2026-08-17 (release, x86-64): 9 trials against this rival,
+        // and 1,000 trials of the loop above in 40.8 ms — about 24,500 candidate
+        // branches per second per core.
+        assert!(
+            trials <= 64,
+            "beating a known rival cost {trials} signatures; the hash is not a work function"
+        );
+
+        // The ground-out event id also wins through the real entry point, so
+        // this is a branch the author can actually put on the wire.
+        let mut winning_request = operation_prefix(&device_state, &local_bundle, &[]);
+        push_leave_control_descriptor(&mut winning_request, winner, false);
+        let winning = operation(OP_SIGN_GROUP_CONTROL, &winning_request)
+            .expect("the ground-out branch signs through the shipped entry point");
+        let (_, _, winning_hash, ..) =
+            decode_group_control_response(OP_SIGN_GROUP_CONTROL, &winning);
+        assert!(
+            winning_hash < rival_hash,
+            "a shipped branch orders ahead of the rival it was ground against"
+        );
+    }
+
+    const LEAVE_EVENT_ID: [u8; 16] = [0xA2; 16];
+
+    fn push_leave_control_descriptor(
+        request: &mut Vec<u8>,
+        event_id: [u8; 16],
+        claim_commit: bool,
+    ) {
+        push_frame(request, &event_id).expect("event id frame");
         push_frame(request, &[0xB2; 32]).expect("group id frame");
         push_u32(request, 2);
         request.push(1);

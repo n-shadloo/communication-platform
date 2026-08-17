@@ -1182,8 +1182,15 @@ final class NativeBetaGroupMls implements GroupMlsCryptoPort {
             current.controlStateHash) {
       return _integrityFailure();
     }
+    // Both keys are read from the reconstructed shared parent, so authority is
+    // the roster's, never the branch's own claim about its signer.
+    final local = GroupForkCanonicalOrder.branchOf(
+      parent: parent,
+      signedControl: stored.last.signedControl,
+    );
+    if (local == null) return _integrityFailure();
 
-    final rivals = <String, GroupControlEvent>{};
+    final rivals = <String, GroupForkBranch>{};
     for (final sibling in siblingCommits) {
       late final _IncomingControlTransport transport;
       try {
@@ -1228,26 +1235,31 @@ final class NativeBetaGroupMls implements GroupMlsCryptoPort {
         // Same branch replayed, not a fork.
         return _integrityFailure();
       }
-      rivals[hash] = event;
+      final rival = GroupForkCanonicalOrder.branchOf(
+        parent: parent,
+        signedControl: verified.signedControl,
+      );
+      if (rival == null) {
+        return const Result.failure(
+          SecurityFailure(SecurityFailureKind.unauthenticatedInput),
+        );
+      }
+      rivals[hash] = rival;
     }
     if (rivals.isEmpty) return _integrityFailure();
 
-    if (GroupForkCanonicalOrder.outranks(
-      current.controlStateHash,
-      rivals.keys,
-    )) {
+    if (GroupForkCanonicalOrder.outranks(local, rivals.values)) {
       return Result.success(
         GroupForkLocalBranchCanonical(
-          supersededEventIds: rivals.values.map((event) => event.eventId),
+          supersededEventIds: rivals.values.map((rival) => rival.eventId),
         ),
       );
     }
-    final canonicalHash = GroupForkCanonicalOrder.canonical(rivals.keys);
-    final canonical = rivals[canonicalHash]!;
+    final canonical = GroupForkCanonicalOrder.canonical(rivals.values);
     return Result.success(
       GroupForkLocalBranchSuperseded(
         canonicalEventId: canonical.eventId,
-        canonicalControlStateHash: canonicalHash,
+        canonicalControlStateHash: canonical.controlStateHash,
         canonicalSignerUserId: canonical.signerUserId,
       ),
     );

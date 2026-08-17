@@ -252,11 +252,18 @@ Two beta gaps were researched against RFC 9420 and resolved as far as the toolch
 allows.
 
 **Same-revision forks now converge.** RFC 9420 assumes a delivery service that
-serializes commits; this project has none, so ADR-038 makes the canonical branch the
-one with the lexicographically smallest control state hash. Siblings are
-authenticated, replayed against the reconstructed shared parent, and authorized
-before they can influence the outcome. A superseded branch is fork-quarantined and
-rejoins by remove/re-add, because an applied MLS commit cannot be rewound.
+serializes commits; this project has none, so the canonical branch is chosen on the
+client. Siblings are authenticated, replayed against the reconstructed shared parent,
+and authorized before they can influence the outcome. A superseded branch is
+fork-quarantined and rejoins by remove/re-add, because an applied MLS commit cannot be
+rewound. ADR-038 originally ordered siblings by the lexicographically smallest control
+state hash; **ADR-041 (2026-08-17) supersedes that**, because the hash is a SHA-256 over
+a descriptor whose event id and `created_ms` the author chooses freely, measured at about
+24,500 candidate branches per second per core, so a member facing eviction could grind a
+branch that displaced its own `Remove`. The order now reads the operation's precedence
+class first — an eviction is never displaced by an invite, a leave, or a metadata edit —
+then the signer's role in the shared parent, then the authenticated signer identity, and
+only then the hash, which is reachable solely between two branches signed by one device.
 
 **Leave is implemented as a two-phase departure.** RFC 9420 section 12.4 forbids a
 Commit that removes its own committer, so a departing member cannot evict itself.
