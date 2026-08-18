@@ -78,7 +78,11 @@ final class CreateGroup {
       signedControl: prepared.signedControl,
       localUserId: currentUserId,
     );
-    if (applied is! GroupControlAccepted) {
+    // A locally originated transition must carry the exact object its peers
+    // need. Committing one without it would advance this device to an epoch
+    // no peer can ever reach, and the transaction boundary cannot tell the
+    // difference on its own because an inbound commit legitimately has none.
+    if (applied is! GroupControlAccepted || !prepared.outbound) {
       return const Result.failure(
         SecurityFailure(SecurityFailureKind.integrityCheckFailed),
       );
@@ -159,7 +163,7 @@ final class MutateGroup {
       signedControl: prepared.signedControl,
       localUserId: actorUserId,
     );
-    if (applied is! GroupControlAccepted) {
+    if (applied is! GroupControlAccepted || !prepared.outbound) {
       return const Result.failure(
         SecurityFailure(SecurityFailureKind.integrityCheckFailed),
       );
@@ -273,6 +277,11 @@ final class SendGroupMessage {
       return Result.failure(failure);
     }
     final prepared = (preparedResult as Success<PreparedGroupMessage>).value;
+    if (!prepared.outbound) {
+      return const Result.failure(
+        SecurityFailure(SecurityFailureKind.integrityCheckFailed),
+      );
+    }
     final committed = await repository.commitMessage(
       expectedGroup: group,
       prepared: prepared,

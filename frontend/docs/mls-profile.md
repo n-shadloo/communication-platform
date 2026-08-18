@@ -286,6 +286,10 @@ failed external prerequisite above.
 Input-boundary fuzzing of the closed-beta operation is no longer outstanding and is
 evidenced below; state-format *migration* fuzzing, which drives a state written by one
 released format version into a later reader, is a different exercise and remains open.
+The device-local half of the crash and transaction-failure matrix is also evidenced below.
+Its physical-device half — process kill, Doze and force-stop, torn writes, Keystore
+availability after reboot, and the packaged Rust core — has not been run and is the larger
+part of gate 6.
 
 ### Closed-beta MLS input fuzzing (2026-08-18)
 
@@ -363,6 +367,79 @@ Not fuzzed, and why:
   printed outcome spread rather than by a coverage percentage.
 - The pairwise transport, application-message, and attachment decoders are outside this
   operation and are not covered here.
+
+### Closed-beta crash and transaction-failure injection (2026-08-18)
+
+Gate 6 asks for crash-safe state persistence. The persistence claim is
+`docs/local-data-model.md`'s MLS transaction boundary: new opaque MLS state, the accepted
+control or application fact, the membership and conversation projections, and the exact
+prepared outbound object commit atomically under a control revision/hash compare-and-swap,
+and the object reaches the network only afterwards. That is a claim about what an
+interruption leaves behind, so it is now tested by interrupting it.
+
+The device-local half of the matrix is implemented and passing. The technique is a
+temporary SQLite trigger that raises `ABORT` on one exact statement inside the real
+transaction (`test/support/storage_fault_injection.dart`), which is the same mechanism
+pieces 12 and 13 already use for the inbox and pairwise outbox, generalised so any table
+and write kind can be the failure point. Nothing under `lib/` is stubbed or given a
+test-only seam, so the rollback under test is the shipped one. Process death is modelled by
+a file-backed database whose whole Dart object graph is dropped and reopened; the reopen
+runs the production `beforeOpen` path, so `PRAGMA quick_check` fails the test if an aborted
+write left the file inconsistent, and the injected fault does not survive the restart.
+
+39 Dart tests across three files cover the four steps and the three gaps between them:
+
+| Step | Failure points covered |
+|---|---|
+| T1 compare-and-swap commit | abort at the opaque-state write, the accepted control fact, the message projection, the immutable message fact, the conversation projection, the roster projection, and the exact outbound object; a stale compare-and-swap witness; a concurrent revision overtaking a prepared branch; a locally originated transition carrying no outbound object |
+| T1 nested in the inbound receive | the same aborts inside the pairwise receive transaction, plus an abort in the pairwise leg *after* the group leg already wrote, an unrecordable fork quarantine, and a re-admission that discards its dead epoch's un-routed work while leaving already-queued ciphertext alone |
+| T1 → T2 | death after the commit and before any fan-out; restart resumes from durable state alone |
+| T2 | a failed outbox transaction; a fan-out that fails part-way through the recipient list |
+| T2 → T3 | death after every recipient is queued and before the routing marker; the retry reuses the exact persisted ciphertext and the ratchet does not step twice |
+| T3 → T4 | a re-dispatch after the relay already accepted the batch |
+| after T4 | a redelivered envelope after a crash before acknowledgement |
+
+`test/features/groups/application/group_outbound_interruption_test.dart` runs the real
+Drift group repository, the real durable pairwise outbox, and the real fan-out coordinator
+together; only the device resolver, the prekey claim, and the native ratchet step are
+stand-ins, and the ratchet stand-in counts its own invocations, so "the retry did not
+re-encrypt" is an assertion rather than a description.
+
+**Two defects were found and fixed.**
+
+The first is not conditional on any interruption. One group object becomes one pairwise
+operation per recipient user, and `pairwise_local_applications.event_id` is `UNIQUE`, so the
+second recipient's operation collided with the first and its whole transaction rolled back.
+Any group with two or more remote members committed its epoch and its outbound object and
+then could never route them: the fan-out failed identically on every retry, so the operation
+was neither resumable nor abandonable, and the group stalled permanently at the first
+Commit. Closed-beta group transport therefore worked only for two-member groups. The
+dispatcher now qualifies the logical send identity per recipient exactly as it already
+qualified the operation id. The identifiers inside the MLS object, which recipients
+deduplicate on, are untouched. It went unnoticed because the dispatcher was only ever tested
+against a fake envelope port, so the schema constraint on the far side of that seam was
+never exercised.
+
+The second is a liveness defect the first exposed. Pending work is ordered by creation and
+the dispatcher returned on the first failure, so one operation nobody can route — an
+unreachable recipient, a corrupt persisted row — stranded every later group's durable
+ciphertext behind it for as long as its cause lasted. Each operation is independent and
+idempotent, so the pass now continues past a failure and still surfaces the first one.
+
+A third, smaller gap was closed in the same pass: the two inbound use cases refuse a
+prepared transition that carries an outbound object, but the three outbound ones did not
+refuse one that carries none, so a crypto port returning an inbound-shaped result would have
+advanced this device to an epoch with nothing to send. The commit boundary cannot detect
+this on its own, because an inbound commit legitimately has no outbound object, so the check
+lives with the caller that knows the direction.
+
+**What this does not close.** Everything above runs on the host VM against SQLite. It models
+a process that dies between transactions. It does not model a `SIGKILL` mid-`fsync`, an
+Android low-memory or Doze kill, a force-stop, a power cut, SQLCipher page-level torn
+writes, or Keystore unavailability after reboot, and it exercises the development in-memory
+MLS port rather than the packaged Rust core. Those cells need the physical-device matrix and
+remain outstanding; see gate 6 and
+`docs/implementation-checklist.md`. No device matrix has been run.
 
 ## Selected candidate
 

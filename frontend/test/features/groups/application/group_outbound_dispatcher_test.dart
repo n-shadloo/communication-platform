@@ -28,6 +28,17 @@ void main() {
       expect(report.workItems, 1);
       expect(report.fanoutOperations, 2);
       expect(envelopes.calls.map((call) => call.target), [_bob, _carol]);
+      // Each recipient user gets its own pairwise operation, so each also
+      // needs its own logical send identity: the durable outbox holds at most
+      // one local application per event id.
+      expect(envelopes.calls.map((call) => call.operationId), [
+        'operation:$_bob',
+        'operation:$_carol',
+      ]);
+      expect(envelopes.calls.map((call) => call.eventId), [
+        'event:$_bob',
+        'event:$_carol',
+      ]);
       expect(envelopes.calls.map((call) => call.includeOwn), [true, false]);
       expect(envelopes.calls.every((call) => call.payload == '7,8,9'), isTrue);
       expect(repository.routed, ['operation']);
@@ -73,11 +84,15 @@ GroupOutboundWork _work(List<String> recipients) => GroupOutboundWork(
 
 final class _EnvelopeCall {
   const _EnvelopeCall({
+    required this.operationId,
+    required this.eventId,
     required this.target,
     required this.includeOwn,
     required this.payload,
   });
 
+  final String operationId;
+  final String eventId;
   final String target;
   final bool includeOwn;
   final String payload;
@@ -101,6 +116,8 @@ final class _Envelopes implements GroupOutboundEnvelopePort {
   }) async {
     calls.add(
       _EnvelopeCall(
+        operationId: operationId,
+        eventId: eventId,
         target: targetUserId,
         includeOwn: includeOwnDevices,
         payload: openedMlsPayload.join(','),

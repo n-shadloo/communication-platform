@@ -68,8 +68,8 @@ opaque/client-owned; **Pending** = Flutter implementation not started.
 | Capability | Backend | Flutter |
 |---|---|---|
 | Key-package claim | Ready | Piece 19 has real closed-beta generation, replenishment, consumable claim, and separately uploaded last-resort lifecycle wiring; backend bucket/consumption contract execution remains pending and production upload is disabled |
-| Group ciphertext delivery | Envelope transport ready | Piece 19 routes every closed-beta MLS object through durable recipient-bound Double Ratchet fan-out, including own other devices, with exact ciphertext retry; production remains disabled |
-| Group creation/membership | Client protocol | Piece 19 implements real closed-beta create, authenticated later Welcome/re-add, membership controls, opaque state, and piece-18 CAS storage; remaining recovery/concurrency matrices keep production fail-closed |
+| Group ciphertext delivery | Envelope transport ready | Piece 19 routes every closed-beta MLS object through durable recipient-bound Double Ratchet fan-out, including own other devices, with exact ciphertext retry. The commit-to-network leg is covered by crash and transaction-failure injection against the real repository, outbox, and fan-out coordinator (2026-08-18), which found and fixed two defects: one logical send identity per group object collided with the durable outbox's unique event id, so any group with two or more remote members committed its epoch and could never transmit it on any retry, and a single unroutable operation stranded every later group behind it. Execution against the packaged Rust core and physical devices remains pending; production remains disabled |
+| Group creation/membership | Client protocol | Piece 19 implements real closed-beta create, authenticated later Welcome/re-add, membership controls, opaque state, and piece-18 CAS storage. The device-local crash and transaction-failure matrix over that CAS boundary is implemented and passing on 2026-08-18: 39 tests abort one exact statement inside the real transaction at every write in the unit, outbound and inbound, and assert the whole unit is absent; a simulated process restart reopens the durable file, passes `PRAGMA quick_check`, and finishes or discards the interrupted operation. The physical-device half — process kill, Doze, force-stop, torn writes, Keystore after reboot, packaged Rust core — has not been run. Remaining recovery/concurrency matrices keep production fail-closed |
 | Owner/admin/member roles | Client protocol | Piece 19 signs and verifies deterministic controls with device authentication proofs and replays the authenticated transcript; full adversarial/device matrix and independent review remain pending |
 | Invite/remove/leave | Client protocol | Closed-beta Invite/re-add, remove, and ADR-039 two-phase leave with automatic owner-side eviction are integrated. The queue-gap remove/re-add matrix is implemented and tested on 2026-08-18: an evicted member is re-admissible by a fresh Add against newly claimed KeyPackages, while a live member and one whose eviction is still uncommitted stay refused; a blocked device admits an authenticated re-admission Welcome and nothing else, requires a consumed KeyPackage and a strictly forward revision, and replaces the retained group, roster, and transcript in the same transaction that retires the group's obligation, advances the acknowledged loss baseline through `pruned_through`, and releases the retained MLS-blocked envelopes. Covered by 45 Dart tests across three files (11 domain re-admission, 31 device-side recovery matrix, 3 admission-service re-invite), including compare-and-swap abort, rollback of the pairwise receive, multi-group blocking, explicit local abandonment, and restart-mid-recovery resumability, against a scripted crypto port. The peer-to-peer signal that asks peers to remove and re-add a gapped device has no defined wire format in either the backend or frontend contract and is not implemented; recovery is driven by the re-admission itself. Execution against the real crypto core, a running backend, and multiple physical devices remains pending, and production MLS commits remain gated |
 | Encrypted metadata | Opaque envelope transport ready | Closed beta processes metadata/policy controls inside authenticated MLS transport and the atomic state/projection boundary; production remains gated |
@@ -268,7 +268,19 @@ opaque/client-owned; **Pending** = Flutter implementation not started.
   queue-gap remove/re-add/history matrix, upstream/project interoperability and
   bucket/backend contract execution against a running backend, multi-device and
   process-death/fault matrices on real hardware, state-format migration fuzzing, and
-  independent cryptographic review. Input-boundary fuzzing of the beta MLS operation is
+  independent cryptographic review. Device-local crash and transaction-failure
+  injection over the piece-18 CAS boundary and the commit-to-network leg is done as of
+  2026-08-18: 39 Dart tests across
+  `test/features/groups/infrastructure/group_commit_boundary_injection_test.dart`,
+  `test/features/groups/application/group_outbound_interruption_test.dart`, and
+  `test/features/synchronization/group_inbox_crash_injection_test.dart`, using a
+  temporary SQLite `RAISE(ABORT)` trigger per failure point and a reopened file-backed
+  database for process death. It found and fixed a per-recipient logical send identity
+  collision that made closed-beta groups of three or more members permanently
+  untransmittable, a head-of-line stall in outbound dispatch, and a missing
+  outbound-direction check in the three locally originated use cases
+  (`docs/mls-profile.md`). This runs on the host VM against SQLite and the development
+  MLS port; it does not substitute for the on-hardware matrix above. Input-boundary fuzzing of the beta MLS operation is
   done: twelve targets over every relay-reachable decoder, run on 2026-08-18, which found
   and fixed one non-canonical MLS object acceptance (`docs/mls-profile.md`,
   `native/crypto_core/fuzz/README.md`). Production still resolves the unsupported adapter,
