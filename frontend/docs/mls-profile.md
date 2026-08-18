@@ -23,6 +23,16 @@ unchanged from the 2026-08-16 audit; the 2026-08-17 pass re-verified the KEM div
 against the draft text and the pinned sources line by line and extended it (rows D5, D7,
 D8, and the no-upstream-fix finding are new).
 
+A 2026-08-18 pass attempted cross-implementation interoperability against a second,
+independent MLS implementation and determined it externally blocked; see "Cross-implementation
+interoperability determination" below. That pass re-verified the IANA HPKE KEM registry
+(`0x0001`-`0x000F` still Unassigned, `0x647A` still X-Wing at
+`draft-connolly-cfrg-xwing-kem-06`, registry still dated 2026-04-16), the crates.io version
+indexes for the pinned `mls-rs` crypto crates and for `openmls`, `draft-connolly-cfrg-xwing-kem-10`,
+and the MLS working group's `implementation_list.md`. **It corrects Phase-A row 3**: OpenMLS's
+unreleased `main` branch now implements `TBD2`'s exact five-primitive mapping at a provisional
+code point. No prerequisite result and no gate changed.
+
 ### Phase-A external preflight (2026-08-16; re-verified unchanged 2026-08-17)
 
 These prerequisites exist outside this implementation and cannot be made true by adding
@@ -40,8 +50,8 @@ crates found all five still blocked, with the same evidence.
 |---|---|---|---|
 | Stable published specification and registry assignment for every primitive in the selected mapping | Four of the five primitives already rest on published, non-expiring standards and are assigned in registries this project does not control: KDF `0x0002` (HKDF-SHA384, reference RFC 5869) and AEAD `0x0002` (AES-256-GCM, reference NIST SP 800-38D) in the IANA HPKE registries, last updated 2026-04-16; signature `ed25519` `0x0807` (`Recommended = Y`, reference RFC 9846) in the IANA TLS SignatureScheme registry, last updated 2026-08-10; and hash SHA-384, which carries no code point at all and is named directly from NIST FIPS 180-4. The hybrid KEM is the exception. `0x647A` is assigned in the IANA HPKE KEM Identifiers registry, but the only normative reference recorded there is `draft-connolly-cfrg-xwing-kem-06`, an Independent-submission Internet-Draft; that draft has since advanced to `-10` (2026-03-02, expiring 2026-09-03) without the registry reference following it, and the chain draft-06 uses to reach it — `draft-ietf-hpke-pq-05` and `draft-irtf-cfrg-concrete-hybrid-kems-04`, the latter in datatracker state `I-D Exists::Revised I-D Needed` — is still moving. | **Blocked** (one primitive of five) | The mapping cannot be frozen as a production wire contract while its KEM rests on a superseded, expiring draft revision. This prerequisite blocks and clears independently of any MLS Cipher Suites action, which is why it is evidenced separately from the row below. |
 | Final MLS specification and an IANA-assigned MLS ciphersuite value | `draft-ietf-mls-pq-ciphersuites-06`, published 2026-07-21, is still an expiring Standards Track Internet-Draft (expires 2027-01-22). Its datatracker state is "I-D Exists", annotated "Waiting for WG Chair Go-Ahead" and "Revised I-D Needed - Issue raised by WG", so the text is expected to change again. Its IANA Considerations request entries in the "MLS Cipher Suites" registry only and request nothing in the HPKE registries. The selected suite is still `TBD2`; that registry, last updated 2025-11-17, contains only `0x0000` RESERVED, RFC 9420 values `0x0001`-`0x0007`, the GREASE values, and Private Use `0xF000`-`0xFFFF`. No post-quantum suite is registered. | **Blocked** | No production suite value, KeyPackage, or group may be emitted. The registry's Specification Required policy is not a route this project may take: ADR-026 forbids assigning a production identifier locally, so this closes only when the working group's document becomes a stable specification and IANA assigns the value that replaces `TBD2`. No amount of primitive-level progress advances it. |
-| Maintained non-project-local OpenMLS/provider support for the exact final Android mapping | OpenMLS 0.8.1 (2026-02-13) remains the newest stable release and 0.9.0-rc.2 (2026-08-06) is still a release candidate; both still document only the three classical RFC 9420 suites. OpenMLS's published post-quantum work targets X-Wing (`MLS_256_XWING_CHACHA20POLY1305_SHA256_Ed25519`, experimental `0x004D`, with no IANA code point), whose AEAD, KDF, and hash differ from `TBD2`; its KEM does not differ, because `TBD2`'s own KEM `0x647a` *is* X-Wing. `mls-rs` exposes `CipherSuite::ML_KEM_768_X25519` at Private Use `0xFE4C`, but the mapping this project assembles through the maintained public `AwsLcCipherSuiteBuilder` API is not `TBD2`: its symmetric half matches and its hybrid KEM does not, as evidenced under "Closed-beta KEM divergence" below. Neither maintained provider implements `TBD2`: OpenMLS has the right KEM (X-Wing *is* `0x647a`) on the wrong AEAD/KDF/hash, and `mls-rs` has the right AEAD/KDF/hash on a pre-standard KEM. The pinned `mls-rs` crypto crates are already the newest published versions (checked on crates.io 2026-08-17), so no upstream fix is available to adopt. | **Blocked** | The closed beta may use the locked maintained `mls-rs` provider under ADR-036, but composing the mapping ourselves does not satisfy the production OpenMLS/provider gate. No project-local cryptographic fork is permitted, and ADR-040 records that supplying a conformant KEM through `mls-rs`'s public extension points would be one — the maintained cipher suite cannot be re-parameterized, so the project would have to author the KEM itself. |
-| Usable upstream interoperability vectors for the selected suite | The MLS Working Group vector repository still exposes only its classical fixture set (`crypto-basics`, `key-schedule`, `message-protection`, `messages`, `passive-client-*`, `psk_secret`, `secret-tree`, `transcript-hashes`, `tree-*`, `treekem`, `welcome`). No ML-KEM/PQ fixture set exists. | **Blocked** | Project lifecycle fixtures are useful beta evidence but cannot substitute for independent upstream interoperability. The construction-level project vectors added on 2026-08-17 (see "Known-answer coverage of the divergent construction") do not change this: they are project-generated regression pins for a construction no external party publishes vectors for, so they are not upstream vectors and do not advance this prerequisite. |
+| Maintained non-project-local OpenMLS/provider support for the exact final Android mapping | OpenMLS 0.8.1 (2026-02-13) remains the newest stable release and 0.9.0-rc.2 (2026-08-06) is still a release candidate; both still document only the three classical RFC 9420 suites. OpenMLS's *released* post-quantum work targets X-Wing (`MLS_256_XWING_CHACHA20POLY1305_SHA256_Ed25519`, experimental `0x004D`, with no IANA code point), whose AEAD, KDF, and hash differ from `TBD2`; its KEM does not differ, because `TBD2`'s own KEM `0x647a` *is* X-Wing. **Corrected 2026-08-18:** that statement no longer describes OpenMLS's `main` branch, which adds `MLS_128_MLKEM768X25519_AES256GCM_SHA384_Ed25519 = 0x004E`, annotated in-source as "[draft-ietf-mls-pq-ciphersuites] TBD2 (provisional code point)", mapping to `HpkeKemType::XWingKemDraft6`, `HpkeKdfType::HkdfSha384`, `HpkeAeadType::AesGcm256`, `HashType::Sha2_384`, and Ed25519 — `TBD2`'s exact five-primitive mapping. It is gated behind the `draft-ietf-mls-pq-ciphersuites` cargo feature and is **unreleased**: the newest published versions on crates.io (checked 2026-08-18) are still 0.8.1 and 0.9.0-rc.2. A provisional code point on an unreleased branch is not the assigned value gate 2 requires and is not a maintained release gate 3 can rest on, so the result is unchanged; but the gap is now a release-and-registry gap rather than a mapping gap, and this row previously misstated that. `mls-rs` exposes `CipherSuite::ML_KEM_768_X25519` at Private Use `0xFE4C`, but the mapping this project assembles through the maintained public `AwsLcCipherSuiteBuilder` API is not `TBD2`: its symmetric half matches and its hybrid KEM does not, as evidenced under "Closed-beta KEM divergence" below. No *released* maintained provider implements `TBD2`: released OpenMLS has the right KEM (X-Wing *is* `0x647a`) on the wrong AEAD/KDF/hash, and `mls-rs` has the right AEAD/KDF/hash on a pre-standard KEM. The pinned `mls-rs` crypto crates are already the newest published versions (re-checked on crates.io 2026-08-18: `mls-rs-crypto-hpke 0.21.0`, `mls-rs-crypto-awslc 0.25.0`, and `mls-rs-crypto-traits 0.22.0` are each still the newest of their crate), so no upstream fix is available to adopt. | **Blocked** | The closed beta may use the locked maintained `mls-rs` provider under ADR-036, but composing the mapping ourselves does not satisfy the production OpenMLS/provider gate. No project-local cryptographic fork is permitted, and ADR-040 records that supplying a conformant KEM through `mls-rs`'s public extension points would be one — the maintained cipher suite cannot be re-parameterized, so the project would have to author the KEM itself. |
+| Usable upstream interoperability vectors for the selected suite | The MLS Working Group vector repository still exposes only its classical fixture set (`crypto-basics`, `key-schedule`, `message-protection`, `messages`, `passive-client-*`, `psk_secret`, `secret-tree`, `transcript-hashes`, `tree-*`, `treekem`, `welcome`). No ML-KEM/PQ fixture set exists. | **Blocked** | Project lifecycle fixtures are useful beta evidence but cannot substitute for independent upstream interoperability. The construction-level project vectors added on 2026-08-17 (see "Known-answer coverage of the divergent construction") do not change this: they are project-generated regression pins for a construction no external party publishes vectors for, so they are not upstream vectors and do not advance this prerequisite. Nor can cross-implementation interoperability stand in for them: the 2026-08-18 assessment below found that no independent implementation can be configured to the beta composition at all, because its KEM is unpublished and has exactly one implementation. |
 | Qualified independent reviewer available for the final implementation | No named, retained reviewer and no review schedule is recorded for this project, and no candidate has been approached. A qualification bar, a scope of work bounded to this implementation, the deliverables required before the review gate can close, and an evaluation of candidates and funding routes against that bar were recorded on 2026-08-18 in [the engagement document](independent-review-engagement.md); it retains nobody and moves no gate. | **Blocked** | Review-dependent production gates cannot close until a qualified reviewer is engaged and all blocking findings are resolved. |
 
 #### Per-identifier registry evidence (verified 2026-08-16; the HPKE KEM/KDF/AEAD and MLS ciphersuite rows re-verified unchanged 2026-08-17)
@@ -207,6 +217,85 @@ mismatch was found and no cryptographic code was changed. One step is pinned but
 not reproduced: the SHAKE-128 seed expansion of D6, because no dependency exposes
 SHAKE and ADR-040 declines project-local `unsafe` FFI to reach it.
 `native/crypto_core/vectors/README.md` states per test what is and is not proven.
+
+### Cross-implementation interoperability determination (2026-08-18)
+
+Interoperating the closed-beta suite against a second, independent MLS implementation was
+attempted and is **externally blocked**. No harness was built, because the prerequisite
+that a harness would exercise cannot be satisfied by any candidate. This is a structural
+result, not a scheduling one: it does not clear when a maintainer ships a release, and no
+amount of project code changes it.
+
+The exact composition a second implementation would have to be configured to is the one
+`BetaMlsCryptoProvider` builds in `native/crypto_core/src/mls_beta.rs`: MLS ciphersuite
+identifier `0xFE4C`, KDF HKDF-SHA384, AEAD AES-256-GCM, hash SHA-384, signature Ed25519,
+and the hybrid KEM described by rows D1-D10 above — `mls-rs`'s `CombinedKem` at HPKE
+`kem_id` `0x000F`, label-first, 7-byte label `5c2e2f0a2f5e5c`, an inner
+`DHKEM(X25519, HKDF-SHA256)` shared secret, SHAKE-128 `DeriveKeyPair` expansion, and no
+encapsulation-key check.
+
+The eleven implementations on the MLS working group's `implementation_list.md` (fetched
+2026-08-18) were assessed against that composition. Every one of them fails on the KEM,
+and for the same reason: **the beta KEM is not a published construction.** It has no
+specification, no IANA code point, and exactly one implementation in existence — the
+`mls-rs-crypto-hpke` crate this project already depends on. A second implementation
+cannot be *configured* to a construction that no specification describes; it could only
+be made to perform it by someone authoring the algorithm inside it. That is not
+configuration, and it would destroy the independence that makes the exercise evidence at
+all, because the KEM under test would then be code written by this project from its own
+reading of the crate under test.
+
+| Candidate | Language | Identifier `0xFE4C` | KDF/AEAD/hash/signature | Beta KEM | Precise gap |
+|---|---|---|---|---|---|
+| OpenMLS | Rust | **No** — `Ciphersuite` is a closed `#[repr(u16)]` enum; `TryFrom<u16>` returns `DecodingError` for any unlisted value | Yes, as one suite: `main` defines `MLS_128_MLKEM768X25519_AES256GCM_SHA384_Ed25519 = 0x004E` mapping to `HkdfSha384`, `AesGcm256`, `Sha2_384`, Ed25519 | **No** — that suite's KEM is `HpkeKemType::XWingKemDraft6`, the conformant X-Wing, which is precisely what rows D1-D10 say the beta KEM is not | Identifier unrepresentable and `HpkeKemType` is a closed enum with no `0x000F` variant. Its PQ suites are also unreleased and feature-gated behind `draft-ietf-mls-pq-ciphersuites` |
+| MLSpp | C++ | Partially — `CipherSuite` wraps a `uint16_t` `enum struct ID`, so the value can be *held*, but the private `get()` is a fixed lookup and `all_supported_cipher_suites` is a fixed `std::array`, so nothing binds primitives to it | Yes, as one suite: `MLKEM768X25519_AES256GCM_SHA384_Ed25519 = 0x0008` | **No** — same X-Wing/ML-KEM hybrid, not the `0x000F` combiner | No registration API; primitives are bound to IDs in private source. Would require editing MLSpp |
+| ts-mls | TypeScript | **Yes** — `CryptoProvider.getCiphersuiteImpl(id: number)` accepts an arbitrary number and `CiphersuiteImpl.id` is `number` | **Yes** — `Kdf`, `Hash`, `Signature`, and AEAD are interfaces; `HKDF-SHA384`, `SHA-384`, `AES256GCM`, and `Ed25519` all ship | **No** — `KemAlgorithm` is a closed union of nine, and no shipped `Hpke` implements the `0x000F` combiner | The one candidate configurable on five of six requirements. Fails only on the KEM, and only because supplying it means authoring it |
+| BouncyCastle | Java | Partially — the `MlsCipherSuite` constructor is public and takes a `short` id, but `getSuite(short)` is a fixed switch | Partially — `BcMlsKdf(SHA384Digest)` and `BcMlsAead(aead_AES_GCM256)` exist, but no Ed25519 + SHA-384 suite is assembled | **No** — only the seven classical RFC 9420 suites; `org.bouncycastle.crypto.hpke.HPKE` exposes a fixed `kem_*` set with no combiner | No post-quantum MLS support of any kind |
+| mls-kotlin | Kotlin | **No** — closed `enum class CipherSuite`; Kotlin enums cannot be extended at runtime | **No** — no Ed25519 + SHA-384 combination | **No** — no ML-KEM at all | Seven classical suites plus GREASE only |
+| mls-go | Go | Not reached | Not reached | **No** — no ML-KEM; documented interop covers suites 1, 2, 3 | No post-quantum support |
+| go-mls | Go | Not reached | Not reached | **No** — no ML-KEM | "RFC in progress"; no post-quantum support |
+| mls_stuff | Python | Not reached | Not reached | **No** — no ML-KEM | Self-described work in progress; incomplete RFC 9420 support |
+| MLS\* | F\* | Not reached | Not reached | **No** | "RFC in progress"; no post-quantum support and no obtainable artifact |
+| RingCentral | C++ | Not reached | Not reached | Not reached | Proprietary and unpublished; cannot be obtained or pinned at any revision |
+| mls-rs | Rust | Yes | Yes | Yes | **Not independent.** It is this implementation's own provider. Running it against itself is a round trip, which `beta_mls_vectors.rs` already performs |
+
+Two findings came out of the assessment and are recorded as findings rather than acted on:
+
+- **Gate 3's evidence has moved, and this document's Phase-A row 3 is corrected above.**
+  OpenMLS `main` now implements `TBD2`'s exact five-primitive mapping — the claim that it
+  had "the right KEM on the wrong AEAD/KDF/hash" is true only of its *released* versions.
+  It is unreleased, feature-gated, and at a provisional code point, so gate 3 does not
+  close; but the direction of travel is real and the row should not misstate it.
+- **The ecosystem has not converged on a provisional value.** OpenMLS uses `0x004E` for
+  `TBD2` and MLSpp uses `0x0008` for the same composition. Two independent implementations
+  picked two mutually incompatible code points for one suite. That is exactly the failure
+  mode gate 2 exists to prevent, and it is direct evidence that gate 2 cannot be
+  satisfied by adopting anyone's provisional value.
+
+One further observation is recorded but **not traced to the wire**: OpenMLS's
+`HpkeKemType::XWingKemDraft6` carries the discriminant `0x004D`, which is not X-Wing's
+registered HPKE `kem_id` `0x647A` (25722). Whether that discriminant reaches the HPKE
+`suite_id` was not followed into its crypto backends, and nothing in this project depends
+on the answer. It is noted only so that a future reader does not assume OpenMLS's `0x004E`
+is wire-compatible with a conformant `0x647a` peer without checking.
+
+What remains externally blocked, precisely: **cross-implementation interoperability
+evidence for the closed-beta suite is unobtainable for as long as the beta KEM is the
+`mls-rs` `0x000F` combiner.** It is not blocked on a missing release, a missing fixture,
+or a missing counterparty — it is blocked because the construction has no second
+implementation and can have none without someone writing one. ADR-040 makes that
+condition permanent for the closed beta rather than pending. The route that would unblock
+it is the same upstream event ADR-040 already names as its reversal trigger: a maintained
+provider implementing `0x647a` against a stable specification, at which point a second
+implementation configured to the same published suite becomes possible for the first time.
+
+Interoperating with a second implementation under a Private Use identifier would in any
+case be **cross-implementation evidence, not upstream interoperability.** It would not
+satisfy Phase-A prerequisite 4 and would close none of the seven production gates: a
+Private Use value is by definition not the assigned value gate 2 requires, and agreement
+between two parties on an unregistered construction is not conformance to a published
+one. Had a candidate been configurable, the result would have been recorded under that
+constraint. None was.
 
 ### Why the beta KEM is not being corrected in place (ADR-040, 2026-08-17)
 
@@ -548,3 +637,13 @@ is an explicit protocol migration and group reinitialization, never silent negot
 - [RFC 9180 (HPKE), for the `suite_id` and `DeriveKeyPair` behavior cited above](https://www.rfc-editor.org/rfc/rfc9180)
 - [OpenMLS](https://github.com/openmls/openmls)
 - [MLS Working Group interoperability vectors](https://github.com/mlswg/mls-implementations/tree/main/test-vectors)
+
+Sources for the 2026-08-18 cross-implementation assessment, each read as raw source at
+branch `main` on that date rather than through documentation or a summarizing tool:
+
+- [MLS Working Group implementation list](https://github.com/mlswg/mls-implementations/blob/main/implementation_list.md), which enumerates the eleven candidates assessed
+- [OpenMLS `traits/src/types.rs`](https://raw.githubusercontent.com/openmls/openmls/main/traits/src/types.rs), for the closed `Ciphersuite` and `HpkeKemType` enums and the `0x004E` mapping
+- [MLSpp `include/mls/crypto.h`](https://raw.githubusercontent.com/cisco/mlspp/main/include/mls/crypto.h), for `CipherSuite::ID` and the fixed `all_supported_cipher_suites` array
+- [ts-mls `src/crypto/`](https://github.com/LukaJCB/ts-mls/tree/main/src/crypto) — `ciphersuite.ts`, `provider.ts`, `hpke.ts`, `kdf.ts`, and `kem.ts`, for the arbitrary-`id` `CryptoProvider` and the closed `KemAlgorithm` union
+- [BouncyCastle `MlsCipherSuite.java`](https://raw.githubusercontent.com/bcgit/bc-java/main/mls/src/main/java/org/bouncycastle/mls/crypto/MlsCipherSuite.java), for `ALL_SUPPORTED_SUITES` and the fixed `getSuite` switch
+- [mls-kotlin `CipherSuite.kt`](https://raw.githubusercontent.com/Traderjoe95/mls-kotlin/main/protocol/src/main/kotlin/com/github/traderjoe95/mls/protocol/crypto/CipherSuite.kt), for the closed `enum class CipherSuite`

@@ -160,8 +160,11 @@ opaque/client-owned; **Pending** = Flutter implementation not started.
   Considerations touch only the MLS Cipher Suites registry, and `TBD2` has no assignment
   there (that registry, last updated 2025-11-17, still holds only RFC 9420
   `0x0001`-`0x0007`, GREASE, and Private Use). (3) OpenMLS 0.8.1 stable and 0.9.0-rc.2
-  still document only the three classical suites and their post-quantum work targets
-  X-Wing rather than the selected mapping, (4) the MLS Working Group vector repository
+  still document only the three classical suites and their *released* post-quantum work
+  targets X-Wing rather than the selected mapping — corrected 2026-08-18: OpenMLS's
+  unreleased `main` branch does now implement the selected mapping exactly, at provisional
+  code point `0x004E` behind a cargo feature, which changes the gap from a mapping gap to a
+  release-and-registry gap without changing the result, (4) the MLS Working Group vector repository
   still publishes only classical fixtures, and (5) no qualified independent reviewer is
   retained. Draft-06 still defines `TBD2` with the exact recorded primitive mapping, so no
   suite/ADR stop-and-decide is triggered. Separately re-verified on 2026-08-17 against the
@@ -273,7 +276,24 @@ opaque/client-owned; **Pending** = Flutter implementation not started.
   are `pub(crate)` inside `mls-rs`, or — for Messages — cannot be fully populated at all.
   **The schema is upstream; the values are not.** They are project-generated, are not
   external interoperability evidence, close no gate, and do not advance the upstream-vector
-  prerequisite. Remaining blockers are the full
+  prerequisite. Cross-implementation interoperability against a second, independent MLS
+  implementation was attempted on 2026-08-18 and is **externally blocked**; no harness was
+  built. All eleven implementations on the MLS working group's list fail the same
+  requirement — the beta hybrid KEM is not a published construction, so it has no
+  specification, no IANA code point, and exactly one implementation in existence, which is
+  the `mls-rs` crate this project already depends on. ts-mls is configurable on five of the
+  six requirements (arbitrary ciphersuite identifier, HKDF-SHA384, AES-256-GCM, SHA-384,
+  Ed25519) and fails only on the KEM; every other candidate fails on the identifier or on
+  ML-KEM support as well. The blocker is structural rather than scheduling: it clears only
+  on the same upstream event ADR-040 names as its reversal trigger. Two findings were
+  recorded rather than acted on — OpenMLS's unreleased `main` now implements `TBD2`'s exact
+  five-primitive mapping at provisional code point `0x004E`, which **corrects** this
+  document's and `docs/mls-profile.md`'s prior statement that OpenMLS had the right KEM on
+  the wrong AEAD/KDF/hash; and OpenMLS and MLSpp have chosen two mutually incompatible
+  provisional code points (`0x004E` and `0x0008`) for that one suite, which is direct
+  evidence that no provisional value may be adopted in place of the IANA assignment. Full
+  per-candidate gaps are in `docs/mls-profile.md`, "Cross-implementation interoperability
+  determination". Remaining blockers are the full
   queue-gap remove/re-add/history matrix, upstream/project interoperability and
   bucket/backend contract execution against a running backend, multi-device and
   process-death/fault matrices on real hardware, state-format migration fuzzing, and
