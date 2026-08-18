@@ -265,8 +265,17 @@ WHERE c.singleton_id = 1
           ),
         );
         if (gapDetected) {
-          await database
-              .update(database.mlsGroups)
+          // Every group this device still follows is potentially affected: a
+          // lost envelope may have carried any group's Commit. A group this
+          // device was already removed from or has left is not, and must not
+          // be flagged — it can never produce a re-admission, so flagging it
+          // would leave the device permanently blocked with no way out.
+          await (database.update(database.mlsGroups)..where(
+                (row) => row.lifecycle.isNotIn([
+                  GroupLifecycle.removed.index,
+                  GroupLifecycle.left.index,
+                ]),
+              ))
               .write(const MlsGroupsCompanion(queueGapRecoveryState: Value(1)));
         }
       });
@@ -500,6 +509,26 @@ WHERE c.singleton_id = 1
               record,
               retainLifecycle: localBranchRetained,
             ),
+          // The re-admission and the end of that group's queue-gap obligation
+          // are one fact. Committing them separately would leave a window in
+          // which a rejoined group still reads as unrecoverable, or worse, a
+          // cleared obligation with no group behind it.
+          PreparedGroupInboxRejoin(
+            :final supersededLocal,
+            :final next,
+            :final prepared,
+          ) =>
+            () async {
+              await groupRepository.rejoinInsideTransaction(
+                supersededLocal: supersededLocal,
+                next: next,
+                prepared: prepared,
+              );
+              await _completeGroupRecoveryInsideTransaction(
+                next.groupId,
+                left: false,
+              );
+            }(),
         },
       );
     }
@@ -1103,6 +1132,15 @@ WHERE c.singleton_id = 1
   Future<Result<void>> markGroupRecovered(String groupId) =>
       _completeGroupRecovery(groupId, left: false);
 
+  /// Abandons a group whose queue-gap obligation the user chose not to wait
+  /// out.
+  ///
+  /// This is deliberately local. A desynced device cannot sign a leave
+  /// announcement at an epoch it no longer holds, so the remaining members
+  /// must still evict the stale leaf themselves; nothing here claims otherwise.
+  /// It is refused for any group that is not actually blocked, so it can never
+  /// become a path that deletes a live group or retires an obligation this
+  /// device has not discharged.
   @override
   Future<Result<void>> markGroupLeft(String groupId) =>
       _completeGroupRecovery(groupId, left: true);
@@ -1110,8 +1148,44 @@ WHERE c.singleton_id = 1
   Future<Result<void>> _completeGroupRecovery(
     String groupId, {
     required bool left,
-  }) => _write(() async {
+  }) async {
+    try {
+      await database.writeTransaction(
+        () => _completeGroupRecoveryInsideTransaction(groupId, left: left),
+      );
+      return const Result.success(null);
+    } on _SyncConflict {
+      return const Result.failure(
+        ValidationFailure(ValidationFailureKind.conflict),
+      );
+    } on Object {
+      return const Result.failure(
+        StorageFailure(StorageFailureKind.unavailable),
+      );
+    }
+  }
+
+  /// Retires one group's queue-gap obligation inside the caller's transaction.
+  ///
+  /// The device stays blocked until the last affected group is either rejoined
+  /// through an authenticated re-admission or explicitly abandoned. Only then
+  /// is the permanent loss acknowledged: the baseline advances through the
+  /// observed `pruned_through`, so the same gap cannot reopen on every drain,
+  /// and the envelopes retained because they might have depended on the lost
+  /// MLS state are released for ordinary processing.
+  Future<void> _completeGroupRecoveryInsideTransaction(
+    String groupId, {
+    required bool left,
+  }) async {
     if (left) {
+      final blocked =
+          await (database.select(database.mlsGroups)..where(
+                (row) =>
+                    row.groupId.equals(groupId) &
+                    row.queueGapRecoveryState.equals(1),
+              ))
+              .getSingleOrNull();
+      if (blocked == null) throw const _SyncConflict();
       await (database.delete(
         database.mlsGroups,
       )..where((row) => row.groupId.equals(groupId))).go();
@@ -1152,7 +1226,7 @@ WHERE c.singleton_id = 1
             ),
           );
     }
-  });
+  }
 
   Future<Result<void>> _updateOutboxBatch(
     OutboxBatch batch,

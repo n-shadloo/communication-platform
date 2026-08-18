@@ -237,7 +237,14 @@ final class GroupMlsAdmissionService implements GroupMlsAdmissionPort {
       final sorted = members.toList(growable: false)
         ..sort((left, right) => left.userId.compareTo(right.userId));
       for (final member in sorted) {
-        if (current.member(member.userId) != null) {
+        // Only an evicted member may be re-admitted, and only through the same
+        // full path a first-time invitation takes: live devices are resolved
+        // and authenticated again and fresh KeyPackages are claimed below. A
+        // live member, or one whose eviction has not been committed yet, is a
+        // conflict.
+        final existing = current.member(member.userId);
+        if (existing != null &&
+            existing.membership != GroupMembershipState.removed) {
           return const Result.failure(
             ValidationFailure(ValidationFailureKind.conflict),
           );

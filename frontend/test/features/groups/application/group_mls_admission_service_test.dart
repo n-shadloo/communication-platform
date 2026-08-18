@@ -138,10 +138,117 @@ void main() {
       );
     },
   );
+
+  group('re-admitting an evicted member', () {
+    test('claims fresh KeyPackages for every live leaf again', () async {
+      // Queue-gap recovery ends in exactly this control: the peer that
+      // evicted the desynced device adds it back, which must resolve its
+      // live devices and claim new KeyPackages from scratch rather than
+      // reuse anything bound to the epoch the device lost.
+      final remote = _Remote();
+      final result =
+          await GroupMlsAdmissionService(
+                remote: remote,
+                authenticationForCurrentUser: (_) => const _Authentication(),
+                store: const _Store(),
+                liveDevicesForCurrentUser: (_) => const _LiveDevices(),
+                clock: const _Clock(),
+              ).prepareControl(
+                current: _currentState(
+                  bobMembership: GroupMembershipState.removed,
+                ),
+                operation: InviteGroupMembersOperation([
+                  GroupMember(
+                    userId: _bob,
+                    displayName: 'Bob',
+                    role: GroupRole.member,
+                  ),
+                ]),
+                actorUserId: _alice,
+                actorDeviceId: _aliceDevice,
+              )
+              as Success<GroupMlsControlContext>;
+
+      expect(remote.claims, {
+        _bob: [_bobDevice1, _bobDevice2],
+      });
+      expect(result.value.admissions.map((value) => value.deviceId), [
+        _bobDevice1,
+        _bobDevice2,
+      ]);
+      final readmitted = (result.value.operation as InviteGroupMembersOperation)
+          .members
+          .single;
+      expect(readmitted.deviceIds, [_bobDevice1, _bobDevice2]);
+      expect(readmitted.verified, isTrue);
+    });
+
+    test('a live member is still a conflict', () async {
+      final remote = _Remote();
+      final result =
+          await GroupMlsAdmissionService(
+            remote: remote,
+            authenticationForCurrentUser: (_) => const _Authentication(),
+            store: const _Store(),
+            liveDevicesForCurrentUser: (_) => const _LiveDevices(),
+            clock: const _Clock(),
+          ).prepareControl(
+            current: _currentState(),
+            operation: InviteGroupMembersOperation([
+              GroupMember(
+                userId: _bob,
+                displayName: 'Bob',
+                role: GroupRole.member,
+              ),
+            ]),
+            actorUserId: _alice,
+            actorDeviceId: _aliceDevice,
+          );
+
+      expect(
+        (result as FailureResult<GroupMlsControlContext>).failure,
+        const ValidationFailure(ValidationFailureKind.conflict),
+      );
+      expect(remote.claims, isEmpty);
+    });
+
+    test('an uncommitted eviction is still a conflict', () async {
+      // The departed leaf is still in the ratchet tree until the owner
+      // commits the matching Remove, so adding the same client again would
+      // duplicate it.
+      final remote = _Remote();
+      final result =
+          await GroupMlsAdmissionService(
+            remote: remote,
+            authenticationForCurrentUser: (_) => const _Authentication(),
+            store: const _Store(),
+            liveDevicesForCurrentUser: (_) => const _LiveDevices(),
+            clock: const _Clock(),
+          ).prepareControl(
+            current: _currentState(bobMembership: GroupMembershipState.left),
+            operation: InviteGroupMembersOperation([
+              GroupMember(
+                userId: _bob,
+                displayName: 'Bob',
+                role: GroupRole.member,
+              ),
+            ]),
+            actorUserId: _alice,
+            actorDeviceId: _aliceDevice,
+          );
+
+      expect(
+        (result as FailureResult<GroupMlsControlContext>).failure,
+        const ValidationFailure(ValidationFailureKind.conflict),
+      );
+      expect(remote.claims, isEmpty);
+    });
+  });
 }
 
 GroupState _currentState({
   List<String> aliceDevices = const [_aliceDevice, _aliceOther],
+  GroupMembershipState bobMembership = GroupMembershipState.active,
 }) => GroupState(
   groupId: List.filled(64, 'a').join(),
   metadata: const GroupMetadata(name: 'Beta group'),
@@ -159,6 +266,7 @@ GroupState _currentState({
       userId: _bob,
       displayName: 'Bob',
       role: GroupRole.member,
+      membership: bobMembership,
       verified: true,
       deviceIds: const [_bobDevice1, _bobDevice2],
     ),

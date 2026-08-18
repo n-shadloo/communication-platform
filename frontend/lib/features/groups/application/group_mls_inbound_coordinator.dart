@@ -37,6 +37,39 @@ final class GroupMlsInboundCoordinator {
     };
   }
 
+  /// Prepares a re-admission Welcome while this device is queue-gap blocked.
+  ///
+  /// Returns null when the object is not an admissible re-admission for an
+  /// affected group. The caller keeps such an envelope deferred rather than
+  /// rejecting it, so hostile or merely early input can neither clear the gap
+  /// nor turn the blocked queue into a rejection or retry loop.
+  Future<Result<PreparedGroupInboxCommit?>> inspectQueueGapRejoin(
+    Uint8List mlsObject,
+  ) async {
+    final probeResult = await crypto.probeIncomingTransport(mlsObject);
+    if (probeResult is! Success<GroupMlsTransportProbe>) {
+      return const Result.success(null);
+    }
+    final probe = probeResult.value;
+    final joinable =
+        probe.kind == GroupMlsTransportKind.welcome ||
+        (probe.kind == GroupMlsTransportKind.control && probe.joinCapable);
+    if (!joinable) return const Result.success(null);
+    final existingResult = await repository.readGroup(probe.groupId);
+    if (existingResult case FailureResult(failure: final failure)) {
+      return Result.failure(failure);
+    }
+    final existing = (existingResult as Success<GroupState?>).value;
+    if (existing == null ||
+        existing.lifecycle != GroupLifecycle.queueGapRejoinRequired) {
+      return const Result.success(null);
+    }
+    final prepared = await _welcome(probe, mlsObject);
+    return prepared is Success<PreparedGroupInboxCommit>
+        ? Result.success(prepared.value)
+        : const Result.success(null);
+  }
+
   Future<Result<PreparedGroupInboxCommit>> _welcome(
     GroupMlsTransportProbe probe,
     Uint8List mlsObject,
@@ -45,7 +78,8 @@ final class GroupMlsInboundCoordinator {
     if (existingResult case FailureResult(failure: final failure)) {
       return Result.failure(failure);
     }
-    if ((existingResult as Success<GroupState?>).value != null) {
+    final existing = (existingResult as Success<GroupState?>).value;
+    if (existing != null && !_isRejoinable(existing)) {
       return const Result.failure(
         SecurityFailure(SecurityFailureKind.unauthenticatedInput),
       );
@@ -81,19 +115,51 @@ final class GroupMlsInboundCoordinator {
     if (prepared.outbound ||
         prepared.consumedKeyPackageState == null ||
         prepared.signedControl.event.groupId != probe.groupId ||
-        applied is! GroupControlAccepted) {
+        applied is! GroupControlAccepted ||
+        applied.state.lifecycle != GroupLifecycle.active) {
+      return const Result.failure(
+        SecurityFailure(SecurityFailureKind.integrityCheckFailed),
+      );
+    }
+    if (existing == null) {
+      return Result.success(
+        PreparedGroupInboxTransition(
+          expectedPrevious: null,
+          next: applied.state,
+          prepared: prepared,
+        ),
+      );
+    }
+    // A re-admission must move the group strictly forward. Without this a
+    // replayed older Welcome would roll a recovered group back to a superseded
+    // roster and epoch, which is exactly the state the gap already lost.
+    if (applied.state.controlRevision <= existing.controlRevision ||
+        applied.state.acceptedEpoch <= existing.acceptedEpoch) {
       return const Result.failure(
         SecurityFailure(SecurityFailureKind.integrityCheckFailed),
       );
     }
     return Result.success(
-      PreparedGroupInboxTransition(
-        expectedPrevious: null,
+      PreparedGroupInboxRejoin(
+        supersededLocal: existing,
         next: applied.state,
         prepared: prepared,
       ),
     );
   }
+
+  /// A group this device can no longer follow may be replaced by an
+  /// authenticated re-admission. A live group never may: a Welcome for a group
+  /// this device is already following is a replay or a relay-supplied forgery.
+  static bool _isRejoinable(GroupState state) => switch (state.lifecycle) {
+    GroupLifecycle.queueGapRejoinRequired ||
+    GroupLifecycle.removed ||
+    GroupLifecycle.forkQuarantined ||
+    GroupLifecycle.controlQuarantined => true,
+    GroupLifecycle.active ||
+    GroupLifecycle.membershipUpdating ||
+    GroupLifecycle.left => false,
+  };
 
   Future<Result<PreparedGroupInboxCommit>> _control(
     GroupMlsTransportProbe probe,

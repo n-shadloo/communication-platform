@@ -436,6 +436,29 @@ final class PairwiseOpaqueEnvelopeInspector implements OpaqueEnvelopeInspector {
       );
     }
     if (!allowPotentiallyMls) {
+      // A queue gap blocks everything that could depend on MLS state this
+      // device no longer has. A re-admission is the one exception, and not by
+      // relaxation: peers removed this device and added it again, so the
+      // Welcome is sealed to a freshly claimed KeyPackage and carries its own
+      // transcript. It depends on nothing that was lost. Withholding it would
+      // block the only exit from the gap; anything else stays deferred.
+      final rejoinCoordinator = groupInbound;
+      if (rejoinCoordinator != null) {
+        final rejoin = await rejoinCoordinator.inspectQueueGapRejoin(
+          openedPayload,
+        );
+        if (rejoin case FailureResult(failure: final failure)) {
+          return Result.failure(failure);
+        }
+        final commit = (rejoin as Success<PreparedGroupInboxCommit?>).value;
+        if (commit != null) {
+          return _boundGroupCommit(
+            commit: commit,
+            senderUserId: senderUserId,
+            senderDeviceId: senderDeviceId,
+          );
+        }
+      }
       return Result.success(
         _PreparedApplication(
           opaqueEventId: 'group-deferred:$envelopeId',
@@ -453,7 +476,20 @@ final class PairwiseOpaqueEnvelopeInspector implements OpaqueEnvelopeInspector {
     if (inspected case FailureResult(failure: final failure)) {
       return Result.failure(failure);
     }
-    final commit = (inspected as Success<PreparedGroupInboxCommit>).value;
+    return _boundGroupCommit(
+      commit: (inspected as Success<PreparedGroupInboxCommit>).value,
+      senderUserId: senderUserId,
+      senderDeviceId: senderDeviceId,
+    );
+  }
+
+  /// The group object's authenticated signer must be the pairwise sender that
+  /// actually delivered it; a relay cannot reattribute one to another session.
+  Result<_PreparedApplication> _boundGroupCommit({
+    required PreparedGroupInboxCommit commit,
+    required String senderUserId,
+    required String senderDeviceId,
+  }) {
     if (commit.senderUserId.toLowerCase() != senderUserId.toLowerCase() ||
         commit.senderDeviceId.toLowerCase() != senderDeviceId.toLowerCase()) {
       return const Result.failure(

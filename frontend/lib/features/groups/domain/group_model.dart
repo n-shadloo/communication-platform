@@ -930,16 +930,24 @@ final class GroupControlStateMachine {
                 GroupState.maximumMembers) {
           return null;
         }
-        final ids = mutable.members
-            .map((member) => member.userId.toLowerCase())
-            .toSet();
+        final invited = <String>{};
         for (final member in members) {
-          if (!ids.add(member.userId.toLowerCase())) return null;
-          mutable.members.add(member);
+          final userId = member.userId.toLowerCase();
+          if (!invited.add(userId)) return null;
+          final existing = previous.member(userId);
+          if (existing == null) {
+            mutable.members.add(member);
+            continue;
+          }
+          // An evicted member is re-admitted by a fresh Add against a freshly
+          // claimed KeyPackage, so the stale row is replaced outright rather
+          // than merged. A member that only announced a leave still occupies
+          // its MLS leaf until the owner commits the eviction, so it is not a
+          // re-admission target yet; a live member is never a target at all.
+          if (existing.membership != GroupMembershipState.removed) return null;
+          mutable.replaceMember(userId, (_) => member);
         }
-        if (members.any(
-          (member) => member.userId.toLowerCase() == localUserId.toLowerCase(),
-        )) {
+        if (invited.contains(localUserId.toLowerCase())) {
           mutable.lifecycle = GroupLifecycle.active;
         }
       case RemoveGroupMemberOperation(:final targetUserId):
@@ -1182,6 +1190,38 @@ final class PreparedGroupInboxTransition extends PreparedGroupInboxCommit {
   @override
   String get opaqueEventId =>
       'group-control:${prepared.signedControl.event.eventId}';
+  @override
+  String get senderUserId => prepared.signedControl.event.signerUserId;
+  @override
+  String get senderDeviceId => prepared.signedControl.event.signerDeviceId;
+}
+
+/// An authenticated re-admission that supersedes a locally retained group.
+///
+/// A device that lost envelopes to the seven-day queue cap cannot be repaired
+/// by any local action: the missing objects may have been Commits, and their
+/// epoch secrets are gone by construction. The only recovery is for peers to
+/// remove the device and add it again, which produces a Welcome sealed to a
+/// freshly claimed KeyPackage. That Welcome carries its own complete control
+/// transcript, so it is authenticated from no state rather than chained onto
+/// the stale local revision, and it replaces the retained group instead of
+/// advancing it.
+final class PreparedGroupInboxRejoin extends PreparedGroupInboxCommit {
+  const PreparedGroupInboxRejoin({
+    required this.supersededLocal,
+    required this.next,
+    required this.prepared,
+  });
+
+  /// The stale local state this re-admission replaces. The repository uses it
+  /// as the compare-and-swap witness so a concurrent change aborts the rejoin.
+  final GroupState supersededLocal;
+  final GroupState next;
+  final PreparedGroupTransition prepared;
+
+  @override
+  String get opaqueEventId =>
+      'group-rejoin:${prepared.signedControl.event.eventId}';
   @override
   String get senderUserId => prepared.signedControl.event.signerUserId;
   @override
