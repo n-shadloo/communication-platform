@@ -263,8 +263,17 @@ opaque/client-owned; **Pending** = Flutter implementation not started.
   not external conformance evidence** — official construction vectors do not exist for
   this construction and cannot, because it is not a published one — so they close no gate
   and do not advance the upstream-vector prerequisite. They found no mismatch: the
-  implementation performs exactly the construction D1-D10 describe. Remaining blockers are
-  the full
+  implementation performs exactly the construction D1-D10 describe. The beta group
+  operations additionally carry protocol-level vectors written in the MLS working group's
+  published vector schema (`vectors/mls-beta-upstream-schema/`, `src/beta_mls_vectors.rs`,
+  10 tests plus an `#[ignore]`d generator): Welcome, Passive Client Scenarios, and Vector
+  Deserialization, with round trips that rejoin from the recorded `Welcome` and reproduce
+  every epoch authenticator, and negative tests that keep those round trips from passing
+  vacuously. The other eleven categories are skipped because the constructions they vector
+  are `pub(crate)` inside `mls-rs`, or — for Messages — cannot be fully populated at all.
+  **The schema is upstream; the values are not.** They are project-generated, are not
+  external interoperability evidence, close no gate, and do not advance the upstream-vector
+  prerequisite. Remaining blockers are the full
   queue-gap remove/re-add/history matrix, upstream/project interoperability and
   bucket/backend contract execution against a running backend, multi-device and
   process-death/fault matrices on real hardware, state-format migration fuzzing, and

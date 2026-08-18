@@ -723,13 +723,55 @@ of which is AWS-LC — with the reference sealing the ciphertext the implementat
 opens, and with the implementation's own randomized `hpke_seal` decrypted by the reference
 to cover the encapsulation direction a static fixture cannot.
 
+### Project-generated vectors written in the upstream schema — still not upstream vectors
+
+`vectors/mls-beta-upstream-schema/`, driven by `src/beta_mls_vectors.rs` (ten tests, plus
+an `#[ignore]`d generator). These carry the MLS working group's published vector schema
+(`test-vectors.md`, branch `main`, verified 2026-08-18, cross-checked against the
+deserializers in `mls-rs 0.55.2`) filled with values this repository produced for `0xFE4C`.
+
+| File | Category | Objects | Round trip |
+|---|---|---|---|
+| `welcome.json` | Welcome | 1 | the recorded `Welcome` decrypts under the recorded `init_priv`, its `GroupInfo` signature and confirmation tag verify, and `signer_pub` is a member of the group it admits |
+| `passive-client.json` | Passive Client Scenarios | 1, over 3 epochs | a client rebuilt from the vector's own key material joins and reproduces `initial_epoch_authenticator` and every epoch authenticator across an add, a by-reference update, and a remove |
+| `deserialization.json` | Vector Deserialization | 8 | each `VarInt` header decodes to the recorded length and re-encodes to the same bytes |
+
+Two negative tests keep the round trips from passing vacuously: corrupting one byte of
+`init_priv` must break the join, and a commit that incorporates a proposal by reference
+must not apply without that proposal.
+
+**The schema is upstream. The values are not. These are not external interoperability
+evidence, they do not satisfy Phase-A external prerequisite 4, and they do not move any of
+the seven production gates.** Every emitted object repeats that under its own `_provenance`
+key, which is the only non-upstream key in the files and is asserted on every test run.
+
+Eleven of the fourteen categories are deliberately absent. The rule applied was to emit a
+category only where this implementation can populate every field through the code it ships;
+for Crypto Basics, Secret Tree, Message Protection, Key Schedule, Pre-Shared Keys,
+Transcript Hashes, Tree Operations, Tree Validation, TreeKEM, and Tree Math the required
+construction is `pub(crate)` inside `mls-rs`, so emitting them would vector a
+re-implementation written for the fixture rather than the shipped path. Messages is absent
+because it cannot be completed at all: RFC 9420 forbids a `PublicMessage` application
+message, and the beta client encrypts control messages, so three of its fields are
+unreachable. `vectors/mls-beta-upstream-schema/README.md` carries the per-category reasons.
+
+One finding is worth the reviewer's attention on its own: the schema requires `EdDSA`
+private keys in "their native byte string representation" — the 32-byte RFC 8032 seed —
+while the beta suite's AWS-LC provider represents them as the 64-byte `seed || public key`
+concatenation. Emission truncates and consumption re-appends. `mls-rs`'s own passive-client
+generator writes the provider-native secret straight out, which would be non-conformant for
+this suite; its framing generator truncates correctly.
+
 ### The vectors that do not and cannot exist
 
 - **Upstream MLS interoperability vectors for this suite.** The MLS WG repository publishes
   only its classical fixture set. This is Phase-A external prerequisite 4 — tracked
   separately from the seven gates — and it cannot be unblocked from inside this
   repository. [The testing strategy](testing-strategy.md) states the consequence directly:
-  experimental PQ MLS fixtures cannot satisfy a production gate.
+  experimental PQ MLS fixtures cannot satisfy a production gate. Writing this project's own
+  vectors in the upstream *schema* does not change that by even a little: adopting a
+  published format is not the same as being validated against a published answer, and
+  `vectors/mls-beta-upstream-schema/` says so in every object it contains.
 - **Construction-level vectors for the beta hybrid KEM.** There is no registry entry, RFC,
   or Internet-Draft whose vectors it is supposed to reproduce, because it is not a
   published construction — that is what rows D1-D10 say. RFC 9180's DHKEM vectors do not
