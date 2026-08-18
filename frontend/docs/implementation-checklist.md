@@ -283,7 +283,15 @@ opaque/client-owned; **Pending** = Flutter implementation not started.
   MLS port; it does not substitute for the on-hardware matrix above. Input-boundary fuzzing of the beta MLS operation is
   done: twelve targets over every relay-reachable decoder, run on 2026-08-18, which found
   and fixed one non-canonical MLS object acceptance (`docs/mls-profile.md`,
-  `native/crypto_core/fuzz/README.md`). Production still resolves the unsupported adapter,
+  `native/crypto_core/fuzz/README.md`). The material an independent assessor needs is now
+  assembled in `docs/mls-beta-review-readiness.md` (2026-08-18, revision `4e65eaf`): source
+  baseline and pinned versions, in-scope claims and an explicit out-of-scope list, the full
+  implementation inventory, the ten project-specific protocol inventions no external
+  specification or vector can validate, the official-versus-project vector split, the
+  adversarial state-machine question set, verified reproduction commands, and a
+  finding-disposition template. **That packet is not a review, records no assessment, and
+  closes no gate**; no reviewer is retained, and its own disposition table is empty.
+  Production still resolves the unsupported adapter,
   `GroupProductionGate` remains false, and production KeyPackage/group creation remains
   impossible.
 - [x] Android reproduces the backend `cross_sig`, `master_sig`, `spk_sig`, and
