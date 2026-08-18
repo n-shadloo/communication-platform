@@ -1934,12 +1934,15 @@ fn import_group_state_envelope(
     authentication: &BetaMlsAuthenticationContext,
     plaintext: &[u8],
 ) -> Result<(OpaqueMlsStateStorage, Vec<u8>, BetaMlsAuthenticationContext), CryptoError> {
-    // Explicit migration for the piece-18/beta-preflight state layout. The
-    // next successful operation always rewrites it as CPMLSG01.
+    // A bare `CPMLSV01` snapshot is the pre-v3 group-state layout: MLS state
+    // alone, with no authentication transcript, so a restored client cannot
+    // verify the roster it is about to act on. ADR-036/ADR-037 declare that
+    // state disposable closed-beta data which participants recreate or rejoin,
+    // and `docs/message-protocol.md` requires it to be rejected. Importing it
+    // here would silently reinterpret it as a v3 state whose proof set happens
+    // to be empty, so it fails closed instead.
     if plaintext.starts_with(BETA_STATE_MAGIC) {
-        let (storage, group_id) = OpaqueMlsStateStorage::import_snapshot(plaintext)
-            .map_err(map_group_state_crypto_error)?;
-        return Ok((storage, group_id, authentication.clone()));
+        return Err(CryptoError::UnsupportedVersion);
     }
 
     let mut reader = Reader::new(plaintext);
@@ -3073,18 +3076,26 @@ mod tests {
         random::FixedRandomProvider,
     };
 
+    use crate::error::CryptoError;
+    use crate::provider::CryptoProvider as FoundationCryptoProvider;
+    use crate::secret::{SecretBytes, SecretVec};
+
     use super::{
         AuthenticatedDevice, AuthenticatedDeviceIdentityProvider, BETA_CIPHERSUITE,
-        BETA_CIPHERSUITE_ID, BETA_STATE_MAGIC, BetaKeyPackageError, BetaKeyPackageKind,
-        BetaMlsAuthenticationContext, BetaMlsCryptoProvider, BetaMlsStateError,
-        KEY_PACKAGE_BUCKETS, OP_COMMIT_PENDING_PROPOSALS, OP_CREATE_GROUP,
-        OP_GENERATE_CONSUMABLE_KEY_PACKAGES, OP_GENERATE_LAST_RESORT_KEY_PACKAGE, OP_JOIN_GROUP,
-        OP_PROCESS_MESSAGE, OP_PROPOSE_UPDATE, OP_REMOVE_MEMBERS, OP_SEND_APPLICATION,
-        OP_SIGN_GROUP_CONTROL, OP_VERIFY_GROUP_CONTROL, OPERATION_REQUEST_MAGIC,
-        OPERATION_RESPONSE_MAGIC, OPERATION_VERSION, OpaqueKeyPackageStorage,
-        OpaqueMlsStateStorage, SEALED_STATE_MAGIC, SealedStateKind, derive_state_key,
-        generate_key_packages, open_secret_snapshot, operation, sign_group_control_operation,
-        unwrap_key_package, wrap_key_package, wrap_key_package_in_bucket,
+        BETA_CIPHERSUITE_ID, BETA_STATE_FORMAT_VERSION, BETA_STATE_MAGIC, BetaKeyPackageError,
+        BetaKeyPackageKind, BetaKeyPackageStateError, BetaMlsAuthenticationContext,
+        BetaMlsCryptoProvider, BetaMlsStateError, GROUP_STATE_ENVELOPE_MAGIC,
+        GROUP_STATE_ENVELOPE_VERSION, KEY_PACKAGE_BUCKETS, KEY_PACKAGE_STORE_MAGIC,
+        KEY_PACKAGE_STORE_VERSION, KEY_PACKAGE_WRAPPER_MAGIC, KEY_PACKAGE_WRAPPER_VERSION,
+        OP_COMMIT_PENDING_PROPOSALS, OP_CREATE_GROUP, OP_GENERATE_CONSUMABLE_KEY_PACKAGES,
+        OP_GENERATE_LAST_RESORT_KEY_PACKAGE, OP_JOIN_GROUP, OP_PROCESS_MESSAGE, OP_PROPOSE_UPDATE,
+        OP_REMOVE_MEMBERS, OP_SEND_APPLICATION, OP_SIGN_GROUP_CONTROL, OP_VERIFY_GROUP_CONTROL,
+        OPERATION_REQUEST_MAGIC, OPERATION_RESPONSE_MAGIC, OPERATION_VERSION,
+        OpaqueKeyPackageStorage, OpaqueMlsStateStorage, SEALED_STATE_MAGIC, SEALED_STATE_VERSION,
+        SealedStateKind, derive_state_key, generate_key_packages, import_group_state_envelope,
+        open_device_secret_snapshot, open_secret_snapshot, operation, seal_device_secret_snapshot,
+        sign_group_control_operation, unwrap_key_package, wrap_key_package,
+        wrap_key_package_in_bucket,
     };
 
     const OPERATION_DAY: u32 = 20_302;
@@ -4540,6 +4551,730 @@ mod tests {
             epoch,
             confirmation,
         }
+    }
+
+    // -----------------------------------------------------------------------
+    // Closed-beta state-format versioning.
+    //
+    // Every persisted beta value is `magic || u16 version || u16 suite || …`.
+    // The formats and their dispositions are:
+    //
+    // | value                | magic      | written | read            |
+    // |----------------------|------------|---------|-----------------|
+    // | sealed wrapper       | `CPMLSE01` | 2       | 1 (migrate), 2  |
+    // | group state envelope | `CPMLSG01` | 1       | 1               |
+    // | raw MLS snapshot     | `CPMLSV01` | 1       | 1, nested only  |
+    // | KeyPackage store     | `CPMLSK01` | 2       | 1 (migrate), 2  |
+    // | KeyPackage wrapper   | `CPMKPV01` | 2       | 2               |
+    //
+    // A bare `CPMLSV01` at the top of a sealed group plaintext is the pre-v3
+    // layout: it carries no authentication transcript. ADR-036/ADR-037 declare
+    // it disposable, so it is rejected rather than migrated.
+    // -----------------------------------------------------------------------
+
+    const STATE_FORMAT_USER: [u8; 16] = [0x63; 16];
+    const STATE_FORMAT_DEVICE: [u8; 16] = [0x73; 16];
+    const STATE_FORMAT_BOB_USER: [u8; 16] = [0x64; 16];
+    const STATE_FORMAT_BOB_DEVICE: [u8; 16] = [0x74; 16];
+    const STATE_FORMAT_NONCE_BYTES: usize = 24;
+    const SEALED_HEADER_BYTES: usize = 8 + 2 + 2 + 1 + 32;
+    const VERSION_OFFSET: usize = 8;
+    const SUITE_OFFSET: usize = 10;
+
+    struct StateFormatFixture {
+        device_state: Vec<u8>,
+        bundle: Vec<u8>,
+        bob_device_state: Vec<u8>,
+        bob_bundle: Vec<u8>,
+        bob_key_package: Vec<u8>,
+        bob_sealed_key_package_state: Vec<u8>,
+        authentication: BetaMlsAuthenticationContext,
+        state_key: SecretBytes<32>,
+        /// The `CPMLSE01` value the engine actually persisted.
+        sealed_state: Vec<u8>,
+        /// Its `CPMLSG01` plaintext.
+        envelope: Vec<u8>,
+        /// The `CPMLSV01` snapshot nested inside that envelope.
+        raw_snapshot: Vec<u8>,
+        group_id: Vec<u8>,
+    }
+
+    /// Builds one real two-device beta group and returns every persisted layer
+    /// of its state, so the version tests operate on genuine engine output
+    /// rather than hand-written bytes.
+    fn state_format_fixture() -> StateFormatFixture {
+        let (device_state, bundle) =
+            enrolled_operation_device(STATE_FORMAT_USER, STATE_FORMAT_DEVICE, 151);
+        let (bob_device_state, bob_bundle) =
+            enrolled_operation_device(STATE_FORMAT_BOB_USER, STATE_FORMAT_BOB_DEVICE, 197);
+
+        let mut bob_request = operation_prefix(&bob_device_state, &bob_bundle, &[]);
+        bob_request.push(0);
+        push_u16(&mut bob_request, 1);
+        let bob_response = operation(OP_GENERATE_CONSUMABLE_KEY_PACKAGES, &bob_request)
+            .expect("Bob generates a consumable KeyPackage");
+        let (bob_sealed_key_package_state, bob_key_packages) =
+            decode_operation_response(OP_GENERATE_CONSUMABLE_KEY_PACKAGES, &bob_response);
+
+        let mut create = operation_prefix(&device_state, &bundle, &[bob_bundle.as_slice()]);
+        push_u16(&mut create, 1);
+        push_frame(&mut create, &bob_key_packages[0]).expect("Bob KeyPackage frame");
+        push_frame(&mut create, b"state-format-binding").expect("create binding frame");
+        let created = operation(OP_CREATE_GROUP, &create).expect("the beta group is created");
+        let output = decode_commit_response(OP_CREATE_GROUP, &created);
+
+        let provider = RustCryptoProvider::default();
+        let state_key = derive_state_key(&provider, &device_state, OPERATION_DAY)
+            .expect("state key derivation succeeds");
+        let authentication = BetaMlsAuthenticationContext::from_verified_bundle_requests(
+            &device_state,
+            OPERATION_DAY,
+            &bundle,
+            std::slice::from_ref(&bob_bundle),
+        )
+        .expect("the local authentication context rebuilds");
+
+        assert_eq!(
+            u16::from_be_bytes([
+                output.sealed_state[VERSION_OFFSET],
+                output.sealed_state[VERSION_OFFSET + 1],
+            ]),
+            SEALED_STATE_VERSION,
+            "the engine seals new state at the current version"
+        );
+        let envelope = open_device_secret_snapshot(
+            &provider,
+            &state_key,
+            SealedStateKind::Group,
+            &authentication,
+            &output.sealed_state,
+        )
+        .expect("the sealed group state opens")
+        .expose()
+        .to_vec();
+        let raw_snapshot = split_group_state_envelope(&envelope);
+
+        StateFormatFixture {
+            device_state,
+            bundle,
+            bob_device_state,
+            bob_bundle,
+            bob_key_package: bob_key_packages[0].clone(),
+            bob_sealed_key_package_state,
+            authentication,
+            state_key,
+            sealed_state: output.sealed_state,
+            envelope,
+            raw_snapshot,
+            group_id: output.group_id,
+        }
+    }
+
+    #[derive(Clone)]
+    struct GroupStateEnvelopeParts {
+        credential_identifier: Vec<u8>,
+        proofs: Vec<Vec<u8>>,
+        raw_state: Vec<u8>,
+    }
+
+    /// Parses a `CPMLSG01` envelope, asserting its exact layout.
+    fn parse_group_state_envelope(envelope: &[u8]) -> GroupStateEnvelopeParts {
+        let mut reader = Reader::new(envelope);
+        reader
+            .expect(GROUP_STATE_ENVELOPE_MAGIC)
+            .expect("group state envelope magic");
+        assert_eq!(
+            reader.u16().expect("envelope version"),
+            GROUP_STATE_ENVELOPE_VERSION
+        );
+        assert_eq!(reader.u16().expect("envelope suite"), BETA_CIPHERSUITE_ID);
+        let credential_identifier = reader
+            .framed()
+            .expect("local credential identifier")
+            .to_vec();
+        assert!(!credential_identifier.is_empty());
+        let proof_count = usize::from(reader.u16().expect("authentication proof count"));
+        assert_eq!(proof_count, 2, "both roster members are proved");
+        let proofs = (0..proof_count)
+            .map(|_| {
+                let proof = reader.framed().expect("authentication proof").to_vec();
+                assert!(!proof.is_empty());
+                proof
+            })
+            .collect();
+        let raw_state = reader.framed().expect("nested MLS snapshot").to_vec();
+        assert!(reader.is_finished());
+        assert!(raw_state.starts_with(BETA_STATE_MAGIC));
+        GroupStateEnvelopeParts {
+            credential_identifier,
+            proofs,
+            raw_state,
+        }
+    }
+
+    fn encode_group_state_envelope(parts: &GroupStateEnvelopeParts) -> Vec<u8> {
+        let mut output = Vec::new();
+        output.extend_from_slice(GROUP_STATE_ENVELOPE_MAGIC);
+        push_u16(&mut output, GROUP_STATE_ENVELOPE_VERSION);
+        push_u16(&mut output, BETA_CIPHERSUITE_ID);
+        push_frame(&mut output, &parts.credential_identifier).expect("credential frame");
+        push_u16(
+            &mut output,
+            u16::try_from(parts.proofs.len()).expect("proof count is bounded"),
+        );
+        for proof in &parts.proofs {
+            push_frame(&mut output, proof).expect("authentication proof frame");
+        }
+        push_frame(&mut output, &parts.raw_state).expect("MLS snapshot frame");
+        output
+    }
+
+    /// The nested `CPMLSV01` snapshot carried by a `CPMLSG01` envelope.
+    fn split_group_state_envelope(envelope: &[u8]) -> Vec<u8> {
+        parse_group_state_envelope(envelope).raw_state
+    }
+
+    fn seal_group_plaintext(fixture: &StateFormatFixture, plaintext: &[u8]) -> Vec<u8> {
+        seal_device_secret_snapshot(
+            &RustCryptoProvider::default(),
+            &fixture.state_key,
+            SealedStateKind::Group,
+            &fixture.authentication,
+            plaintext,
+        )
+        .expect("the probe plaintext seals")
+        .to_vec()
+    }
+
+    /// Hand-seals a `CPMLSE01` version-1 value. Nothing in this repository has
+    /// ever written one, so the read path can only be exercised from a fixture.
+    fn seal_group_state_version_one(
+        state_key: &SecretBytes<32>,
+        credential_identifier: &[u8],
+        plaintext: &[u8],
+    ) -> Vec<u8> {
+        let provider = RustCryptoProvider::default();
+        let mut header = Vec::new();
+        header.extend_from_slice(SEALED_STATE_MAGIC);
+        push_u16(&mut header, 1);
+        push_u16(&mut header, BETA_CIPHERSUITE_ID);
+        header.push(SealedStateKind::Group as u8);
+        header.extend_from_slice(
+            &provider
+                .sha256(credential_identifier)
+                .expect("credential identifier hashes"),
+        );
+        let nonce = [0x5A_u8; STATE_FORMAT_NONCE_BYTES];
+        let secret = SecretVec::input(plaintext).expect("plaintext is bounded");
+        let ciphertext = provider
+            .xchacha20poly1305_encrypt(state_key, &nonce, &secret, &header)
+            .expect("the version-one wrapper seals");
+        let mut sealed = header;
+        sealed.extend_from_slice(&nonce);
+        sealed.extend_from_slice(&ciphertext);
+        sealed
+    }
+
+    fn send_application_request(
+        fixture: &StateFormatFixture,
+        sealed_group_state: &[u8],
+    ) -> Vec<u8> {
+        let mut request = operation_prefix(
+            &fixture.device_state,
+            &fixture.bundle,
+            &[fixture.bob_bundle.as_slice()],
+        );
+        push_frame(&mut request, sealed_group_state).expect("sealed group state frame");
+        push_frame(&mut request, b"state-format probe").expect("application data frame");
+        push_frame(&mut request, b"state-format aad").expect("authenticated data frame");
+        request
+    }
+
+    fn open_group_state(
+        fixture: &StateFormatFixture,
+        sealed: &[u8],
+    ) -> Result<Vec<u8>, CryptoError> {
+        open_device_secret_snapshot(
+            &RustCryptoProvider::default(),
+            &fixture.state_key,
+            SealedStateKind::Group,
+            &fixture.authentication,
+            sealed,
+        )
+        .map(|opened| opened.expose().to_vec())
+    }
+
+    /// Pins the version matrix. A silent bump to any of these constants without
+    /// a corresponding read-path decision is exactly the failure these tests exist
+    /// to catch.
+    #[test]
+    fn persisted_state_formats_match_the_recorded_version_matrix() {
+        assert_eq!(SEALED_STATE_MAGIC, b"CPMLSE01");
+        assert_eq!(SEALED_STATE_VERSION, 2);
+        assert_eq!(GROUP_STATE_ENVELOPE_MAGIC, b"CPMLSG01");
+        assert_eq!(GROUP_STATE_ENVELOPE_VERSION, 1);
+        assert_eq!(BETA_STATE_MAGIC, b"CPMLSV01");
+        assert_eq!(BETA_STATE_FORMAT_VERSION, 1);
+        assert_eq!(KEY_PACKAGE_STORE_MAGIC, b"CPMLSK01");
+        assert_eq!(KEY_PACKAGE_STORE_VERSION, 2);
+        assert_eq!(KEY_PACKAGE_WRAPPER_MAGIC, b"CPMKPV01");
+        assert_eq!(KEY_PACKAGE_WRAPPER_VERSION, 2);
+        assert_eq!(BETA_CIPHERSUITE_ID, 0xFE4C);
+    }
+
+    /// ADR-036/ADR-037 make the pre-v3 group state disposable: it carries the MLS
+    /// state with no authentication transcript, so a client restored from it could
+    /// not verify the roster it is about to act on. It must fail closed rather than
+    /// load as a v3 state whose proof set happens to be empty.
+    #[test]
+    fn group_state_rejects_the_disposable_pre_v3_layout() {
+        let fixture = state_format_fixture();
+
+        // The bare snapshot is still internally well formed, so the rejection has
+        // to come from the format decision and not from an incidental parse error.
+        let (_, parsed_group_id) = OpaqueMlsStateStorage::import_snapshot(&fixture.raw_snapshot)
+            .expect("the pre-v3 snapshot parses as a CPMLSV01 value");
+        assert_eq!(parsed_group_id, fixture.group_id);
+
+        assert_eq!(
+            import_group_state_envelope(&fixture.authentication, &fixture.raw_snapshot)
+                .expect_err("the disposable pre-v3 layout is rejected"),
+            CryptoError::UnsupportedVersion
+        );
+
+        // End to end: a correctly sealed, correctly bound, freshly encrypted
+        // pre-v3 plaintext still cannot drive an operation.
+        let sealed = seal_group_plaintext(&fixture, &fixture.raw_snapshot);
+        assert_eq!(
+            open_group_state(&fixture, &sealed).expect("the wrapper itself is valid"),
+            fixture.raw_snapshot,
+            "the rejection is a state-format decision, not a sealing failure"
+        );
+        assert_eq!(
+            operation(
+                OP_SEND_APPLICATION,
+                &send_application_request(&fixture, &sealed)
+            )
+            .expect_err("no operation resumes from disposable pre-v3 state"),
+            CryptoError::UnsupportedVersion
+        );
+
+        // Nothing was partially applied: the real state still drives an operation.
+        operation(
+            OP_SEND_APPLICATION,
+            &send_application_request(&fixture, &fixture.sealed_state),
+        )
+        .expect("the current state is untouched by the rejected import");
+    }
+
+    #[test]
+    fn group_state_envelope_rejects_unknown_versions_magic_and_suite() {
+        let fixture = state_format_fixture();
+
+        for version in [0_u16, 2, 3, u16::MAX] {
+            let mut mutated = fixture.envelope.clone();
+            mutated[VERSION_OFFSET..VERSION_OFFSET + 2].copy_from_slice(&version.to_be_bytes());
+            assert_eq!(
+                import_group_state_envelope(&fixture.authentication, &mutated)
+                    .expect_err("an envelope version the code never wrote is rejected"),
+                CryptoError::UnsupportedVersion,
+                "envelope version {version} must be rejected"
+            );
+            let sealed = seal_group_plaintext(&fixture, &mutated);
+            assert_eq!(
+                operation(
+                    OP_SEND_APPLICATION,
+                    &send_application_request(&fixture, &sealed)
+                )
+                .expect_err("no operation resumes from an unknown envelope version"),
+                CryptoError::UnsupportedVersion
+            );
+        }
+
+        let mut wrong_magic = fixture.envelope.clone();
+        wrong_magic[..8].copy_from_slice(b"CPMLSG02");
+        assert_eq!(
+            import_group_state_envelope(&fixture.authentication, &wrong_magic)
+                .expect_err("a neighbouring magic is not silently accepted"),
+            CryptoError::MalformedInput
+        );
+
+        let mut wrong_suite = fixture.envelope.clone();
+        wrong_suite[SUITE_OFFSET..SUITE_OFFSET + 2].copy_from_slice(&0x0001_u16.to_be_bytes());
+        assert_eq!(
+            import_group_state_envelope(&fixture.authentication, &wrong_suite)
+                .expect_err("a classical suite is never reinterpreted as the beta suite"),
+            CryptoError::UnsupportedOperation
+        );
+    }
+
+    #[test]
+    fn opaque_snapshot_rejects_every_version_other_than_one() {
+        let fixture = state_format_fixture();
+
+        for version in [0_u16, 2, 3, u16::MAX] {
+            let mut mutated = fixture.raw_snapshot.clone();
+            mutated[VERSION_OFFSET..VERSION_OFFSET + 2].copy_from_slice(&version.to_be_bytes());
+            assert_eq!(
+                OpaqueMlsStateStorage::import_snapshot(&mutated)
+                    .expect_err("an unknown snapshot version is rejected"),
+                BetaMlsStateError::UnsupportedVersion,
+                "snapshot version {version} must be rejected"
+            );
+        }
+
+        let mut wrong_suite = fixture.raw_snapshot.clone();
+        wrong_suite[SUITE_OFFSET..SUITE_OFFSET + 2].copy_from_slice(&0x0001_u16.to_be_bytes());
+        assert_eq!(
+            OpaqueMlsStateStorage::import_snapshot(&wrong_suite)
+                .expect_err("a foreign suite is rejected"),
+            BetaMlsStateError::SuiteMismatch
+        );
+    }
+
+    /// The sealed wrapper is the one place a superseded version is genuinely
+    /// supported: version 1 bound state to the full `BasicCredential` identifier,
+    /// version 2 binds it to the stable device signing key. The migration must
+    /// return byte-identical plaintext and must not accept the wrong binding.
+    #[test]
+    fn sealed_state_version_one_opens_exactly_and_is_bound_to_its_own_identifier() {
+        let fixture = state_format_fixture();
+
+        let legacy = seal_group_state_version_one(
+            &fixture.state_key,
+            &fixture.authentication.local_credential_identifier,
+            &fixture.envelope,
+        );
+        assert_eq!(
+            u16::from_be_bytes([legacy[VERSION_OFFSET], legacy[VERSION_OFFSET + 1]]),
+            1
+        );
+        assert_eq!(
+            open_group_state(&fixture, &legacy).expect("version one opens"),
+            fixture.envelope,
+            "a supported migration preserves exactly the state it claims to"
+        );
+
+        // Version 1 accepts only the version-1 binding: sealing the same bytes
+        // under the version-2 binding must not open as version 1.
+        let mislabelled = seal_group_state_version_one(
+            &fixture.state_key,
+            &fixture
+                .authentication
+                .state_binding_identifier()
+                .expect("the stable binding derives"),
+            &fixture.envelope,
+        );
+        assert_eq!(
+            open_group_state(&fixture, &mislabelled)
+                .expect_err("each version is bound to its own identifier"),
+            CryptoError::AuthenticationFailed
+        );
+    }
+
+    /// The version-1 comment promises the next successful write rewrites the
+    /// wrapper as version 2. That promise is the whole migration, so it is tested.
+    #[test]
+    fn sealed_state_version_one_is_rewritten_as_version_two_on_the_next_write() {
+        let fixture = state_format_fixture();
+
+        let legacy = seal_group_state_version_one(
+            &fixture.state_key,
+            &fixture.authentication.local_credential_identifier,
+            &fixture.envelope,
+        );
+        let response = operation(
+            OP_SEND_APPLICATION,
+            &send_application_request(&fixture, &legacy),
+        )
+        .expect("a version-one wrapper still drives one operation");
+        let output = decode_message_response(OP_SEND_APPLICATION, &response);
+
+        assert_eq!(
+            u16::from_be_bytes([
+                output.sealed_state[VERSION_OFFSET],
+                output.sealed_state[VERSION_OFFSET + 1],
+            ]),
+            SEALED_STATE_VERSION,
+            "the rewritten wrapper is at the current version"
+        );
+        let rewritten = open_group_state(&fixture, &output.sealed_state)
+            .expect("the rewritten wrapper opens under the stable binding");
+        assert!(rewritten.starts_with(GROUP_STATE_ENVELOPE_MAGIC));
+        assert!(!split_group_state_envelope(&rewritten).is_empty());
+    }
+
+    #[test]
+    fn sealed_state_rejects_every_version_it_has_never_written() {
+        let fixture = state_format_fixture();
+
+        for version in [0_u16, 3, 4, u16::MAX] {
+            let mut mutated = fixture.sealed_state.clone();
+            mutated[VERSION_OFFSET..VERSION_OFFSET + 2].copy_from_slice(&version.to_be_bytes());
+            assert_eq!(
+                open_group_state(&fixture, &mutated)
+                    .expect_err("a wrapper version the code has never seen is rejected"),
+                CryptoError::UnsupportedVersion,
+                "wrapper version {version} must be rejected"
+            );
+            assert_eq!(
+                operation(
+                    OP_SEND_APPLICATION,
+                    &send_application_request(&fixture, &mutated)
+                )
+                .expect_err("no operation resumes from an unknown wrapper version"),
+                CryptoError::UnsupportedVersion
+            );
+        }
+    }
+
+    /// Truncation must never leave a prefix that opens. Every prefix of every
+    /// layer is checked, so a length-confusion bug cannot hide between framings.
+    #[test]
+    fn truncated_state_fails_closed_at_every_prefix() {
+        let fixture = state_format_fixture();
+
+        for length in 0..fixture.sealed_state.len() {
+            assert!(
+                open_group_state(&fixture, &fixture.sealed_state[..length]).is_err(),
+                "a {length}-byte sealed prefix must not open"
+            );
+        }
+        for length in 0..fixture.envelope.len() {
+            assert!(
+                import_group_state_envelope(&fixture.authentication, &fixture.envelope[..length])
+                    .is_err(),
+                "a {length}-byte envelope prefix must not import"
+            );
+        }
+        for length in 0..fixture.raw_snapshot.len() {
+            assert!(
+                OpaqueMlsStateStorage::import_snapshot(&fixture.raw_snapshot[..length]).is_err(),
+                "a {length}-byte snapshot prefix must not import"
+            );
+        }
+    }
+
+    /// Tampering must fail closed everywhere, including the associated-data
+    /// header that carries the version, suite, kind, and credential binding.
+    #[test]
+    fn tampered_state_fails_closed_across_header_and_ciphertext() {
+        let fixture = state_format_fixture();
+
+        for index in 0..SEALED_HEADER_BYTES {
+            let mut mutated = fixture.sealed_state.clone();
+            mutated[index] ^= 0x01;
+            assert!(
+                open_group_state(&fixture, &mutated).is_err(),
+                "a flipped header byte at {index} must not open"
+            );
+        }
+
+        // The body is nonce plus ciphertext plus tag; sample it densely enough to
+        // cover the nonce, the first block, the interior, and the tag.
+        let body = SEALED_HEADER_BYTES..fixture.sealed_state.len();
+        for index in body.step_by(7) {
+            let mut mutated = fixture.sealed_state.clone();
+            mutated[index] ^= 0x01;
+            assert!(
+                open_group_state(&fixture, &mutated).is_err(),
+                "a flipped body byte at {index} must not open"
+            );
+        }
+        let last = fixture.sealed_state.len() - 1;
+        let mut tampered_tag = fixture.sealed_state.clone();
+        tampered_tag[last] ^= 0x80;
+        assert!(
+            open_group_state(&fixture, &tampered_tag).is_err(),
+            "a flipped authentication tag must not open"
+        );
+
+        // Re-sealing a plaintext requires the state key, so the AEAD wrapper above
+        // is the boundary an attacker actually faces. The envelope's own checks are
+        // defense in depth for a caller that can already produce a valid wrapper,
+        // and they cover the fields the envelope authenticates rather than the
+        // opaque mls-rs blob it deliberately carries verbatim.
+        let parts = parse_group_state_envelope(&fixture.envelope);
+
+        let mut corrupted_proof = parts.clone();
+        let proof_tail = corrupted_proof.proofs[0].len() - 1;
+        corrupted_proof.proofs[0][proof_tail] ^= 0xFF;
+
+        let mut duplicated_proof = parts.clone();
+        duplicated_proof.proofs[1] = duplicated_proof.proofs[0].clone();
+
+        let mut no_proofs = parts.clone();
+        no_proofs.proofs.clear();
+
+        let mut empty_state = parts.clone();
+        empty_state.raw_state.clear();
+
+        for (label, damaged) in [
+            ("a corrupted authentication proof", corrupted_proof),
+            ("a duplicated authentication proof", duplicated_proof),
+            ("an empty proof set", no_proofs),
+            ("an empty MLS snapshot", empty_state),
+        ] {
+            let plaintext = encode_group_state_envelope(&damaged);
+            assert!(
+                import_group_state_envelope(&fixture.authentication, &plaintext).is_err(),
+                "{label} must not import"
+            );
+            let resealed = seal_group_plaintext(&fixture, &plaintext);
+            assert!(
+                operation(
+                    OP_SEND_APPLICATION,
+                    &send_application_request(&fixture, &resealed)
+                )
+                .is_err(),
+                "{label} must not drive an operation"
+            );
+        }
+    }
+
+    /// `KeyPackage` store version 1 predates the per-package authentication proof.
+    /// Migrating it must keep every package exactly and must not invent a proof.
+    #[test]
+    fn key_package_store_version_one_migrates_without_inventing_proofs() {
+        let fixture = state_format_fixture();
+        let provider = RustCryptoProvider::default();
+        let bob_state_key = derive_state_key(&provider, &fixture.bob_device_state, OPERATION_DAY)
+            .expect("Bob's state key derives");
+        let bob_authentication = BetaMlsAuthenticationContext::from_verified_bundle_requests(
+            &fixture.bob_device_state,
+            OPERATION_DAY,
+            &fixture.bob_bundle,
+            &[],
+        )
+        .expect("Bob's authentication context rebuilds");
+        let current = open_device_secret_snapshot(
+            &provider,
+            &bob_state_key,
+            SealedStateKind::KeyPackages,
+            &bob_authentication,
+            &fixture.bob_sealed_key_package_state,
+        )
+        .expect("Bob's sealed KeyPackage state opens");
+        let current = current.expose().to_vec();
+
+        let version_one = downgrade_key_package_store_to_version_one(&current);
+        let migrated =
+            OpaqueKeyPackageStorage::import_snapshot(&version_one).expect("version one migrates");
+        let imported =
+            OpaqueKeyPackageStorage::import_snapshot(&current).expect("version two imports");
+
+        assert_eq!(
+            migrated.len().expect("migrated count"),
+            imported.len().expect("current count")
+        );
+        assert_eq!(
+            key_package_store_entries(
+                &migrated
+                    .export_snapshot()
+                    .expect("migrated store re-exports")
+            ),
+            key_package_store_entries(
+                &imported
+                    .export_snapshot()
+                    .expect("current store re-exports")
+            ),
+            "the migration preserves exactly the packages version one held"
+        );
+        assert!(
+            migrated.proofs.lock().expect("migrated proofs").is_empty(),
+            "version one held no proofs, so the migration must not fabricate one"
+        );
+        assert!(
+            !imported.proofs.lock().expect("current proofs").is_empty(),
+            "version two carries the per-package proof"
+        );
+
+        for version in [0_u16, 3, 4, u16::MAX] {
+            let mut mutated = current.clone();
+            mutated[VERSION_OFFSET..VERSION_OFFSET + 2].copy_from_slice(&version.to_be_bytes());
+            assert_eq!(
+                OpaqueKeyPackageStorage::import_snapshot(&mutated)
+                    .expect_err("an unknown store version is rejected"),
+                BetaKeyPackageStateError::UnsupportedVersion,
+                "store version {version} must be rejected"
+            );
+        }
+    }
+
+    /// The `KeyPackage` wrapper has only ever been written at version 2, and its
+    /// read path accepts only version 2. Nothing may reinterpret a version-1 bucket.
+    #[test]
+    fn key_package_wrapper_rejects_its_superseded_version_one() {
+        let fixture = state_format_fixture();
+
+        unwrap_key_package(&fixture.bob_key_package).expect("the current wrapper unwraps");
+
+        for version in [0_u16, 1, 3, u16::MAX] {
+            let mut mutated = fixture.bob_key_package.clone();
+            mutated[VERSION_OFFSET..VERSION_OFFSET + 2].copy_from_slice(&version.to_be_bytes());
+            assert_eq!(
+                unwrap_key_package(&mutated)
+                    .expect_err("only the current wrapper version is accepted"),
+                BetaKeyPackageError::UnsupportedVersion,
+                "wrapper version {version} must be rejected"
+            );
+        }
+    }
+
+    /// Rebuilds a `CPMLSK01` version-1 store from a version-2 one by dropping the
+    /// per-package proof frame that version 1 never carried.
+    fn downgrade_key_package_store_to_version_one(current: &[u8]) -> Vec<u8> {
+        let mut reader = Reader::new(current);
+        reader
+            .expect(KEY_PACKAGE_STORE_MAGIC)
+            .expect("KeyPackage store magic");
+        assert_eq!(
+            reader.u16().expect("store version"),
+            KEY_PACKAGE_STORE_VERSION
+        );
+        assert_eq!(reader.u16().expect("store suite"), BETA_CIPHERSUITE_ID);
+        let count = reader.u32().expect("stored package count");
+        assert!(count > 0);
+
+        let mut output = Vec::new();
+        output.extend_from_slice(KEY_PACKAGE_STORE_MAGIC);
+        push_u16(&mut output, 1);
+        push_u16(&mut output, BETA_CIPHERSUITE_ID);
+        push_u32(&mut output, count);
+        for _ in 0..count {
+            let reference = reader.framed().expect("package reference");
+            let encoded = reader.framed().expect("encoded package");
+            assert!(
+                !reader.framed().expect("package proof").is_empty(),
+                "version two stores a proof for every package"
+            );
+            push_frame(&mut output, reference).expect("reference frame");
+            push_frame(&mut output, encoded).expect("encoded package frame");
+        }
+        assert!(reader.is_finished());
+        output
+    }
+
+    /// The `(reference, encoded package)` pairs a store holds, ignoring proofs.
+    fn key_package_store_entries(snapshot: &[u8]) -> Vec<(Vec<u8>, Vec<u8>)> {
+        let mut reader = Reader::new(snapshot);
+        reader
+            .expect(KEY_PACKAGE_STORE_MAGIC)
+            .expect("KeyPackage store magic");
+        let version = reader.u16().expect("store version");
+        assert_eq!(reader.u16().expect("store suite"), BETA_CIPHERSUITE_ID);
+        let count = reader.u32().expect("stored package count");
+        let mut entries = Vec::new();
+        for _ in 0..count {
+            let reference = reader.framed().expect("package reference").to_vec();
+            let encoded = reader.framed().expect("encoded package").to_vec();
+            if version >= 2 {
+                reader.framed().expect("package proof");
+            }
+            entries.push((reference, encoded));
+        }
+        assert!(reader.is_finished());
+        entries
     }
 
     fn response_reader(operation: u32, response: &[u8]) -> Reader<'_> {

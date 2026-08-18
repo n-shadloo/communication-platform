@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:communication_platform/features/local_storage/infrastructure/database/local_database.dart';
 import 'package:drift/native.dart';
@@ -432,6 +433,108 @@ void main() {
           'signed_payload',
           'signer_authentication_proof',
         ]),
+      );
+      await upgraded.close();
+    },
+  );
+
+  // Schema 11 adds nullable transcript-evidence columns. ADR-036/ADR-037 make
+  // pre-v3 group state disposable, so the upgrade must carry the opaque MLS
+  // handle across untouched and must leave absent evidence absent. Fabricating
+  // either would be the storage-layer form of the silent reinterpretation the
+  // crypto core rejects.
+  test(
+    'version-ten upgrade preserves opaque group state and fabricates no evidence',
+    () async {
+      final current = LocalDatabase(NativeDatabase(databaseFile));
+      await current.customSelect('SELECT 1').getSingle();
+      await current.close();
+
+      final opaqueState = Uint8List.fromList(
+        List<int>.generate(256, (index) => (index * 7 + 11) % 256),
+      );
+      final controlStateHash = Uint8List.fromList(List<int>.filled(32, 0xA7));
+      final canonicalControl = Uint8List.fromList(const [1, 2, 3, 4]);
+      final signature = Uint8List.fromList(List<int>.filled(64, 0x5C));
+
+      final versionTen = sqlite3.open(databaseFile.path)
+        ..execute(
+          'ALTER TABLE group_control_events '
+          'DROP COLUMN deterministic_projection',
+        )
+        ..execute('ALTER TABLE group_control_events DROP COLUMN signed_payload')
+        ..execute(
+          'ALTER TABLE group_control_events '
+          'DROP COLUMN signer_authentication_proof',
+        )
+        ..execute(
+          'INSERT INTO mls_groups (group_id, opaque_crypto_state_handle, '
+          'accepted_epoch, state_version) VALUES (?, ?, ?, ?)',
+          <Object?>['group-pre-v3', opaqueState, 3, 1],
+        )
+        ..execute(
+          'INSERT INTO group_control_events (event_id, group_id, revision, '
+          'control_state_hash, epoch, signer_user_id, signer_device_id, '
+          'operation_kind, canonical_control, signature, apply_state, '
+          'created_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+          <Object?>[
+            'event-pre-v3',
+            'group-pre-v3',
+            1,
+            controlStateHash,
+            3,
+            'user-1',
+            'device-1',
+            1,
+            canonicalControl,
+            signature,
+            2,
+            1000,
+          ],
+        )
+        ..execute('PRAGMA user_version = 10');
+      versionTen.close();
+
+      final upgraded = LocalDatabase(NativeDatabase(databaseFile));
+      final group = await upgraded
+          .customSelect(
+            "SELECT * FROM mls_groups WHERE group_id = 'group-pre-v3'",
+          )
+          .getSingle();
+
+      expect(
+        group.read<Uint8List>('opaque_crypto_state_handle'),
+        opaqueState,
+        reason: 'the upgrade never rewrites opaque MLS state',
+      );
+      expect(group.read<int>('accepted_epoch'), 3);
+      expect(group.read<int>('state_version'), 1);
+
+      final event = await upgraded
+          .customSelect(
+            'SELECT * FROM group_control_events '
+            "WHERE event_id = 'event-pre-v3'",
+          )
+          .getSingle();
+
+      expect(
+        event.readNullable<String>('deterministic_projection'),
+        isNull,
+        reason: 'absent transcript evidence stays absent',
+      );
+      expect(event.readNullable<Uint8List>('signed_payload'), isNull);
+      expect(
+        event.readNullable<Uint8List>('signer_authentication_proof'),
+        isNull,
+      );
+      expect(event.read<Uint8List>('canonical_control'), canonicalControl);
+
+      expect(
+        await upgraded
+            .customSelect('PRAGMA user_version')
+            .map((row) => row.read<int>('user_version'))
+            .getSingle(),
+        LocalDatabase.currentSchemaVersion,
       );
       await upgraded.close();
     },
