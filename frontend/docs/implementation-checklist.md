@@ -291,7 +291,13 @@ opaque/client-owned; **Pending** = Flutter implementation not started.
   adversarial state-machine question set, verified reproduction commands, and a
   finding-disposition template. **That packet is not a review, records no assessment, and
   closes no gate**; no reviewer is retained, and its own disposition table is empty.
-  Production still resolves the unsupported adapter,
+  The engagement that would use that packet is prepared in
+  `docs/independent-review-engagement.md` (2026-08-18): a qualification bar, a scope of work
+  bounded to this implementation, the seven deliverables required before the review gate can
+  close, and an evaluation of candidates and funding routes against primary sources.
+  **That document retains nobody, names nobody as retained, and moves no gate**; retaining a
+  reviewer, funding, the review, and closure of its findings are all external, and its
+  engagement record is empty. Production still resolves the unsupported adapter,
   `GroupProductionGate` remains false, and production KeyPackage/group creation remains
   impossible.
 - [x] Android reproduces the backend `cross_sig`, `master_sig`, `spk_sig`, and
