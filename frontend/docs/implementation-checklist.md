@@ -267,8 +267,11 @@ opaque/client-owned; **Pending** = Flutter implementation not started.
   the full
   queue-gap remove/re-add/history matrix, upstream/project interoperability and
   bucket/backend contract execution against a running backend, multi-device and
-  process-death/fault matrices on real hardware, migration fuzzing, and independent
-  cryptographic review. Production still resolves the unsupported adapter,
+  process-death/fault matrices on real hardware, state-format migration fuzzing, and
+  independent cryptographic review. Input-boundary fuzzing of the beta MLS operation is
+  done: twelve targets over every relay-reachable decoder, run on 2026-08-18, which found
+  and fixed one non-canonical MLS object acceptance (`docs/mls-profile.md`,
+  `native/crypto_core/fuzz/README.md`). Production still resolves the unsupported adapter,
   `GroupProductionGate` remains false, and production KeyPackage/group creation remains
   impossible.
 - [x] Android reproduces the backend `cross_sig`, `master_sig`, `spk_sig`, and

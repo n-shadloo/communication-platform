@@ -58,6 +58,16 @@ overflow-checks = true
 panic = "unwind"
 strip = "symbols"
 
+# Fuzz campaigns run optimized so a soak covers a useful number of inputs, but
+# every assertion the decoders rely on stays live. `panic = "unwind"` is
+# required: the harness classifies a panic by catching it.
+[profile.fuzz]
+inherits = "release"
+debug-assertions = true
+overflow-checks = true
+panic = "unwind"
+strip = "none"
+
 [lints.rust]
 unsafe_op_in_unsafe_fn = "deny"
 

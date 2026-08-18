@@ -279,9 +279,90 @@ stays resumable.
 The remaining gates are implementation-dependent and are evidenced only after code
 exists: packaged-Android lifecycle and malformed-input fixtures; backend KeyPackage
 bucket and last-resort contract tests; crash, transaction-failure, queue-gap, replay,
-downgrade, concurrent-commit and fork tests; state-format migration and fuzzing; and an
+downgrade, concurrent-commit and fork tests; state-format migration fuzzing; and an
 independent review of the final implementation. Passing any of these does not override a
 failed external prerequisite above.
+
+Input-boundary fuzzing of the closed-beta operation is no longer outstanding and is
+evidenced below; state-format *migration* fuzzing, which drives a state written by one
+released format version into a later reader, is a different exercise and remains open.
+
+### Closed-beta MLS input fuzzing (2026-08-18)
+
+Every decoder reachable from `cp_crypto_v1_beta_mls_operation` is fuzzed by an in-crate
+harness (`native/crypto_core/src/mls_beta/fuzz.rs`, documented in
+`native/crypto_core/fuzz/README.md`). Twelve targets cover the C ABI entry with its input
+and output bounding, the request envelope, relay-served peer device bundles, published
+`KeyPackage` buckets, group creation from those buckets, Welcome processing,
+incoming-message processing, bare MLS object hashing, signed group-control transcripts and
+their descriptor/metadata/member/text readers, persisted device state, and the three
+persisted state-restoration layers.
+
+The harness is structure-aware and mutational, not coverage-guided: the pinned stable
+`1.97.1` toolchain and the offline/pinned-dependency rules exclude `cargo-fuzz`, libFuzzer,
+AFL++, ASan, and Miri. It builds one genuine two-device beta group with the engine itself
+and mutates only the fields an untrusted relay supplies, with operators aware of the `u32`
+frame headers and `u16` counts the format uses. Detectors are a caught panic, a contained
+panic (ABI status 14), per-input allocation-growth and single-allocation ceilings measured
+by a test-only counting allocator, a slow-input budget, and a watchdog that aborts on a
+decoder that never returns. Each detector has a negative control
+(`every_detector_reports_its_injected_defect`), so a clean campaign is evidence rather than
+an absence of instrumentation. The per-target outcome spread is printed with every run, so
+how deep the mutations actually reached is recorded rather than asserted.
+
+**One defect was found and fixed.** `MlsMessage::from_bytes` stops at the end of the object
+it decodes and ignores whatever follows, so `object || anything` decoded to the same
+message. `hash_mls_object` and the `KeyPackage` wrapper already re-serialized and compared;
+Welcome processing and incoming-message processing did not. An untrusted relay could
+therefore present one logical Welcome or Commit under unlimited distinct byte encodings,
+each accepted and each yielding a different SHA-256 identity. That defeats any
+deduplication or binding keyed on the exact received bytes — including the digest
+`native_beta_group_mls.dart` compares against a signed control event's `mls_commit_hash` —
+and a tampered Commit was applied to a candidate group state before that comparison
+rejected it. All four relay-reachable MLS object paths now share `exact_mls_object`, which
+refuses any encoding that does not re-serialize to the exact input bytes.
+`every_mls_object_path_refuses_a_non_canonical_encoding` is the regression. This tightens a
+bound and does not relax one; RFC 9420 presentation encoding is canonical by construction,
+so no conforming peer is excluded.
+
+Recorded campaign, run on the pinned toolchain with no network access:
+
+```sh
+CP_FUZZ_ITERATIONS=100000 cargo test --locked --all-features --profile fuzz \
+    mls_beta::fuzz::beta_mls_fuzz_campaign -- --exact --ignored --nocapture
+```
+
+| | |
+|---|---|
+| Date | 2026-08-18 |
+| Seed | `0x0badc0ded15ea5e5` (default) |
+| Targets | 12 |
+| Inputs executed | 20,700,000 |
+| Duration | 1859.1 s |
+| Panics, unbounded allocations, hangs, contained panics | none |
+
+The base budget is per dispatcher target; a direct-decoder target runs forty times that
+many, so the twelve targets executed 100,000 inputs each for the seven dispatcher targets
+and 4,000,000 each for the five decoder targets. Two earlier campaigns of 2,540,000 inputs
+each, under seeds `0x0badc0ded15ea5e5` and `0x51d2a7c3b9e40611`, were run over the first ten
+targets and were also clean. Each `cargo test --locked --all-features` additionally runs a
+bounded 25-base gate over all twelve targets.
+
+Not fuzzed, and why:
+
+- Sealed group and `KeyPackage` state cannot be reached by the relay at all: it is
+  XChaCha20-Poly1305 sealed under a key derived from the device identity secret and bound
+  to the device signing key. Its plaintext layers are fuzzed directly instead, which is the
+  local storage-tamper boundary rather than the relay boundary.
+- Memory-safety instrumentation is absent. The crate is safe Rust apart from the reviewed
+  FFI shims, but no sanitizer or Miri run backs that up, because both need a nightly
+  toolchain the project does not pin. This is the one gate condition the harness does not
+  close.
+- Coverage-guided corpus growth is absent for the same reason. Corpus admission uses a
+  deterministic outcome-novelty signal, not edge coverage, so reach is evidenced by the
+  printed outcome spread rather than by a coverage percentage.
+- The pairwise transport, application-message, and attachment decoders are outside this
+  operation and are not covered here.
 
 ## Selected candidate
 

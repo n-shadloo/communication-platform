@@ -694,23 +694,43 @@ pub(crate) fn operation(operation: u32, input: &[u8]) -> Result<Vec<u8>, CryptoE
     }
 }
 
+/// Decodes one MLS object and refuses every non-canonical encoding of it.
+///
+/// `MlsMessage::from_bytes` stops at the end of the object it decodes and
+/// ignores whatever follows, so `object || anything` yields the same message.
+/// Every object handled here arrives through the untrusted relay, and both
+/// this core and `native_beta_group_mls.dart` bind a control event to a
+/// SHA-256 digest over the exact received bytes. Accepting a second encoding
+/// would therefore let the relay break that binding, or present one object
+/// under unlimited distinct identities, without holding any key. The
+/// `KeyPackage` wrapper and this operation already enforced this; Welcome and
+/// incoming-message processing did not, and closed-beta fuzzing found the
+/// difference.
+fn exact_mls_object(bytes: &[u8]) -> Result<MlsMessage, CryptoError> {
+    if bytes.is_empty() {
+        return Err(CryptoError::MalformedInput);
+    }
+    let message = MlsMessage::from_bytes(bytes).map_err(|_| CryptoError::MalformedInput)?;
+    if message
+        .to_bytes()
+        .map_err(|_| CryptoError::MalformedInput)?
+        != bytes
+    {
+        return Err(CryptoError::MalformedInput);
+    }
+    Ok(message)
+}
+
 fn hash_mls_object_operation(
     operation: u32,
     provider: &RustCryptoProvider,
     reader: &mut Reader<'_>,
 ) -> Result<Vec<u8>, CryptoError> {
     let exact = reader.framed()?;
-    if !reader.is_finished() || exact.is_empty() {
+    if !reader.is_finished() {
         return Err(CryptoError::MalformedInput);
     }
-    let message = MlsMessage::from_bytes(exact).map_err(|_| CryptoError::MalformedInput)?;
-    if message
-        .to_bytes()
-        .map_err(|_| CryptoError::MalformedInput)?
-        != exact
-    {
-        return Err(CryptoError::MalformedInput);
-    }
+    exact_mls_object(exact)?;
     let mut output = operation_response_header(operation)?;
     push_frame(&mut output, &provider.sha256(exact)?)?;
     bounded_operation_output(output)
@@ -851,7 +871,7 @@ fn join_group_operation(
         OpaqueKeyPackageStorage::import_snapshot(plaintext_key_packages.expose())
             .map_err(map_key_package_state_crypto_error)?;
     let group_storage = OpaqueMlsStateStorage::default();
-    let welcome = MlsMessage::from_bytes(welcome_bytes).map_err(|_| CryptoError::MalformedInput)?;
+    let welcome = exact_mls_object(welcome_bytes)?;
     let local_proof = welcome
         .welcome_key_package_references()
         .into_iter()
@@ -1080,7 +1100,7 @@ fn process_message_operation(
     let sealed_group_state = reader.framed()?;
     let message_bytes = reader.framed()?;
     let message_digest = provider.sha256(message_bytes)?;
-    let message = MlsMessage::from_bytes(message_bytes).map_err(|_| CryptoError::MalformedInput)?;
+    let message = exact_mls_object(message_bytes)?;
     if !reader.is_finished() {
         return Err(CryptoError::MalformedInput);
     }
@@ -3053,6 +3073,9 @@ fn encode_credential_identifier(
 }
 
 #[cfg(test)]
+mod fuzz;
+
+#[cfg(test)]
 mod tests {
     use mls_rs::{
         CipherSuiteProvider, Client, CryptoProvider, ExtensionList, GroupStateStorage,
@@ -3098,7 +3121,7 @@ mod tests {
         wrap_key_package_in_bucket,
     };
 
-    const OPERATION_DAY: u32 = 20_302;
+    pub(super) const OPERATION_DAY: u32 = 20_302;
     const OPERATION_USER: [u8; 16] = [0x61; 16];
     const OPERATION_DEVICE: [u8; 16] = [0x71; 16];
     const OPERATION_BOB_USER: [u8; 16] = [0x62; 16];
@@ -4070,7 +4093,7 @@ mod tests {
         output
     }
 
-    fn operation_prefix(
+    pub(super) fn operation_prefix(
         device_state: &[u8],
         local_bundle: &[u8],
         additional_bundles: &[&[u8]],
@@ -4255,7 +4278,10 @@ mod tests {
         request.push(6);
     }
 
-    fn push_group_control_descriptor(request: &mut Vec<u8>, members: [([u8; 16], [u8; 16]); 2]) {
+    pub(super) fn push_group_control_descriptor(
+        request: &mut Vec<u8>,
+        members: [([u8; 16], [u8; 16]); 2],
+    ) {
         push_frame(request, &[0xA1; 16]).expect("event id frame");
         push_frame(request, &[0xB2; 32]).expect("group id frame");
         push_u32(request, 1);
@@ -4329,7 +4355,7 @@ mod tests {
         )
     }
 
-    fn enrolled_operation_device(
+    pub(super) fn enrolled_operation_device(
         user_id: [u8; 16],
         device_id: [u8; 16],
         seed: u8,
