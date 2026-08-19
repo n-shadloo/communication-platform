@@ -48,6 +48,7 @@ The documents use three requirement words:
 - [Backend/Flutter implementation checklist](implementation-checklist.md)
 - [Testing strategy](testing-strategy.md)
 - [Deployment and release](deployment-and-release.md)
+- [Beta release signing and key continuity](release-signing.md)
 
 ## Authority and change control
 

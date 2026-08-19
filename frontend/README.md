@@ -28,14 +28,21 @@ mirror; the application has no foreign runtime dependency.
 
 ## Environments and identifiers
 
-The Android namespace and application IDs deliberately use the reserved `com.example`
-placeholder until final branding is approved:
-
 | Environment | Dart entry point | Android application ID |
 |---|---|---|
-| Development | `lib/main_development.dart` | `com.example.communication_platform.development` |
-| Closed beta | `lib/main_beta.dart` | `com.example.communication_platform.beta` |
-| Production | `lib/main_production.dart` | `com.example.communication_platform` |
+| Development | `lib/main_development.dart` | `dev.nimashadloo.chat.development` |
+| Closed beta | `lib/main_beta.dart` | `dev.nimashadloo.chat.beta` |
+| Production | `lib/main_production.dart` | `dev.nimashadloo.chat` |
+
+The three are separate, coexisting applications; none upgrades into another. The
+closed-beta ID is **frozen** and lives in `android/beta-release-identity.properties`,
+which the build reads and the release verification checks against. Changing it after
+the first external install would force every beta user through an uninstall that
+permanently destroys their local state — see
+[Beta release signing and key continuity](docs/release-signing.md).
+
+The Android `namespace` is still `com.example.communication_platform`. That is only
+the build-time Kotlin/resource package and is not part of the installed identity.
 
 Plain `flutter run` uses `lib/main.dart`, which delegates to development and always
 shows a visible non-production label. Production builds must select the production

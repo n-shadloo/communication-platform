@@ -1,5 +1,12 @@
 # Deployment and release
 
+Release signing, key custody, and upgrade-continuity verification for the Private
+Experimental Beta are specified separately in
+[Beta release signing and key continuity](release-signing.md) and decided by
+ADR-042. That document is authoritative for anything concerning signing keys,
+release artifacts, and their verification; this one covers the surrounding
+release process.
+
 ## Environments
 
 Use compile-time flavors with separate visible identity and trust configuration:
@@ -7,8 +14,14 @@ Use compile-time flavors with separate visible identity and trust configuration:
 | Flavor | Purpose | Trust |
 |---|---|---|
 | development | Local engineering | local origin/CA; debug banner |
+| beta | Private Experimental Beta | beta origin/CA/pins; persistent Beta signing identity |
 | staging | Production-like integration | staging origin/CA/pins; staging accounts |
 | production | User release | production origin/private CA/primary+backup pins only |
+
+The beta and production flavors are separate, coexisting Android applications
+with different application IDs and different signing identities. Neither
+upgrades into the other. The production release build is deliberately unsigned
+so it keeps building and stays verifiable without being installable.
 
 No runtime text field changes the production server. Secrets are never compiled into the
 client; only public origins, CA certificates, SPKI hashes, and protocol capabilities are
@@ -48,10 +61,15 @@ by contract tests and conservative client behavior, not runtime version guessing
    rehearsal.
 3. Produce deterministic release APK artifacts where the toolchain permits.
 4. Sign with an offline-controlled application signing key; keep backup/recovery process
-   separate from source control.
+   separate from source control. The Private Experimental Beta already does this
+   through `tool/build_beta_release.sh`; production keeps a distinct key that is
+   not created until an explicit production release decision.
 5. Generate SHA-256 artifact hashes and signed update metadata.
 6. Verify install, upgrade with real encrypted migration fixtures, rollback behavior, and
-   private-CA connectivity on representative devices.
+   private-CA connectivity on representative devices. Upgrade continuity is proved
+   by `tool/verify_upgrade_continuity.sh` plus the manual product-state tier in
+   [release-signing.md](release-signing.md); a successful build is never
+   sufficient evidence on its own.
 7. Publish APK, hash, version notes, and minimum protocol compatibility through the
    self-hosted/local distribution channel.
 

@@ -216,6 +216,15 @@ Initial distribution is a reproducibly signed direct APK plus self-hosted update
 metadata, all usable on the local network. Update signatures are verified independently
 of TLS. A store channel may be added later but cannot become a runtime dependency.
 
+Because distribution is a direct APK rather than an App Bundle through a store,
+Play App Signing does not apply: the application signing key is the distribution
+identity permanently, and there is no upload-key reset if it is lost. The Private
+Experimental Beta therefore has a frozen application ID and a single persistent
+signing key, with `minSdk` 24 fixing the available signature schemes at v2 and
+v3. Key custody, backup and recovery, the release procedure, artifact
+verification, and the upgrade-continuity proof are specified in
+[Beta release signing and key continuity](release-signing.md) under ADR-042.
+
 ## Primary references
 
 - [Android Keystore](https://developer.android.com/privacy-and-security/keystore)
