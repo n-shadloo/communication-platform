@@ -1,5 +1,5 @@
 # ops/tls/make_ca.sh — private CA + server certificate for the network-shutdown
-# posture (see ops/tls/README.md; the public deployment uses Let's Encrypt instead).
+# posture (see ops/tls/README.md; this is what the nginx site is configured for).
 #
 # The root generated here is pre-distributed to client devices, and clients SPKI-pin
 # the server key. Everything lands in ops/tls/out/, which is gitignored — the private
