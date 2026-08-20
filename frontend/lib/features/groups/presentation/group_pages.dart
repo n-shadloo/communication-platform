@@ -68,8 +68,7 @@ class CreateGroupPage extends ConsumerWidget {
     if (injectedContacts != null && onCreate != null) {
       return _CreateGroupFlow(contacts: injectedContacts!, onCreate: onCreate!);
     }
-    if (ref.watch(groupFeatureAvailabilityProvider) !=
-        GroupFeatureAvailability.developmentPreview) {
+    if (!ref.watch(groupFeatureAvailabilityProvider).isAvailable) {
       return const GroupProductionGatePage();
     }
     final auth = ref.watch(authenticationControllerProvider);
@@ -162,7 +161,7 @@ class _CreateGroupFlowState extends State<_CreateGroupFlow> {
         child: ListView(
           padding: const EdgeInsets.all(AppSpacing.x4),
           children: [
-            const _DevelopmentPreviewBanner(),
+            const _GroupMaturityBanner(),
             const SizedBox(height: AppSpacing.x4),
             Text(
               _details
@@ -411,8 +410,7 @@ class GroupChatPage extends ConsumerWidget {
         onSend: onSend!,
       );
     }
-    if (ref.watch(groupFeatureAvailabilityProvider) !=
-        GroupFeatureAvailability.developmentPreview) {
+    if (!ref.watch(groupFeatureAvailabilityProvider).isAvailable) {
       return const GroupProductionGatePage();
     }
     final auth = ref.watch(authenticationControllerProvider);
@@ -506,7 +504,7 @@ class _GroupChatViewState extends State<GroupChatView> {
     );
     final chat = Column(
       children: [
-        const _DevelopmentPreviewBanner(),
+        const _GroupMaturityBanner(),
         if (state.lifecycle != GroupLifecycle.active)
           _GroupLifecycleNotice(lifecycle: state.lifecycle),
         if (_sendFailed) _InlineError(message: strings.groupSendFailed),
@@ -659,8 +657,7 @@ class GroupInfoPage extends ConsumerWidget {
         onMutate: onMutate!,
       );
     }
-    if (ref.watch(groupFeatureAvailabilityProvider) !=
-        GroupFeatureAvailability.developmentPreview) {
+    if (!ref.watch(groupFeatureAvailabilityProvider).isAvailable) {
       return const GroupProductionGatePage();
     }
     final auth = ref.watch(authenticationControllerProvider);
@@ -732,7 +729,7 @@ class _GroupInfoViewState extends State<GroupInfoView> {
       child: ListView(
         padding: const EdgeInsets.all(AppSpacing.x4),
         children: [
-          const _DevelopmentPreviewBanner(),
+          const _GroupMaturityBanner(),
           if (state.lifecycle != GroupLifecycle.active) ...[
             const SizedBox(height: AppSpacing.x3),
             _GroupLifecycleNotice(lifecycle: state.lifecycle),
@@ -981,8 +978,7 @@ class EditGroupPage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    if (ref.watch(groupFeatureAvailabilityProvider) !=
-        GroupFeatureAvailability.developmentPreview) {
+    if (!ref.watch(groupFeatureAvailabilityProvider).isAvailable) {
       return const GroupProductionGatePage();
     }
     final auth = ref.watch(authenticationControllerProvider);
@@ -1083,7 +1079,7 @@ class _GroupEditViewState extends State<GroupEditView> {
         child: ListView(
           padding: const EdgeInsets.all(AppSpacing.x4),
           children: [
-            const _DevelopmentPreviewBanner(),
+            const _GroupMaturityBanner(),
             const SizedBox(height: AppSpacing.x4),
             if (!canEdit) _InlineError(message: strings.groupPermissionChanged),
             AppField(
@@ -1218,8 +1214,7 @@ class _AddGroupMembersPageState extends ConsumerState<AddGroupMembersPage> {
 
   @override
   Widget build(BuildContext context) {
-    if (ref.watch(groupFeatureAvailabilityProvider) !=
-        GroupFeatureAvailability.developmentPreview) {
+    if (!ref.watch(groupFeatureAvailabilityProvider).isAvailable) {
       return const GroupProductionGatePage();
     }
     final auth = ref.watch(authenticationControllerProvider);
@@ -1248,7 +1243,7 @@ class _AddGroupMembersPageState extends ConsumerState<AddGroupMembersPage> {
                 child: ListView(
                   padding: const EdgeInsets.all(AppSpacing.x4),
                   children: [
-                    const _DevelopmentPreviewBanner(),
+                    const _GroupMaturityBanner(),
                     const SizedBox(height: AppSpacing.x4),
                     GroupMemberPicker(
                       contacts: eligible,
@@ -1409,35 +1404,50 @@ class _MemberRow extends StatelessWidget {
   }
 }
 
-class _DevelopmentPreviewBanner extends StatelessWidget {
-  const _DevelopmentPreviewBanner();
+/// States what this build's group stack actually is.
+///
+/// The two reachable states make materially different promises, so one shared
+/// string cannot cover both: the development preview sends nothing at all,
+/// while the private experimental artifact really does transmit group objects
+/// and really can lose the state they produce (ADR-036, ADR-044).
+class _GroupMaturityBanner extends ConsumerWidget {
+  const _GroupMaturityBanner();
 
   @override
-  Widget build(BuildContext context) => Semantics(
-    liveRegion: true,
-    child: DecoratedBox(
-      decoration: BoxDecoration(
-        color: context.tokens.colors.warning.withValues(alpha: 0.14),
-        borderRadius: AppRadii.compact,
-        border: Border.all(color: context.tokens.colors.warning),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.x3),
-        child: Row(
-          children: [
-            AppIcon(AppIcons.warning, color: context.tokens.colors.warning),
-            const SizedBox(width: AppSpacing.x2),
-            Expanded(
-              child: Text(
-                AppLocalizations.of(context).groupDevelopmentPreviewBanner,
-                style: context.tokens.typography.compact,
+  Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = AppLocalizations.of(context);
+    final label = switch (ref.watch(groupFeatureAvailabilityProvider)) {
+      GroupFeatureAvailability.developmentPreview =>
+        l10n.groupDevelopmentPreviewBanner,
+      GroupFeatureAvailability.privateExperimental =>
+        l10n.groupExperimentalBanner,
+      // Unreachable: every screen renders the closed gate before this point.
+      GroupFeatureAvailability.productionUnavailable => null,
+    };
+    if (label == null) return const SizedBox.shrink();
+    return Semantics(
+      liveRegion: true,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: context.tokens.colors.warning.withValues(alpha: 0.14),
+          borderRadius: AppRadii.compact,
+          border: Border.all(color: context.tokens.colors.warning),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpacing.x3),
+          child: Row(
+            children: [
+              AppIcon(AppIcons.warning, color: context.tokens.colors.warning),
+              const SizedBox(width: AppSpacing.x2),
+              Expanded(
+                child: Text(label, style: context.tokens.typography.compact),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
-    ),
-  );
+    );
+  }
 }
 
 class _GroupLifecycleNotice extends StatelessWidget {

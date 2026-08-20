@@ -116,10 +116,10 @@ abstract class AppLocalizations {
   /// **'Development configuration'**
   String get developmentConfiguration;
 
-  /// A persistent warning that the running app is a closed-beta build, not production.
+  /// A persistent warning that the running app is the private experimental build. It deliberately does not say 'beta': ADR-044 holds that 'beta' implies a feature-complete, reviewed pre-release, which this is not. The key still names the flavor, because the .beta application ID is frozen and cannot follow the wording.
   ///
   /// In en, this message translates to:
-  /// **'Closed beta configuration'**
+  /// **'Private experimental build'**
   String get betaConfiguration;
 
   /// Bootstrap text shown before product screens are implemented.
@@ -1850,11 +1850,17 @@ abstract class AppLocalizations {
   /// **'The post-quantum MLS profile is still gated. This build cannot create groups, generate KeyPackages, or send group ciphertext.'**
   String get groupProductionUnavailableMessage;
 
-  /// No description provided for @groupDevelopmentPreviewBanner.
+  /// Shown on group screens in a development build, where the in-memory fake never transmits anything.
   ///
   /// In en, this message translates to:
   /// **'Development preview only — no production group ciphertext is sent'**
   String get groupDevelopmentPreviewBanner;
+
+  /// Shown on group screens in the private experimental build. Group objects really are transmitted here, and the state they produce is disposable by decision, so the wording must not reuse the development preview's promise that nothing is sent.
+  ///
+  /// In en, this message translates to:
+  /// **'Experimental group encryption — not reviewed or standardized. An update may reset these groups and delete their messages.'**
+  String get groupExperimentalBanner;
 
   /// No description provided for @groupCreateTitle.
   ///

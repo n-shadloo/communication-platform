@@ -32,6 +32,111 @@ void main() {
     );
   });
 
+  test('only the private experimental artifact holds a beta MLS permit', () {
+    // Production must never hold one: it resolves the unsupported adapter and
+    // its packaged native core does not even export the beta MLS symbol.
+    expect(
+      GroupProductionGate.privateExperimentalPermit(AppEnvironment.production),
+      isNull,
+    );
+    expect(
+      GroupProductionGate.privateExperimentalPermit(AppEnvironment.development),
+      isNull,
+    );
+    expect(
+      GroupProductionGate.privateExperimentalPermit(AppEnvironment.beta),
+      isNotNull,
+    );
+
+    final source = File(
+      'lib/app/config/group_production_gate.dart',
+    ).readAsStringSync();
+    // The beta flavor is a release build, so the permit deliberately tests the
+    // compiled environment and not kReleaseMode. Reintroducing a kReleaseMode
+    // test here would close the private deployment's groups again, which is
+    // exactly the defect ADR-044 records.
+    expect(source, contains('environment == AppEnvironment.beta'));
+    expect(source, contains('const GroupPrivateExperimentalPermit._()'));
+    expect(
+      source.split('privateExperimentalPermit').last,
+      isNot(contains('kReleaseMode')),
+    );
+    expect(source, isNot(contains('bool.fromEnvironment')));
+    expect(source, isNot(contains('String.fromEnvironment')));
+  });
+
+  test(
+    'group availability follows the permits, and only production closes',
+    () {
+      GroupFeatureAvailability availabilityIn(AppEnvironment environment) {
+        final container = ProviderContainer(
+          overrides: [appEnvironmentProvider.overrideWithValue(environment)],
+        );
+        addTearDown(container.dispose);
+        return container.read(groupFeatureAvailabilityProvider);
+      }
+
+      expect(
+        availabilityIn(AppEnvironment.development),
+        GroupFeatureAvailability.developmentPreview,
+      );
+      expect(
+        availabilityIn(AppEnvironment.beta),
+        GroupFeatureAvailability.privateExperimental,
+      );
+      expect(
+        availabilityIn(AppEnvironment.production),
+        GroupFeatureAvailability.productionUnavailable,
+      );
+
+      expect(GroupFeatureAvailability.developmentPreview.isAvailable, isTrue);
+      expect(GroupFeatureAvailability.privateExperimental.isAvailable, isTrue);
+      expect(
+        GroupFeatureAvailability.productionUnavailable.isAvailable,
+        isFalse,
+      );
+    },
+  );
+
+  test('one permit decides both the beta stack and its screens', () {
+    // Before ADR-044 the screens gated on the development permit while the
+    // crypto, KeyPackage maintenance and inbound coordinator gated on the raw
+    // environment. The beta artifact therefore uploaded KeyPackages for groups
+    // its own UI would never show. Both halves now read the same permit, and
+    // the screens ask `isAvailable` rather than naming one availability value,
+    // so adding a maturity tier cannot silently re-close them.
+    final groupProviders = File(
+      'lib/app/dependencies/group_providers.dart',
+    ).readAsStringSync();
+    final syncProviders = File(
+      'lib/app/dependencies/sync_providers.dart',
+    ).readAsStringSync();
+    final screens = File(
+      'lib/features/groups/presentation/group_pages.dart',
+    ).readAsStringSync();
+
+    for (final source in [groupProviders, syncProviders]) {
+      expect(source, contains('GroupProductionGate.privateExperimentalPermit'));
+      expect(
+        source,
+        isNot(contains('AppEnvironment.beta')),
+        reason:
+            'The beta boundary belongs to the permit, not to a comparison '
+            'repeated across composition roots.',
+      );
+    }
+
+    expect(
+      screens.contains('groupFeatureAvailabilityProvider).isAvailable'),
+      isTrue,
+    );
+    expect(
+      screens,
+      isNot(contains('GroupFeatureAvailability.developmentPreview)')),
+      reason: 'A screen gating on one tier by name reopens the ADR-044 defect.',
+    );
+  });
+
   test('production provider cannot install the development MLS fake', () {
     final container = ProviderContainer(
       overrides: [

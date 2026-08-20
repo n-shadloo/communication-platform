@@ -1,4 +1,3 @@
-import 'package:communication_platform/app/config/app_environment.dart';
 import 'package:communication_platform/app/config/group_production_gate.dart';
 import 'package:communication_platform/app/dependencies/contact_providers.dart';
 import 'package:communication_platform/app/dependencies/core_providers.dart';
@@ -25,17 +24,34 @@ import 'package:communication_platform/features/groups/infrastructure/unsupporte
 import 'package:communication_platform/features/pairwise/infrastructure/contact_selective_pairwise_claim_adapter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-enum GroupFeatureAvailability { developmentPreview, productionUnavailable }
+enum GroupFeatureAvailability {
+  /// The in-memory fake, in a non-release development build. Nothing is sent.
+  developmentPreview,
+
+  /// The real closed-beta PQ MLS stack in the private experimental artifact.
+  /// Group objects are transmitted over the pairwise transport, and the state
+  /// they produce is disposable by decision (ADR-036, ADR-044).
+  privateExperimental,
+
+  /// No group stack. Production always lands here; so does any build without a
+  /// permit. Every group screen renders the closed gate instead.
+  productionUnavailable;
+
+  bool get isAvailable =>
+      this != GroupFeatureAvailability.productionUnavailable;
+}
 
 final groupFeatureAvailabilityProvider = Provider<GroupFeatureAvailability>((
   ref,
 ) {
-  final permit = GroupProductionGate.developmentPreviewPermit(
-    ref.watch(appEnvironmentProvider),
-  );
-  return permit == null
-      ? GroupFeatureAvailability.productionUnavailable
-      : GroupFeatureAvailability.developmentPreview;
+  final environment = ref.watch(appEnvironmentProvider);
+  if (GroupProductionGate.developmentPreviewPermit(environment) != null) {
+    return GroupFeatureAvailability.developmentPreview;
+  }
+  if (GroupProductionGate.privateExperimentalPermit(environment) != null) {
+    return GroupFeatureAvailability.privateExperimental;
+  }
+  return GroupFeatureAvailability.productionUnavailable;
 });
 
 final groupMlsCryptoProvider = Provider<GroupMlsCryptoPort>((ref) {
@@ -44,7 +60,7 @@ final groupMlsCryptoProvider = Provider<GroupMlsCryptoPort>((ref) {
   if (permit != null) {
     return DevelopmentInMemoryGroupMls.forDevelopmentPreview(permit);
   }
-  if (environment == AppEnvironment.beta) {
+  if (GroupProductionGate.privateExperimentalPermit(environment) != null) {
     final crypto = ref.watch(cryptoCoreProvider);
     if (crypto is BetaMlsCryptoPort) {
       return NativeBetaGroupMls(crypto as BetaMlsCryptoPort);
@@ -65,9 +81,13 @@ final groupKeyPackageMaintenanceServiceProvider =
       GroupKeyPackageMaintenanceService,
       GroupKeyPackageMaintenanceScope
     >((ref, scope) async {
-      if (ref.watch(appEnvironmentProvider) != AppEnvironment.beta) {
+      if (GroupProductionGate.privateExperimentalPermit(
+            ref.watch(appEnvironmentProvider),
+          ) ==
+          null) {
         throw StateError(
-          'PQ MLS KeyPackage maintenance is closed outside beta.',
+          'PQ MLS KeyPackage maintenance is closed without a private '
+          'experimental permit.',
         );
       }
       final database = await ref.watch(localDatabaseProvider.future);
@@ -99,7 +119,10 @@ final fullyComposedGroupMlsCryptoProvider = FutureProvider<GroupMlsCryptoPort>((
   ref,
 ) async {
   final fallback = ref.watch(groupMlsCryptoProvider);
-  if (ref.watch(appEnvironmentProvider) != AppEnvironment.beta) {
+  if (GroupProductionGate.privateExperimentalPermit(
+        ref.watch(appEnvironmentProvider),
+      ) ==
+      null) {
     return fallback;
   }
   final core = ref.watch(cryptoCoreProvider);

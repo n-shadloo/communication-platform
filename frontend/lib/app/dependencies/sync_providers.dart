@@ -1,4 +1,4 @@
-import 'package:communication_platform/app/config/app_environment.dart';
+import 'package:communication_platform/app/config/group_production_gate.dart';
 import 'package:communication_platform/app/dependencies/contact_providers.dart';
 import 'package:communication_platform/app/dependencies/core_providers.dart';
 import 'package:communication_platform/app/dependencies/group_providers.dart';
@@ -55,7 +55,10 @@ final durableSyncEngineProvider =
       );
       final store = DriftSyncStore(database);
       final groupKeyPackageMaintenance =
-          ref.watch(appEnvironmentProvider) == AppEnvironment.beta
+          GroupProductionGate.privateExperimentalPermit(
+                ref.watch(appEnvironmentProvider),
+              ) !=
+              null
           ? await ref.watch(
               groupKeyPackageMaintenanceServiceProvider((
                 userId: scope.userId,

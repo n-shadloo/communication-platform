@@ -251,7 +251,11 @@ android {
             // file it comes from; a change forces every beta user through an
             // uninstall that destroys their local state irrecoverably.
             applicationId = betaApplicationId
-            resValue("string", "app_name", "Communication Platform (Closed Beta)")
+            // "Experimental", not "Beta". The application ID is frozen and keeps
+            // its .beta suffix as an opaque identifier, but the launcher label is
+            // a claim to the user, and ADR-044 holds that "beta" would overstate
+            // an unreviewed cryptographic stack with disposable group state.
+            resValue("string", "app_name", "Communication Platform (Experimental)")
             if (betaSigningMaterial != null) {
                 // Attached at flavor level, not build-type level, so that only
                 // Beta gains the persistent release identity. A build type's own

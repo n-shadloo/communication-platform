@@ -102,21 +102,22 @@ void main() {
     expect(find.text('No connection to server'), findsWidgets);
   });
 
-  testWidgets('beta connection gate names the closed beta, not development', (
-    tester,
-  ) async {
-    await _pumpBootstrap(
-      tester,
-      platform: BootstrapPlatform.android,
-      configuration: testAndroidConfiguration,
-      health: FakeHealthReachabilityPort(const HealthUnreachable()),
-      environment: AppEnvironment.beta,
-    );
+  testWidgets(
+    'beta connection gate names the private experimental build, not development',
+    (tester) async {
+      await _pumpBootstrap(
+        tester,
+        platform: BootstrapPlatform.android,
+        configuration: testAndroidConfiguration,
+        health: FakeHealthReachabilityPort(const HealthUnreachable()),
+        environment: AppEnvironment.beta,
+      );
 
-    expect(find.text("Can't reach the server"), findsOneWidget);
-    expect(find.text('Closed beta configuration'), findsOneWidget);
-    expect(find.text('Development configuration'), findsNothing);
-  });
+      expect(find.text("Can't reach the server"), findsOneWidget);
+      expect(find.text('Private experimental build'), findsOneWidget);
+      expect(find.text('Development configuration'), findsNothing);
+    },
+  );
 
   testWidgets('production connection gate shows no configuration banner', (
     tester,
@@ -129,7 +130,7 @@ void main() {
     );
 
     expect(find.text("Can't reach the server"), findsOneWidget);
-    expect(find.text('Closed beta configuration'), findsNothing);
+    expect(find.text('Private experimental build'), findsNothing);
     expect(find.text('Development configuration'), findsNothing);
   });
 }

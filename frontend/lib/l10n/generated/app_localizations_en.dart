@@ -18,7 +18,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get developmentConfiguration => 'Development configuration';
 
   @override
-  String get betaConfiguration => 'Closed beta configuration';
+  String get betaConfiguration => 'Private experimental build';
 
   @override
   String get foundationReady => 'Flutter foundation is ready';
@@ -994,6 +994,10 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get groupDevelopmentPreviewBanner =>
       'Development preview only — no production group ciphertext is sent';
+
+  @override
+  String get groupExperimentalBanner =>
+      'Experimental group encryption — not reviewed or standardized. An update may reset these groups and delete their messages.';
 
   @override
   String get groupCreateTitle => 'Create Group';

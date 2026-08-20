@@ -12,9 +12,9 @@
   "@developmentConfiguration": {
     "description": "A persistent warning that the running app is not production."
   },
-  "betaConfiguration": "Closed beta configuration",
+  "betaConfiguration": "Private experimental build",
   "@betaConfiguration": {
-    "description": "A persistent warning that the running app is a closed-beta build, not production."
+    "description": "A persistent warning that the running app is the private experimental build. It deliberately does not say 'beta': ADR-044 holds that 'beta' implies a feature-complete, reviewed pre-release, which this is not. The key still names the flavor, because the .beta application ID is frozen and cannot follow the wording."
   },
   "foundationReady": "Flutter foundation is ready",
   "@foundationReady": {
@@ -353,6 +353,13 @@
   "groupProductionUnavailableTitle": "Production groups are not available",
   "groupProductionUnavailableMessage": "The post-quantum MLS profile is still gated. This build cannot create groups, generate KeyPackages, or send group ciphertext.",
   "groupDevelopmentPreviewBanner": "Development preview only — no production group ciphertext is sent",
+  "@groupDevelopmentPreviewBanner": {
+    "description": "Shown on group screens in a development build, where the in-memory fake never transmits anything."
+  },
+  "groupExperimentalBanner": "Experimental group encryption — not reviewed or standardized. An update may reset these groups and delete their messages.",
+  "@groupExperimentalBanner": {
+    "description": "Shown on group screens in the private experimental build. Group objects really are transmitted here, and the state they produce is disposable by decision, so the wording must not reuse the development preview's promise that nothing is sent."
+  },
   "groupCreateTitle": "Create Group",
   "groupPickMembersTitle": "Pick members",
   "groupDetailsTitle": "Group details",

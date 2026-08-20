@@ -1,3 +1,5 @@
+import 'package:communication_platform/app/config/app_environment.dart';
+import 'package:communication_platform/app/dependencies/core_providers.dart';
 import 'package:communication_platform/app/design_system/app_theme.dart';
 import 'package:communication_platform/core/result/result.dart';
 import 'package:communication_platform/features/groups/domain/group_model.dart';
@@ -26,6 +28,36 @@ void main() {
     expect(find.textContaining('cannot create groups'), findsOneWidget);
     expect(find.textContaining('KeyPackages'), findsOneWidget);
     semantics.dispose();
+  });
+
+  testWidgets('each build states what its own group stack really is', (
+    tester,
+  ) async {
+    Future<void> pumpCreate(AppEnvironment environment) => _pump(
+      tester,
+      CreateGroupPage(
+        injectedContacts: const [
+          GroupPickerContact(userId: _member, name: 'Ada', verified: true),
+        ],
+        onCreate: (_, _) async => Result.success(_state()),
+      ),
+      environment: environment,
+    );
+
+    // The development preview transmits nothing, so it may say so.
+    await pumpCreate(AppEnvironment.development);
+    expect(find.textContaining('Development preview only'), findsOneWidget);
+    expect(find.textContaining('Experimental group encryption'), findsNothing);
+
+    // The private experimental build really does send group objects and really
+    // can lose the state they produce, so it must not reuse that promise.
+    await pumpCreate(AppEnvironment.beta);
+    expect(
+      find.textContaining('Experimental group encryption'),
+      findsOneWidget,
+    );
+    expect(find.textContaining('delete their messages'), findsOneWidget);
+    expect(find.textContaining('Development preview only'), findsNothing);
   });
 
   testWidgets('create flow remains usable at narrow RTL and large text', (
@@ -196,9 +228,11 @@ Future<void> _pump(
   Widget child, {
   Locale locale = const Locale('en'),
   TextScaler textScaler = TextScaler.noScaling,
+  AppEnvironment environment = AppEnvironment.development,
 }) async {
   await tester.pumpWidget(
     ProviderScope(
+      overrides: [appEnvironmentProvider.overrideWithValue(environment)],
       child: MaterialApp(
         locale: locale,
         theme: AppTheme.light(),

@@ -18,7 +18,7 @@ class AppLocalizationsFa extends AppLocalizations {
   String get developmentConfiguration => 'پیکربندی توسعه';
 
   @override
-  String get betaConfiguration => 'پیکربندی بتای بسته';
+  String get betaConfiguration => 'نسخهٔ آزمایشی خصوصی';
 
   @override
   String get foundationReady => 'پایهٔ فلاتر آماده است';
@@ -992,6 +992,10 @@ class AppLocalizationsFa extends AppLocalizations {
   @override
   String get groupDevelopmentPreviewBanner =>
       'فقط پیش‌نمایش توسعه — هیچ متن رمز گروهی عملیاتی ارسال نمی‌شود';
+
+  @override
+  String get groupExperimentalBanner =>
+      'رمزنگاری گروهی آزمایشی — بازبینی‌نشده و غیراستاندارد. یک به‌روزرسانی ممکن است این گروه‌ها را بازنشانی کند و پیام‌هایشان را حذف کند.';
 
   @override
   String get groupCreateTitle => 'ساخت گروه';
