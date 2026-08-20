@@ -5,6 +5,7 @@ import 'package:communication_platform/app/dependencies/authentication_assembly.
 import 'package:communication_platform/app/dependencies/contact_providers.dart';
 import 'package:communication_platform/app/dependencies/core_providers.dart';
 import 'package:communication_platform/app/dependencies/local_storage_providers.dart';
+import 'package:communication_platform/app/dependencies/provisioned_transport.dart';
 import 'package:communication_platform/core/application/ports/enrollment_crypto_port.dart';
 import 'package:communication_platform/features/authentication/presentation/authentication_controller.dart';
 import 'package:communication_platform/features/bootstrap/application/bootstrap_flow.dart';
@@ -15,6 +16,7 @@ import 'package:communication_platform/features/bootstrap/infrastructure/provisi
 import 'package:communication_platform/features/devices/presentation/device_enrollment_controller.dart';
 import 'package:communication_platform/features/local_storage/infrastructure/platform/platform_local_storage.dart';
 import 'package:communication_platform/features/local_storage/infrastructure/protected_storage_bootstrap_adapter.dart';
+import 'package:communication_platform/features/networking/infrastructure/tls/transport_security.dart';
 import 'package:communication_platform/shared/infrastructure/crypto/platform_crypto_core.dart';
 import 'package:communication_platform/shared/infrastructure/crypto/unsupported_enrollment_crypto.dart';
 import 'package:communication_platform/shared/infrastructure/time/system_time_source.dart';
@@ -31,6 +33,15 @@ Future<void> bootstrap(AppEnvironment environment) async {
     platform: platform,
   );
   final configurationResult = await configurationPort.load();
+  // Trust for the transport the app actually uses. Android's network security
+  // configuration does not reach dart:io, so without this the client would fall
+  // back to the public root store and never trust the provisioned server.
+  final transportSecurity = switch (configurationResult) {
+    ConfigurationLoaded(:final configuration) => provisionedTransportSecurity(
+      configuration.trustMaterial,
+    ),
+    ConfigurationNotProvisioned() => const TransportSecurity.platformDefault(),
+  };
   final cryptoCore = createPlatformCryptoCore(
     betaMlsEnabled: environment == AppEnvironment.beta,
   );
@@ -43,6 +54,7 @@ Future<void> bootstrap(AppEnvironment environment) async {
       localStorage: localStorageRuntime,
       timeSource: const SystemTimeSource(),
       enrollmentCrypto: enrollmentCrypto,
+      transportSecurity: transportSecurity,
     ),
     ConfigurationNotProvisioned() => null,
   };
@@ -50,7 +62,7 @@ Future<void> bootstrap(AppEnvironment environment) async {
     configuration: _ResolvedBootstrapConfiguration(configurationResult),
     storage: ProtectedStorageBootstrapAdapter(localStorageRuntime),
     trust: const ProvisionedTrustPort(),
-    health: DioHealthReachabilityPort(),
+    health: DioHealthReachabilityPort(transportSecurity: transportSecurity),
     platform: platform,
   );
   runApp(

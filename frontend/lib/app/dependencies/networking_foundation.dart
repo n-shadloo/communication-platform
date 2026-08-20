@@ -6,8 +6,8 @@ import 'package:communication_platform/features/networking/infrastructure/auth/d
 import 'package:communication_platform/features/networking/infrastructure/auth/token_coordinator.dart';
 import 'package:communication_platform/features/networking/infrastructure/diagnostics/network_diagnostics.dart';
 import 'package:communication_platform/features/networking/infrastructure/realtime/dio_websocket_gateway.dart';
-import 'package:communication_platform/features/networking/infrastructure/realtime/platform_socket_connector.dart';
 import 'package:communication_platform/features/networking/infrastructure/realtime/socket_connector.dart';
+import 'package:communication_platform/features/networking/infrastructure/tls/transport_security.dart';
 import 'package:dio/dio.dart';
 
 /// Scope-owned composition for the single reviewed REST client and socket gateway.
@@ -26,12 +26,15 @@ final class NetworkingFoundation {
     required RealtimeReconnectHook reconnectHook,
     Dio? dio,
     SocketConnector? socketConnector,
+    TransportSecurity transportSecurity =
+        const TransportSecurity.platformDefault(),
     NetworkDiagnostics diagnostics = const NoopNetworkDiagnostics(),
     RetryScheduler retryScheduler = const TimerRetryScheduler(),
   }) {
     final restClient = DioRestClient(
       serverOrigin: serverOrigin,
       dio: dio,
+      transportSecurity: transportSecurity,
       diagnostics: diagnostics,
       retryScheduler: retryScheduler,
     );
@@ -45,7 +48,7 @@ final class NetworkingFoundation {
     restClient.bindTokenCoordinator(tokenCoordinator);
     final webSocketGateway = DioWebSocketGateway(
       serverOrigin: serverOrigin,
-      connector: socketConnector ?? const PlatformSocketConnector(),
+      connector: socketConnector ?? transportSecurity.socketConnector,
       tokenCoordinator: tokenCoordinator,
       reconnectHook: reconnectHook,
       diagnostics: diagnostics,

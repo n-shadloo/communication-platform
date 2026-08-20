@@ -11,6 +11,7 @@ import 'package:communication_platform/features/local_storage/infrastructure/loc
 import 'package:communication_platform/features/networking/infrastructure/api/dio_rest_client.dart';
 import 'package:communication_platform/features/networking/infrastructure/auth/dio_token_endpoints.dart';
 import 'package:communication_platform/features/networking/infrastructure/auth/token_coordinator.dart';
+import 'package:communication_platform/features/networking/infrastructure/tls/transport_security.dart';
 
 final class AuthenticationAssembly {
   AuthenticationAssembly._({
@@ -25,10 +26,15 @@ final class AuthenticationAssembly {
     required SecureLocalStorageRuntime localStorage,
     required TimeSource timeSource,
     required EnrollmentCryptoPort enrollmentCrypto,
+    TransportSecurity transportSecurity =
+        const TransportSecurity.platformDefault(),
   }) {
     final lifecycle = AuthenticationLifecycleBus();
     final tokenStore = SecureSessionTokenAdapter(localStorage);
-    final restClient = DioRestClient(serverOrigin: serverOrigin);
+    final restClient = DioRestClient(
+      serverOrigin: serverOrigin,
+      transportSecurity: transportSecurity,
+    );
     final coordinator = TokenCoordinator(
       store: tokenStore,
       refreshExchange: DioRefreshTokenExchange(restClient),
