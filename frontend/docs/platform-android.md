@@ -137,14 +137,39 @@ configuration and the HTTP/WebSocket clients enforce primary and backup SPKI pin
 failure is blocking and never offers "continue anyway". Development trust is compiled
 only into visibly non-production flavors.
 
-The closed-beta flavor renders the same resources from its own `BETA_*` values.
-`tool/render_beta_trust.sh` refuses to run unless the supplied CA file matches
-`BETA_PRIVATE_CA_SHA256`, `tool/build_beta_release.sh` runs it on every release
-build so the compiled trust cannot go stale against the compiled configuration,
-and `tool/verify_release_apk.sh --beta` reads the pin-set back out of the
-packaged artifact. Dart holds the origin and pins but never enforces them, so
-verifying the compiled resource is what separates a pinned artifact from one
-that trusts the system CA store.
+**Android's network security configuration does not govern this app's API
+traffic.** It applies to the platform's Java HTTP stacks and WebView. Both of
+this client's transports — Dio for REST and `IOWebSocketChannel` for the socket
+— run on `dart:io`, which does not consult it. Release validation established
+this against a live server: every network precondition held and the connection
+still failed, and removing the pin-set changed nothing (ADR-043).
+
+Trust for the app's own traffic is therefore installed in Dart, at
+`features/networking/infrastructure/tls/`. `TransportSecurity.provisioned`
+builds a `SecurityContext` with `withTrustedRoots: false` and the provisioned
+authority, so the built-in root store is **replaced**, not extended: no public
+authority can issue a certificate this client accepts. Chain construction,
+expiry, and hostname verification are still performed in full by the platform
+TLS implementation. The REST client and the WebSocket connector share one
+context, so neither can be left on default trust.
+
+The authority reaches the app as `<ENVIRONMENT>_PRIVATE_CA_PEM_BASE64`, because
+`dart:io` verifies against a certificate rather than the fingerprint the
+configuration carries. Absent or malformed authority material blocks at
+configuration rather than falling back to public roots.
+
+The closed-beta flavor still renders the Android resources from its `BETA_*`
+values — `tool/render_beta_trust.sh` refuses to run unless the supplied CA file
+matches `BETA_PRIVATE_CA_SHA256`, and `tool/verify_release_apk.sh --beta` reads
+the pin-set back out of the artifact — but that configuration is retained as
+defence in depth for any future WebView or Java-side traffic. It is not what
+protects the API traffic, and must not be described as though it were.
+
+Leaf SPKI pinning is deliberately not reimplemented in Dart: `X509Certificate`
+exposes no SPKI accessor and no SHA-256, so it would take hand-written ASN.1
+parsing and a hashing dependency inside the TLS path. Anchoring exclusively to
+one offline private root is the stronger constraint; see ADR-043 for the
+residual exposure that choice accepts.
 
 ## Background delivery
 

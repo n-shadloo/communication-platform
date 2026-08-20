@@ -234,12 +234,19 @@ the recorded identity, and that the packaged native core really does export
 
 It also reads the **compiled network security config back out of the artifact**
 and checks that it pins the provisioned host, carries both SPKI pins, disables
-cleartext, and packages the private CA as a trust anchor. That check exists
-because Dart carries the origin and pins but cannot enforce them: Android does
-that from a compiled resource, so an artifact that merely holds the right values
-in Dart is indistinguishable, from the outside, from one that trusts the system
-CA store and pins nothing. Resource names are obfuscated in a release build, so
-the check resolves them through the resource table rather than by filename.
+cleartext, and packages the private CA as a trust anchor. Resource names are
+obfuscated in a release build, so the check resolves them through the resource
+table rather than by filename.
+
+Note what that check does and does not prove. Android applies this configuration
+to the platform's Java HTTP stacks and WebView; the app's own REST and WebSocket
+traffic runs on `dart:io`, which does not consult it (ADR-043). Trust for the
+app's traffic comes from `BETA_PRIVATE_CA_PEM`, which `build_beta_release.sh`
+also passes to the client as `BETA_PRIVATE_CA_PEM_BASE64`, and is covered by
+`test/features/networking/transport_security_test.dart` against a real TLS
+handshake. The artifact check confirms the declarative Android configuration is
+correct and consistent with provisioning; it is defence in depth, not the
+mechanism protecting API traffic.
 
 Production mode checks the application ID, that the artifact is **not** signed,
 and that the packaged native core does **not** export the beta MLS symbol — the
@@ -395,6 +402,7 @@ else:
 | `CP_BETA_KEY_ALIAS` | `communication-platform-beta`. |
 | `CP_BETA_KEY_PASSWORD` | Key passphrase. |
 | `BETA_SERVER_ORIGIN`, `BETA_PRIVATE_CA_SHA256`, `BETA_PRIMARY_SPKI_SHA256`, `BETA_BACKUP_SPKI_SHA256` | Provisioning. Public values, but keep them out of the repository. |
+| `BETA_PRIVATE_CA_PEM` | Path to the private CA certificate on the runner. Public material, but the build fails closed without it, and the app cannot reach the server without it. |
 
 Supplying only *some* of the `CP_BETA_*` variables is a hard failure, never a
 silent fallback to the file.

@@ -14,8 +14,14 @@ automated: `tool/render_beta_trust.sh` substitutes the template from the same
 CA file matches `BETA_PRIVATE_CA_SHA256`, and `tool/build_beta_release.sh` calls
 it on every release build so the compiled trust cannot drift from the compiled
 configuration. `tool/verify_release_apk.sh --beta` then reads the pin-set back out
-of the packaged artifact, because a build that merely holds the right values in
-Dart is indistinguishable, from the outside, from one that pins nothing.
+of the packaged artifact.
+
+**These resources do not govern the app's own API traffic.** Android applies them
+to the platform's Java HTTP stacks and WebView; this client's REST and WebSocket
+transports both run on `dart:io`, which does not consult them. Trust for that
+traffic is installed in Dart from `<ENV>_PRIVATE_CA_PEM_BASE64`; see ADR-043 and
+`docs/platform-android.md`. What is rendered here is retained as defence in depth
+for any future WebView or Java-side traffic.
 
 Those rendered resources are provisioning artifacts and are ignored by Git. The build
 pipeline must verify the CA SHA-256 fingerprint and both SPKI SHA-256 digests before
