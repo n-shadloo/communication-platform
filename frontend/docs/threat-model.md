@@ -108,6 +108,12 @@ client MUST not claim otherwise.
 
 ## Security release gates
 
+These are gates on a **release**. ADR-044 defines the initial Private Experimental
+deployment, which is not one: it is private, named, disclosed distribution of an
+artifact that states its own maturity, and it leaves every gate below closed and
+unsatisfied. Nothing in that decision may be read as clearing one of them, and the
+written disclosure it requires is what makes distributing under them acceptable.
+
 - No handwritten cryptographic primitive.
 - No shipping an unreviewed cross-platform protocol implementation.
 - All official and project test vectors pass on Android for the version-1 release.

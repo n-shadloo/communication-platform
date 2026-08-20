@@ -1,28 +1,39 @@
 # Deployment and release
 
-Release signing, key custody, and upgrade-continuity verification for the Private
-Experimental Beta are specified separately in
+What the initial deployment *is* - its audience, its maturity tiers, what may be
+claimed about it, and what must be disclosed - is decided by
+[ADR-044](decisions.md). Release signing, key custody, and upgrade-continuity
+verification are specified separately in
 [Beta release signing and key continuity](release-signing.md) and decided by
-ADR-042. That document is authoritative for anything concerning signing keys,
-release artifacts, and their verification; this one covers the surrounding
-release process.
+ADR-042. Those two are authoritative for the deployment definition and for
+anything concerning signing keys, release artifacts, and their verification; this
+document covers the surrounding release process.
 
 ## Environments
 
-Use compile-time flavors with separate visible identity and trust configuration:
+Use compile-time flavors with separate visible identity and trust configuration.
+There are exactly three; each has one Dart entry point and reads one provisioning
+prefix:
 
-| Flavor | Purpose | Trust |
-|---|---|---|
-| development | Local engineering | local origin/CA; debug banner |
-| beta | Private Experimental Beta | beta origin/CA/pins; persistent Beta signing identity |
-| staging | Production-like integration | staging origin/CA/pins; staging accounts |
-| production | User release | production origin/private CA/primary+backup pins only |
+| Flavor | Entry point | Purpose | Trust |
+|---|---|---|---|
+| development | `lib/main_development.dart` | Local engineering | local origin/CA; debug banner |
+| beta | `lib/main_beta.dart` | The Private Experimental deployment (ADR-044) | beta origin/CA/pins; persistent Beta signing identity |
+| production | `lib/main_production.dart` | Future public release | production origin/private CA/primary+backup pins only |
+
+There is deliberately no staging flavor. A fourth environment would need a fourth
+application ID, a fourth provisioning prefix, and its own trust material, and
+nothing in the current release process needs one: production-like integration is
+rehearsed against the beta origin. Adding one is an ADR decision, not a build
+edit.
 
 Every non-production flavor carries a persistent configuration banner, on the
 blocking Connection screen and inside the application shell, that names its own
-environment: development reads "Development configuration" and beta reads
-"Closed beta configuration". A beta build is installed by external testers and
-must never present itself as development. Production shows no banner at all.
+build: development reads "Development configuration" and beta reads "Private
+experimental build". Under ADR-044 that banner deliberately does not say "beta" -
+the word overstates an unreviewed stack - even though the frozen application ID
+keeps its `.beta` suffix. A beta build is installed by external testers and must
+never present itself as development. Production shows no banner at all.
 
 The beta and production flavors are separate, coexisting Android applications
 with different application IDs and different signing identities. Neither
@@ -78,6 +89,16 @@ by contract tests and conservative client behavior, not runtime version guessing
    sufficient evidence on its own.
 7. Publish APK, hash, version notes, and minimum protocol compatibility through the
    self-hosted/local distribution channel.
+8. For the Private Experimental deployment, deliver the ADR-044 written disclosure with
+   the artifact. This is release-blocking, not a courtesy. It must state, in writing:
+   that no part of the cryptography has been independently reviewed; that messages
+   arrive only while the app is running, because there is no background delivery and no
+   notifications; that group messaging is experimental and its history can be lost on an
+   update; that history exists only on the device and uninstalling destroys it
+   permanently; that a recovery secret plus a second enrolled device recovers identity
+   but never history; and that the build is for evaluation among people who already
+   trust each other, and is not appropriate for anyone whose safety depends on the
+   confidentiality of their messages.
 
 Updates are explicit user/admin actions. The app may check only the self-hosted signed
 metadata endpoint. It never fetches executable code or dependencies dynamically.

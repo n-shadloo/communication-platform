@@ -578,7 +578,13 @@ backend contracts and durable
 recipient-bound pairwise outbox; no MLS secret or shared/raw MLS ciphertext is exposed
 to Dart projections or backend metadata.
 
-The beta transport/state format is explicitly disposable and versioned. Production
+The beta transport/state format is explicitly disposable and versioned. ADR-044 makes
+that track user-reachable in the Private Experimental artifact and only there: one
+source-only `GroupProductionGate.privateExperimentalPermit` now decides both the beta
+stack and its screens, and every group screen in that build states that the encryption
+is experimental and that an update may reset the group and delete its messages. Until
+ADR-044 the screens gated on the development-preview permit alone, so the shipped beta
+artifact uploaded KeyPackages for groups its own interface would never show. Production
 still resolves only to the unsupported port; the release entry point references a
 source-constant closed gate whose constructor assertion prevents an accidental true
 value from compiling. OpenMLS remains the production preference, but its documented

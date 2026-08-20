@@ -52,6 +52,468 @@ is not silently edited out of history.
 
 | ADR-043 | Accepted | The client's own transport trusts the provisioned private CA exclusively; Android's network security configuration is retained as defence in depth for non-Dart traffic only (2026-08-20) | Release validation of a real signed Beta APK found the app could not reach a healthy, correctly provisioned server. Every network precondition held - DNS, TCP, TLS from the host, a chain verifying against the provisioned CA, ~1.1s latency - and removing the pin-set from a diagnostic build changed nothing. The cause is that Android's `network_security_config` governs the platform's Java HTTP stacks and WebView, while this app's REST and WebSocket traffic both run on `dart:io`, which does not consult it. The configuration was therefore protecting no traffic at all: the app was simultaneously unable to reach its own server and, had it reached one, unpinned. Trust now comes from a `SecurityContext` built with `withTrustedRoots: false` plus the provisioned authority, so the built-in root store is **replaced** rather than extended and no public authority can issue a certificate this client accepts; chain construction, expiry, and hostname verification are still performed in full by BoringSSL. Both transports share one context, and the authority reaches the app as `<ENV>_PRIVATE_CA_PEM_BASE64` because `dart:io` verifies against a certificate, not the digest the configuration previously carried. Absent or malformed authority material fails configuration closed rather than falling back to public roots. Leaf SPKI pinning is deliberately **not** reimplemented in Dart: `X509Certificate` exposes no SPKI accessor and no SHA-256, so it would require hand-written ASN.1 parsing plus a hashing dependency inside the TLS path, which `AGENTS.md` forbids and which would be unreviewed cryptographic code. Anchoring exclusively to a single offline private root is a stronger constraint than the public-CA-plus-leaf-pin model it replaces, and the residual exposure - a stolen CA key minting a new leaf - is accepted for the closed beta and recorded here. The rendered Android configuration and its two pins are kept and still verified in the artifact, but only as defence in depth for any future WebView or Java-side traffic; no document may claim they protect the app's API traffic. Health checks now distinguish `trustRejected` from ordinary connectivity so a refused certificate is never reported, or retried, as an outage. |
 
+| ADR-044 | Accepted | The initial deployment is one Private Experimental Android artifact carrying declared maturity tiers, distributed privately under the frozen Beta identity, while Production stays uninstallable (2026-08-20) | A 20-30 person private deployment needed one authoritative definition, and the repository did not have one. Inspection found the existing build-time separation correct and worth keeping - three flavors, three application IDs, two Cargo profiles whose native symbol sets are verified in the packaged artifact, a signing identity attached only to Beta, and `signingConfig = null` on the release build type so Production packages unsigned and the OS cannot install it. It also found the separation incomplete in one place: `groupFeatureAvailabilityProvider` derived availability from the development-preview permit alone, which requires `!kReleaseMode`, so every group screen in the shipped Beta artifact rendered the closed gate while that same artifact composed `NativeBetaGroupMls`, ran `GroupKeyPackageMaintenanceService`, and processed inbound group objects - uploading MLS KeyPackages for groups no user of it could create. One source-only `GroupProductionGate.privateExperimentalPermit` now decides both the stack and its screens, and the screens gate on `isAvailable` rather than naming one tier. The deployment is defined as **experimental, not beta**: nothing in it has been independently reviewed, its group suite is MLS Private Use `0xFE4C` and is not `TBD2`-conformant (ADR-040), and it has no background delivery, notifications, voice, or search. The frozen application ID keeps its `.beta` suffix because ADR-042 makes it unchangeable and an identifier is not a claim; every user-facing string says Experimental. One artifact carries three declared tiers - supported (pairwise messaging, identity, devices, attachments, history transfer), experimental (closed-beta PQ MLS groups, whose state is disposable by ADR-036 and is disclosed as such on every group screen), and visibly absent (voice, search, notifications, background delivery). Confidentiality, integrity, client-side verification, hybrid PQXDH with no fallback, provisioned-CA-only transport, encrypted local state, key continuity, and the Beta/Production artifact separation all stay mandatory; independent review, registry assignment, interoperability, upstream vectors, reproducible builds, and background delivery are deferred with their residual risk recorded and disclosed to users in writing at handover. Piece 19's closed-beta half is delivered as the experimental tier and its production half stays blocked on the same five external prerequisites; piece 20 is re-scoped from "after every production gate" - unreachable, and therefore dead rather than blocked - to a decision about which MLS exporter may key real-time media, which this decision does not grant. Opens no production gate and supersedes nothing. |
+
+## ADR-044 in full — the initial private deployment (2026-08-20)
+
+**Status:** Accepted. Deployment decision. **Opens no production gate.**
+
+### The question
+
+The project needs an initial deployment usable by roughly 20–30 trusted people. The
+repository already contains an Android `beta` flavor, a frozen application ID, a
+persistent signing identity, a release pipeline, and a large closed-beta PQ MLS
+implementation. What it does not contain is one authoritative answer to: what is that
+deployment, what may honestly be said about it, what stays mandatory, what may be
+deferred, and how it reaches public production without becoming a dead end.
+
+This decision answers that. It is not a plan for future work; it describes what the
+next artifact handed to a user is, and it corrects the places where the code and the
+documentation disagreed about it.
+
+### What the repository actually ships today
+
+Verified against the working tree on 2026-08-20, not assumed:
+
+| Area | State |
+|---|---|
+| Flavors | `development`, `beta`, `production` on one `environment` dimension in `android/app/build.gradle.kts` |
+| Application IDs | `dev.nimashadloo.chat.development`, `dev.nimashadloo.chat.beta`, `dev.nimashadloo.chat` |
+| Entry points | `lib/main_development.dart`, `lib/main_beta.dart`, `lib/main_production.dart`; `lib/main.dart` delegates to development |
+| Provisioning | `String.fromEnvironment` under one `<ENV>_` prefix per flavor; no runtime origin selection anywhere |
+| Native core | Two Cargo profiles. `foundation` (development, production) exports 15 symbols; `beta` (`--features beta-pq-mls`) exports those plus `cp_crypto_v1_beta_mls_operation` |
+| Signing | Beta signs with a persistent RSA-4096 v2+v3 identity attached at flavor level; `buildTypes.release` sets `signingConfig = null`, so Production packages unsigned |
+| Signing identity | **Created**, on 2026-08-19; read back out of the keystore and re-verified on 2026-08-20. Certificate SHA-256 `d8d40c0c…71b5a2ff`, subject `CN=dev.nimashadloo.chat.beta`, valid to 2054-01-04, matching `android/beta-release-identity.properties` exactly. Off-site encrypted backups of it are still required before the first external install |
+| Transport trust | `SecurityContext(withTrustedRoots: false)` plus the provisioned authority, on both REST and WebSocket (ADR-043) |
+| Local state | SQLCipher database keyed by a non-exportable AndroidKeyStore key; `allowBackup="false"`; isolation between flavors is the Android application sandbox, which follows the application ID |
+| Background delivery | **Absent.** `AndroidPollingScheduler` is a port with no adapter in `lib/` |
+| Notifications | **Absent.** No notification dependency is declared in `pubspec.yaml` |
+| Voice | **Absent.** `/voice-rooms` renders `StructuralPlaceholderPage`, badged as a non-shipping placeholder |
+| Search | **Absent** |
+| Independent review | **None**, for any layer. ADR-017 is open; both review packets are prepared and no reviewer is retained |
+
+Two documented facts were wrong and are corrected by this decision rather than left
+standing: `docs/implementation-checklist.md` said the real signing identity had not been
+created, and `README.md` said Android release signing was absent. Both predate ADR-042.
+`docs/deployment-and-release.md` also listed a `staging` flavor that has never existed in
+`build.gradle.kts`, in `lib/`, or in any provisioning prefix.
+
+### The defect this decision had to resolve first
+
+`groupFeatureAvailabilityProvider` derived availability solely from
+`GroupProductionGate.developmentPreviewPermit`, which returns non-null only when
+`!kReleaseMode && environment == development`. The beta flavor is a release build, so
+**every group screen in the Beta artifact rendered `GroupProductionGatePage`** — while
+the same artifact composed `NativeBetaGroupMls`, ran `GroupKeyPackageMaintenanceService`
+as post-inbox work, and processed inbound Welcome, control, and application objects
+through `GroupMlsInboundCoordinator`.
+
+The shipped Beta artifact therefore generated and uploaded MLS KeyPackages, advertising
+to the backend and to peers a capability its own interface would never honour, for
+groups no user of it could create. Piece 18 introduced the screen gate before piece 19
+wired the beta stack, and piece 19 never revisited it. No test covered the beta case.
+
+An ADR cannot state what Beta can access while that contradiction stands, so it is fixed
+here: one source-only permit now decides both the stack and its screens.
+
+### The name
+
+"Beta" is the wrong word and this decision stops using it in front of users.
+
+Beta ordinarily means feature-complete, pre-release, expected to work. This build has no
+independent cryptographic review of any layer, a group ciphersuite on MLS Private Use
+`0xFE4C` that is not `TBD2`-conformant (ADR-040), no background delivery, no
+notifications, no voice, and no search. **Experimental** is the accurate word.
+
+The application ID keeps its `.beta` suffix. ADR-042 froze it, and changing it would
+force every install through an uninstall that destroys local state irrecoverably. An
+application ID is an opaque identifier, not a claim; a launcher label and a persistent
+banner are claims. So the identifier stays `dev.nimashadloo.chat.beta`, the Dart enum
+stays `AppEnvironment.beta`, the Gradle flavor stays `beta` — and every string a user
+reads says Experimental.
+
+### Decision
+
+**D1. The initial deployment is the Private Experimental build.** One Android artifact,
+application ID `dev.nimashadloo.chat.beta`, signed by the frozen Beta identity, compiled
+against one private origin, distributed as a direct APK with its SHA-256 and metadata
+file to a known, named set of roughly 20–30 trusted recipients over the self-hosted
+channel. It is not a beta, a release candidate, or a preview of a shipping product, and
+no document, screen, or release note may present it as one.
+
+**D2. One artifact carrying declared maturity tiers, not a uniform product.** The
+functionality in it is at genuinely different maturity levels and the deployment says so
+rather than averaging them into a single claim:
+
+| Tier | Contents | What is promised |
+|---|---|---|
+| **Supported** | Registration, login, two-phase device enrollment, cross-signing, SAS/QR verification, the signed device log, recovery secret, contacts and encrypted profiles, hybrid PQXDH + Double Ratchet direct messages, the application-event protocol, Saved Messages, attachments, linked devices, device-to-device history transfer, the durable inbox/outbox | Its failure modes are understood, it is covered by tests and vectors, and its local state is intended to survive every update. **Not** that it is audited |
+| **Experimental** | Closed-beta PQ MLS groups | It really transmits and really encrypts, using a maintained implementation. Its state is disposable by decision (ADR-036) and an update may reset it. No standards conformance, no interoperability, no review |
+| **Absent** | Voice rooms, local search, notifications, background delivery, appearance settings | Nothing. These are visibly missing and must stay visibly missing rather than half-present |
+
+Neither of the first two tiers is independently reviewed. "Supported" distinguishes
+expected state durability, not assessed security.
+
+**D3. The existing build-time separation is confirmed and completed, not replaced.**
+Separate flavors, separate application IDs, separate native crypto profiles, separate
+provisioning prefixes, and a signing identity attached at flavor level are the correct
+architecture and are kept exactly as they are. What changes is that the group boundary,
+which was expressed inconsistently in four places, now has one source-only expression:
+`GroupProductionGate.privateExperimentalPermit`. `group_providers.dart` and
+`sync_providers.dart` reach the beta stack only through it, and the five group screens
+gate on `GroupFeatureAvailability.isAvailable` rather than naming one tier, so adding a
+tier can never silently close them again.
+
+### Scope
+
+In scope: the Android Private Experimental artifact, its distribution, its disclosure,
+its isolation from Production, and the conditions under which it is revisited.
+
+Out of scope, and unchanged by this decision: the backend, which stays read-only; the
+production ciphersuite selection (ADR-026); the closed-beta protocol decisions (ADR-036,
+ADR-037, ADR-039, ADR-040, ADR-041); the signing and identity decision (ADR-042); the
+transport trust decision (ADR-043); and the post-v1 Web backlog (ADR-033).
+
+### Explicit non-goals
+
+- This is not a public release, a soft launch, or a staged rollout of one.
+- It does not open any of the seven production gates in `docs/mls-profile.md`, and it
+  does not touch `GroupProductionGate.releaseAssertion`, ADR-017, or ADR-026.
+- It does not give Production a signing identity, and it does not make Production
+  installable.
+- It does not authorize a locally assigned production ciphersuite identifier, a
+  classical fallback, a production KeyPackage path, or a project-local cryptographic
+  fork.
+- It does not create a second product, a second repository, or a long-lived branch.
+- It does not implement background delivery, notifications, search, or voice, and it
+  does not permit shipping a partial version of any of them.
+
+### Alternatives evaluated
+
+**A. One artifact containing everything, gated at runtime.** Rejected. The production
+artifact would then package a native core exporting `cp_crypto_v1_beta_mls_operation`,
+and the only boundary between an unreviewed draft ciphersuite and a production user
+would be a runtime branch — defeated by one bug, one define, or one refactor. Today that
+boundary is provable from the artifact itself: `tool/verify_release_apk.sh --production`
+extracts the packaged `.so` and fails if the beta symbol is present. That evidence is
+worth more than the build simplicity it costs.
+
+**B. Separate Beta and Production build flavors.** Selected, because it is what already
+exists and it survives every objection raised against the others. Two application IDs
+that can never upgrade into one another, two native profiles proven distinct at the
+artifact level, one signing identity that reaches only Beta, and a Production artifact
+that the OS refuses to install.
+
+**C. A separate private-experimental application, developed as its own product.**
+Rejected. It duplicates the entire pairwise stack, doubles the surface any future review
+must cover, and guarantees drift from the line it must eventually graduate into. It buys
+isolation the flavor split already provides, at the cost of the shared reviewed core
+that ADR-032 and ADR-017 depend on.
+
+**D. A long-lived branch or materially separate product.** Rejected for the same reasons
+as C, plus one specific to this project: ADR-042 makes the signing identity and
+application ID unchangeable, so any divergence that later needs to merge back cannot be
+resolved by shipping a different application. The merge cost is paid in user data.
+
+**E. Ship the private deployment with groups closed, as a direct-message-only client.**
+Seriously considered and rejected. It is the smallest attack surface, and if the group
+stack were unproven *and* unwired it would be the right answer. But the group stack is
+already wired into the beta artifact's sync engine and KeyPackage maintenance, so
+closing only the screens produces the current defect rather than safety. Closing it
+properly means unwiring the work of ADR-036, ADR-037, ADR-039, ADR-040 and ADR-041 and
+leaving them permanently unexercisable, since the only remaining piece-19 evidence —
+execution against the packaged Rust core on physical devices against a live backend — can
+only be produced by people using it. That is a dead end, and it would need to supersede
+five accepted decisions to reach. Rejected in favour of exposing it as a declared
+experimental tier with honest disclosure.
+
+### Security invariants that remain mandatory
+
+A small, trusted audience reduces the *adversary population*. It changes nothing about
+the server, the network, or a lost phone. These stay mandatory and each one is enforced,
+not merely asserted:
+
+| Invariant | Enforcement |
+|---|---|
+| The server stays an untrusted relay; every signature, identity, device-log, version, replay, and AEAD check happens on the client | Runtime, throughout `lib/features/**` |
+| No cryptographic primitive or zeroization is implemented in Dart | The primitives live in the Rust core. `test/architecture/crypto_core_boundary_test.dart` asserts the narrow FFI surface and fails if any Dart file imports a cryptography package |
+| Confidentiality and integrity of message content, including against a seized backend | Runtime; `docs/threat-model.md` is unchanged by this decision |
+| Hybrid PQXDH with no classical fallback and no silent downgrade | Build-time and runtime (ADR-025, ADR-034) |
+| Device authentication by cross-signing and the client-signed device log; unsigned devices are never messaged | Runtime (ADR-027) |
+| Transport trusts the provisioned private authority and nothing else; absent or malformed authority material fails configuration closed | Runtime (ADR-043); `test/features/networking/transport_security_test.dart` proves it against a real handshake |
+| Local state is encrypted at rest under a non-exportable AndroidKeyStore key, with backup disabled | Runtime and manifest |
+| Key continuity: the application ID and signing certificate are frozen, and every artifact is verified against the recorded fingerprint before distribution | Build-time and tooling (ADR-042); `tool/verify_release_apk.sh` fails closed |
+| Production cannot execute the beta MLS core | Build-time and artifact-level: the Cargo feature is non-default, the symbol allowlist in `tool/build_rust_android.sh` exits 5 on any mismatch, and `verify_release_apk.sh --production` re-checks the packaged library |
+| Production cannot be installed | Build-time: `signingConfig = null`; asserted on every CI run by `tool/ci.sh` |
+| No arbitrary server selection, certificate bypass, remote configuration, telemetry, foreign push, or third-party runtime resource | Structural: origins come only from `String.fromEnvironment`, `badCertificateCallback` returns false unconditionally, and `pubspec.yaml` declares no such dependency. `AppRuntimePolicy.lockedDown` records the policy and is asserted in `test/features/bootstrap/application/app_configuration_test.dart` |
+| No plaintext, credential, key, or ciphertext in logs | Runtime, with redaction tests |
+| Catastrophic local data loss is treated as unrecoverable, never as an acceptable migration | Process: ADR-042 and `docs/release-signing.md` |
+
+The signing key custody procedure in `docs/release-signing.md` is mandatory before the
+first external install, not after it, and this decision does not relax it. Its one
+unmitigated risk — a single key holder — remains accepted and recorded there.
+
+**On `docs/threat-model.md`'s security release gates.** They include "no shipping an
+unreviewed cross-platform protocol implementation" and an independent sign-off. Handing
+an artifact to 20–30 people is plainly shipping *something*, so the tension is real and
+is resolved explicitly rather than by wordplay: those gates are **release** gates and
+they stay closed. This decision does not open them, does not claim they are satisfied,
+and does not make this artifact a release. It authorizes one narrower thing — private,
+named, disclosed distribution of an artifact that says what it is — and it pays for that
+by requiring the written disclosure in the user-disclosure section to reach every
+recipient. If the disclosure is not delivered, the distribution is not authorized.
+
+### Requirements deferred, and the risk each deferral keeps
+
+| Deferred | Why it is not a prerequisite here | Residual risk |
+|---|---|---|
+| Independent cryptographic review (ADR-017, production gate 7) | It is a public-release gate. Retaining a reviewer is an external event with unknown availability and cost, and blocking a 20–30 person private deployment on it would leave the implementation permanently unexercised against real devices | **The largest one.** No layer, pairwise included, has been assessed by anyone outside the project. A design or implementation flaw in PQXDH, the ratchet, the device log, or the storage layer would not be caught. Users must be told this plainly |
+| An IANA-assigned MLS ciphersuite value and a non-expiring primitive specification (gates 1, 2) | No amount of work in this repository can advance either. The private deployment does not interoperate with anything | Group state is tied to a Private Use identifier and a moving draft, so it is disposable by construction. Disclosed in tier 2 |
+| A maintained provider implementing `TBD2`'s KEM (gate 3) | ADR-040 determined that no such provider exists and that supplying one locally would be a project-local cryptographic fork | The beta KEM is hybrid ML-KEM-768/X25519 from a maintained implementation, but it is not `TBD2` and can never be `TBD2` evidence |
+| Cross-implementation interoperability | `docs/mls-profile.md` determined it structurally unobtainable: the beta KEM has one implementation and no specification, so no second implementation can be *configured* to it | No independent implementation can validate the group wire format |
+| Upstream MLS interoperability vectors (part of gate 4) | The MLS WG repository publishes only classical fixtures | Project vectors and NIST ACVP anchors are the only fixture evidence |
+| Web, Wasm, and browser vectors | Post-v1 under ADR-033; crypto-dependent Web behavior stays fail-closed | None for this deployment |
+| Background delivery, notifications, search, voice | None is required for the deployment to be usable, and a partial implementation of any of them would make a delivery promise the system cannot keep | Messages arrive only while the app is running. This is the single most consequential user-visible limitation and must be disclosed |
+| Reproducible builds and SBOM | Public-release supply-chain requirements. The artifact is built by one maintainer from a recorded revision, and the metadata file records that revision and warns when the tree is dirty | A recipient cannot independently reproduce the artifact; they can only verify that it carries the expected signer and hash |
+
+### What may and may not be claimed
+
+| Term | Permitted? |
+|---|---|
+| **Experimental** | Yes, everywhere. It is the accurate description of the artifact as a whole |
+| **Beta** | Not in user-facing text. Permitted only where it names the frozen identifier, the Gradle flavor, or the `AppEnvironment` value |
+| **End-to-end encrypted** | Yes for direct messages, attachments, and profiles. The pairwise construction is implemented, tested against vectors, and has no fallback path |
+| **Post-quantum** | Yes, with precision: hybrid X25519 + ML-KEM-768 for direct-message session establishment, and hybrid ML-KEM-768/X25519 for the experimental group layer. Never as a bare adjective for the product |
+| **MLS** | Only as "based on the MLS protocol (RFC 9420) with an experimental non-standard ciphersuite". Never unqualified; the suite is Private Use `0xFE4C` |
+| **Standards-compliant**, **interoperable**, **conformant** | **No.** For the group layer these are provably false (ADR-040) |
+| **Audited**, **reviewed**, **verified** | **No**, for any layer, until ADR-017 closes |
+| **Secure** | Not as a bare claim. Specific, scoped statements only — what is protected, against whom, and what is not |
+| **Production**, **release**, **stable**, **1.0** | **No** |
+
+### User disclosure requirements
+
+The goal is that the user's expectations match the system's actual behavior. Every item
+below is a requirement of this decision:
+
+1. **A persistent build-identity banner.** Present on the blocking Connection screen and
+   inside the application shell, reading "Private experimental build". Production shows
+   no banner. *Implemented:* `AppEnvironmentBanner`.
+2. **Per-tier honesty on the experimental surfaces.** Group screens state that the
+   encryption is experimental, unreviewed, non-standard, and that an update may reset
+   those groups and delete their messages. The development preview keeps its own distinct
+   wording, because it transmits nothing and the experimental build does. *Implemented:*
+   `_GroupMaturityBanner`, covered by a widget test asserting the two builds do not share
+   one string.
+3. **Absent features stay visibly absent.** Voice rooms and appearance remain badged
+   non-shipping placeholders. *Implemented:* `StructuralPlaceholderPage`.
+4. **Out-of-band disclosure at handover.** Because there is no store listing and no
+   in-app onboarding disclosure yet, the following must be delivered in writing with the
+   APK, alongside the SHA-256 and the metadata file, and is a release-blocking checklist
+   item:
+   - no part of the cryptography has been independently reviewed;
+   - messages arrive only while the app is running — there is no background delivery and
+     no notifications, so this must not be relied on for anything time-critical;
+   - group messaging is experimental and its history can be lost on an update;
+   - message history exists only on the device; the server holds none, and uninstalling
+     destroys it permanently;
+   - a recovery secret plus a second enrolled device is the only way to recover an
+     identity, and it does not recover history;
+   - this build is for evaluation among people who already trust each other, and is not
+     appropriate for anyone whose safety depends on the confidentiality of their
+     messages.
+5. **What must never be communicated:** any claim from the "No" rows above, any implied
+   delivery guarantee, and any statement that the private CA pin-set in the Android
+   network security configuration protects the app's API traffic — ADR-043 established
+   that it does not.
+
+An in-app first-run disclosure is the correct home for item 4 and is recorded as
+follow-up work. It is deliberately not implemented here: this decision does not
+introduce product surfaces, and a written handover is sufficient and verifiable for a
+named 20–30 person audience.
+
+### The production boundary
+
+Unchanged by this decision except that the group boundary now has one expression instead
+of being restated in each composition root and again on every screen. Nothing here
+weakens an existing boundary.
+
+| | Production | Private Experimental |
+|---|---|---|
+| Installable | **No.** Packages unsigned; the OS refuses it | Yes, signed by the frozen Beta identity |
+| Native core | `foundation` profile. Does not export `cp_crypto_v1_beta_mls_operation` | `beta` profile. Exports it |
+| Group stack | `UnsupportedGroupMlsCrypto`, failing closed on all nine port methods | `NativeBetaGroupMls` |
+| Group screens | `GroupProductionGatePage` | Reachable, with the experimental banner |
+| KeyPackage upload | Impossible: the maintenance provider throws | Generated and uploaded |
+| Origin, CA, pins | `PRODUCTION_*` only | `BETA_*` only. A separate backend deployment and separate accounts |
+| Local state | Its own sandbox, its own KeyStore alias | Its own sandbox, its own KeyStore alias |
+| Signing identity | None | The frozen persistent identity |
+
+**Nothing crosses.** The two are different applications; neither upgrades into the other,
+no data migrates between them, and no MLS state, group, ratchet, or KeyPackage produced
+by one is ever readable by the other.
+
+**If someone tries to enable beta functionality in Production**, in order of which fails
+first: `GroupProductionGate.privateExperimentalPermit` returns null for production, so
+the composition root installs the unsupported adapter; `main_production.dart` references
+`GroupProductionGate.releaseAssertion`, whose `assert` and explicit `StateError` fail
+release compilation if the constant is edited; the production Cargo build does not enable
+`beta-pq-mls`, so the symbol does not exist to call; `tool/build_rust_android.sh` exits 5
+if the exported symbol set differs from its allowlist; `tool/verify_release_apk.sh
+--production` extracts the packaged library and fails if the symbol is present;
+`tool/ci.sh` runs that check on every run; and the artifact is unsigned regardless, so no
+device can install it.
+
+Compile-time and build-time: the Cargo feature, the flavor source sets, the symbol
+allowlist, the provisioning prefixes, `signingConfig = null`, and the
+`GroupProductionGate` constants. Runtime: the permits and the composed adapters.
+CI-enforced: the production build, the artifact verification, analysis, and the test
+suite.
+
+This was run, not assumed. A production release APK built from this working tree on
+2026-08-20 passed `tool/verify_release_apk.sh --production`: application ID
+`dev.nimashadloo.chat`, unsigned so the OS cannot install it, and a packaged native core
+that does not export `cp_crypto_v1_beta_mls_operation`.
+
+### Piece 19 under this deployment
+
+The deployment objective changes how piece 19's remaining work is classified. It changes
+none of its findings.
+
+| Classification | Work |
+|---|---|
+| **Mandatory for this deployment** | Nothing new to build. What ships is what exists. The one genuinely required outstanding item is execution of the closed-beta group stack against the packaged Rust core, on physical devices, against a live backend — which this deployment is the mechanism for producing |
+| **Useful but deferrable** | Broader adversarial and multi-device matrices; the manual product-state upgrade tier in `docs/release-signing.md` before any storage-, schema-, or crypto-state-touching release |
+| **Primarily public production** | Gates 1, 2, 3, 5 and 7: registry assignment, suite identifier, maintained provider support, KeyPackage bucket conformance for the production suite, and independent review. Gates 4 and 6 each have an Android device half that this deployment does exercise, but neither can be *evidenced* until the suite those fixtures must be run against exists |
+| **Externally blocked** | Gates 1, 2, 3, upstream vectors, and a retained reviewer. Five prerequisites, none movable from inside this repository |
+| **Obsolete as previously framed** | Re-running the Phase-A preflight audit as the deliverable of every attempt at piece 19. It is now trigger-driven: re-run it when one of the revisit conditions below fires, not on a schedule. The audit's *content*, its stop-and-decide rule, and the prohibition on locally assigning an identifier are all unchanged |
+
+Piece 19 is therefore not "blocked pending five gates" for the purposes of this
+deployment. Its closed-beta half is **delivered**, as the experimental tier. Its
+production half stays blocked exactly as `docs/mls-profile.md` records.
+
+### Piece 20
+
+Its prerequisite was written for a public-release objective and no longer says anything
+actionable: it requires that piece 19 pass every production gate, and gates 1–3 cannot be
+reached from inside this project, so as written piece 20 is permanently dead rather than
+merely blocked.
+
+Re-scoped, without touching any implementation, because none exists: **piece 20's real
+prerequisite is a decision about which MLS exporter it may derive media keys from.** Two
+paths, and this ADR grants neither:
+
+- the production gates close and voice consumes the reviewed production exporter; or
+- a separate, later ADR explicitly accepts the private-experimental exporter for
+  experimental voice only, under the same disposable-state and disclosure rules.
+
+The second is available but is deliberately not taken here. Real-time audio would rest on
+the least mature layer in the system, and it needs its own evidence: a self-hosted
+LiveKit and TURN deployment, an Android SFrame wire spike proving the SFU cannot decrypt,
+and a truthful foreground-service integration. That is a decision to make with that
+evidence in hand, not a corollary of this one.
+
+`docs/implementation-prompts.md` is untracked, so this re-scope is recorded here, and
+this ADR is authoritative over the prompt text.
+
+### Evolution toward public production
+
+The private deployment must not become an architectural dead end. It does not, because
+almost everything in it graduates unchanged.
+
+**Graduates as-is:** the entire supported tier — the Rust core and its FFI boundary, the
+pairwise transport, the application-event protocol, device enrollment and cross-signing,
+the device log, recovery, attachments, history transfer, the durable sync engine, the
+storage layer, the design system, and the transport trust model.
+
+**Needs replacement, not migration:** the experimental group layer. When production gates
+1–3 close, the suite changes, and ADR-036 already fixes the consequence: beta group state
+is reinitialized, never silently migrated. Groups are recreated and rejoined. This is
+disclosed to users in advance rather than discovered by them.
+
+**Needs building:** background delivery, notifications, search, and voice.
+
+**How users migrate.** They do not upgrade from the experimental application into the
+production one — the application IDs differ, so no upgrade path can exist. A user moving
+to the public product installs a second application, registers against the production
+backend, and starts fresh. Their experimental install keeps working independently until
+they remove it. Anyone expecting their experimental history to appear in the production
+app will be wrong, and must be told so before they invest in that history.
+
+**Application identity.** Production keeps `dev.nimashadloo.chat`, already reserved and
+already the flavor's ID. It gains its own signing identity only through an explicit,
+separate release decision, created offline, with its own custody procedure. Nothing in
+this decision authorizes creating it.
+
+**Cryptographic state.** Identity material — the account master key, device keys, the
+device log — is portable in principle through the existing recovery format, but it is
+bound to a backend deployment, and the experimental and production backends are separate.
+In practice, production enrollment is a fresh enrollment.
+
+### Irreversible decisions
+
+Recorded plainly, because pretending migration will be easy is how projects lose user
+data:
+
+1. **The Beta application ID and signing certificate are permanent.** Losing the key ends
+   the deployment's ability to update. Rotation cannot fix key loss, and with `minSdk` 24
+   the original key must keep signing the v2 block forever, so a compromised key can
+   never be fully retired.
+2. **Local history has no second copy.** No server history by design, backup disabled,
+   database key non-exportable. Any event that erases app data erases history for a
+   single-device user, permanently.
+3. **Experimental group state is disposable and will be discarded.** Not a risk — a
+   scheduled outcome, whenever the draft, the identifier, or the suite changes.
+4. **The private CA is the only trust anchor.** `withTrustedRoots: false` means a lost or
+   compromised authority requires a new build, distributed out of band, to restore
+   connectivity. This is deliberate and stronger than the public-CA model it replaced,
+   and it has no runtime recovery path.
+5. **Every user who receives this artifact learns the project exists.** A private
+   deployment is not anonymous distribution.
+
+### Consequences
+
+- The Beta artifact's group stack becomes reachable by the people who install it, which
+  is the only way the last outstanding piece-19 evidence can be produced.
+- The KeyPackages that artifact was already uploading now correspond to groups that can
+  actually exist.
+- One permit, in one file, decides the experimental boundary. Three architecture tests
+  and one widget test fail if either half drifts from the other.
+- Users see "Experimental" rather than "Closed beta", which is a weaker and truer claim.
+- Production's fail-closed posture is unchanged and now stated in one place: it cannot
+  execute the beta core, and it cannot be installed at all.
+- The deployment ships without background delivery or notifications. That is a real
+  usability cost, accepted deliberately in exchange for not making a delivery promise the
+  system cannot keep.
+- Nothing here opens a production gate, and no accepted decision is superseded.
+
+### Review and revisit conditions
+
+Deadlines are not triggers. Re-open this decision when one of these occurs:
+
+1. **The audience changes shape** — distribution beyond the known, named recipients, or
+   any distribution to someone who is not personally trusted by the maintainer.
+2. **Public distribution is proposed**, in any form, including a store listing.
+3. **An independent cryptographic review is retained**, or reports findings. This is the
+   single largest deferred requirement and its closure changes what may be claimed.
+4. **A production gate closes**, particularly gates 1 or 2, which would begin the group
+   layer's replacement and its state reinitialization.
+5. **A signing or application-identity event** — key loss, suspected key exposure, or a
+   second key holder being added.
+6. **Android's developer-verification requirement reaches the deployment's users.**
+   Google's developer-verification documentation, read on 2026-08-20, records enforcement
+   for certified Android devices in Brazil, Indonesia, Singapore and Thailand from
+   2026-09-30, a global rollout in 2027, ADB and an advanced install flow remaining
+   available for unregistered apps, and a free limited-distribution account capped at
+   about 20 devices. This deployment targets 20–30 *users*, several of whom will enrol
+   more than one device, so that cap may not cover it. This was established from search
+   summaries of official Google domains, not from a page read end to end; the primary
+   documentation must be read and dated before any of it becomes binding, and no
+   distribution decision may rest on the numbers above until it is.
+7. **The threat model changes** — a user whose safety depends on this software, or a
+   materially different adversary than `docs/threat-model.md` records.
+8. **Background delivery or notifications are implemented**, which changes the delivery
+   promise and therefore the disclosure.
+
 ## ADR-041 in full — same-revision fork ordering (2026-08-17)
 
 **Status:** Accepted. Closed-beta protocol decision. Supersedes ADR-038. **Opens no
@@ -367,8 +829,10 @@ spikes, not guessed in this document.
 
 ## Decisions that do not block development
 
-- Product name, logo, and final Android application ID remain placeholders.
-- Direct signed APK distribution is the initial release channel. Self-hosted Web
-  distribution is post-v1 and requires a later approved release decision.
+- Product name, logo, and app icon remain placeholders. The Android application IDs are
+  **not** placeholders: ADR-042 froze them, and ADR-044 makes the Private Experimental
+  one the identity the initial deployment ships under.
+- Direct signed APK distribution is the initial release channel, defined by ADR-044.
+  Self-hosted Web distribution is post-v1 and requires a later approved release decision.
 - Django Admin remains the administration surface; a client admin feature is out of
   scope.
