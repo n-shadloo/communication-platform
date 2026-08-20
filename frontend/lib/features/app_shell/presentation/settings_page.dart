@@ -1,34 +1,73 @@
+import 'package:communication_platform/app/design_system/app_icons.dart';
 import 'package:communication_platform/app/design_system/app_tokens.dart';
+import 'package:communication_platform/l10n/generated/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 final class SettingsPage extends StatelessWidget {
   const SettingsPage({super.key});
+
   @override
-  Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('Settings')),
-    body: ListView(
-      padding: const EdgeInsets.all(AppSpacing.x4),
-      children: [
-        Card(
-          child: ListTile(
-            leading: const Icon(Icons.devices),
-            title: const Text('Linked Devices'),
-            subtitle: const Text(
-              'Review, rename, or revoke devices on this account',
-            ),
-            trailing: const Icon(Icons.chevron_right),
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    return Scaffold(
+      appBar: AppBar(title: Text(l10n.settingsDestination)),
+      body: ListView(
+        padding: const EdgeInsets.all(AppSpacing.x4),
+        children: [
+          _SettingsEntry(
+            icon: AppIcons.devices,
+            title: l10n.settingsLinkedDevicesTitle,
+            summary: l10n.settingsLinkedDevicesSummary,
             onTap: () => context.go('/settings/linked-devices'),
           ),
-        ),
-        Card(
-          child: ListTile(
-            title: const Text('Appearance'),
-            trailing: const Icon(Icons.chevron_right),
+          // The security notice is acknowledged once, during enrollment, and is
+          // never shown again on a timer. It therefore has to stay reachable on
+          // demand, or the one statement a user agreed to becomes unreadable
+          // after the moment they agreed to it (ADR-045).
+          _SettingsEntry(
+            entryKey: const ValueKey('settings-security-notice'),
+            icon: AppIcons.security,
+            title: l10n.authSecurityNoticeAction,
+            onTap: () => context.push('/security-notice'),
+          ),
+          _SettingsEntry(
+            icon: AppIcons.settings,
+            title: l10n.settingsAppearanceTitle,
             onTap: () => context.go('/settings/appearance'),
           ),
-        ),
-      ],
+        ],
+      ),
+    );
+  }
+}
+
+final class _SettingsEntry extends StatelessWidget {
+  const _SettingsEntry({
+    required this.icon,
+    required this.title,
+    required this.onTap,
+    this.summary,
+    this.entryKey,
+  });
+
+  final AppIconData icon;
+  final String title;
+  final String? summary;
+  final VoidCallback onTap;
+  final Key? entryKey;
+
+  @override
+  Widget build(BuildContext context) => Card(
+    child: ListTile(
+      key: entryKey,
+      leading: AppIcon(icon, decorative: true),
+      title: Text(title),
+      subtitle: summary == null ? null : Text(summary!),
+      // `AppIcons.forward` mirrors in RTL; a raw chevron does not, and this
+      // page is one of the two the product ships in Persian.
+      trailing: AppIcon(AppIcons.forward, decorative: true),
+      onTap: onTap,
     ),
   );
 }

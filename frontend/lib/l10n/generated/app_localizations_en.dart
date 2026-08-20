@@ -15,6 +15,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get developmentAppTitle => 'Communication Platform (Development)';
 
   @override
+  String get experimentalAppTitle => 'Communication Platform (Experimental)';
+
+  @override
   String get developmentConfiguration => 'Development configuration';
 
   @override
@@ -24,19 +27,19 @@ class AppLocalizationsEn extends AppLocalizations {
   String get foundationReady => 'Flutter foundation is ready';
 
   @override
-  String get bootstrapLoadingConfiguration => 'Loading secure configurationâ€¦';
+  String get bootstrapLoadingConfiguration => 'Loading secure configuration…';
 
   @override
-  String get bootstrapCheckingStorage => 'Checking protected storageâ€¦';
+  String get bootstrapCheckingStorage => 'Checking protected storage…';
 
   @override
-  String get bootstrapDiscoveringIdentity => 'Checking this deviceâ€¦';
+  String get bootstrapDiscoveringIdentity => 'Checking this device…';
 
   @override
-  String get bootstrapValidatingTrust => 'Verifying server trustâ€¦';
+  String get bootstrapValidatingTrust => 'Verifying server trust…';
 
   @override
-  String get bootstrapCheckingServer => 'Connecting to the serverâ€¦';
+  String get bootstrapCheckingServer => 'Connecting to the server…';
 
   @override
   String get bootstrapReady => 'Ready';
@@ -90,6 +93,22 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsDestination => 'Settings';
 
   @override
+  String get maturityExperimentalLabel => 'Experimental';
+
+  @override
+  String get maturityNotBuiltLabel => 'Not built yet';
+
+  @override
+  String get settingsLinkedDevicesTitle => 'Linked Devices';
+
+  @override
+  String get settingsLinkedDevicesSummary =>
+      'Review, rename, or revoke devices on this account';
+
+  @override
+  String get settingsAppearanceTitle => 'Appearance';
+
+  @override
   String get chatsPlaceholderTitle => 'Chats structure';
 
   @override
@@ -97,11 +116,11 @@ class AppLocalizationsEn extends AppLocalizations {
       'The routed conversation list and detail regions are ready for later feature pieces.';
 
   @override
-  String get voiceRoomsPlaceholderTitle => 'Voice Rooms structure';
+  String get voiceRoomsPlaceholderTitle => 'Voice rooms';
 
   @override
   String get voiceRoomsPlaceholderBody =>
-      'The routed voice-room list and detail regions are ready for later feature pieces.';
+      'Voice rooms are not built yet. This build sends and receives no audio.';
 
   @override
   String get settingsPlaceholderTitle => 'Settings structure';
@@ -126,18 +145,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get newRoomPlaceholderTitle => 'Create voice room';
 
   @override
-  String get placeholderBody =>
-      'This route exists only to validate adaptive navigation and deep links.';
-
-  @override
-  String get nonShippingPlaceholder =>
-      'Structural placeholder — not for shipping';
-
-  @override
-  String get openPlaceholderDetail => 'Open placeholder detail';
-
-  @override
-  String get openAppearanceDetail => 'Open appearance detail';
+  String get placeholderBody => 'This part of the app is not built yet.';
 
   @override
   String get composeChat => 'Start a conversation';
@@ -213,6 +221,10 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get authSecurityNoticeAction => 'Security & how this app protects you';
+
+  @override
+  String get securityNoticeTitle =>
+      'What this app protects — and what it doesn\'t';
 
   @override
   String get authBackToLoginAction => 'Back to login';
@@ -297,9 +309,6 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get authSecureSetupBoundaryMessage =>
       'You are signed in with registration-only access. Device registration is completed in the next setup step.';
-
-  @override
-  String get authSecurityNoticeTitle => 'Security boundary';
 
   @override
   String get authSecurityNoticeMessage =>
@@ -413,10 +422,6 @@ class AppLocalizationsEn extends AppLocalizations {
       'Secure setup could not continue. Try again.';
 
   @override
-  String get enrollmentSecurityTitle =>
-      'What this app protects — and what it doesn\'t';
-
-  @override
   String get enrollmentIdentityRecoveredTitle => 'Identity recovered';
 
   @override
@@ -439,6 +444,37 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get enrollmentUnderstandAction => 'I understand';
+
+  @override
+  String get disclosureBuildTitle => 'What this build is';
+
+  @override
+  String get disclosureNoIndependentReview =>
+      'Nobody outside the project has reviewed this app\'s encryption. It is written and tested by one person, and a mistake in it would not have been caught.';
+
+  @override
+  String get disclosureForegroundDeliveryOnly =>
+      'Messages arrive only while this app is open. There are no notifications and nothing runs in the background, so do not rely on it for anything urgent.';
+
+  @override
+  String get disclosureDeviceOnlyHistory =>
+      'Your messages are stored only on this phone. The server keeps no copy and no backup exists, so uninstalling the app destroys them permanently.';
+
+  @override
+  String get disclosureRecoveryExcludesHistory =>
+      'Your recovery secret restores your account identity on a new device. It never restores messages; those can only come from another device of yours that still works.';
+
+  @override
+  String get disclosureExperimentalGroups =>
+      'Group chats use experimental encryption that is not finished or standardised. An update can reset a group and delete everything in it.';
+
+  @override
+  String get disclosureUnbuiltSurfaces =>
+      'Some things you can see are not built yet: voice rooms, search and file attachments do nothing, and the display name and photo you choose are not published — other people see the username you registered with.';
+
+  @override
+  String get disclosureIntendedUse =>
+      'This build is for trying out among people who already trust each other. It is not suitable if your safety depends on your messages staying private.';
 
   @override
   String get contactsNewTitle => 'New';
@@ -524,7 +560,11 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get profileTemporaryTransport =>
-      'Profile encryption and key delivery are using development-only fake transport until pairwise messaging is available. Production remains blocked.';
+      'Development build only: profile encryption and key delivery here are a stand-in, not real cryptography.';
+
+  @override
+  String get profileNotBuiltNotice =>
+      'This build cannot publish a profile yet. The name and photo you choose here are not sent anywhere, and your contacts see the username you registered with.';
 
   @override
   String get profileSavedMessage => 'Encrypted profile published.';
@@ -898,6 +938,10 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get attachmentChoosePrompt => 'Choose encrypted media or a file.';
+
+  @override
+  String get attachmentsNotBuiltNotice =>
+      'File attachments are not built yet. Nothing can be attached to a message in this build.';
 
   @override
   String get attachmentPhotoOption => 'Photo or image';

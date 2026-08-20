@@ -81,9 +81,6 @@ final class ProfileService {
   final ProfileProtectionPort protection;
   final ProfileKeyDistributionPort keyDistribution;
 
-  bool get usesTemporaryTransport =>
-      !protection.isProductionReady || !keyDistribution.isProductionReady;
-
   Future<Result<AuthenticatedProfile?>> refreshPeer(String userId) async {
     final authenticated = await authentication.refreshPeer(
       userId: userId,

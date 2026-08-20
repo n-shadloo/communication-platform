@@ -50,6 +50,28 @@ void main() {
     expect(find.text('Open or save verified file'), findsOneWidget);
     expect(find.textContaining('../'), findsNothing);
   });
+
+  testWidgets('with no picker wired the sheet says attachments are absent', (
+    tester,
+  ) async {
+    // This is the path the running app takes: the composer's paperclip
+    // opens the sheet with nothing behind it, because no build composes an
+    // attachment picker or transfer service. It used to offer three choices
+    // that did nothing at all when tapped (ADR-045).
+    await _pump(tester, const AttachmentSheet());
+
+    expect(
+      find.text(
+        'File attachments are not built yet. Nothing can be attached to a '
+        'message in this build.',
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('Not built yet'), findsOneWidget);
+    for (final label in ['Photo or image', 'File', 'Camera']) {
+      expect(find.text(label), findsNothing);
+    }
+  });
 }
 
 Future<void> _pump(WidgetTester tester, Widget child) => tester.pumpWidget(

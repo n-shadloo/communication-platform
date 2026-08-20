@@ -8,6 +8,10 @@
   "@developmentAppTitle": {
     "description": "The application title for visibly non-production builds."
   },
+  "experimentalAppTitle": "Communication Platform (Experimental)",
+  "@experimentalAppTitle": {
+    "description": "The application title for the Private Experimental build. It must match the Android launcher label set by the beta product flavor, and it must never read \"Development\": a build installed by other people may not present itself as a developer build (ADR-044)."
+  },
   "developmentConfiguration": "Development configuration",
   "@developmentConfiguration": {
     "description": "A persistent warning that the running app is not production."
@@ -20,11 +24,11 @@
   "@foundationReady": {
     "description": "Bootstrap text shown before product screens are implemented."
   },
-  "bootstrapLoadingConfiguration": "Loading secure configurationâ€¦",
-  "bootstrapCheckingStorage": "Checking protected storageâ€¦",
-  "bootstrapDiscoveringIdentity": "Checking this deviceâ€¦",
-  "bootstrapValidatingTrust": "Verifying server trustâ€¦",
-  "bootstrapCheckingServer": "Connecting to the serverâ€¦",
+  "bootstrapLoadingConfiguration": "Loading secure configuration…",
+  "bootstrapCheckingStorage": "Checking protected storage…",
+  "bootstrapDiscoveringIdentity": "Checking this device…",
+  "bootstrapValidatingTrust": "Verifying server trust…",
+  "bootstrapCheckingServer": "Connecting to the server…",
   "bootstrapReady": "Ready",
   "notProvisionedTitle": "App not provisioned",
   "notProvisionedMessage": "Install a provisioned copy of this app from a trusted source. There is no connection bypass.",
@@ -40,10 +44,21 @@
   "chatsDestination": "Chats",
   "voiceRoomsDestination": "Voice Rooms",
   "settingsDestination": "Settings",
+  "maturityExperimentalLabel": "Experimental",
+  "@maturityExperimentalLabel": {
+    "description": "Badge for a surface that really transmits and encrypts but is neither reviewed nor standardised and whose state is disposable (ADR-045, SurfaceMaturity.experimental)."
+  },
+  "maturityNotBuiltLabel": "Not built yet",
+  "@maturityNotBuiltLabel": {
+    "description": "Badge for a surface that is routed and visible but has no implementation behind it (ADR-045, SurfaceMaturity.notBuilt). It replaces \"Structural placeholder - not for shipping\", which was developer wording and which contradicted itself in a build that does ship."
+  },
+  "settingsLinkedDevicesTitle": "Linked Devices",
+  "settingsLinkedDevicesSummary": "Review, rename, or revoke devices on this account",
+  "settingsAppearanceTitle": "Appearance",
   "chatsPlaceholderTitle": "Chats structure",
   "chatsPlaceholderBody": "The routed conversation list and detail regions are ready for later feature pieces.",
-  "voiceRoomsPlaceholderTitle": "Voice Rooms structure",
-  "voiceRoomsPlaceholderBody": "The routed voice-room list and detail regions are ready for later feature pieces.",
+  "voiceRoomsPlaceholderTitle": "Voice rooms",
+  "voiceRoomsPlaceholderBody": "Voice rooms are not built yet. This build sends and receives no audio.",
   "settingsPlaceholderTitle": "Settings structure",
   "settingsPlaceholderBody": "The routed settings list and detail regions are ready for later feature pieces.",
   "threadPlaceholderTitle": "Conversation detail",
@@ -51,10 +66,7 @@
   "appearancePlaceholderTitle": "Appearance detail",
   "newChatPlaceholderTitle": "New conversation",
   "newRoomPlaceholderTitle": "Create voice room",
-  "placeholderBody": "This route exists only to validate adaptive navigation and deep links.",
-  "nonShippingPlaceholder": "Structural placeholder — not for shipping",
-  "openPlaceholderDetail": "Open placeholder detail",
-  "openAppearanceDetail": "Open appearance detail",
+  "placeholderBody": "This part of the app is not built yet.",
   "composeChat": "Start a conversation",
   "composeVoiceRoom": "Create a voice room",
   "connectingStatus": "Connecting…",
@@ -87,6 +99,10 @@
   "authCreateAccountAction": "Create account",
   "authCreatingAccountAction": "Creating account…",
   "authSecurityNoticeAction": "Security & how this app protects you",
+  "securityNoticeTitle": "What this app protects — and what it doesn't",
+  "@securityNoticeTitle": {
+    "description": "Title of the single security notice. It is shown as the mandatory last step of device enrollment and again whenever the notice is re-opened from Settings or from the pre-login link."
+  },
   "authBackToLoginAction": "Back to login",
   "authBackAction": "Back",
   "authUsernameFormatError": "Use 3–32 letters, numbers, or underscores.",
@@ -110,7 +126,6 @@
   "authRestoringSession": "Restoring your secure session…",
   "authSecureSetupBoundaryTitle": "Secure device setup required",
   "authSecureSetupBoundaryMessage": "You are signed in with registration-only access. Device registration is completed in the next setup step.",
-  "authSecurityNoticeTitle": "Security boundary",
   "authSecurityNoticeMessage": "Your login password authenticates your account. A separate recovery secret protects cryptographic identity material. Neither secret restores message history from the server.",
   "enrollmentSetupTitle": "Setting up encryption on this device",
   "enrollmentWithheldMessage": "Finishing secure device setup. Messaging stays unavailable until every security step completes.",
@@ -142,7 +157,6 @@
   "enrollmentLogConflictMessage": "The signed device log changed concurrently or did not match. Secure setup is blocked.",
   "enrollmentUnsupportedMessage": "This installation does not support the required secure enrollment protocol.",
   "enrollmentGenericMessage": "Secure setup could not continue. Try again.",
-  "enrollmentSecurityTitle": "What this app protects \u2014 and what it doesn't",
   "enrollmentIdentityRecoveredTitle": "Identity recovered",
   "enrollmentNoHistoryMessage": "Your cryptographic identity is ready. No message history was restored: history can only come later from an existing online device, and history transfer is not part of this setup.",
   "enrollmentProtectsHeading": "What it DOES protect",
@@ -150,6 +164,17 @@
   "enrollmentDoesNotProtectHeading": "What it does NOT protect",
   "enrollmentDoesNotProtectBody": "It does not hide connection timing, IP addresses, traffic patterns, or the social graph from a live hostile server operator. First contact is not protected until users compare fingerprints out of band. Encryption also cannot protect content already decrypted on a compromised or seized device.",
   "enrollmentUnderstandAction": "I understand",
+  "disclosureBuildTitle": "What this build is",
+  "@disclosureBuildTitle": {
+    "description": "Heading of the deployment disclosure section, rendered only by a build that is handed to someone else (ADR-045)."
+  },
+  "disclosureNoIndependentReview": "Nobody outside the project has reviewed this app's encryption. It is written and tested by one person, and a mistake in it would not have been caught.",
+  "disclosureForegroundDeliveryOnly": "Messages arrive only while this app is open. There are no notifications and nothing runs in the background, so do not rely on it for anything urgent.",
+  "disclosureDeviceOnlyHistory": "Your messages are stored only on this phone. The server keeps no copy and no backup exists, so uninstalling the app destroys them permanently.",
+  "disclosureRecoveryExcludesHistory": "Your recovery secret restores your account identity on a new device. It never restores messages; those can only come from another device of yours that still works.",
+  "disclosureExperimentalGroups": "Group chats use experimental encryption that is not finished or standardised. An update can reset a group and delete everything in it.",
+  "disclosureUnbuiltSurfaces": "Some things you can see are not built yet: voice rooms, search and file attachments do nothing, and the display name and photo you choose are not published — other people see the username you registered with.",
+  "disclosureIntendedUse": "This build is for trying out among people who already trust each other. It is not suitable if your safety depends on your messages staying private.",
   "contactsNewTitle": "New",
   "contactsNewGroup": "New Group",
   "contactsNewVoiceRoom": "New Voice Room",
@@ -176,7 +201,8 @@
   "profileAvatarStyleLabel": "Avatar style",
   "profileSaveAction": "Save encrypted profile",
   "profileSavingAction": "Saving…",
-  "profileTemporaryTransport": "Profile encryption and key delivery are using development-only fake transport until pairwise messaging is available. Production remains blocked.",
+  "profileTemporaryTransport": "Development build only: profile encryption and key delivery here are a stand-in, not real cryptography.",
+  "profileNotBuiltNotice": "This build cannot publish a profile yet. The name and photo you choose here are not sent anywhere, and your contacts see the username you registered with.",
   "profileSavedMessage": "Encrypted profile published.",
   "profileInvalidName": "Enter a display name of 1 to 64 characters.",
   "safetyTitle": "Safety number",
@@ -317,6 +343,7 @@
   "chatYouAuthor": "You",
   "chatAttachmentsUnavailable": "Open or save verified file",
   "attachmentChoosePrompt": "Choose encrypted media or a file.",
+  "attachmentsNotBuiltNotice": "File attachments are not built yet. Nothing can be attached to a message in this build.",
   "attachmentPhotoOption": "Photo or image",
   "attachmentFileOption": "File",
   "attachmentCameraOption": "Camera",

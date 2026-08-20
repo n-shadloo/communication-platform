@@ -1,3 +1,4 @@
+import 'package:communication_platform/app/config/deployment_disclosure.dart';
 import 'package:communication_platform/app/design_system/app_components.dart';
 import 'package:communication_platform/app/design_system/app_icons.dart';
 import 'package:communication_platform/app/design_system/app_tokens.dart';
@@ -5,6 +6,13 @@ import 'package:communication_platform/l10n/generated/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+/// A routed destination that a user can reach and that has no implementation
+/// behind it.
+///
+/// It carries the shared [SurfaceMaturity.notBuilt] badge and says so in plain
+/// words. It deliberately offers nothing to open: a "not built yet" screen with
+/// a button to another "not built yet" screen is half-presence, which is what
+/// ADR-044 requires absent features not to be.
 enum StructuralPlaceholderKind {
   chats,
   voiceRooms,
@@ -72,7 +80,7 @@ class StructuralPlaceholderPage extends StatelessWidget {
                     alignment: AlignmentDirectional.centerStart,
                     child: AppStatusBadge(
                       kind: AppStatusKind.warning,
-                      label: l10n.nonShippingPlaceholder,
+                      label: SurfaceMaturity.notBuilt.label(l10n),
                     ),
                   ),
                   const SizedBox(height: AppSpacing.x6),
@@ -100,16 +108,6 @@ class StructuralPlaceholderPage extends StatelessWidget {
                     ),
                     textAlign: TextAlign.center,
                   ),
-                  if (_targetRoute case final target?) ...[
-                    const SizedBox(height: AppSpacing.x6),
-                    AppButton(
-                      label: kind == StructuralPlaceholderKind.settings
-                          ? l10n.openAppearanceDetail
-                          : l10n.openPlaceholderDetail,
-                      onPressed: () => context.go(target),
-                      leading: AppIcons.forward,
-                    ),
-                  ],
                 ],
               ),
             ),
@@ -118,11 +116,4 @@ class StructuralPlaceholderPage extends StatelessWidget {
       ),
     );
   }
-
-  String? get _targetRoute => switch (kind) {
-    StructuralPlaceholderKind.chats => '/chats/sample-thread',
-    StructuralPlaceholderKind.voiceRooms => '/voice-rooms/sample-room',
-    StructuralPlaceholderKind.settings => '/settings/appearance',
-    _ => null,
-  };
 }

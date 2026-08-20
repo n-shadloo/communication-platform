@@ -45,7 +45,7 @@ void main() {
     await tester.sendKeyUpEvent(LogicalKeyboardKey.altLeft);
     await tester.pumpAndSettle();
 
-    expect(find.text('Voice Rooms structure'), findsOneWidget);
+    expect(find.text('Voice rooms'), findsOneWidget);
     expect(find.text('Route: /voice-rooms'), findsOneWidget);
 
     await tester.sendKeyDownEvent(LogicalKeyboardKey.altLeft);
@@ -128,7 +128,7 @@ void main() {
     await tester.sendKeyUpEvent(LogicalKeyboardKey.altLeft);
     await tester.pump(const Duration(milliseconds: 200));
 
-    expect(find.text('Voice Rooms structure'), findsOneWidget);
+    expect(find.text('Voice rooms'), findsOneWidget);
     expect(
       find.byKey(const ValueKey('app-route-spatial-transition')),
       findsNothing,

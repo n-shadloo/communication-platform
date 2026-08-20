@@ -346,16 +346,12 @@ class _DestinationRail extends StatelessWidget {
             ),
           ),
         const Spacer(),
-        if (!compact)
-          Padding(
-            padding: const EdgeInsets.all(AppSpacing.x4),
-            child: Text(
-              l10n.nonShippingPlaceholder,
-              style: context.tokens.typography.label.copyWith(
-                color: context.tokens.colors.textMuted,
-              ),
-            ),
-          ),
+        // The navigation rail carried a permanent "Structural placeholder - not
+        // for shipping" footer here, in every build including production, where
+        // it was simply false. The build's identity belongs to the environment
+        // banner at the top of the shell, which production correctly omits, and
+        // a second permanent label repeated beside it only competes with the
+        // per-surface labels that do carry a consequence (ADR-045).
       ],
     );
   }

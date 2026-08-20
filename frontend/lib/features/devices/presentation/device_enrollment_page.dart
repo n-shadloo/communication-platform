@@ -6,6 +6,7 @@ import 'package:communication_platform/app/design_system/app_tokens.dart';
 import 'package:communication_platform/features/authentication/presentation/authentication_controller.dart';
 import 'package:communication_platform/features/devices/domain/device_enrollment_model.dart';
 import 'package:communication_platform/features/devices/presentation/device_enrollment_controller.dart';
+import 'package:communication_platform/features/devices/presentation/security_notice_sections.dart';
 import 'package:communication_platform/l10n/generated/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -363,7 +364,7 @@ final class _DeviceEnrollmentPageState
     bool busy,
   ) => _EnrollmentCard(
     key: const ValueKey('mandatory-security-notice'),
-    title: l10n.enrollmentSecurityTitle,
+    title: l10n.securityNoticeTitle,
     children: [
       if (journal.flow == EnrollmentFlow.laterDevice) ...[
         Text(
@@ -377,24 +378,12 @@ final class _DeviceEnrollmentPageState
         ),
         const SizedBox(height: AppSpacing.x6),
       ],
-      Text(
-        l10n.enrollmentProtectsHeading,
-        style: context.tokens.typography.section,
-      ),
-      const SizedBox(height: AppSpacing.x2),
-      Text(l10n.enrollmentProtectsBody, style: context.tokens.typography.body),
-      const SizedBox(height: AppSpacing.x6),
-      Text(
-        l10n.enrollmentDoesNotProtectHeading,
-        style: context.tokens.typography.section.copyWith(
-          color: context.tokens.colors.danger,
-        ),
-      ),
-      const SizedBox(height: AppSpacing.x2),
-      Text(
-        l10n.enrollmentDoesNotProtectBody,
-        style: context.tokens.typography.body,
-      ),
+      // The deployment disclosure sits inside this gate rather than in a second
+      // consent screen of its own. Two blocking screens in a row halve the
+      // attention paid to each, and this one is already mandatory, already
+      // durable in the enrollment journal, and already the last thing between
+      // the user and their first message (ADR-045).
+      const SecurityNoticeSections(),
       const SizedBox(height: AppSpacing.x6),
       AppButton(
         key: const ValueKey('accept-security-notice'),

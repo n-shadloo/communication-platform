@@ -110,6 +110,12 @@ abstract class AppLocalizations {
   /// **'Communication Platform (Development)'**
   String get developmentAppTitle;
 
+  /// The application title for the Private Experimental build. It must match the Android launcher label set by the beta product flavor, and it must never read "Development": a build installed by other people may not present itself as a developer build (ADR-044).
+  ///
+  /// In en, this message translates to:
+  /// **'Communication Platform (Experimental)'**
+  String get experimentalAppTitle;
+
   /// A persistent warning that the running app is not production.
   ///
   /// In en, this message translates to:
@@ -131,31 +137,31 @@ abstract class AppLocalizations {
   /// No description provided for @bootstrapLoadingConfiguration.
   ///
   /// In en, this message translates to:
-  /// **'Loading secure configurationâ€¦'**
+  /// **'Loading secure configuration…'**
   String get bootstrapLoadingConfiguration;
 
   /// No description provided for @bootstrapCheckingStorage.
   ///
   /// In en, this message translates to:
-  /// **'Checking protected storageâ€¦'**
+  /// **'Checking protected storage…'**
   String get bootstrapCheckingStorage;
 
   /// No description provided for @bootstrapDiscoveringIdentity.
   ///
   /// In en, this message translates to:
-  /// **'Checking this deviceâ€¦'**
+  /// **'Checking this device…'**
   String get bootstrapDiscoveringIdentity;
 
   /// No description provided for @bootstrapValidatingTrust.
   ///
   /// In en, this message translates to:
-  /// **'Verifying server trustâ€¦'**
+  /// **'Verifying server trust…'**
   String get bootstrapValidatingTrust;
 
   /// No description provided for @bootstrapCheckingServer.
   ///
   /// In en, this message translates to:
-  /// **'Connecting to the serverâ€¦'**
+  /// **'Connecting to the server…'**
   String get bootstrapCheckingServer;
 
   /// No description provided for @bootstrapReady.
@@ -248,6 +254,36 @@ abstract class AppLocalizations {
   /// **'Settings'**
   String get settingsDestination;
 
+  /// Badge for a surface that really transmits and encrypts but is neither reviewed nor standardised and whose state is disposable (ADR-045, SurfaceMaturity.experimental).
+  ///
+  /// In en, this message translates to:
+  /// **'Experimental'**
+  String get maturityExperimentalLabel;
+
+  /// Badge for a surface that is routed and visible but has no implementation behind it (ADR-045, SurfaceMaturity.notBuilt). It replaces "Structural placeholder - not for shipping", which was developer wording and which contradicted itself in a build that does ship.
+  ///
+  /// In en, this message translates to:
+  /// **'Not built yet'**
+  String get maturityNotBuiltLabel;
+
+  /// No description provided for @settingsLinkedDevicesTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Linked Devices'**
+  String get settingsLinkedDevicesTitle;
+
+  /// No description provided for @settingsLinkedDevicesSummary.
+  ///
+  /// In en, this message translates to:
+  /// **'Review, rename, or revoke devices on this account'**
+  String get settingsLinkedDevicesSummary;
+
+  /// No description provided for @settingsAppearanceTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Appearance'**
+  String get settingsAppearanceTitle;
+
   /// No description provided for @chatsPlaceholderTitle.
   ///
   /// In en, this message translates to:
@@ -263,13 +299,13 @@ abstract class AppLocalizations {
   /// No description provided for @voiceRoomsPlaceholderTitle.
   ///
   /// In en, this message translates to:
-  /// **'Voice Rooms structure'**
+  /// **'Voice rooms'**
   String get voiceRoomsPlaceholderTitle;
 
   /// No description provided for @voiceRoomsPlaceholderBody.
   ///
   /// In en, this message translates to:
-  /// **'The routed voice-room list and detail regions are ready for later feature pieces.'**
+  /// **'Voice rooms are not built yet. This build sends and receives no audio.'**
   String get voiceRoomsPlaceholderBody;
 
   /// No description provided for @settingsPlaceholderTitle.
@@ -317,26 +353,8 @@ abstract class AppLocalizations {
   /// No description provided for @placeholderBody.
   ///
   /// In en, this message translates to:
-  /// **'This route exists only to validate adaptive navigation and deep links.'**
+  /// **'This part of the app is not built yet.'**
   String get placeholderBody;
-
-  /// No description provided for @nonShippingPlaceholder.
-  ///
-  /// In en, this message translates to:
-  /// **'Structural placeholder — not for shipping'**
-  String get nonShippingPlaceholder;
-
-  /// No description provided for @openPlaceholderDetail.
-  ///
-  /// In en, this message translates to:
-  /// **'Open placeholder detail'**
-  String get openPlaceholderDetail;
-
-  /// No description provided for @openAppearanceDetail.
-  ///
-  /// In en, this message translates to:
-  /// **'Open appearance detail'**
-  String get openAppearanceDetail;
 
   /// No description provided for @composeChat.
   ///
@@ -469,6 +487,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Security & how this app protects you'**
   String get authSecurityNoticeAction;
+
+  /// Title of the single security notice. It is shown as the mandatory last step of device enrollment and again whenever the notice is re-opened from Settings or from the pre-login link.
+  ///
+  /// In en, this message translates to:
+  /// **'What this app protects — and what it doesn\'t'**
+  String get securityNoticeTitle;
 
   /// No description provided for @authBackToLoginAction.
   ///
@@ -607,12 +631,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'You are signed in with registration-only access. Device registration is completed in the next setup step.'**
   String get authSecureSetupBoundaryMessage;
-
-  /// No description provided for @authSecurityNoticeTitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Security boundary'**
-  String get authSecurityNoticeTitle;
 
   /// No description provided for @authSecurityNoticeMessage.
   ///
@@ -800,12 +818,6 @@ abstract class AppLocalizations {
   /// **'Secure setup could not continue. Try again.'**
   String get enrollmentGenericMessage;
 
-  /// No description provided for @enrollmentSecurityTitle.
-  ///
-  /// In en, this message translates to:
-  /// **'What this app protects — and what it doesn\'t'**
-  String get enrollmentSecurityTitle;
-
   /// No description provided for @enrollmentIdentityRecoveredTitle.
   ///
   /// In en, this message translates to:
@@ -847,6 +859,54 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'I understand'**
   String get enrollmentUnderstandAction;
+
+  /// Heading of the deployment disclosure section, rendered only by a build that is handed to someone else (ADR-045).
+  ///
+  /// In en, this message translates to:
+  /// **'What this build is'**
+  String get disclosureBuildTitle;
+
+  /// No description provided for @disclosureNoIndependentReview.
+  ///
+  /// In en, this message translates to:
+  /// **'Nobody outside the project has reviewed this app\'s encryption. It is written and tested by one person, and a mistake in it would not have been caught.'**
+  String get disclosureNoIndependentReview;
+
+  /// No description provided for @disclosureForegroundDeliveryOnly.
+  ///
+  /// In en, this message translates to:
+  /// **'Messages arrive only while this app is open. There are no notifications and nothing runs in the background, so do not rely on it for anything urgent.'**
+  String get disclosureForegroundDeliveryOnly;
+
+  /// No description provided for @disclosureDeviceOnlyHistory.
+  ///
+  /// In en, this message translates to:
+  /// **'Your messages are stored only on this phone. The server keeps no copy and no backup exists, so uninstalling the app destroys them permanently.'**
+  String get disclosureDeviceOnlyHistory;
+
+  /// No description provided for @disclosureRecoveryExcludesHistory.
+  ///
+  /// In en, this message translates to:
+  /// **'Your recovery secret restores your account identity on a new device. It never restores messages; those can only come from another device of yours that still works.'**
+  String get disclosureRecoveryExcludesHistory;
+
+  /// No description provided for @disclosureExperimentalGroups.
+  ///
+  /// In en, this message translates to:
+  /// **'Group chats use experimental encryption that is not finished or standardised. An update can reset a group and delete everything in it.'**
+  String get disclosureExperimentalGroups;
+
+  /// No description provided for @disclosureUnbuiltSurfaces.
+  ///
+  /// In en, this message translates to:
+  /// **'Some things you can see are not built yet: voice rooms, search and file attachments do nothing, and the display name and photo you choose are not published — other people see the username you registered with.'**
+  String get disclosureUnbuiltSurfaces;
+
+  /// No description provided for @disclosureIntendedUse.
+  ///
+  /// In en, this message translates to:
+  /// **'This build is for trying out among people who already trust each other. It is not suitable if your safety depends on your messages staying private.'**
+  String get disclosureIntendedUse;
 
   /// No description provided for @contactsNewTitle.
   ///
@@ -1007,8 +1067,14 @@ abstract class AppLocalizations {
   /// No description provided for @profileTemporaryTransport.
   ///
   /// In en, this message translates to:
-  /// **'Profile encryption and key delivery are using development-only fake transport until pairwise messaging is available. Production remains blocked.'**
+  /// **'Development build only: profile encryption and key delivery here are a stand-in, not real cryptography.'**
   String get profileTemporaryTransport;
+
+  /// No description provided for @profileNotBuiltNotice.
+  ///
+  /// In en, this message translates to:
+  /// **'This build cannot publish a profile yet. The name and photo you choose here are not sent anywhere, and your contacts see the username you registered with.'**
+  String get profileNotBuiltNotice;
 
   /// No description provided for @profileSavedMessage.
   ///
@@ -1675,6 +1741,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Choose encrypted media or a file.'**
   String get attachmentChoosePrompt;
+
+  /// No description provided for @attachmentsNotBuiltNotice.
+  ///
+  /// In en, this message translates to:
+  /// **'File attachments are not built yet. Nothing can be attached to a message in this build.'**
+  String get attachmentsNotBuiltNotice;
 
   /// No description provided for @attachmentPhotoOption.
   ///

@@ -1,5 +1,7 @@
 import 'dart:typed_data';
 
+import 'package:communication_platform/app/config/app_environment.dart';
+import 'package:communication_platform/app/dependencies/core_providers.dart';
 import 'package:communication_platform/app/design_system/app_components.dart';
 import 'package:communication_platform/app/design_system/app_theme.dart';
 import 'package:communication_platform/core/application/ports/enrollment_crypto_port.dart';
@@ -165,12 +167,69 @@ void main() {
     );
     expect(find.text('What it DOES protect'), findsOneWidget);
     expect(find.text('What it does NOT protect'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('deployment-disclosure')),
+      findsNothing,
+      reason: 'the development flavor is never handed to anyone',
+    );
   });
+
+  testWidgets(
+    'the private experimental gate discloses the build before it can be accepted',
+    (tester) async {
+      await _pump(
+        tester,
+        _journal(
+          phase: EnrollmentPhase.securityNotice,
+          flow: EnrollmentFlow.firstDevice,
+          identity: IdentityKeyPackage.fromNative(
+            _identityBytes(display: false),
+          ),
+        ),
+        environment: AppEnvironment.beta,
+      );
+
+      // Every point ADR-045 requires is on the one screen the user has to
+      // pass, and the acknowledgement is what passes it.
+      expect(
+        find.byKey(const ValueKey('deployment-disclosure')),
+        findsOneWidget,
+      );
+      expect(find.text('What this build is'), findsOneWidget);
+      for (final fragment in const [
+        'Nobody outside the project has reviewed',
+        'only while this app is open',
+        'stored only on this phone',
+        'never restores messages',
+        'experimental encryption',
+        'not built yet',
+        'already trust each other',
+      ]) {
+        expect(
+          find.textContaining(fragment),
+          findsOneWidget,
+          reason: 'the disclosure omits: \$fragment',
+        );
+      }
+      expect(
+        tester
+            .widget<AppButton>(
+              find.byKey(const ValueKey('accept-security-notice')),
+            )
+            .onPressed,
+        isNotNull,
+      );
+    },
+  );
 }
 
 const userId = '6f0c2f5e-8a41-4c9e-9a34-1f3d8f2b7c10';
 
-Future<void> _pump(WidgetTester tester, EnrollmentJournal journal) async {
+Future<void> _pump(
+  WidgetTester tester,
+  EnrollmentJournal journal, {
+  AppEnvironment environment = AppEnvironment.development,
+}) async {
   final store = _WidgetStore(journal);
   final coordinator = DeviceEnrollmentCoordinator(
     repository: const _UnusedRepository(),
@@ -182,6 +241,7 @@ Future<void> _pump(WidgetTester tester, EnrollmentJournal journal) async {
     ProviderScope(
       overrides: [
         deviceEnrollmentCoordinatorProvider.overrideWithValue(coordinator),
+        appEnvironmentProvider.overrideWithValue(environment),
       ],
       child: MaterialApp(
         theme: AppTheme.light(),

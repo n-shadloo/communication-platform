@@ -1,4 +1,5 @@
 import 'package:communication_platform/app/config/app_environment.dart';
+import 'package:communication_platform/app/config/app_environment_banner.dart';
 import 'package:communication_platform/app/design_system/app_theme.dart';
 import 'package:communication_platform/app/design_system/app_tokens.dart';
 import 'package:communication_platform/app/routing/app_router.dart';
@@ -83,12 +84,8 @@ class _CommunicationPlatformAppState
 
   @override
   Widget build(BuildContext context) => MaterialApp.router(
-    onGenerateTitle: (context) {
-      final localizations = AppLocalizations.of(context);
-      return widget.environment.isProduction
-          ? localizations.appTitle
-          : localizations.developmentAppTitle;
-    },
+    onGenerateTitle: (context) =>
+        widget.environment.userFacingTitle(AppLocalizations.of(context)),
     locale: widget.locale,
     supportedLocales: AppLocalizations.supportedLocales,
     localizationsDelegates: AppLocalizations.localizationsDelegates,

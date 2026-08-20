@@ -1,5 +1,8 @@
 import 'dart:typed_data';
 
+import 'package:communication_platform/app/config/app_environment.dart';
+import 'package:communication_platform/app/dependencies/contact_providers.dart';
+import 'package:communication_platform/app/dependencies/core_providers.dart';
 import 'package:communication_platform/app/design_system/app_components.dart';
 import 'package:communication_platform/app/design_system/app_theme.dart';
 import 'package:communication_platform/core/protocol/identity_protocol_model.dart';
@@ -209,15 +212,85 @@ void main() {
     expect(find.byType(TextField), findsOneWidget);
     expect(find.byType(AppButton), findsOneWidget);
   });
+
+  testWidgets('a build with no profile adapter says so and offers no Save', (
+    tester,
+  ) async {
+    // Every flavor but development composes the unsupported profile
+    // ports, so the Private Experimental build cannot publish a profile.
+    // It used to claim a "development-only fake transport" instead and
+    // let the user press Save into a generic error (ADR-045).
+    tester.view.physicalSize = const Size(800, 1600);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await _pump(
+      tester,
+      const EditProfilePage(),
+      environment: AppEnvironment.beta,
+    );
+
+    expect(
+      find.byKey(const ValueKey('profile-not-built-notice')),
+      findsOneWidget,
+    );
+    expect(find.text('Not built yet'), findsOneWidget);
+    expect(find.textContaining('cannot publish a profile yet'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('development-profile-transport-warning')),
+      findsNothing,
+    );
+    expect(
+      tester
+          .widget<AppButton>(find.byKey(const ValueKey('profile-save')))
+          .onPressed,
+      isNull,
+    );
+  });
+
+  testWidgets('the development stand-in keeps its own distinct wording', (
+    tester,
+  ) async {
+    await _pump(tester, const EditProfilePage());
+
+    expect(
+      find.byKey(const ValueKey('development-profile-transport-warning')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('profile-not-built-notice')),
+      findsNothing,
+    );
+  });
+
+  test('publishing support is read from the composed adapters', () {
+    ProfilePublishing publishingIn(AppEnvironment environment) {
+      final container = ProviderContainer(
+        overrides: [appEnvironmentProvider.overrideWithValue(environment)],
+      );
+      addTearDown(container.dispose);
+      return container.read(profilePublishingProvider);
+    }
+
+    expect(
+      publishingIn(AppEnvironment.development),
+      ProfilePublishing.developmentStandIn,
+    );
+    expect(publishingIn(AppEnvironment.beta), ProfilePublishing.notBuilt);
+    expect(publishingIn(AppEnvironment.production), ProfilePublishing.notBuilt);
+    expect(ProfilePublishing.notBuilt.canPublish, isFalse);
+  });
 }
 
 Future<void> _pump(
   WidgetTester tester,
   Widget child, {
   Locale locale = const Locale('en'),
+  AppEnvironment environment = AppEnvironment.development,
 }) async {
   await tester.pumpWidget(
     ProviderScope(
+      overrides: [appEnvironmentProvider.overrideWithValue(environment)],
       child: MaterialApp(
         locale: locale,
         theme: AppTheme.light(),

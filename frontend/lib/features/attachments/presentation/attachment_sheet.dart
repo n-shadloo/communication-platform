@@ -1,3 +1,4 @@
+import 'package:communication_platform/app/config/deployment_disclosure.dart';
 import 'package:communication_platform/app/design_system/app_components.dart';
 import 'package:communication_platform/app/design_system/app_icons.dart';
 import 'package:communication_platform/app/design_system/app_tokens.dart';
@@ -11,10 +12,19 @@ final class AttachmentSheet extends StatelessWidget {
   final EncryptedAttachmentDescriptor? descriptor;
   final VoidCallback? onCancelled;
 
+  /// Whether a picker is wired behind the compose choices.
+  ///
+  /// No composition root installs an attachment picker or transfer service, so
+  /// in the running app this is false and the sheet says attachments are not
+  /// built instead of offering three options that do nothing when tapped
+  /// (ADR-045).
+  bool get _pickerAvailable => onCancelled != null;
+
   @override
   Widget build(BuildContext context) {
     final strings = AppLocalizations.of(context);
     final colors = context.tokens.colors;
+    final composing = descriptor == null;
     return SafeArea(
       child: Padding(
         padding: const EdgeInsets.all(AppSpacing.x3),
@@ -23,25 +33,33 @@ final class AttachmentSheet extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text(
-              descriptor == null
-                  ? strings.chatAttachAction
-                  : descriptor!.displayName,
+              composing ? strings.chatAttachAction : descriptor!.displayName,
               style: context.tokens.typography.title,
             ),
             const SizedBox(height: AppSpacing.x1),
             Text(
-              descriptor == null
-                  ? strings.attachmentChoosePrompt
-                  : strings.attachmentDetails(
-                      descriptor!.mimeType,
-                      descriptor!.plaintextSize,
-                    ),
+              switch ((composing, _pickerAvailable)) {
+                (true, true) => strings.attachmentChoosePrompt,
+                (true, false) => strings.attachmentsNotBuiltNotice,
+                (false, _) => strings.attachmentDetails(
+                  descriptor!.mimeType,
+                  descriptor!.plaintextSize,
+                ),
+              },
               style: context.tokens.typography.compact.copyWith(
                 color: colors.textMuted,
               ),
             ),
             const SizedBox(height: AppSpacing.x2),
-            if (descriptor == null) ...[
+            if (composing && !_pickerAvailable)
+              Align(
+                alignment: AlignmentDirectional.centerStart,
+                child: AppStatusBadge(
+                  kind: AppStatusKind.warning,
+                  label: SurfaceMaturity.notBuilt.label(strings),
+                ),
+              )
+            else if (composing) ...[
               _AttachmentChoice(
                 icon: AppIcons.attach,
                 label: strings.attachmentPhotoOption,

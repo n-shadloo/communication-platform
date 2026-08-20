@@ -15,6 +15,9 @@ class AppLocalizationsFa extends AppLocalizations {
   String get developmentAppTitle => 'پلتفرم ارتباطی (توسعه)';
 
   @override
+  String get experimentalAppTitle => 'پلتفرم ارتباطی (آزمایشی)';
+
+  @override
   String get developmentConfiguration => 'پیکربندی توسعه';
 
   @override
@@ -90,6 +93,22 @@ class AppLocalizationsFa extends AppLocalizations {
   String get settingsDestination => 'تنظیمات';
 
   @override
+  String get maturityExperimentalLabel => 'آزمایشی';
+
+  @override
+  String get maturityNotBuiltLabel => 'هنوز ساخته نشده';
+
+  @override
+  String get settingsLinkedDevicesTitle => 'دستگاه‌های متصل';
+
+  @override
+  String get settingsLinkedDevicesSummary =>
+      'دستگاه‌های این حساب را ببینید، تغییر نام دهید یا باطل کنید';
+
+  @override
+  String get settingsAppearanceTitle => 'نمایش';
+
+  @override
   String get chatsPlaceholderTitle => 'ساختار گفت‌وگوها';
 
   @override
@@ -97,11 +116,11 @@ class AppLocalizationsFa extends AppLocalizations {
       'فهرست مسیریابی‌شدهٔ گفت‌وگوها و ناحیهٔ جزئیات برای بخش‌های بعدی آماده است.';
 
   @override
-  String get voiceRoomsPlaceholderTitle => 'ساختار اتاق‌های صوتی';
+  String get voiceRoomsPlaceholderTitle => 'اتاق‌های صوتی';
 
   @override
   String get voiceRoomsPlaceholderBody =>
-      'فهرست مسیریابی‌شدهٔ اتاق‌های صوتی و ناحیهٔ جزئیات برای بخش‌های بعدی آماده است.';
+      'اتاق‌های صوتی هنوز ساخته نشده‌اند. این نسخه هیچ صدایی نمی‌فرستد و دریافت نمی‌کند.';
 
   @override
   String get settingsPlaceholderTitle => 'ساختار تنظیمات';
@@ -126,17 +145,7 @@ class AppLocalizationsFa extends AppLocalizations {
   String get newRoomPlaceholderTitle => 'ساخت اتاق صوتی';
 
   @override
-  String get placeholderBody =>
-      'این مسیر فقط برای بررسی ناوبری تطبیقی و پیوند مستقیم وجود دارد.';
-
-  @override
-  String get nonShippingPlaceholder => 'جای‌نگهدار ساختاری — مناسب انتشار نیست';
-
-  @override
-  String get openPlaceholderDetail => 'باز کردن جزئیات آزمایشی';
-
-  @override
-  String get openAppearanceDetail => 'باز کردن جزئیات نمایش';
+  String get placeholderBody => 'این بخش از برنامه هنوز ساخته نشده است.';
 
   @override
   String get composeChat => 'شروع گفت‌وگو';
@@ -210,6 +219,10 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get authSecurityNoticeAction => 'امنیت و روش محافظت این برنامه';
+
+  @override
+  String get securityNoticeTitle =>
+      'این برنامه از چه چیزهایی محافظت می‌کند — و از چه چیزهایی نه';
 
   @override
   String get authBackToLoginAction => 'بازگشت به ورود';
@@ -293,9 +306,6 @@ class AppLocalizationsFa extends AppLocalizations {
   @override
   String get authSecureSetupBoundaryMessage =>
       'شما با دسترسی محدود ثبت‌نام وارد شده‌اید. ثبت دستگاه در مرحله بعدی کامل می‌شود.';
-
-  @override
-  String get authSecurityNoticeTitle => 'مرز امنیتی';
 
   @override
   String get authSecurityNoticeMessage =>
@@ -409,10 +419,6 @@ class AppLocalizationsFa extends AppLocalizations {
       'راه‌اندازی امن ادامه پیدا نکرد. دوباره تلاش کنید.';
 
   @override
-  String get enrollmentSecurityTitle =>
-      'این برنامه از چه چیزهایی محافظت می‌کند — و از چه چیزهایی نه';
-
-  @override
   String get enrollmentIdentityRecoveredTitle => 'هویت بازیابی شد';
 
   @override
@@ -435,6 +441,37 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get enrollmentUnderstandAction => 'متوجه شدم';
+
+  @override
+  String get disclosureBuildTitle => 'این نسخه چیست';
+
+  @override
+  String get disclosureNoIndependentReview =>
+      'هیچ‌کس بیرون از این پروژه رمزنگاری این برنامه را بازبینی نکرده است. همه‌چیز را یک نفر نوشته و آزموده است و اگر اشتباهی در آن باشد، کسی آن را نگرفته است.';
+
+  @override
+  String get disclosureForegroundDeliveryOnly =>
+      'پیام‌ها فقط وقتی می‌رسند که این برنامه باز باشد. هیچ اعلانی وجود ندارد و چیزی در پس‌زمینه اجرا نمی‌شود، پس برای کار فوری به آن تکیه نکنید.';
+
+  @override
+  String get disclosureDeviceOnlyHistory =>
+      'پیام‌های شما فقط روی همین گوشی ذخیره می‌شوند. سرور هیچ نسخه‌ای ندارد و پشتیبانی گرفته نمی‌شود، پس حذف برنامه آن‌ها را برای همیشه از بین می‌برد.';
+
+  @override
+  String get disclosureRecoveryExcludesHistory =>
+      'راز بازیابی، هویت حساب شما را روی دستگاه تازه برمی‌گرداند. هرگز پیام‌ها را برنمی‌گرداند؛ آن‌ها فقط از دستگاه دیگری از خودتان که هنوز کار می‌کند منتقل می‌شوند.';
+
+  @override
+  String get disclosureExperimentalGroups =>
+      'گفت‌وگوهای گروهی از رمزنگاری آزمایشی استفاده می‌کنند که نه کامل است و نه استاندارد. یک به‌روزرسانی می‌تواند گروه را بازنشانی کند و هر چه در آن است حذف شود.';
+
+  @override
+  String get disclosureUnbuiltSurfaces =>
+      'بخش‌هایی که می‌بینید هنوز ساخته نشده‌اند: اتاق‌های صوتی، جست‌وجو و پیوست فایل کاری انجام نمی‌دهند، و نام و عکسی که انتخاب می‌کنید منتشر نمی‌شود — دیگران همان نام کاربری ثبت‌نام شما را می‌بینند.';
+
+  @override
+  String get disclosureIntendedUse =>
+      'این نسخه برای آزمودن میان کسانی است که از پیش به هم اعتماد دارند. اگر امنیت شما به محرمانه‌ماندن پیام‌هایتان وابسته است، مناسب نیست.';
 
   @override
   String get contactsNewTitle => 'جدید';
@@ -520,7 +557,11 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get profileTemporaryTransport =>
-      'تا آماده‌شدن پیام‌رسانی دونفره، رمزنگاری و توزیع کلید پروفایل فقط شبیه‌ساز توسعه است. نسخه تولید مسدود می‌ماند.';
+      'فقط در نسخهٔ توسعه: رمزنگاری و توزیع کلید پروفایل اینجا جایگزین موقت است، نه رمزنگاری واقعی.';
+
+  @override
+  String get profileNotBuiltNotice =>
+      'این نسخه هنوز نمی‌تواند پروفایل را منتشر کند. نام و عکسی که اینجا انتخاب می‌کنید جایی فرستاده نمی‌شود و مخاطبان شما همان نام کاربری ثبت‌نامتان را می‌بینند.';
 
   @override
   String get profileSavedMessage => 'پروفایل رمزنگاری‌شده منتشر شد.';
@@ -896,6 +937,10 @@ class AppLocalizationsFa extends AppLocalizations {
   @override
   String get attachmentChoosePrompt =>
       'رسانه یا فایل رمزنگاری‌شده را انتخاب کنید.';
+
+  @override
+  String get attachmentsNotBuiltNotice =>
+      'پیوست فایل هنوز ساخته نشده است. در این نسخه نمی‌توان چیزی به پیام پیوست کرد.';
 
   @override
   String get attachmentPhotoOption => 'عکس یا تصویر';

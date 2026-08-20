@@ -86,6 +86,15 @@ GoRouter createAppRouter({
         );
       },
     ),
+    // Registered unconditionally. The security notice is static content with
+    // three entry points - the pre-login links, Settings, and a deep link - and
+    // none of them may depend on whether authentication happens to be wired
+    // into this composition (ADR-045).
+    GoRoute(
+      path: '/security-notice',
+      pageBuilder: (context, state) =>
+          _page(context, state, const PreAuthSecurityNoticePage()),
+    ),
     if (authenticationRouteState != null) ...[
       GoRoute(
         path: '/session-restoring',
@@ -104,11 +113,6 @@ GoRouter createAppRouter({
           state,
           PendingActivationPage(username: state.extra as String?),
         ),
-      ),
-      GoRoute(
-        path: '/security-notice',
-        pageBuilder: (context, state) =>
-            _page(context, state, const PreAuthSecurityNoticePage()),
       ),
       GoRoute(
         path: '/encryption-setup',

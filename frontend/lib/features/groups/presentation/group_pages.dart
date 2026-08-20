@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:communication_platform/app/config/deployment_disclosure.dart';
 import 'package:communication_platform/app/dependencies/contact_providers.dart';
 import 'package:communication_platform/app/dependencies/group_providers.dart';
 import 'package:communication_platform/app/dependencies/messaging_providers.dart';
@@ -1425,6 +1426,16 @@ class _GroupMaturityBanner extends ConsumerWidget {
       GroupFeatureAvailability.productionUnavailable => null,
     };
     if (label == null) return const SizedBox.shrink();
+    // The badge comes from the shared maturity vocabulary so a group screen and
+    // a not-built screen cannot end up naming their maturity in two different
+    // words; the sentence below it states this surface's specific consequence,
+    // which no shared badge can carry (ADR-045).
+    final maturity = switch (ref.watch(groupFeatureAvailabilityProvider)) {
+      GroupFeatureAvailability.privateExperimental =>
+        SurfaceMaturity.experimental,
+      _ => null,
+    };
+    final badge = maturity?.label(l10n);
     return Semantics(
       liveRegion: true,
       child: DecoratedBox(
@@ -1435,12 +1446,27 @@ class _GroupMaturityBanner extends ConsumerWidget {
         ),
         child: Padding(
           padding: const EdgeInsets.all(AppSpacing.x3),
-          child: Row(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              AppIcon(AppIcons.warning, color: context.tokens.colors.warning),
-              const SizedBox(width: AppSpacing.x2),
-              Expanded(
-                child: Text(label, style: context.tokens.typography.compact),
+              if (badge != null) ...[
+                AppStatusBadge(kind: AppStatusKind.warning, label: badge),
+                const SizedBox(height: AppSpacing.x2),
+              ],
+              Row(
+                children: [
+                  AppIcon(
+                    AppIcons.warning,
+                    color: context.tokens.colors.warning,
+                  ),
+                  const SizedBox(width: AppSpacing.x2),
+                  Expanded(
+                    child: Text(
+                      label,
+                      style: context.tokens.typography.compact,
+                    ),
+                  ),
+                ],
               ),
             ],
           ),

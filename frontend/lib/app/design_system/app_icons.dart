@@ -33,6 +33,10 @@ abstract final class AppIcons {
   static const error = AppIconData._(FLucideIcons.circleAlert, 'error');
   static const info = AppIconData._(FLucideIcons.info, 'info');
   static const security = AppIconData._(FLucideIcons.shieldCheck, 'security');
+  static const devices = AppIconData._(
+    FLucideIcons.monitorSmartphone,
+    'devices',
+  );
   static const empty = AppIconData._(FLucideIcons.inbox, 'empty');
   static const retry = AppIconData._(FLucideIcons.rotateCw, 'retry');
   static const close = AppIconData._(FLucideIcons.x, 'close');

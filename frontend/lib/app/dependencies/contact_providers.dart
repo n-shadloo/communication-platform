@@ -40,6 +40,41 @@ final profileKeyDistributionProvider = Provider<ProfileKeyDistributionPort>((
       : const UnsupportedProfileKeyDistribution();
 });
 
+/// What the composed profile ports can actually do in the running build.
+enum ProfilePublishing {
+  /// Real profile encryption and authenticated key delivery.
+  available,
+
+  /// The development stand-in. It round-trips locally and is not cryptography.
+  developmentStandIn,
+
+  /// No adapter. Publishing fails closed and nothing a user types is sent.
+  notBuilt;
+
+  bool get canPublish => this != ProfilePublishing.notBuilt;
+}
+
+/// Read from the adapters this build actually composed, never from the
+/// environment.
+///
+/// A second environment comparison beside the one above is how a screen ends up
+/// claiming a capability the composition root did not install - which is the
+/// defect ADR-044 found in the group boundary and which ADR-045 keeps out of
+/// this one. Today every flavor but development resolves the unsupported
+/// adapters, so the Private Experimental build cannot publish a profile and
+/// says so instead of failing with a generic error.
+final profilePublishingProvider = Provider<ProfilePublishing>((ref) {
+  final protection = ref.watch(profileProtectionProvider);
+  final distribution = ref.watch(profileKeyDistributionProvider);
+  if (protection is UnsupportedProfileProtection ||
+      distribution is UnsupportedProfileKeyDistribution) {
+    return ProfilePublishing.notBuilt;
+  }
+  return protection.isProductionReady && distribution.isProductionReady
+      ? ProfilePublishing.available
+      : ProfilePublishing.developmentStandIn;
+});
+
 final directoryServiceProvider = FutureProvider<DirectoryService>((ref) async {
   final local = await ref.watch(contactLocalProvider.future);
   return DirectoryService(

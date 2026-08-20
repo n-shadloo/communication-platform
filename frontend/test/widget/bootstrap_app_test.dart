@@ -18,10 +18,7 @@ void main() {
     expect(find.text('Development configuration'), findsOneWidget);
     expect(find.text('Private experimental build'), findsNothing);
     expect(find.text('No chats yet'), findsOneWidget);
-    expect(
-      find.text('Structural placeholder — not for shipping'),
-      findsNothing,
-    );
+    expect(find.text('Not built yet'), findsNothing);
     expect(find.text('Flutter foundation is ready'), findsNothing);
   });
 
