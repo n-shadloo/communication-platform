@@ -156,6 +156,70 @@ $signature_report"
   pass "signed by the frozen Beta identity $actual_fingerprint"
 fi
 
+# --- Native trust, read out of the packaged artifact -------------------------
+
+# Dart carries the origin and pins but cannot enforce them: Android does that
+# from a compiled resource. Reading that resource back out of the APK is the
+# only check that distinguishes a pinned build from one that merely holds the
+# right values in Dart and trusts the system CA store.
+if [[ "$mode" == "beta" ]]; then
+  # Resource file names are obfuscated in a release build, so resolve the real
+  # path through the resource table rather than guessing it.
+  trust_resource="$(aapt2 dump resources "$native_apk_path" 2>/dev/null |
+    grep -A1 'xml/network_security_config' |
+    sed -n 's/.*(file) \(res\/[^ ]*\.xml\).*/\1/p' | head -n 1)"
+  [[ -n "$trust_resource" ]] ||
+    fail "The artifact has no network_security_config resource, so Android would
+         apply its platform default and pin nothing."
+
+  trust_tree="$(aapt2 dump xmltree "$native_apk_path" --file "$trust_resource" 2>&1)"
+
+  printf '%s' "$trust_tree" | grep -q 'domain-config' ||
+    fail "The packaged trust config has no domain-config, so this artifact trusts
+         the system CA store and pins nothing. Run tool/render_beta_trust.sh."
+
+  expected_host="${BETA_SERVER_ORIGIN:-}"
+  expected_host="${expected_host#https://}"
+  expected_host="${expected_host%%/*}"
+  expected_host="${expected_host%%:*}"
+  if [[ -n "$expected_host" ]]; then
+    # aapt2 renders the domain as a quoted text node. Match the quotes too, so a
+    # superstring such as evil-chat.example.com cannot satisfy the check.
+    printf '%s' "$trust_tree" | grep -qF "'$expected_host'" ||
+      fail "The packaged trust config does not pin $expected_host."
+    pass "packaged trust config pins $expected_host"
+  else
+    pass "packaged trust config carries a domain-config"
+  fi
+
+  pin_count="$(printf '%s' "$trust_tree" | grep -c 'digest="SHA-256"' || true)"
+  [[ "$pin_count" -ge 2 ]] ||
+    fail "The packaged trust config carries $pin_count pin(s); a primary and a
+         backup are both required, or rotating the server key locks every
+         client out."
+  pass "packaged trust config carries $pin_count SPKI pins"
+
+  for pin_name in BETA_PRIMARY_SPKI_SHA256 BETA_BACKUP_SPKI_SHA256; do
+    pin_value="${!pin_name:-}"
+    [[ -n "$pin_value" ]] || continue
+    printf '%s' "$trust_tree" | grep -qF "$pin_value" ||
+      fail "$pin_name is not present in the packaged trust config, so the
+           artifact pins something other than what was provisioned."
+  done
+
+  printf '%s' "$trust_tree" | grep -q 'cleartextTrafficPermitted=false' ||
+    fail "The packaged trust config does not disable cleartext traffic."
+  pass "packaged trust config disables cleartext traffic"
+
+  # The packaged file name is obfuscated in a release build, so the resource
+  # table is the only reliable place to look for the trust anchor.
+  aapt2 dump resources "$native_apk_path" 2>/dev/null |
+    grep -q 'raw/provisioned_private_ca' ||
+    fail "The provisioned private CA is not packaged, so the pinned domain has
+         no trust anchor and every connection to it would fail."
+  pass "provisioned private CA is packaged as a trust anchor"
+fi
+
 # --- Beta/Production native separation ---------------------------------------
 
 [[ -n "$llvm_nm_tool" ]] ||

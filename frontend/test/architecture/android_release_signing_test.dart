@@ -180,6 +180,46 @@ void main() {
     expect(environment, contains('to_properties_path() { cygpath -m "\$1"; }'));
   });
 
+  test('the Beta artifact cannot ship without native pinning', () {
+    // Dart carries the origin and pins but cannot enforce them. Android does
+    // that from a compiled resource, so a Beta build with no rendered trust
+    // config trusts the system CA store and pins nothing while still looking
+    // correctly provisioned.
+    final builder = File('tool/build_beta_release.sh').readAsStringSync();
+    expect(
+      builder,
+      contains('tool/render_beta_trust.sh'),
+      reason:
+          'Rendering on every release build is what stops the compiled trust '
+          'from drifting from the values compiled into Dart.',
+    );
+    expect(builder, contains('BETA_PRIVATE_CA_PEM'));
+
+    final renderer = File('tool/render_beta_trust.sh').readAsStringSync();
+    // Pinning the wrong root either breaks every connection or trusts the
+    // wrong issuer, so the CA file must match the provisioned fingerprint.
+    expect(renderer, contains('does not match BETA_PRIVATE_CA_SHA256'));
+    expect(renderer, contains('@@SERVER_HOST@@'));
+    expect(renderer, contains('unsubstituted placeholder'));
+
+    final verifier = File('tool/verify_release_apk.sh').readAsStringSync();
+    expect(verifier, contains('xml/network_security_config'));
+    expect(verifier, contains('domain-config'));
+    expect(verifier, contains('raw/provisioned_private_ca'));
+
+    // Rendered trust resources are deployment-specific provisioning artifacts,
+    // and android/provisioning/README.md keeps them out of source control.
+    final ignored = File('.gitignore').readAsStringSync();
+    expect(
+      ignored,
+      contains('/android/app/src/beta/res/xml/network_security_config.xml'),
+    );
+    expect(
+      ignored,
+      contains('/android/app/src/beta/res/raw/provisioned_private_ca.'),
+    );
+  });
+
   test('no signing secret is present in source control', () {
     // Passwords reach Gradle only through the environment or an untracked
     // properties file; nothing secret may be literal in the build script.
