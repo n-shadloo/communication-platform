@@ -26,6 +26,7 @@ Required environment (public provisioning values, never secrets):
   BETA_PRIVATE_CA_SHA256     64 hex characters
   BETA_PRIMARY_SPKI_SHA256   base64 SHA-256 pin
   BETA_BACKUP_SPKI_SHA256    base64 SHA-256 pin, different from the primary
+  BETA_PRIVATE_CA_PEM        path to the private CA certificate, PEM form
 
 Required signing material, supplied one of two ways:
   CP_BETA_SIGNING_PROPERTIES pointing at an untracked properties file, or
@@ -54,7 +55,8 @@ done
        and back the keystore up before building anything for users."
 
 missing_provisioning=()
-for name in BETA_SERVER_ORIGIN BETA_PRIVATE_CA_SHA256 BETA_PRIMARY_SPKI_SHA256 BETA_BACKUP_SPKI_SHA256; do
+for name in BETA_SERVER_ORIGIN BETA_PRIVATE_CA_SHA256 BETA_PRIMARY_SPKI_SHA256 \
+  BETA_BACKUP_SPKI_SHA256 BETA_PRIVATE_CA_PEM; do
   [[ -n "${!name:-}" ]] || missing_provisioning+=("$name")
 done
 if [[ "${#missing_provisioning[@]}" -gt 0 ]]; then
@@ -74,6 +76,13 @@ fi
 # --- Build -------------------------------------------------------------------
 
 cd "$frontend_root"
+
+# Render the native trust resources from the same values compiled into Dart, on
+# every build. Dart cannot enforce a pin; Android does that from a compiled
+# resource, so a stale or absent one would silently ship an unpinned artifact.
+echo
+"$frontend_root/tool/render_beta_trust.sh"
+echo
 
 readonly source_revision="$(git rev-parse HEAD 2>/dev/null || echo unknown)"
 readonly source_dirty="$(git status --porcelain 2>/dev/null | head -n 1)"
