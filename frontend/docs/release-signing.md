@@ -199,6 +199,7 @@ export BETA_SERVER_ORIGIN="https://chat.nimashadloo.dev"
 export BETA_PRIVATE_CA_SHA256="<64 hex characters>"
 export BETA_PRIMARY_SPKI_SHA256="<base64 pin>"
 export BETA_BACKUP_SPKI_SHA256="<a different base64 pin>"
+export BETA_PRIVATE_CA_PEM="<path to the private CA certificate>"
 ./tool/build_beta_release.sh --build-number 2 --build-name 0.1.1
 ```
 
@@ -230,6 +231,15 @@ there is exactly one signer, that v2 and v3 are present and v1 is not, that the
 signer is not the Android debug certificate, that the certificate SHA-256 equals
 the recorded identity, and that the packaged native core really does export
 `cp_crypto_v1_beta_mls_operation`.
+
+It also reads the **compiled network security config back out of the artifact**
+and checks that it pins the provisioned host, carries both SPKI pins, disables
+cleartext, and packages the private CA as a trust anchor. That check exists
+because Dart carries the origin and pins but cannot enforce them: Android does
+that from a compiled resource, so an artifact that merely holds the right values
+in Dart is indistinguishable, from the outside, from one that trusts the system
+CA store and pins nothing. Resource names are obfuscated in a release build, so
+the check resolves them through the resource table rather than by filename.
 
 Production mode checks the application ID, that the artifact is **not** signed,
 and that the packaged native core does **not** export the beta MLS symbol — the

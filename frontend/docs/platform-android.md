@@ -137,6 +137,15 @@ configuration and the HTTP/WebSocket clients enforce primary and backup SPKI pin
 failure is blocking and never offers "continue anyway". Development trust is compiled
 only into visibly non-production flavors.
 
+The closed-beta flavor renders the same resources from its own `BETA_*` values.
+`tool/render_beta_trust.sh` refuses to run unless the supplied CA file matches
+`BETA_PRIVATE_CA_SHA256`, `tool/build_beta_release.sh` runs it on every release
+build so the compiled trust cannot go stale against the compiled configuration,
+and `tool/verify_release_apk.sh --beta` reads the pin-set back out of the
+packaged artifact. Dart holds the origin and pins but never enforces them, so
+verifying the compiled resource is what separates a pinned artifact from one
+that trusts the system CA store.
+
 ## Background delivery
 
 There is no FCM/APNs fallback. Correctness therefore relies on the backend durable queue,
