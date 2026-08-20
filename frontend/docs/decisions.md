@@ -54,6 +54,426 @@ is not silently edited out of history.
 
 | ADR-044 | Accepted | The initial deployment is one Private Experimental Android artifact carrying declared maturity tiers, distributed privately under the frozen Beta identity, while Production stays uninstallable (2026-08-20) | A 20-30 person private deployment needed one authoritative definition, and the repository did not have one. Inspection found the existing build-time separation correct and worth keeping - three flavors, three application IDs, two Cargo profiles whose native symbol sets are verified in the packaged artifact, a signing identity attached only to Beta, and `signingConfig = null` on the release build type so Production packages unsigned and the OS cannot install it. It also found the separation incomplete in one place: `groupFeatureAvailabilityProvider` derived availability from the development-preview permit alone, which requires `!kReleaseMode`, so every group screen in the shipped Beta artifact rendered the closed gate while that same artifact composed `NativeBetaGroupMls`, ran `GroupKeyPackageMaintenanceService`, and processed inbound group objects - uploading MLS KeyPackages for groups no user of it could create. One source-only `GroupProductionGate.privateExperimentalPermit` now decides both the stack and its screens, and the screens gate on `isAvailable` rather than naming one tier. The deployment is defined as **experimental, not beta**: nothing in it has been independently reviewed, its group suite is MLS Private Use `0xFE4C` and is not `TBD2`-conformant (ADR-040), and it has no background delivery, notifications, voice, or search. The frozen application ID keeps its `.beta` suffix because ADR-042 makes it unchangeable and an identifier is not a claim; every user-facing string says Experimental. One artifact carries three declared tiers - supported (pairwise messaging, identity, devices, attachments, history transfer), experimental (closed-beta PQ MLS groups, whose state is disposable by ADR-036 and is disclosed as such on every group screen), and visibly absent (voice, search, notifications, background delivery). Confidentiality, integrity, client-side verification, hybrid PQXDH with no fallback, provisioned-CA-only transport, encrypted local state, key continuity, and the Beta/Production artifact separation all stay mandatory; independent review, registry assignment, interoperability, upstream vectors, reproducible builds, and background delivery are deferred with their residual risk recorded and disclosed to users in writing at handover. Piece 19's closed-beta half is delivered as the experimental tier and its production half stays blocked on the same five external prerequisites; piece 20 is re-scoped from "after every production gate" - unreachable, and therefore dead rather than blocked - to a decision about which MLS exporter may key real-time media, which this decision does not grant. Opens no production gate and supersedes nothing. |
 
+| ADR-045 | Accepted | One application-level maturity word - Experimental - two feature labels that only ever read *down* from it, and one mandatory first-run disclosure inside the enrollment gate that already exists; amends two rows of ADR-044's tier table (2026-08-20) | ADR-044 defined what the deployment *is* and deferred what the software *says*. Inspection of the running surfaces found four different vocabularies reaching users and two of them false in the artifact that carries them: the task-switcher title called the Private Experimental build "Communication Platform (Development)" while its own launcher label said Experimental; the wide navigation rail carried a permanent "Structural placeholder - not for shipping" footer in **every** build including production; Edit Profile claimed a "development-only fake transport" in a build that composes no profile adapter at all, so Save could only fail; and the composer's paperclip opened three inert options because no build composes an attachment picker or transfer service. Those last two are also a correction to ADR-044, whose supported tier listed encrypted profiles and attachments: both are absent and are now labelled **Not built yet**. Terminology was re-derived rather than inherited and landed in the same place for a better reason - Google's published launch-stage definition of Experimental ("not intended for production use or covered by any SLA, support obligation, or deprecation policy and might be subject to backward-incompatible changes", read at primary source 2026-08-20) describes this artifact exactly, including the backward-incompatible clause that is ADR-036's disposable group state, while Preview promises the previewed thing ships and Beta promises feature completeness. Consent reuses `EnrollmentPhase.securityNotice`, which is already mandatory, already durable in the enrollment journal, and already withholds messaging until accepted, rather than adding a second blocking screen that would split the attention paid to both. Seven disclosure points state only the facts that make an ordinary expectation wrong - no review, foreground-only delivery, device-only history, recovery without history, resettable groups, unbuilt surfaces, intended use - and cryptographic identifiers are excluded by decision because printing them beside those seven would bury them. Periodic re-acknowledgement is rejected on measured evidence that repetition destroys a warning and that the damage generalises to this app's genuinely blocking security states; re-consent is content-triggered through `DeploymentDisclosure.revision`, pinned by a test to the exact disclosure text. There is deliberately no label meaning supported, stable, verified or audited: the absence of a badge must never read as an assurance. Opens no production gate and supersedes nothing. |
+
+## ADR-045 in full — what the application tells its users about itself (2026-08-20)
+
+**Status:** Accepted. User-facing communication decision. **Opens no production gate.**
+Amends two rows of ADR-044's tier table; supersedes nothing.
+
+### The question
+
+ADR-044 defined what the initial deployment *is*. It did not define what the software
+*says*. It listed a persistent banner, per-tier honesty on group screens, visibly absent
+features, and a written handover disclosure, and it deferred the in-app first-run
+disclosure as follow-up work.
+
+That leaves the question this decision answers: **what must a user understand before
+using this application, how should the application say it, and what has to be true for
+that statement to stay true?** Concretely — one maturity label or several, which words,
+where they appear, whether anything must be acknowledged, and who keeps it accurate.
+
+The answer was derived from the running application, not from ADR-044's list. That
+matters, because inspecting the surfaces found that ADR-044's list was itself partly
+wrong.
+
+### What the application actually said to users, before this decision
+
+Every row was read out of the working tree on 2026-08-20.
+
+| Surface | What a user saw | Verdict |
+|---|---|---|
+| Shell and Connection banner | "Private experimental build" | Correct. Kept |
+| Android launcher label (beta flavor) | "Communication Platform (Experimental)" | Correct. Kept |
+| Window and task-switcher title | "Communication Platform (Development)" | **Wrong.** `app.dart` branched on `isProduction` alone, so the Private Experimental artifact named itself a developer build in the task switcher while its own launcher icon said Experimental |
+| Navigation rail footer, wide layouts, **every** flavor | "Structural placeholder — not for shipping" | **Wrong.** Developer wording, shown permanently, and flatly false in production. The golden file `shell_wide_dark.png` is a production shell containing it |
+| Voice rooms, appearance | "Structural placeholder — not for shipping" plus "The routed voice-room list and detail regions are ready for later feature pieces" | **Wrong.** Engineering vocabulary a user cannot act on, and self-contradictory in a build that does ship |
+| Voice rooms placeholder | A button opening `/voice-rooms/sample-room`, another placeholder | Half-presence, which ADR-044 forbids for absent features |
+| Group screens | "Experimental group encryption — not reviewed or standardized. An update may reset these groups and delete their messages." | Correct. Kept |
+| Edit profile | "Profile encryption and key delivery are using development-only fake transport until pairwise messaging is available. Production remains blocked." | **Wrong in the artifact that ships it.** See below |
+| Attachment sheet, reached by the composer's paperclip | "Choose encrypted media or a file." and three options: Photo, File, Camera | **Wrong.** All three are inert |
+| Connection screen, five status lines | "Loading secure configurationâ€¦", and four more | **Wrong.** Double-encoded ellipsis, on the first screen every recipient sees |
+| Enrollment security notice | What it does and does not protect, with a mandatory "I understand" | Correct, and the right mechanism. Silent about the deployment |
+| Pre-login "Security & how this app protects you" | A *different*, shorter notice titled "Security boundary" | **Wrong.** `ui-specification.md` §5 requires the same notice to be re-viewable, not a weaker one |
+| Settings | No security-notice entry at all | Missing. §15 has always required one |
+| Settings | Entirely hard-coded English | Missing. The product ships English and Persian |
+
+Four different vocabularies reached users — "private experimental build", "experimental",
+"structural placeholder — not for shipping", "development-only fake transport" — and two
+of them were false in the artifact that carries them. ADR-044's "declared maturity tiers"
+had no single expression anywhere in the code.
+
+### The defects this decision had to resolve first
+
+**D-a. Two of ADR-044's "supported" features do not exist in the artifact.**
+
+`profileProtectionProvider` and `profileKeyDistributionProvider` return
+`UnsupportedProfileProtection` and `UnsupportedProfileKeyDistribution` for every
+environment except development. In the Private Experimental build, `publishOwn` therefore
+fails at `protection.seal` and `refreshPeer` fails at `keyDistribution.receive`. Encrypted
+profiles do not work at all: a user could type a display name, press Save, and get
+`authGenericErrorMessage` — under a warning claiming a "development-only fake transport"
+that build does not contain.
+
+`AttachmentTransferService` exists in `lib/features/attachments/application/` and is
+composed by no provider anywhere. `pubspec.yaml` declares no file or image picker. The
+composer's paperclip dispatches `OpenAttachmentIntent()` with no attachment, and
+`AttachmentSheet` renders three `ListTile`s whose `onTap` is `null` because the chat page
+passes no `onCancelled`. `docs/implementation-checklist.md` has said attachments are
+pending all along.
+
+ADR-044's supported tier lists "contacts and encrypted profiles" and "attachments". Two
+of those are not supported, not experimental, and not present. **This decision amends that
+row** rather than editing ADR-044 in place, and relabels both surfaces so the application
+agrees with the correction.
+
+**D-b. The notice a user must acknowledge and the notice a user can go back and read were
+not the same statement.** The enrollment gate showed the protect/does-not-protect
+boundary; the pre-login link showed a two-sentence paragraph about passwords and recovery
+secrets under a different title. Whichever one is right, they cannot both be the notice.
+
+**D-c. The build's own name disagreed with itself.** Launcher label "Experimental", task
+title "Development".
+
+An ADR about honest communication cannot be written over these, so they are fixed here.
+
+### The word
+
+Evaluated independently of ADR-044, against what the artifact provably is.
+
+| Term | What it conventionally promises | Fits this artifact? |
+|---|---|---|
+| **Experimental** | Google's published launch-stage definition, read at primary source on 2026-08-20: "Experiments are focused on getting customer feedback about a prototype. They are not intended for production use or covered by any SLA, support obligation, or deprecation policy and might be subject to backward-incompatible changes." | **Yes, precisely** — including the backward-incompatible clause, which is exactly ADR-036's disposable group state |
+| **Preview** | Same source: "ready for testing by customers before adopting it for production use at GA … not necessarily feature-complete … no SLAs or technical support commitments" | No. "Preview" promises that the thing previewed is what will ship. The group layer will be *replaced* and its data discarded (ADR-036), so it is not a preview of anything |
+| **Beta** | Feature-complete, final testing before release. Mozilla's release channels describe Beta as the version "destined to become the next released Firefox"; Google Cloud retired the stage in favour of Preview and GA | No. No background delivery, no notifications, no voice, no search, no attachments, no profiles, and no review of any layer |
+| **Alpha** | Incomplete, expect breakage — arguably accurate | No. It is a release-train word: alpha implies a beta and a release follow on a schedule. There is no schedule, and the group layer is not on a train to production |
+| **Development** / **Testing** | Not a shipped artifact / a purpose, not a maturity | No. "Development" already names another flavor and would be false on a signed artifact installed by other people; "Testing" invites "so it's finished, you're just testing it?" |
+| **Stable**, **Production**, **1.0** | Production-ready, covered by support | **Provably false.** Forbidden |
+
+**"Private Experimental" is kept.** The two words are orthogonal — *private* describes
+distribution, *experimental* describes maturity — so combining them adds information
+rather than confusion, and *private* carries a real instruction: do not pass the artifact
+on. This lands where ADR-044 landed, by a different route.
+
+### Decision
+
+**D1. One application-level maturity designation: Experimental.** It is carried by the
+persistent banner, by the launcher label, and now by the task-switcher title, which must
+agree with the launcher label and no longer says "Development". Production carries no
+designation at all, because it has none to carry and cannot be installed.
+
+**D2. Feature-level labels exist, there are exactly two of them, and both read *down*
+from the application label.**
+
+| Label | Meaning | Where it appears today |
+|---|---|---|
+| **Experimental** | The surface really transmits and really encrypts, using a maintained implementation, but nothing about it is reviewed or standardised and its state is disposable by decision | Group screens, and the build-disclosure section of the security notice |
+| **Not built yet** | The surface is routed and visible and has no implementation behind it. Nothing it appears to offer happens | Voice rooms, appearance, file attachments, profile publishing |
+
+**There is no third label, and no label meaning "supported", "stable", "verified" or
+"audited".** An unlabelled surface is governed by the application-level Experimental
+designation and by nothing stronger. This is the load-bearing part of the model: the
+absence of a badge must never be readable as an assurance, so no badge may ever assert
+one. `SurfaceMaturity` in `lib/app/config/deployment_disclosure.dart` holds both values
+and an architecture test fails if a third is added or if any screen renders a maturity
+word without it.
+
+ADR-044's three *tiers* are unchanged as a description of the deployment. What changes is
+that only the two tiers that reduce a user's expectations are expressed on screen. The
+supported tier is deliberately silent, because "supported" in ADR-044 means "its local
+state is intended to survive updates" — a durability claim that would be read as a safety
+claim if it were printed next to an encryption feature.
+
+**D3. Disclosure has four placements, each with one job, and nothing is repeated for
+emphasis.**
+
+| Placement | Job | Surface |
+|---|---|---|
+| Continuous, low salience | Identity: which build this is | The environment banner. It is not a warning and must not be turned into one |
+| Once, high salience, blocking | Consequences: what a user must know before trusting the app with a conversation | The deployment disclosure inside the existing mandatory enrollment notice |
+| Contextual, persistent, per surface | The specific consequence of *this* feature | The group banner; the not-built pages, the profile notice, the attachment sheet |
+| On demand, always | Re-reading what was acknowledged | Settings → "Security & how this app protects you", and the pre-login links, both opening the same notice |
+
+**D4. Consent: one mandatory acknowledgement, at first enrollment on a device, inside the
+gate that already exists. Never on a timer.**
+
+The mechanism was already in the repository and was not being used for this:
+`EnrollmentPhase.securityNotice` is the last step of device enrollment for both the
+first-device and later-device flows, it is durably persisted in the enrollment journal,
+messaging is withheld until it is accepted, and it already ends in an explicit "I
+understand". The deployment disclosure becomes a section of that screen. No second consent
+screen is created.
+
+Re-acknowledgement is **content-triggered, not time-triggered**.
+`DeploymentDisclosure.revision` moves when, and only when, the disclosed facts move; a
+test pins the revision to the exact English text of every point, so changing a word
+without raising the revision fails CI. Raising it makes re-delivering the written handover
+disclosure to existing recipients release-blocking, and every later enrollment reads the
+new text.
+
+Coverage at launch is complete: no external install exists yet, because
+`docs/release-signing.md` makes the off-site key-custody procedure mandatory *before* the
+first external install and ADR-044 records those backups as still outstanding. Every
+recipient of the first artifact will therefore enrol under revision 1. (That is an
+inference from the recorded custody state, not an observation of a device.)
+
+**D5. Disclosure content is exactly the set of facts that make an ordinary expectation of
+a chat application wrong.** Seven points, ordered by consequence, in
+`DisclosurePoint`. Each was chosen because the system's actual behavior contradicts what a
+user would otherwise assume:
+
+| Point | The expectation it corrects | Evidence in this repository |
+|---|---|---|
+| No independent review | "Someone competent has checked the encryption" | ADR-017 is open for every layer; both review packets are prepared and no reviewer is retained |
+| Delivery only while the app is open | "Messages arrive when they are sent" | `AndroidPollingScheduler` is a port with no adapter in `lib/`; `pubspec.yaml` declares no notification dependency |
+| History lives only on this phone | "My chats are backed up somewhere" | No server history by design (ADR-028); `allowBackup="false"`; the database key is a non-exportable AndroidKeyStore key |
+| Recovery restores identity, not messages | "My recovery secret gets everything back" | ADR-030; the backup carries cross-signing identity material only |
+| Groups are experimental and can be reset | "A group chat is a chat" | ADR-036: beta group state is disposable and is reinitialised, never migrated |
+| Parts of the interface are not built | "If I can see it, it works" | Voice, search, attachments and profile publishing are absent or fail closed |
+| Intended use | "This is a secure messenger" | The threat model's release gates are closed; the deployment is private evaluation among people who already trust each other |
+
+**Cryptographic detail is excluded by decision.** `0xFE4C`, `TBD2`, draft revisions, IANA
+registry state, `withTrustedRoots: false` and the Cargo feature split are all true and all
+unusable by a reader. Printing them beside the seven consequences would bury the
+consequences, which is itself a disclosure failure. They stay in the ADRs, in
+`docs/mls-profile.md`, and in the written handover.
+
+**D6. The one notice has one title and one body, rendered from one widget.**
+`SecurityNoticeSections` renders the permanent boundary — what the protocol does and does
+not protect, which stays true in a production release — followed by the build disclosure,
+which exists only in a build that is handed to someone else. Production and development
+resolve `deploymentDisclosure` to null, so Private Experimental wording is structurally
+incapable of appearing in either.
+
+### Scope
+
+In scope: what the Android Private Experimental artifact says about its own maturity,
+where it says it, what a user must acknowledge, and the corrections needed to make those
+statements true.
+
+Out of scope and unchanged: the deployment definition (ADR-044), signing and identity
+(ADR-042), transport trust (ADR-043), every protocol decision, the backend, and the
+production gates.
+
+### Explicit non-goals
+
+- It does not implement attachments, profile publishing, search, voice, notifications or
+  background delivery. It labels their absence honestly; that is the opposite of building
+  them.
+- It does not add a consent screen, a terms-of-service flow, a legal agreement, an
+  age gate, or any acceptance the application does not act on.
+- It does not add analytics, acknowledgement reporting, or any signal that a disclosure
+  was read. There is no telemetry in this product and this decision does not introduce the
+  first of it.
+- It does not change what the group layer is, only how it is labelled.
+- It does not open a production gate or relax the written-handover requirement, which
+  ADR-044 makes a condition of distribution.
+
+### Alternatives evaluated
+
+**Consent model.**
+
+**A. No acknowledgement, banner only.** Rejected. Three of the seven facts have durable,
+irreversible consequences — missed messages, permanently destroyed history, discarded
+group state. A banner communicates identity, not consequence, and a permanent banner is
+the single most habituated element on a screen.
+
+**B. A second, dedicated consent screen after enrollment.** Rejected, and this is the
+alternative that looks most like the obvious answer. Two blocking screens in a row do not
+double the attention paid; they split it, and the second is the one that gets dismissed.
+The enrollment gate is already mandatory, already durable, already tested, and already the
+last thing before a user's first message.
+
+**C. First-run acknowledgement inside the existing gate.** **Selected.**
+
+**D. Periodic re-acknowledgement — monthly, or on every update.** Rejected on evidence,
+and it is worth stating why plainly: re-showing an unchanged warning does not refresh it,
+it trains dismissal. Kirwan, Bjornn, Anderson, Vance, Eargle and Jenkins measured "a
+continued, linear decrease in activation through all six repetitions" of a security
+warning in the brain's visual processing regions, and found "the learned negative valence
+of computer security warnings is not enough to overcome habituation" (*Frontiers in
+Psychology*, 2020). Worse, the damage generalises: this application depends on genuinely
+blocking states — unverified identity, unsigned device, changed master key, queue-gap
+rejoin — and training a user to click past a familiar warning degrades those too. A
+periodic notice would make the app less safe, not more.
+
+**E. Re-acknowledgement when the disclosed facts change.** **Selected, in the narrow
+content-triggered form of D4.** The version that was rejected is the runtime one: storing
+an acknowledged revision per install and re-opening the notice when it advances. That
+needs a new column on `enrollmentIntents`, a schema migration, and a new transition out of
+`EnrollmentPhase.complete` — new states in a security-critical state machine, to buy
+enforcement that this deployment's distribution model already provides. There is no
+over-the-air update here: when a fact changes, the maintainer builds an artifact and hands
+it to named people with a written disclosure, which is already release-blocking. The
+revision is enforced in CI and bound to that process instead.
+
+**F. Feature-specific acknowledgement, for example a modal before creating a first
+group.** Rejected. The group screens already carry a persistent contextual statement of
+the exact consequence, which outperforms a modal in front of the least-used feature, where
+click-through is highest. A persistent statement cannot be dismissed; a modal exists to be
+dismissed.
+
+**Feature labelling.**
+
+**G. One uniform application-level label, no per-feature labels.** Rejected. It forces a
+single claim over components with genuinely different failure modes: either the group
+layer is overstated and users lose group history unwarned, or the pairwise layer is
+understated and the deployment fails to produce the piece-19 evidence it exists to
+produce.
+
+**H. A full maturity taxonomy — stable / supported / beta / experimental / planned — with
+a badge on every feature.** Rejected on two grounds. It cannot be kept accurate: a badge
+on every surface is a maintenance obligation on every change, and the first stale badge
+poisons all of them. And it requires a word meaning "assessed", which no evidence in this
+repository supports for any layer.
+
+**I. Two labels, both meaning "less than the application label", applied only to
+exceptions.** **Selected.** Only the exceptions carry a badge, there are only two kinds,
+and both are honest downgrades. Nothing has to be re-audited when a feature is unchanged.
+
+**Where the disclosure lives.**
+
+**J. Out-of-band written handover only, as ADR-044 left it.** Rejected as *sufficient*,
+kept as *required*. A document delivered with an APK is read once, by whoever opens the
+message, and is not present at the moment a user decides to trust the app with a
+conversation. It also cannot reach a second person who installs from a forwarded file.
+ADR-044's requirement stands unchanged; this decision adds the in-app statement it
+deferred.
+
+**K. Store-listing style disclosure.** Not applicable. There is no store listing;
+distribution is a direct APK over the self-hosted channel.
+
+### External evidence, and what it decided
+
+Three findings changed the decision. Everything else was decided from the repository.
+
+| Question | Source | Finding | Effect |
+|---|---|---|---|
+| Is a warning worth building at all, or do users click through everything? | Akhawe and Felt, "Alice in Warningland: A Large-Scale Field Study of Browser Security Warning Effectiveness", *USENIX Security* 2013 (read at primary source, 2026-08-20) | Measured clickthrough over ~25 million warning impressions: 7.2% and 23.2% for Firefox and Chrome malware warnings, 9.1% and 18.0% for phishing, 33.0% for Firefox SSL — but 70.2% for Chrome SSL. The authors conclude warnings "can be effective in practice; security experts and system architects should not dismiss the goal of communicating security information to end users", and that the variance shows "the user experience of a warning can have a significant impact on user behavior" | Build the disclosure, and design it. The 70.2% outlier is the warning users met most often and could bypass most easily — which is the argument against repetition, not against warning |
+| Does repeating the notice help? | Kirwan, Bjornn, Anderson, Vance, Eargle, Jenkins, "Repetition of Computer Security Warnings Results in Differential Repetition Suppression Effects as Revealed With Functional MRI", *Frontiers in Psychology*, 2020 | Continuous linear decrease in visual-processing activation across all six repetitions; the negative valence of a security warning does not overcome habituation | No periodic re-acknowledgement. Re-consent is content-triggered only |
+| What does each maturity word promise, in published industry usage? | Google Maps Platform launch stages, `developers.google.com/maps/launch-stages`, last updated 2026-08-19 (read 2026-08-20) | Experimental: "not intended for production use or covered by any SLA, support obligation, or deprecation policy and might be subject to backward-incompatible changes". Preview: "ready for testing by customers before adopting it for production use at GA … not necessarily feature-complete". GA: "production ready" | "Experimental" is the accurate word, on a published definition, and the backward-incompatible clause matches ADR-036 exactly |
+
+Separately, ADR-044's revisit condition 6 required that Android's developer-verification
+documentation "be read and dated" at primary source before any of it becomes binding. It
+was, on 2026-08-20:
+`developer.android.com/developer-verification` records enforcement from **2026-09-30** for
+Brazil, Indonesia, Singapore and Thailand on certified devices running Android 7+, with a
+global rollout in 2027;
+`developer.android.com/developer-verification/guides/limited-distribution` (page dated
+2026-08-20) describes the free account type as requiring no government ID and permitting
+developers to "Share apps with up to 20 devices that end-users have explicitly
+authorized", registered through a QR-code or link handshake. **This changes no part of the
+disclosure model** and is recorded because the condition asked for it: the 20-device cap
+is per account and this deployment targets 20–30 *users*, several of whom will enrol more
+than one device, so the free tier may not cover it. That is a distribution question for
+ADR-044's revisit process, not a communication question.
+
+Nothing else external was consulted, and no secondary source was treated as evidence.
+
+### Threats and failure modes
+
+Each was checked against the model, not asserted.
+
+| Failure | How the model addresses it | Residual |
+|---|---|---|
+| A user assumes the app is production-ready | Application-level Experimental label, on the banner, the launcher and the task title; the disclosure names the absence of review first | A user who ignores all of them. Accepted; the audience is personally known |
+| A user assumes stronger encryption than the evidence supports | "Audited", "reviewed", "verified", "standards-compliant" and "interoperable" are forbidden; the disclosure states plainly that nobody outside the project has reviewed it | The word "encrypted" still appears throughout, and is true |
+| A user misses time-critical messages | The single most consequential fact is disclosure point 2, and it is stated in the user's terms — "there are no notifications and nothing runs in the background" — not as "best-effort background polling is not implemented" | Real. It is a usability cost ADR-044 accepted deliberately |
+| A user loses history to an uninstall or a group reset | Points 3, 4 and 5, plus the persistent group banner at the point of use | The user must act on it. No backup exists to offer |
+| Warnings are vague enough to be ignored | Every point states a consequence and an implied action. None says "may", "could" or "we cannot guarantee" | — |
+| Warnings are so heavy that adoption fails | Seven short facts on one screen, once. The banner is identity, not alarm. Nothing repeats | If it is still too heavy, that is information about the artifact, not about the wording |
+| A user shares the APK beyond the intended group | "Private" is in the application-level label, and the disclosure says who the build is for. A second-hand installer still meets the mandatory enrollment gate, so the in-app disclosure reaches them even though the written handover does not | Distribution beyond named recipients is ADR-044 revisit condition 1 |
+| A user relies on it for something it was never built for | Point 7 states the intended use and the excluded use in one sentence | A user whose safety depends on it should not be a recipient at all |
+| A label goes stale as features land | Labels are downgrades only, held in one enum, rendered from one place, asserted by tests. A feature that starts working loses its badge; nothing has to be re-certified | A feature that *stops* working needs a badge added, which no test can detect |
+
+### Relationship with the deployment architecture
+
+Checked against the artifact, not against the documentation.
+
+| Claim the model makes | What enforces it |
+|---|---|
+| Only a build handed to someone else states what it is | `deploymentDisclosure` is null for development and production; asserted per environment |
+| Production shows no maturity wording anywhere | No banner, no disclosure, and the navigation-rail "not for shipping" footer is gone. The `shell_wide_dark.png` golden is regenerated from a production shell |
+| The task title, the launcher label and the banner name one build | `userFacingTitle` and `configurationBanner` are one extension over `AppEnvironment`; the launcher label is the beta flavor's `resValue` |
+| The group label matches the group stack | Both come from `GroupProductionGate.privateExperimentalPermit` through `groupFeatureAvailabilityProvider` (ADR-044) |
+| The profile label matches the composed adapters | `profilePublishingProvider` reads the installed adapters, never the environment, so a screen cannot claim a capability the composition root did not install |
+| The disclosure and the shell name the same build | `bootstrap()` sets `appEnvironmentProvider` and the app's `environment` from one argument; asserted |
+
+### What may and may not be claimed
+
+ADR-044's table stands. This decision adds:
+
+| Term | Permitted? |
+|---|---|
+| **Supported**, **stable**, **verified** as a badge on any feature | **No.** There is no such label and none may be added |
+| **Not built yet** | Yes, for a routed surface with no implementation behind it |
+| **Experimental** as a feature badge | Yes, only for a surface that really transmits and whose state is disposable |
+| A feature name in the interface with no working implementation and no label | **No.** Either it works, or it says it does not |
+| "Development" in any Private Experimental surface | **No** |
+
+### Maintenance and ownership
+
+One file owns the vocabulary and the disclosure: `lib/app/config/deployment_disclosure.dart`.
+The maintainer who changes what the software does owns changing what it says, in the same
+change. Enforced by `test/architecture/deployment_disclosure_test.dart`:
+
+- the disclosure exists for the Private Experimental build and for no other;
+- every `DisclosurePoint` is rendered, and the order is the ADR's order;
+- the revision is pinned to the exact English text of every point;
+- every point and label has an English and a Persian string;
+- no user-facing string says "beta", "audited", "production ready" or "stable release";
+- `SurfaceMaturity` has exactly two values, both downgrades;
+- every screen rendering a maturity label renders it from `SurfaceMaturity`;
+- `bootstrap()` keeps the composed environment and the rendered environment identical.
+
+### Consequences
+
+- A recipient cannot reach their first message without reading a screen that states, in
+  their own language, that nothing is reviewed, that messages arrive only while the app is
+  open, and that history has no second copy.
+- The written handover disclosure ADR-044 requires is unchanged and still
+  release-blocking. It is now a duplicate of an in-app statement rather than the only copy.
+- Two features ADR-044 called supported are labelled as not built, and one of them no
+  longer offers a Save button that cannot work.
+- The application stopped calling itself a development build in the task switcher, and
+  stopped telling production users they are running something not for shipping.
+- Five status lines on the first screen a user sees are no longer mojibake.
+- Settings is localized and, for the first time, satisfies §15's requirement that the
+  security notice be re-openable.
+- Adding a maturity word to a screen now fails a test unless it comes from the shared
+  vocabulary; editing the disclosure fails a test unless the revision moves with it.
+- Nothing here opens a production gate, and no accepted decision is superseded.
+
+### Corrections to ADR-044
+
+Recorded here rather than edited into ADR-044, per this register's rule.
+
+1. **D2's supported tier is amended.** "Attachments" and "encrypted profiles" are removed
+   from it. Attachments have no composed transfer service, no picker dependency, and an
+   inert sheet; profile publishing and profile decryption fail closed in every flavor but
+   development. Both belong to the absent tier and are labelled "Not built yet". The rest
+   of the supported tier was checked and stands.
+2. **The disclosure-requirements section's item 4 note is discharged.** "An in-app
+   first-run disclosure is the correct home for item 4 and is recorded as follow-up work"
+   — it is now implemented, in the existing mandatory gate, and the written handover
+   remains required alongside it.
+3. **Revisit condition 6's primary-source requirement is discharged**, with the dates and
+   figures recorded above. The condition itself remains open.
+
+### Review and revisit conditions
+
+ADR-044's eight conditions apply unchanged. This decision adds four:
+
+1. **A feature changes tier** — anything absent starts working, or anything working stops.
+   The label and the disclosure both move, and the revision moves with them.
+2. **A new user-facing surface makes a security or maturity claim** that is not rendered
+   from `SurfaceMaturity` or `DisclosurePoint`.
+3. **`DeploymentDisclosure.revision` changes.** Re-delivering the written disclosure to
+   every existing recipient becomes release-blocking for that build.
+4. **Background delivery or notifications ship.** Disclosure point 2 becomes false, which
+   is a revision change and, under ADR-044's own condition 8, a re-open of that decision
+   too.
+
 ## ADR-044 in full — the initial private deployment (2026-08-20)
 
 **Status:** Accepted. Deployment decision. **Opens no production gate.**

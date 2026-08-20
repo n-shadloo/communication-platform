@@ -64,6 +64,16 @@ These recur across screens. They are stated here so the individual screens can s
   the UI must say so plainly (detailed at each spot): *Delete for everyone*, voice-room
   *ephemeral* text, and history recovery. Never word a dialog to imply a stronger promise
   than the system can keep.
+- **Two maturity labels, and they only read down.** A surface may be badged
+  **Experimental** (it really transmits, nothing about it is reviewed or standardised,
+  and its state is disposable) or **Not built yet** (routed and visible, nothing behind
+  it). There is no badge meaning supported, stable, verified or audited, and none may be
+  added: an unbadged surface is covered by the application-level label and by nothing
+  stronger. Both words come from `SurfaceMaturity`; a screen that invents its own
+  maturity wording is a defect ([ADR-045](decisions.md)).
+- **A feature that does not work does not offer itself.** Where an action cannot
+  succeed - no adapter is composed, no picker exists - the screen says so and disables
+  the action. It never presents a control that fails into a generic error.
 - **Two separate secrets, never conflated.** A **login password** authenticates to the
   server; a **recovery secret** protects cross-signing private identity material. Neither
   recovers message history from the server because the server stores none.
@@ -294,8 +304,28 @@ section must not be softened or omitted.
      decrypted on a phone in someone else's hands.
    Wording must not imply the app makes communication "safe from the government"; it makes
    **content** unreadable — the rest is the user's informed risk.
-4. In onboarding: an **"I understand"** button (required to proceed). From Settings: a
+4. **What this build is** — the deployment disclosure required by
+   [ADR-045](decisions.md). Present **only** in a build that is distributed to
+   someone: seven short facts, ordered by consequence — no independent review; delivery
+   only while the app is open; history stored only on this device; recovery restores
+   identity and never messages; groups are experimental and can be reset; parts of the
+   interface are not built; who the build is and is not for. **[PRIVACY]** No
+   cryptographic identifiers, draft names, or registry state here — they are true and
+   unreadable, and they would bury the seven facts. Sections 2 and 3 are permanent and
+   stay true in a production release; this section must be absent from one.
+5. In onboarding: an **"I understand"** button (required to proceed). From Settings: a
    plain **Close/Back**.
+
+**One notice, three entry points.** The onboarding step, the Settings entry (§15) and
+the pre-login links (§2, §3) render the same sections in the same order. A shorter or
+differently-titled variant at any entry point is a defect: a user re-reading what they
+acknowledged must find the statement they acknowledged.
+
+**Not repeated.** Acknowledgement happens once per device, in onboarding. The notice is
+never re-shown on a schedule or after an ordinary update; ADR-045 records the measured
+evidence that repetition destroys a warning and degrades the app's other blocking
+security states. Re-acknowledgement is triggered only by the disclosure content
+changing.
 
 ---
 

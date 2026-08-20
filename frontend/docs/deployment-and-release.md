@@ -2,7 +2,9 @@
 
 What the initial deployment *is* - its audience, its maturity tiers, what may be
 claimed about it, and what must be disclosed - is decided by
-[ADR-044](decisions.md). Release signing, key custody, and upgrade-continuity
+[ADR-044](decisions.md), and what it *says* to the people who receive it - the
+maturity vocabulary, the disclosure, and the one acknowledgement - is decided by
+[ADR-045](decisions.md). Release signing, key custody, and upgrade-continuity
 verification are specified separately in
 [Beta release signing and key continuity](release-signing.md) and decided by
 ADR-042. Those two are authoritative for the deployment definition and for
@@ -34,6 +36,13 @@ experimental build". Under ADR-044 that banner deliberately does not say "beta" 
 the word overstates an unreviewed stack - even though the frozen application ID
 keeps its `.beta` suffix. A beta build is installed by external testers and must
 never present itself as development. Production shows no banner at all.
+
+The banner, the Android launcher label, and the window title Android shows in the
+task switcher name the same build. Before ADR-045 the title branched on production
+alone, so the Private Experimental artifact called itself "Communication Platform
+(Development)" beside a launcher icon reading "(Experimental)".
+`AppEnvironmentBanner` now owns both strings, and the Gradle flavor owns the
+launcher label they must match.
 
 The beta and production flavors are separate, coexisting Android applications
 with different application IDs and different signing identities. Neither
@@ -99,6 +108,21 @@ by contract tests and conservative client behavior, not runtime version guessing
    but never history; and that the build is for evaluation among people who already
    trust each other, and is not appropriate for anyone whose safety depends on the
    confidentiality of their messages.
+
+   The same seven facts are also stated inside the application, as the deployment
+   disclosure inside the mandatory enrollment security notice ([ADR-045](decisions.md)).
+   The written delivery is not replaced by it and stays release-blocking: it reaches a
+   recipient before they install, and it is the only copy a person who declines to
+   install ever sees.
+
+9. If `DeploymentDisclosure.revision` in
+   `lib/app/config/deployment_disclosure.dart` differs from the revision carried by the
+   previously distributed artifact, re-deliver the written disclosure to **every**
+   existing recipient, not only to new ones. The revision moves when and only when what
+   the build promises moves, so a changed revision is exactly the case where a person
+   who already enrolled has been told something that is no longer true. Their install
+   will not re-show the notice; that is the deliberate rejection of periodic
+   re-acknowledgement recorded in ADR-045, and this step is what pays for it.
 
 Updates are explicit user/admin actions. The app may check only the self-hosted signed
 metadata endpoint. It never fetches executable code or dependencies dynamically.

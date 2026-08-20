@@ -102,7 +102,9 @@ boundary; the size-notification anchor path is shared by every row builder.
   display or existing-account identity restore; explicit resumable two-phase
   enrollment/finishing-secure-setup state; mandatory Security Notice.
 - **Security Notice:** exact protected/unprotected boundaries and mandatory acknowledgement
-  during onboarding.
+  during onboarding, plus the deployment disclosure in a build that is distributed to
+  someone. One screen serves all three entry points - onboarding, Settings, and the
+  pre-login links - and is never re-shown on a schedule ([ADR-045](decisions.md)).
 
 ### Discovery and chat
 

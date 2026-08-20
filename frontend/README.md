@@ -1,9 +1,12 @@
 # Communication Platform frontend
 
-Minimal Flutter foundation for the Android and Web client. The product name and all
-brand assets remain provisional. Piece 03 adds the adaptive application shell and an
-explicitly non-shipping structural placeholder; no product feature screens or service
-integrations are present.
+Flutter client for Android, with a preserved post-v1 Web foundation. The product name
+and all brand assets remain provisional. Registration, login, device enrollment and
+cross-signing, contacts, direct messaging, Saved Messages, linked devices, history
+transfer and the closed-beta group stack are implemented; voice rooms, search,
+notifications, background delivery, file attachments and profile publishing are not,
+and every surface that is routed without an implementation behind it says so
+([ADR-045](docs/decisions.md)). `docs/implementation-checklist.md` is the live status.
 
 The app bundles Vazirmatn `v33.003` and its SIL OFL 1.1 license under
 `assets/fonts/vazirmatn/`. The exact artifact and checksum provenance is recorded in
@@ -40,6 +43,14 @@ trusted people, carrying declared maturity tiers rather than one uniform claim. 
 deliberately not called a beta in anything a user reads - nothing in it has been
 independently reviewed - even though the frozen application ID, the Gradle flavor, and
 the `AppEnvironment` value all keep the `beta` name they can no longer change.
+
+What that build *says* about itself is decided by [ADR-045](docs/decisions.md): one
+application-level word, two feature labels that only ever read down from it
+(**Experimental**, **Not built yet**), and one mandatory disclosure shown once, as part
+of the enrollment security notice a device must already pass. There is deliberately no
+label meaning supported, stable, verified or audited - nothing here has been assessed by
+anyone outside the project - and the notice is never re-shown on a timer. The written
+disclosure delivered with the artifact stays release-blocking alongside it.
 
 The three are separate, coexisting applications; none upgrades into another. The
 closed-beta ID is **frozen** and lives in `android/beta-release-identity.properties`,
