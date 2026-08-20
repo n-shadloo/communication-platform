@@ -13,6 +13,7 @@ import 'package:communication_platform/features/networking/infrastructure/api/ap
 import 'package:communication_platform/features/networking/infrastructure/api/api_request.dart';
 import 'package:communication_platform/features/networking/infrastructure/api/backend_error_mapper.dart';
 import 'package:communication_platform/features/networking/infrastructure/diagnostics/network_diagnostics.dart';
+import 'package:communication_platform/features/networking/infrastructure/tls/transport_security.dart';
 import 'package:dio/dio.dart';
 
 abstract interface class RetryScheduler {
@@ -30,10 +31,13 @@ final class DioRestClient {
   DioRestClient({
     required Uri serverOrigin,
     Dio? dio,
+    TransportSecurity transportSecurity =
+        const TransportSecurity.platformDefault(),
     NetworkDiagnostics diagnostics = const NoopNetworkDiagnostics(),
     RetryScheduler retryScheduler = const TimerRetryScheduler(),
   }) : _diagnostics = diagnostics,
        _retryScheduler = retryScheduler,
+       _transportSecurity = transportSecurity,
        _dio =
            dio ??
            Dio(
@@ -45,6 +49,12 @@ final class DioRestClient {
                validateStatus: (_) => true,
              ),
            ) {
+    // An injected Dio belongs to its owner, including its adapter; only the
+    // client built here is bound to the provisioned trust.
+    final adapter = transportSecurity.httpClientAdapter;
+    if (dio == null && adapter != null) {
+      _dio.httpClientAdapter = adapter;
+    }
     if (serverOrigin.scheme != 'https' ||
         serverOrigin.userInfo.isNotEmpty ||
         serverOrigin.hasQuery ||
@@ -59,6 +69,7 @@ final class DioRestClient {
   }
 
   final Dio _dio;
+  final TransportSecurity _transportSecurity;
   final NetworkDiagnostics _diagnostics;
   final RetryScheduler _retryScheduler;
   AccessTokenCoordinator? _tokenCoordinator;
@@ -347,7 +358,18 @@ final class DioRestClient {
     return builder.takeBytes();
   }
 
-  Failure _mapDioFailure(DioException error) => switch (error.type) {
+  Failure _mapDioFailure(DioException error) {
+    // A rejected peer certificate arrives as a connection error, which would
+    // otherwise be reported as being offline. Classify it first: the difference
+    // between "the network is down" and "this is not the provisioned server"
+    // is the whole point of pinning the trust anchor.
+    if (_transportSecurity.isTrustFailure(error.error)) {
+      return const TransportFailure(TransportFailureKind.trustRejected);
+    }
+    return _mapDioExceptionType(error);
+  }
+
+  Failure _mapDioExceptionType(DioException error) => switch (error.type) {
     DioExceptionType.cancel => const CancellationFailure(
       CancellationFailureKind.requestedByUser,
     ),
