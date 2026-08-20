@@ -91,6 +91,14 @@ if [[ -n "$source_dirty" ]]; then
   echo "         not reproducible from $source_revision alone." >&2
 fi
 
+# The authority itself, not just its fingerprint. Android's network security
+# configuration governs the platform's Java stacks and WebView; it does not
+# govern dart:io, which is what this app's REST and WebSocket traffic runs on.
+# That transport verifies against a certificate supplied here, and the app fails
+# closed at configuration when it is absent.
+readonly private_ca_base64="$(base64 < "$BETA_PRIVATE_CA_PEM" | tr -d '\r\n')"
+[[ -n "$private_ca_base64" ]] || fail "Could not encode $BETA_PRIVATE_CA_PEM."
+
 build_arguments=(
   build apk
   --release
@@ -101,6 +109,7 @@ build_arguments=(
   "--dart-define=BETA_PRIVATE_CA_SHA256=$BETA_PRIVATE_CA_SHA256"
   "--dart-define=BETA_PRIMARY_SPKI_SHA256=$BETA_PRIMARY_SPKI_SHA256"
   "--dart-define=BETA_BACKUP_SPKI_SHA256=$BETA_BACKUP_SPKI_SHA256"
+  "--dart-define=BETA_PRIVATE_CA_PEM_BASE64=$private_ca_base64"
 )
 [[ -n "$build_name" ]] && build_arguments+=(--build-name "$build_name")
 

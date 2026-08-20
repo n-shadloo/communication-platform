@@ -158,10 +158,13 @@ fi
 
 # --- Native trust, read out of the packaged artifact -------------------------
 
-# Dart carries the origin and pins but cannot enforce them: Android does that
-# from a compiled resource. Reading that resource back out of the APK is the
-# only check that distinguishes a pinned build from one that merely holds the
-# right values in Dart and trusts the system CA store.
+# This resource governs the platform's Java HTTP stacks and WebView. It does NOT
+# govern dart:io, which is what this app's REST and WebSocket traffic runs on -
+# that trust is installed in Dart from the provisioned authority instead, and is
+# covered by test/features/networking/transport_security_test.dart. These checks
+# therefore confirm the declarative Android configuration is correct and
+# consistent with provisioning; they are not evidence that the app's own traffic
+# is pinned.
 if [[ "$mode" == "beta" ]]; then
   # Resource file names are obfuscated in a release build, so resolve the real
   # path through the resource table rather than guessing it.
@@ -187,7 +190,7 @@ if [[ "$mode" == "beta" ]]; then
     # superstring such as evil-chat.example.com cannot satisfy the check.
     printf '%s' "$trust_tree" | grep -qF "'$expected_host'" ||
       fail "The packaged trust config does not pin $expected_host."
-    pass "packaged trust config pins $expected_host"
+    pass "declared Android trust config pins $expected_host"
   else
     pass "packaged trust config carries a domain-config"
   fi
@@ -197,7 +200,7 @@ if [[ "$mode" == "beta" ]]; then
     fail "The packaged trust config carries $pin_count pin(s); a primary and a
          backup are both required, or rotating the server key locks every
          client out."
-  pass "packaged trust config carries $pin_count SPKI pins"
+  pass "declared Android trust config carries $pin_count SPKI pins"
 
   for pin_name in BETA_PRIMARY_SPKI_SHA256 BETA_BACKUP_SPKI_SHA256; do
     pin_value="${!pin_name:-}"
@@ -209,7 +212,7 @@ if [[ "$mode" == "beta" ]]; then
 
   printf '%s' "$trust_tree" | grep -q 'cleartextTrafficPermitted=false' ||
     fail "The packaged trust config does not disable cleartext traffic."
-  pass "packaged trust config disables cleartext traffic"
+  pass "declared Android trust config disables cleartext traffic"
 
   # The packaged file name is obfuscated in a release build, so the resource
   # table is the only reliable place to look for the trust anchor.
