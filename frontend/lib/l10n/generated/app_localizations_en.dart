@@ -18,6 +18,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get developmentConfiguration => 'Development configuration';
 
   @override
+  String get betaConfiguration => 'Closed beta configuration';
+
+  @override
   String get foundationReady => 'Flutter foundation is ready';
 
   @override

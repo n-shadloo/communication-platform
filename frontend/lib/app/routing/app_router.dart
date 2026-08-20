@@ -55,7 +55,7 @@ GoRouter createAppRouter({
           BootstrapPage(
             flow: bootstrapFlow,
             platform: bootstrapPlatform,
-            isProduction: environment.isProduction,
+            environment: environment,
             onResolved: (navigation) {
               switch (navigation.destination) {
                 case BootstrapDestination.login:

@@ -101,6 +101,37 @@ void main() {
     expect(find.byKey(const ValueKey('app-shell-golden')), findsOneWidget);
     expect(find.text('No connection to server'), findsWidgets);
   });
+
+  testWidgets('beta connection gate names the closed beta, not development', (
+    tester,
+  ) async {
+    await _pumpBootstrap(
+      tester,
+      platform: BootstrapPlatform.android,
+      configuration: testAndroidConfiguration,
+      health: FakeHealthReachabilityPort(const HealthUnreachable()),
+      environment: AppEnvironment.beta,
+    );
+
+    expect(find.text("Can't reach the server"), findsOneWidget);
+    expect(find.text('Closed beta configuration'), findsOneWidget);
+    expect(find.text('Development configuration'), findsNothing);
+  });
+
+  testWidgets('production connection gate shows no configuration banner', (
+    tester,
+  ) async {
+    await _pumpBootstrap(
+      tester,
+      platform: BootstrapPlatform.android,
+      configuration: testAndroidConfiguration,
+      health: FakeHealthReachabilityPort(const HealthUnreachable()),
+    );
+
+    expect(find.text("Can't reach the server"), findsOneWidget);
+    expect(find.text('Closed beta configuration'), findsNothing);
+    expect(find.text('Development configuration'), findsNothing);
+  });
 }
 
 Future<void> _pumpBootstrap(
@@ -110,6 +141,7 @@ Future<void> _pumpBootstrap(
   FakePlatformTrustPort? trust,
   FakeHealthReachabilityPort? health,
   LocalBootstrapState localState = const LocalBootstrapState.fresh(),
+  AppEnvironment environment = AppEnvironment.production,
 }) async {
   final flow = BootstrapFlow(
     configuration: FakeBootstrapConfigurationPort(
@@ -124,7 +156,7 @@ Future<void> _pumpBootstrap(
   );
   await tester.pumpWidget(
     CommunicationPlatformApp(
-      environment: AppEnvironment.production,
+      environment: environment,
       locale: const Locale('en'),
       bootstrapFlow: flow,
       bootstrapPlatform: platform,

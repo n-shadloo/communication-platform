@@ -18,6 +18,12 @@ Use compile-time flavors with separate visible identity and trust configuration:
 | staging | Production-like integration | staging origin/CA/pins; staging accounts |
 | production | User release | production origin/private CA/primary+backup pins only |
 
+Every non-production flavor carries a persistent configuration banner, on the
+blocking Connection screen and inside the application shell, that names its own
+environment: development reads "Development configuration" and beta reads
+"Closed beta configuration". A beta build is installed by external testers and
+must never present itself as development. Production shows no banner at all.
+
 The beta and production flavors are separate, coexisting Android applications
 with different application IDs and different signing identities. Neither
 upgrades into the other. The production release build is deliberately unsigned

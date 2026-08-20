@@ -16,12 +16,56 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Development configuration'), findsOneWidget);
+    expect(find.text('Closed beta configuration'), findsNothing);
     expect(find.text('No chats yet'), findsOneWidget);
     expect(
       find.text('Structural placeholder — not for shipping'),
       findsNothing,
     );
     expect(find.text('Flutter foundation is ready'), findsNothing);
+  });
+
+  testWidgets('beta shell names the closed beta, never development', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      const CommunicationPlatformApp(
+        environment: AppEnvironment.beta,
+        locale: Locale('en'),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Closed beta configuration'), findsOneWidget);
+    expect(find.text('Development configuration'), findsNothing);
+  });
+
+  testWidgets('production shell shows no configuration banner at all', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      const CommunicationPlatformApp(
+        environment: AppEnvironment.production,
+        locale: Locale('en'),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Development configuration'), findsNothing);
+    expect(find.text('Closed beta configuration'), findsNothing);
+  });
+
+  testWidgets('Persian beta shell is labelled in Persian', (tester) async {
+    await tester.pumpWidget(
+      const CommunicationPlatformApp(
+        environment: AppEnvironment.beta,
+        locale: Locale('fa'),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('پیکربندی بتای بسته'), findsOneWidget);
+    expect(find.text('پیکربندی توسعه'), findsNothing);
   });
 
   testWidgets(
@@ -41,6 +85,7 @@ void main() {
       expect(directionality.textDirection, TextDirection.rtl);
       expect(find.text('گفت‌وگوها'), findsWidgets);
       expect(find.text('پیکربندی توسعه'), findsNothing);
+      expect(find.text('پیکربندی بتای بسته'), findsNothing);
     },
   );
 }

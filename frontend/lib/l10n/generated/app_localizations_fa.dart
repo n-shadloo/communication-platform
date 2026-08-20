@@ -18,6 +18,9 @@ class AppLocalizationsFa extends AppLocalizations {
   String get developmentConfiguration => 'پیکربندی توسعه';
 
   @override
+  String get betaConfiguration => 'پیکربندی بتای بسته';
+
+  @override
   String get foundationReady => 'پایهٔ فلاتر آماده است';
 
   @override

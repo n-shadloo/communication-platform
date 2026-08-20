@@ -1,4 +1,5 @@
 import 'package:communication_platform/app/config/app_environment.dart';
+import 'package:communication_platform/app/config/app_environment_banner.dart';
 import 'package:communication_platform/app/design_system/app_icons.dart';
 import 'package:communication_platform/app/design_system/app_tokens.dart';
 import 'package:communication_platform/l10n/generated/app_localizations.dart';
@@ -97,6 +98,7 @@ class _AppShellState extends State<AppShell> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
+    final environmentBanner = widget.environment.configurationBanner(l10n);
     final selected = widget.navigationShell.currentIndex;
     final widthClass = AppBreakpoints.of(MediaQuery.sizeOf(context).width);
     final shortcuts = <ShortcutActivator, VoidCallback>{
@@ -114,8 +116,8 @@ class _AppShellState extends State<AppShell> {
     );
     content = Column(
       children: [
-        if (!widget.environment.isProduction)
-          _EnvironmentBanner(label: l10n.developmentConfiguration),
+        if (environmentBanner != null)
+          _EnvironmentBanner(label: environmentBanner),
         if (widget.status.connection != AppConnectionState.connected)
           _ConnectionStrip(connection: widget.status.connection),
         Expanded(child: content),

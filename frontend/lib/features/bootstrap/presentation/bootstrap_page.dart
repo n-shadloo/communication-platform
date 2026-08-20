@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'package:communication_platform/app/config/app_environment.dart';
+import 'package:communication_platform/app/config/app_environment_banner.dart';
 import 'package:communication_platform/app/design_system/app_components.dart';
 import 'package:communication_platform/app/design_system/app_tokens.dart';
 import 'package:communication_platform/features/bootstrap/application/bootstrap_flow.dart';
@@ -27,14 +29,14 @@ class BootstrapPage extends StatefulWidget {
   const BootstrapPage({
     required this.flow,
     required this.platform,
-    required this.isProduction,
+    required this.environment,
     required this.onResolved,
     super.key,
   });
 
   final BootstrapFlow flow;
   final BootstrapPlatform platform;
-  final bool isProduction;
+  final AppEnvironment environment;
   final ValueChanged<BootstrapNavigation> onResolved;
 
   @override
@@ -89,6 +91,7 @@ class _BootstrapPageState extends State<BootstrapPage> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
+    final environmentBanner = widget.environment.configurationBanner(l10n);
     final state = _state;
     final connection = state is BootstrapConnectionBlocked ? state : null;
 
@@ -97,7 +100,7 @@ class _BootstrapPageState extends State<BootstrapPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            if (!widget.isProduction)
+            if (environmentBanner != null)
               Semantics(
                 container: true,
                 liveRegion: true,
@@ -105,10 +108,7 @@ class _BootstrapPageState extends State<BootstrapPage> {
                   color: Theme.of(context).colorScheme.secondaryContainer,
                   child: Padding(
                     padding: const EdgeInsets.all(AppSpacing.x3),
-                    child: Text(
-                      l10n.developmentConfiguration,
-                      textAlign: TextAlign.center,
-                    ),
+                    child: Text(environmentBanner, textAlign: TextAlign.center),
                   ),
                 ),
               ),

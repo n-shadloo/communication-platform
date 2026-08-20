@@ -12,6 +12,10 @@
   "@developmentConfiguration": {
     "description": "A persistent warning that the running app is not production."
   },
+  "betaConfiguration": "Closed beta configuration",
+  "@betaConfiguration": {
+    "description": "A persistent warning that the running app is a closed-beta build, not production."
+  },
   "foundationReady": "Flutter foundation is ready",
   "@foundationReady": {
     "description": "Bootstrap text shown before product screens are implemented."

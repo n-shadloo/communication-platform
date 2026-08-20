@@ -116,6 +116,12 @@ abstract class AppLocalizations {
   /// **'Development configuration'**
   String get developmentConfiguration;
 
+  /// A persistent warning that the running app is a closed-beta build, not production.
+  ///
+  /// In en, this message translates to:
+  /// **'Closed beta configuration'**
+  String get betaConfiguration;
+
   /// Bootstrap text shown before product screens are implemented.
   ///
   /// In en, this message translates to:
