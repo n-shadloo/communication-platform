@@ -193,23 +193,36 @@ ADR-046 makes delivery layered, and every layer drives this same engine.
 
 - **Foreground.** Android holds the WebSocket while the application lifecycle permits.
   Socket frames are wake-up hints; the authoritative REST drain is what moves messages.
-- **Background floor.** `WorkManager` performs best-effort polling/drain behind the
-  `AndroidPollingScheduler` port. It is not instant, not exact-periodic, and not reliable
-  after force-stop; its floor is the platform's 15 minutes, Doze defers it to maintenance
-  windows that thin out, and the *rare* and *restricted* standby buckets give it no
-  network at all.
+- **Background floor.** A persisted periodic `JobScheduler` job performs one best-effort
+  drain behind the `AndroidPollingScheduler` port (ADR-049, which replaces ADR-046's
+  `WorkManager` mechanism: `JobInfo` is in the framework at `minSdk` 24 and
+  `setPersisted(true)` survives a reboot with no receiver of this application's own). It
+  is not instant, not exact-periodic, and not reliable after force-stop; its floor is the
+  platform's 15 minutes, Doze defers it to maintenance windows that thin out, the *rare*
+  and *restricted* standby buckets give it no network at all, and Android 13+ moves an
+  application into *restricted* after eight days without user interaction. The job is
+  armed once for the life of a signed-in session rather than on each background
+  transition, because registering a periodic job restarts its window.
 - **Background near-real-time, opt-in and off by default.** A `specialUse` foreground
   service keeps the process out of the cached state so the same socket survives — a frozen
   app's TCP sockets are terminated by the system — and gives the process the one app state
   Android documents as having unrestricted background network. It hosts the same isolate
   and the same supervisor. Messaging still never starts a `dataSync` or `remoteMessaging`
   service.
-- **Exactly one delivery owner at a time**, held as a durable leased Drift row. The
-  foreground isolate, the service isolate and the headless worker isolate must never run
-  the engine concurrently: besides duplicate sockets, concurrent `TokenCoordinator`
-  instances race a *rotating* refresh token and can invalidate the session. The supervisor
-  already cancels polling whenever it takes over; the lease makes that crash-safe rather
-  than in-memory.
+- **Exactly one delivery owner at a time**, arbitrated in the process rather than in the
+  database (ADR-049, replacing ADR-046's durable lease). Concurrent owners would race
+  `TokenCoordinator` instances on a *rotating* refresh token — the loser presents a
+  retired one, the backend answers 401 `invalid_token`, and the session ends — and would
+  hand the same envelope to the ratchet twice, because `beginNextEnvelopeInspection`
+  deliberately re-offers rows left `inspecting` by a crash. The job service runs in the
+  default process and the Flutter engine documents one Dart VM per process, so every owner
+  is on one main looper: a wake-up goes to the isolate that already exists, a headless
+  engine starts only when none does, and a foreground session waits for a headless run
+  before it opens storage or reads a token.
+- **A deferred wake-up is acknowledged, not fired and forgotten.** The platform lets the
+  process be frozen again once the job is finished, so an unacknowledged tick is a drain
+  the system stops part-way. `BestEffortDeliveryTick.complete()` is called unconditionally,
+  including when the cycle failed.
 - **Notifications are a projection of committed state.** Implemented 2026-08-21 under
   ADR-048, which amends this line: the trigger is a durable-state signal rather than
   post-inbox-commit work, because that hook fires only when the engine runs and so can
@@ -261,10 +274,18 @@ mailbox nor transmitted its outbox. What runs now:
   background would make a session started at launch stand itself down. Every foreground
   transition re-reads connectivity, because Android 8.0 and above does not deliver
   connectivity changes to a backgrounded app.
-- **Layers 1 and 2 are not built.** This build composes `UnscheduledBestEffortPolling`,
-  which schedules nothing and emits nothing, so a backgrounded application performs no
-  catch-up. Delivery happens while the application is running, exactly as the enrollment
-  disclosure states.
+- **Layer 1 is built; Layer 2 is not.** The Android build composes
+  `PlatformDeferredDeliveryScheduler` behind `AndroidBestEffortPollingPort`, so a
+  backgrounded application performs an *eventual* catch-up. Every other target composes
+  `UnscheduledBestEffortPolling`, which schedules nothing and says so. Near-real-time
+  background delivery would need ADR-046's opt-in `specialUse` foreground service, which
+  remains unbuilt, and the enrollment disclosure states the difference at revision 3.
+- **A headless catch-up composes from the same root.** `ApplicationRuntime` builds the
+  provisioned trust context, the single `TokenCoordinator` and the environment-gated
+  crypto core for both entry points, so the background path cannot quietly establish a
+  weaker posture than the foreground one. It opens no socket — a cached process is frozen
+  and its TCP sockets are terminated — and runs one `synchronize()` followed by one alert
+  reconciliation.
 - **Layer 3 is built and is not part of the delivery session.** ADR-048 composes
   `MessageAlertController` at the application root, beside `MessageDeliveryController` and
   deliberately not inside it: a delivery session that fails to compose still leaves

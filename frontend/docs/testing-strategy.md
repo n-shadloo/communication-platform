@@ -122,7 +122,16 @@ Use at least two accounts and multiple Android devices for version 1:
 - logout, remote revocation, local wipe, deep links, and hidden notifications. The alert
   policy is decided entirely in Dart and is covered by host tests; what a device actually
   renders - lock screen, status-bar icon, heads-up, channel vibration, and the permission
-  dialog across Android 13 to 16 - is a release gate that has not been run (ADR-048).
+  dialog across Android 13 to 16 - is a release gate that has not been run (ADR-048);
+- deferred background catch-up (ADR-049). Everything that decides *when* the platform is
+  asked for something, *when* it is told the wake-up is over, and *what a run refuses to
+  start* is decided in Dart and covered by host tests. What is not, and is a release gate
+  that has not been run: that the job runs at all on a device; that a headless
+  `FlutterEngine` starts the `backgroundDelivery` entry point from the release AOT
+  snapshot; the Doze, standby-bucket, eight-day restricted-bucket, reboot, force-stop,
+  Data-Saver and vendor-battery matrix on Samsung, Xiaomi and an AOSP image across Android
+  11 to 16; and whether a persisted job survives an in-place upgrade, which the platform
+  documentation does not specify.
 
 Patrol may drive Android native flows. Browser E2E is post-v1 and is not required for the
 Android release.

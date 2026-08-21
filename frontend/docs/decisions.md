@@ -56,9 +56,579 @@ is not silently edited out of history.
 
 | ADR-045 | Accepted | One application-level maturity word - Experimental - two feature labels that only ever read *down* from it, and one mandatory first-run disclosure inside the enrollment gate that already exists; amends two rows of ADR-044's tier table (2026-08-20) | ADR-044 defined what the deployment *is* and deferred what the software *says*. Inspection of the running surfaces found four different vocabularies reaching users and two of them false in the artifact that carries them: the task-switcher title called the Private Experimental build "Communication Platform (Development)" while its own launcher label said Experimental; the wide navigation rail carried a permanent "Structural placeholder - not for shipping" footer in **every** build including production; Edit Profile claimed a "development-only fake transport" in a build that composes no profile adapter at all, so Save could only fail; and the composer's paperclip opened three inert options because no build composes an attachment picker or transfer service. Those last two are also a correction to ADR-044, whose supported tier listed encrypted profiles and attachments: both are absent and are now labelled **Not built yet**. Terminology was re-derived rather than inherited and landed in the same place for a better reason - Google's published launch-stage definition of Experimental ("not intended for production use or covered by any SLA, support obligation, or deprecation policy and might be subject to backward-incompatible changes", read at primary source 2026-08-20) describes this artifact exactly, including the backward-incompatible clause that is ADR-036's disposable group state, while Preview promises the previewed thing ships and Beta promises feature completeness. Consent reuses `EnrollmentPhase.securityNotice`, which is already mandatory, already durable in the enrollment journal, and already withholds messaging until accepted, rather than adding a second blocking screen that would split the attention paid to both. Seven disclosure points state only the facts that make an ordinary expectation wrong - no review, foreground-only delivery, device-only history, recovery without history, resettable groups, unbuilt surfaces, intended use - and cryptographic identifiers are excluded by decision because printing them beside those seven would bury them. Periodic re-acknowledgement is rejected on measured evidence that repetition destroys a warning and that the damage generalises to this app's genuinely blocking security states; re-consent is content-triggered through `DeploymentDisclosure.revision`, pinned by a test to the exact disclosure text. There is deliberately no label meaning supported, stable, verified or audited: the absence of a badge must never read as an assurance. Opens no production gate and supersedes nothing. |
 
-| ADR-046 | Accepted | Background message delivery is layered — a composed foreground socket, a best-effort WorkManager floor, and an opt-in `specialUse` foreground service holding the same connection — and a notification is a projection of committed local state, never of the transport; supersedes ADR-029 (2026-08-21) | ADR-029 chose best-effort polling and no persistent service. Inspection of the composed artifact found something else entirely: `SyncLifecycleSupervisor`, `DioWebSocketGateway`, `GatewayRealtimeSyncAdapter` and `NetworkingFoundation` exist, are tested, and are constructed **only in tests**, and `durableSyncEngineProvider` is read by nothing, so the shipped build neither drains its mailbox nor transmits its outbox — `SendConversationEvents` ends at `fanout.prepareAndQueue` and the rows stay there. ADR-045's disclosure "messages arrive only while this app is open" is therefore wrong in the user's favour and is corrected here. On the platform, primary sources read 2026-08-21 leave a narrow design space: a backgrounded process is cached, and "if all processes for a particular app are frozen, the system terminates any active TCP sockets maintained by the app", so an unattended socket is closed rather than slow; `WorkManager`'s floor is 15 minutes, Doze defers `JobScheduler` to maintenance windows that thin out over time, Android 16 enforces job quota even in the active standby bucket, and the *rare* and *restricted* buckets disable background network outright, so deferrable work can only ever be *eventual*; while-idle alarms buy six minutes of best-case cadence for a user-revocable `SCHEDULE_EXACT_ALARM` and still wake an app that has no network. The one documented state with unrestricted background network is "app process is running a foreground service", and Android's own Doze acceptable-use table rates the battery-optimization exemption **Acceptable** for an "instant messaging, chat, or calling app" that "can't use FCM because of technical dependency", which is this application exactly — the exemption granting that an app "can use the network and hold partial wake locks during Doze and App Standby" and being itself an exemption from the Android 12 background FGS-start restriction. The type is `specialUse` with a truthful subtype property, because `dataSync` is capped at 6 h/24 h and barred from `BOOT_COMPLETED` at `targetSdk` 35+, `remoteMessaging` means device-to-device continuity, and `systemExempted` is gated on roles this app lacks; the existing test forbidding `remoteMessaging` and `FOREGROUND_SERVICE_DATA_SYNC` in the manifest stands unchanged. Exactly one delivery owner runs at a time, held as a durable Drift lease rather than an in-memory flag, because concurrent isolates would race a *rotating* refresh token and can invalidate the session. Notifications fire only from the existing `PostInboxCommitWorkPort` after the inbox transaction commits, deduplicated by a durable `notified_at`, recovered by query rather than replay, and bounded by a grouped summary. Reliability is stated in four tiers and never as a guarantee: near-real-time foregrounded; near-real-time best-effort backgrounded when the user has granted the exemption and their vendor cooperates; eventual otherwise, and nothing at all in the *rare* and *restricted* buckets; and nothing whatsoever after force-stop, which no design can change. The costs are accepted and disclosed: a persistent shade entry that makes the app observable on the device, real battery use, two permissions, and per-vendor setup on the 77% of the Iranian fleet that is Samsung or Xiaomi (Statcounter, July 2026). Layer 2 ships off by default and may not be enabled in any distributed artifact before the physical-device matrix runs; UnifiedPush was rejected because the backend has no push endpoint and may not be changed, it needs a second app and a second service per user, and it moves message-timing metadata outside the reviewed boundary without removing the Android constraint; SMS wake was rejected outright for binding accounts to carrier-held phone numbers. No experiment was run: only Play-Store emulator images without root were available and no Samsung or Xiaomi hardware, so a local result would have proved nothing about the fleet that matters. Reaffirms ADR-013, opens no production gate, changes no cryptographic behaviour, and adds no dependency by itself. |
+| ADR-046 | Accepted, Layers 0 and 1 amended by ADR-047 and ADR-049 | Background message delivery is layered — a composed foreground socket, a best-effort WorkManager floor, and an opt-in `specialUse` foreground service holding the same connection — and a notification is a projection of committed local state, never of the transport; supersedes ADR-029 (2026-08-21) | ADR-029 chose best-effort polling and no persistent service. Inspection of the composed artifact found something else entirely: `SyncLifecycleSupervisor`, `DioWebSocketGateway`, `GatewayRealtimeSyncAdapter` and `NetworkingFoundation` exist, are tested, and are constructed **only in tests**, and `durableSyncEngineProvider` is read by nothing, so the shipped build neither drains its mailbox nor transmits its outbox — `SendConversationEvents` ends at `fanout.prepareAndQueue` and the rows stay there. ADR-045's disclosure "messages arrive only while this app is open" is therefore wrong in the user's favour and is corrected here. On the platform, primary sources read 2026-08-21 leave a narrow design space: a backgrounded process is cached, and "if all processes for a particular app are frozen, the system terminates any active TCP sockets maintained by the app", so an unattended socket is closed rather than slow; `WorkManager`'s floor is 15 minutes, Doze defers `JobScheduler` to maintenance windows that thin out over time, Android 16 enforces job quota even in the active standby bucket, and the *rare* and *restricted* buckets disable background network outright, so deferrable work can only ever be *eventual*; while-idle alarms buy six minutes of best-case cadence for a user-revocable `SCHEDULE_EXACT_ALARM` and still wake an app that has no network. The one documented state with unrestricted background network is "app process is running a foreground service", and Android's own Doze acceptable-use table rates the battery-optimization exemption **Acceptable** for an "instant messaging, chat, or calling app" that "can't use FCM because of technical dependency", which is this application exactly — the exemption granting that an app "can use the network and hold partial wake locks during Doze and App Standby" and being itself an exemption from the Android 12 background FGS-start restriction. The type is `specialUse` with a truthful subtype property, because `dataSync` is capped at 6 h/24 h and barred from `BOOT_COMPLETED` at `targetSdk` 35+, `remoteMessaging` means device-to-device continuity, and `systemExempted` is gated on roles this app lacks; the existing test forbidding `remoteMessaging` and `FOREGROUND_SERVICE_DATA_SYNC` in the manifest stands unchanged. Exactly one delivery owner runs at a time, held as a durable Drift lease rather than an in-memory flag, because concurrent isolates would race a *rotating* refresh token and can invalidate the session. Notifications fire only from the existing `PostInboxCommitWorkPort` after the inbox transaction commits, deduplicated by a durable `notified_at`, recovered by query rather than replay, and bounded by a grouped summary. Reliability is stated in four tiers and never as a guarantee: near-real-time foregrounded; near-real-time best-effort backgrounded when the user has granted the exemption and their vendor cooperates; eventual otherwise, and nothing at all in the *rare* and *restricted* buckets; and nothing whatsoever after force-stop, which no design can change. The costs are accepted and disclosed: a persistent shade entry that makes the app observable on the device, real battery use, two permissions, and per-vendor setup on the 77% of the Iranian fleet that is Samsung or Xiaomi (Statcounter, July 2026). Layer 2 ships off by default and may not be enabled in any distributed artifact before the physical-device matrix runs; UnifiedPush was rejected because the backend has no push endpoint and may not be changed, it needs a second app and a second service per user, and it moves message-timing metadata outside the reviewed boundary without removing the Android constraint; SMS wake was rejected outright for binding accounts to carrier-held phone numbers. No experiment was run: only Play-Store emulator images without root were available and no Samsung or Xiaomi hardware, so a local result would have proved nothing about the fleet that matters. Reaffirms ADR-013, opens no production gate, changes no cryptographic behaviour, and adds no dependency by itself. |
 | ADR-047 | Accepted | The delivery path is composed at the application root, on the one networking foundation, and a send is a durable write the supervisor observes rather than a call it receives (2026-08-21) | Implements ADR-046's Layer 0 and closes its follow-up step 1. **The two composition roots are resolved into one**: `AuthenticationAssembly` owns a single `NetworkingFoundation` — one `DioRestClient`, one `TokenCoordinator`, one provisioned `SecurityContext` — and the socket is built from it by `NetworkingFoundation.realtimeGateway`, so close 4001 refreshes and close 4003 revokes through the coordinator the whole application shares. A second coordinator was rejected outright: both would rotate the same refresh token and the loser would present one the server has already retired, ending the session for both. `NetworkingFoundation` was dead code and, contrary to ADR-046's inventory, had no tests at all; it is kept and made live rather than deleted, because the role its name claims is the role the application needs. **Ownership sits at the application root**, as a Riverpod notifier the root holds through `listenManual`: `flutter_riverpod` 3.3.2 pauses subscriptions created in `build` when their widget leaves the view (`ConsumerStatefulElement._applyTickerMode`, verified in the pinned source), so a screen-owned or `ref.watch`-owned controller would silently stop managing sessions when a route covered it, while `listenManual` subscriptions are never ticker-mode managed. Exactly one session runs at a time, serialized on one transition queue with the wanted scope re-checked after every await; the durable cross-isolate lease ADR-046 requires is not built and is not yet needed, because this stage composes exactly one isolate. A session runs only for `fullScope`/`offlineFullScope` and stops when logout *begins*, because `TokenCoordinator.logout` wipes protected storage and closes the database before it emits the termination a completion-triggered stop would wait for. **A send is not a call into the supervisor**: composers write exact per-recipient ciphertext into `outbox_operations` and return, and the supervisor requests a cycle when the durable projection's outbox depth *increases*. Reacting to depth being non-zero was rejected — every engine run rewrites the connection phase and re-emits the projection, so it spins against a row waiting out its backoff (demonstrated: the rule inverted makes the loop-safety test hang) — and an in-memory trigger port was rejected for needing cross-feature wiring that the durable queue already provides, and for not surviving a restart. Two platform edges were corrected because they neutralised the composed path: Flutter leaves `WidgetsBinding.lifecycleState` null until the first `SystemChannels.lifecycle` message and documents the initial value as detached "updated to the current state (usually resumed) as soon as the first lifecycle update is received", so reading "not yet reported" as background made a session started at launch stand itself down and never connect; and connectivity_plus documents that Android 8.0+ does not deliver connectivity changes to a backgrounded app and that status should be re-checked on resume, so a cached *unavailable* could outlive the outage and block foreground reconnect. Connectivity, lifecycle, wall-clock delay and the deferred scheduler are resolved and released together as one `DeliveryPlatformPorts`, which is also what lets a test drive the real supervisor without a device. This build composes `UnscheduledBestEffortPolling`, which schedules nothing and emits nothing: ADR-046's Layers 1 to 3 stay unbuilt, a backgrounded application still performs no catch-up, and ADR-045's `foregroundDeliveryOnly` disclosure — previously wrong in the user's favour — is now true, so its revision does not move. Adds no dependency, changes no cryptographic behaviour, opens no production gate, and leaves the Beta/Production boundary untouched: the engine's group stack still resolves through the compile-time permit, and the production artifact verifies unsigned and free of the beta MLS symbol. |
 | ADR-048 | Accepted | The user is told a message arrived by one sender-neutral system notification that is a reconciliation of committed local state, not an event; amends ADR-046's Layer 3 and ADR-045's delivery disclosure (2026-08-21) | ADR-046 sketched Layer 3 in three sentences and ADR-047 built the delivery path under it; inspection of the composed artifact found no notification port, adapter, channel or dependency of any kind, and two things that change what could honestly be built — a message arriving into the conversation on screen is still marked unread, because `ChatConversationView` marks read exactly once from `initState`, so `messages.unread` alone cannot answer "is the user looking at this"; and inbound **group** messages set no unread state at all, because `commitMessageInsideTransaction` writes neither `unread` nor `unread_count`, which is a piece-18 gap left unfixed here because `GroupChatPage` also never marks a group read. Three of ADR-046's Layer 3 details are amended on evidence. **One aggregate notification, not bounded individual ones plus a summary**: with a sender-neutral preview, N notifications are N copies of one sentence, and the only thing they add is a per-message or per-conversation identifier visible to `system_server` and to any app holding notification access — which the threat model's "person with filesystem access to a locked device" adversary and its protection of "notification previews" both weigh against; `MessagingStyle` and conversation shortcuts were rejected outright for publishing a pseudonymous per-contact identifier into the launcher, and an unspecified per-package cap (AOSP near 50, OEM-variable, unqueryable) makes any count-growing design unspecified. **A reconciliation of durable state, not an emission from `PostInboxCommitWorkPort`**: that hook fires only when the engine runs, so it can announce but never *withdraw*, and read-elsewhere, withdrawn-by-sender, conversation-opened and mute are all changes to committed state that no post-drain hook observes; drift dispatches table updates only after `COMMIT` (`Transaction.complete()` precedes `disposeChildStreams()`, verified in pinned 2.34.2 source), so a stream over `messages` and `conversations` is a strictly post-commit trigger and preserves ADR-046's actual principle more directly than the hook did. **A boolean `messages.alerted` (schema 12), not `notified_at`**: nothing reads the time, and it survives projection rebuilds because the projector upserts with a companion that omits the column, the same mechanism that already preserves `starred`. Content is `New message` / `New messages` and nothing else — no sender, conversation, text, count or timestamp — `VISIBILITY_PRIVATE` with a matching `setPublicVersion`, because Android 15 shows that during screen sharing and otherwise redacts "without any further context". Tapping carries the launcher intent alone under `FLAG_IMMUTABLE`: no destination, no extra, no identifier, so there is nothing to forge and no path around the routing guards. Deliberate silence (muted, on screen) still spends the marker so it cannot surface late; a platform refusal spends nothing, so granting later announces the backlog. "On screen" requires a mounted route **and** a foregrounded application, with an unreported lifecycle read as foreground for ADR-047's reason. One automatic `POST_NOTIFICATIONS` prompt at the point of use, guarded by a durable marker and by `shouldShowRequestPermissionRationale` — true in exactly the one state where a second refusal would make the denial permanent — so the app never nags and never spends the user's last prompt. No dependency: `flutter_local_notifications` 22.3.0 would work but every API needed is in `androidx.core:core:1.16.0`, already declared for `FileProvider`, so the platform half is app-owned Kotlin behind a port that carries no identifier and holds no policy. Only `POST_NOTIFICATIONS` and `VIBRATE` are added; a new architecture test forbids every foreground-service, boot, exact-alarm and SMS permission while ADR-046's Layers 1 and 2 stay unbuilt. Reliability is unchanged and stated: an alert reaches the user only while the process is alive, so ADR-045's `foregroundDeliveryOnly` — which said "There are no notifications" — is now false, its revision moves 1 → 2, and re-delivering the written handover becomes release-blocking. The Kotlin half is **unmeasured**: no rooted image and no signed-in session are reachable from this workstation, so what the notification looks like on a device is a release gate, not a claim. Full reasoning in "ADR-048 in full" below. Opens no production gate and changes no cryptographic behaviour. |
+| ADR-049 | Accepted | A backgrounded client catches up through one persisted periodic `JobScheduler` job at the platform floor, delivered to the isolate that already exists or to a headless one when none does, and never to both; ADR-046's WorkManager dependency and its durable delivery lease are both replaced (2026-08-21) | ADR-046's Layer 1. Nothing was assumed: every Android mechanism that runs without the user was re-derived from primary sources read 2026-08-21, and the scope excludes anything the user must grant, configure or change, which removes the foreground service, the exact alarm and the battery-optimization exemption by definition and leaves deferrable jobs as the only floor. **The dependency is dropped.** `JobInfo` is in the framework at `minSdk` 24 and `setPersisted(true)` survives a reboot with no receiver of this application's own, so `androidx.work` would have added a Room database, a service and a boot receiver to the merged manifest of a security-reviewed artifact in order to schedule one job; the existing test forbidding the `workmanager` package therefore stands and now records a decision rather than an absence. **The durable Drift lease is dropped too, and replaced by something exact.** Verified in the pinned engine source, `DartVMRef::Create` documents that "there can only be one VM running in the process at any given time", the `IsolateNameServer` belongs to that VM, and the job service is declared with no `android:process` — so every delivery owner this design can produce is in one process, on one main looper, and in-process arbitration is not weaker than a heartbeat lease but strictly more precise: a job whose process holds a live activity engine sends `runCatchUp` into that isolate and waits for the reply, and only a process with no engine starts a headless one. The hazard being removed is concrete and now evidenced twice over: two `TokenCoordinator`s rotate one refresh token, the loser presents a retired one, the backend returns 401 `invalid_token` (accounts `API.md`) and `TokenCoordinator._endsSession` clears the session — and `beginNextEnvelopeInspection` selects rows in `received` *or* `inspecting`, so two engines would hand the same envelope to the ratchet twice. A foreground session therefore asks the platform for exclusive ownership *before* it opens storage or reads a token, and waits for a headless run rather than killing one mid-call into the shared native core. **A tick is acknowledged, not fired and forgotten**, because a job that is finished lets the process be frozen again and an unacknowledged tick is a catch-up the platform stops mid-drain. **Arming moved off the lifecycle**: a periodic job restarts its window every time it is registered, so ADR-046's arm-on-background/cancel-on-foreground would have meant a user who opens the app more often than the interval never receives one wake-up, and a process that died while foregrounded would have left nothing scheduled at all; it is armed once for the life of a signed-in session and disarmed on logout, and a headless run that finds no session disarms it for itself. **Both entry points now compose through one `ApplicationRuntime`**, so the provisioned authority, the single token coordinator and the environment-gated crypto core cannot be silently absent from the background path; `MainActivity`'s protected-storage and message-alert channels were Activity-scoped and unreachable from a headless engine, and are now Context-bound classes with one implementation each. The alert path needs no change and asks for no permission in the background, because `ReconcileMessageAlerts` already gates the single automatic prompt on `visible.isForeground`. Reliability is stated in four tiers and never as a guarantee: near-real-time foregrounded; *eventual* backgrounded, fifteen minutes at best and bound to Doze maintenance windows that thin out; **nothing** in the *rare* and *restricted* buckets, where Android disables background network and which Android 13+ applies after eight days without interaction; and nothing whatsoever after a force-stop. ADR-045's disclosure moves to revision 3 in both catalogues, which makes re-delivering the written handover release-blocking again. Adds no dependency, changes no cryptographic behaviour, opens no production gate, and leaves the Beta/Production boundary untouched — verified after the change against the built artifact, which packages unsigned, carries the production application ID, exports no beta MLS symbol, and declares exactly one service, bound with `BIND_JOB_SERVICE`, unexported, in the default process, with no foreground-service permission of any kind. |
+
+## ADR-049 in full — what makes a backgrounded client take delivery (2026-08-21)
+
+**Status:** Accepted. Implements ADR-046's Layer 1 and **replaces two of its
+mechanisms** — the `WorkManager` dependency and the durable Drift delivery lease — on
+evidence recorded below. Amends ADR-045's delivery disclosure to revision 3. Opens no
+production gate.
+
+### The question
+
+The user has closed the application, or has not opened it for some time. Messages are
+waiting for this device on a server it can reach. **What causes the application to take
+delivery of them, how often can that honestly be expected to happen, and what must be
+true for it to be safe every time it does?**
+
+The scope excludes, by definition, anything that requires the user to grant, configure or
+change something; anything that requires the application to keep running; and anything
+that needs per-manufacturer instructions to work at all. This is the floor beneath every
+better mechanism, and the only thing that will be true for a user who never reads the
+instructions.
+
+Nothing was assumed. The mechanism, the cadence, the entry point, the process model, the
+ownership model, the dependency and the native/Dart split were all re-derived, including
+the ones ADR-046 had already named.
+
+### Exact environment, fixed
+
+- 20–30 users, all in Iran, known to the operator, receiving the artifact by private
+  handover. Nothing configured, nothing granted, no setting changed.
+- International connectivity may be entirely unavailable; domestic connectivity reaches
+  the backend, which is inside Iran and is the authoritative durable mailbox
+  (`GET /api/v1/me/envelopes`, seven-day TTL).
+- Fleet dominated by Samsung and Xiaomi, whose background-management behaviour AOSP does
+  not specify. Android 11 through 16 all materially represented.
+- `minSdk` 24, `targetSdk` 36, `compileSdk` 36 (read from the pinned Flutter 3.44.7
+  Gradle extension, 2026-08-21). Directly installed signed APK; Play policy does not bind
+  it, platform behaviour binds it completely.
+- ADR-013 stands: no foreign push, no Firebase, no foreign runtime call. FCM is excluded
+  twice over — by decision, and because Google's servers are unreachable exactly when
+  this application is most needed.
+
+### What the repository actually did before
+
+Verified in the composed application on 2026-08-21, not in its documentation.
+
+| Component | Existed | Reachable at runtime |
+|---|---|---|
+| Foreground socket, engine, drain, commit (ADR-047) | yes | yes |
+| Alert reconciliation from committed state (ADR-048) | yes | yes |
+| `AndroidPollingScheduler` port | yes | **no adapter** |
+| `UnscheduledBestEffortPolling` composed as the polling port | yes | yes — it schedules nothing and emits nothing |
+| Any `<service>`, job, alarm or receiver in the manifest | **no** | no |
+
+So a backgrounded application performed no catch-up whatsoever, exactly as
+`sync_platform_adapters.dart` said and exactly as ADR-045's disclosure told recipients.
+Three further findings came out of that inspection and changed what could be built:
+
+1. **The protected-storage boundary was unreachable from any second entry point.**
+   `loadOrCreateStorageKey` was a method-channel handler registered in
+   `MainActivity.configureFlutterEngine`, and a channel handler exists only on the engine
+   that registered it. A headless engine calling it would have received
+   `MissingPluginException` — which `AndroidKeystoreProtectedStorage` does not catch, so
+   it would have propagated out of `SecureLocalStorageRuntime.open()`. The same was true
+   of the message-alert channel. Both are now Context-bound classes with exactly one
+   implementation each, and `MainActivity` keeps only what genuinely needs a window: the
+   permission dialog, the settings screen, `FLAG_SECURE`, and the clipboard.
+2. **The supervisor armed and disarmed the scheduler on lifecycle transitions.**
+   `_enterBackground` called `polling.schedule`, `_resumeForeground` called
+   `polling.cancel`. Against a *periodic* platform job that is a defect rather than a
+   detail: registering one restarts its window, so a user who opens the application more
+   often than the interval would never receive a single wake-up, and a process that died
+   while foregrounded would have left nothing scheduled at all. Arming moved to the
+   session.
+3. **`SyncLifecycleSupervisor.dispose()` did not cancel polling**, so a job armed for a
+   session would have outlived logout.
+
+### Research findings
+
+All from primary sources, read 2026-08-21, plus the pinned Android SDK sources
+(`android-35`) and the pinned Flutter engine sources shipped with Flutter 3.44.7.
+
+**Deferrable jobs are the only mechanism inside this scope.** Everything Android offers
+for running without the user, and why each does or does not survive the exclusions:
+
+| Mechanism | Needs from the user | Verdict |
+|---|---|---|
+| `JobScheduler` / `WorkManager` periodic job | nothing | **the only candidate** |
+| Foreground service (`specialUse`, ADR-046 Layer 2) | battery-optimization exemption, notification permission, per-vendor setup | out of scope by definition; still unbuilt |
+| `setExactAndAllowWhileIdle` | `SCHEDULE_EXACT_ALARM`, which the user can revoke | out of scope, and see below |
+| `setAndAllowWhileIdle` | nothing | in scope, and rejected on evidence below |
+| `BOOT_COMPLETED` receiver | nothing (normal permission) | not needed: `setPersisted(true)` does it |
+| `MY_PACKAGE_REPLACED` receiver | nothing | rejected: deliverability not established, see *outstanding validation* |
+| Sync adapter | a visible account | worse than a job in every respect, and Doze stops it too |
+| Home-screen widget `updatePeriodMillis` | the user must place a widget | out of scope |
+| Platform push (FCM) | nothing | excluded by ADR-013 and unreachable in the outage this deployment exists for |
+| UnifiedPush / self-hosted distributor | a second app, a second service | out of scope here; ADR-046 rejected it and nothing has changed |
+| SMS wake | a phone number and an SMS permission | rejected outright by ADR-046 on the threat model |
+
+**What the job floor actually is.** `JobInfo.java` in the pinned API 35 SDK:
+`MIN_PERIOD_MILLIS = 15 * 60 * 1000L`, and `setPeriodic` logs and silently raises anything
+shorter. `MIN_FLEX_MILLIS = 5 * 60 * 1000L`, and flex is clamped to
+`max(5% of the period, 5 minutes)`, so a 15-minute job is eligible in the last five
+minutes of each period. `setPeriodic`'s own contract is an upper bound on frequency, not
+a lower bound on delivery: "You have no control over when within this interval this job
+will be executed, only the guarantee that it will be executed **at most** once within
+this interval, as long as the constraints are satisfied."
+
+**Doze suspends what a catch-up needs.** In Doze the system "suspends network access",
+"ignores wake locks", "defers standard `AlarmManager` alarms" and "doesn't let
+`JobScheduler` run. `WorkManager` uses `JobScheduler` internally, so `WorkManager` tasks
+don't run", releasing them only in maintenance windows of which "over time … the system
+schedules … less frequently"
+([Doze and App Standby](https://developer.android.com/training/monitoring-device-state/doze-standby)).
+
+**Two standby buckets have no background network at all, and an unopened app lands in
+one.** The power table gives, per bucket: *active* — 20 min of jobs per rolling hour, no
+network restriction; *working set* — 10 min per 4 h; *frequent* — 10 min per 12 h;
+*rare* — 10 min per 24 h, **network disabled**; *restricted* — once per day for 10 min,
+**network disabled**
+([power details](https://developer.android.com/topic/performance/power/power-details)).
+The same page notes that "execution quota behavior for jobs changed in Android 16. Prior
+to Android 16 there was no execution limit when the app is in the active standby bucket",
+which Android 16's own notes confirm reaches "tasks scheduled using WorkManager,
+JobScheduler, and DownloadManager"
+([Android 16 behavior changes](https://developer.android.com/about/versions/16/behavior-changes-all)).
+Decisively for this deployment: "On Android 13 (API level 33) and higher, unless your app
+qualifies for an exemption, the system places your app in the restricted bucket … [when]
+the user doesn't interact with your app for a specific number of days … Android 13
+reduces the number of days to 8", and in that bucket "restricted jobs don't run by
+themselves. There must be at least one other job running or pending at the same time"
+([app standby buckets](https://developer.android.com/topic/performance/appstandby)).
+The same page also records the counter-pressure this design gets for free: the system
+does **not** treat an app as idle while "the app generates a notification that users see
+on the lock screen or in the notification tray", and an app returns to *active* when
+"the user taps on a notification that your app sends". A catch-up that finds a message
+and alerts (ADR-048) is therefore self-reinforcing; a catch-up that finds nothing for
+eight days is not, and that is the honest limit.
+
+**While-idle alarms buy nothing here, and the two primary sources disagree about how
+little.** The Doze page says "neither `setAndAllowWhileIdle()` nor
+`setExactAndAllowWhileIdle()` can fire alarms more than once per nine minutes, per app".
+The pinned SDK's own `AlarmManager.java` javadoc is less generous: "Under normal system
+operation, it will not dispatch these alarms more than about every minute …; **when in
+low-power idle modes this duration may be significantly longer, such as 15 minutes**",
+and the dispatch grants only that "the app will also be added to the system's temporary
+power exemption list for **approximately 10 seconds**". Ten seconds does not cover a
+Keystore unwrap, a SQLCipher open, a TLS handshake to a private CA and a drain. Alarms
+are also bucket-quota'd (one per hour in *rare*, one per day in *restricted*), do not
+survive a reboot, and the javadoc restricts the API to cases "where it is actually
+required that the alarm go off while in idle — a reasonable example would be … a calendar
+notification". Rejected on all four counts, more firmly than ADR-046 rejected it.
+
+**A job is the one thing that both runs and has a network.** `JobScheduler`'s own
+javadoc: "While a job is running, the system holds a wakelock on behalf of your app", and
+the network constraint means the job is not started until there is one. Its limits are
+recorded honestly: from Android 12 "jobs will still be stopped after 10 minutes if the
+system is busy or needs the resources"; from Android 14 the scheduler "may try to optimize
+job execution by shifting execution to times with more available system resources", and
+`onStartJob` that does not return "within several seconds" is an ANR; `JobService`
+"executes each incoming job on a Handler running on your application's main thread".
+`setPersisted(true)` carries `@RequiresPermission(RECEIVE_BOOT_COMPLETED)` and is what
+loads the job at boot, so no receiver of this application's own is needed.
+
+**A backgrounded process cannot hold anything.** Android 14: "an app's process is in a
+cached state when it's moved to the background", and "shortly after an app process enters
+a cached state, background work is disallowed". AOSP: "if all processes for a particular
+app are frozen, the system terminates any active TCP sockets maintained by the app"
+([cached apps freezer](https://source.android.com/docs/core/perf/cached-apps-freezer)).
+This is why a catch-up opens no socket, and why an unacknowledged wake-up is not a slow
+catch-up but an interrupted one.
+
+**Force-stop is absolute.** An app the user force-stops, or that has never been launched
+since install, receives no broadcasts and runs no scheduled work until it is launched
+manually. No architecture changes this.
+
+**Data Saver is a user setting this design cannot and will not work around.** With Data
+Saver on and the device on a metered network, "the system blocks background data usage";
+an app may ask for an allowlist exemption through
+`ACTION_IGNORE_BACKGROUND_DATA_RESTRICTIONS_SETTINGS`
+([Data Saver](https://developer.android.com/training/basics/network-ops/data-saver)).
+Asking is out of scope for this piece by definition, so it is disclosed instead.
+
+**One process, one Dart VM — verified in source, not assumed.** The pinned Flutter engine
+states in `dart_vm_lifecycle.h` that "there can only be one VM running in the process at
+any given time", and `DartVMRef::Create` reuses a running one; `IsolateNameServer` is
+owned by that `DartVM` and its Dart-side documentation says "all isolates share a global
+mapping of names to ports". Two `FlutterEngine`s in one Android process therefore share
+one VM and one name server — which is also why `drift_flutter`'s
+`shareAcrossIsolates: true`, already used by this application, connects a headless isolate
+to the *same* database server isolate rather than opening a second connection to the same
+SQLCipher file.
+
+**The headless entry point is a documented Flutter API.** `new FlutterEngine(context)`
+registers generated plugins automatically (verified in `FlutterEngine.java`), and
+`DartExecutor.executeDartEntrypoint(DartEntrypoint(bundlePath, functionName))` runs a
+named top-level function. Plugins Flutter generates are registered; **channels this
+application registers on its activity are not**, which is finding 1 above.
+
+### Alternatives evaluated
+
+**1 — Nothing; keep `UnscheduledBestEffortPolling` (the status quo).** Costs nothing,
+leaks nothing, promises nothing, and is exactly what the disclosure said. Rejected as the
+answer, because the question is what happens when the application is not open, and for a
+private messenger with no push the difference between "never" and "usually within tens of
+minutes" is the difference between usable and not.
+
+**2 — Tell the user something arrived without draining it.** There is no such signal
+without push, and inventing one would mean announcing something this device has not
+authenticated. Rejected: it is the one thing ADR-046's Layer 3 principle forbids.
+
+**3 — Do the catch-up in Kotlin.** Would avoid a second Dart context entirely. Rejected
+outright: the drain, the envelope inspection, the ratchet, the group stack and the
+projection are Dart over a reviewed Rust core, and a Kotlin reimplementation would be a
+second, unreviewed copy of the security-critical path.
+
+**4 — `androidx.work` (ADR-046 as written).** The documented recommendation, and it
+handles reboot rescheduling itself. Rejected. At `minSdk` 24 WorkManager delegates to
+`JobScheduler` anyway, and `setPersisted(true)` gives the reboot property directly. What
+it would add is a Room database, a `SystemJobService`, a `RescheduleReceiver`, an
+`androidx.startup` `InitializationProvider` and `RECEIVE_BOOT_COMPLETED` — merged
+invisibly into the manifest of an artifact whose manifest is an audited surface — in
+order to schedule one job. ADR-048 set the precedent for exactly this trade and the
+evidence points the same way. The existing test forbidding the `workmanager` package
+therefore stands unchanged and now records a decision rather than an absence.
+
+**5 — The `workmanager` Flutter plugin.** Adds all of the above plus a plugin, a
+`SharedPreferences`-held callback handle, and a generic background channel. Rejected for
+the same reasons, more so.
+
+**6 — A self-rescheduling one-shot job with `setMinimumLatency` and
+`setOverrideDeadline`.** A deadline gets better treatment from the Android 14 shifting
+behaviour. Rejected on two counts: `setOverrideDeadline` runs the job when the deadline
+expires **even if its constraints are not met**, which means waking with no network; and a
+chain that fails to reschedule itself once is a chain that is broken permanently, while a
+periodic job is self-healing by construction.
+
+**7 — While-idle alarms.** Rejected on the four grounds recorded under *Research*.
+
+**8 — Keeping ADR-046's durable Drift delivery lease.** ADR-046 required "a durable
+leased row in Drift with an owner identity and a heartbeat, not an in-memory flag, so a
+crash releases it and a restart reclaims it". Re-examined against evidence and
+**rejected**. Its stated advantage does not exist here: a crash of the process releases an
+in-memory flag too, because the process is what held it, and there is no second process to
+coordinate with — the job service is declared with no `android:process`, and one Dart VM
+per process is the engine's own documented invariant. What it would cost is real: a
+heartbeat writing to an encrypted database on a timer forever, and a stale lease after a
+crash that blocks catch-up until it expires. What replaces it is more precise, not weaker
+— see below.
+
+**9 — Letting the two owners overlap and only protecting the token refresh.** Tempting,
+because the refresh is the sharpest hazard. Rejected: `beginNextEnvelopeInspection`
+deliberately selects rows in `received` *or* `inspecting` so a crashed inspection is
+retried, which means two concurrent engines would hand the same envelope to the ratchet
+twice; and the post-inbox composite runs group KeyPackage maintenance, pending eviction
+and outbound dispatch, whose concurrency properties are not established. Exclusion covers
+the whole cycle.
+
+**10 — Killing an in-flight headless run when the user opens the application.** Equivalent
+to process death for the durable engine, which it is built to survive. Rejected anyway:
+the run may be inside an FFI call into the shared native cryptographic core, and abandoning
+one is a worse trade than waiting the seconds a catch-up takes.
+
+### Decision
+
+**One persisted periodic `JobScheduler` job at the platform floor, delivered to whichever
+Dart isolate already exists, and to a headless one only when none does.**
+
+**The mechanism.** `JobInfo.Builder(JOB_ID, DeferredDeliveryJobService)` with
+`setPeriodic(max(requested, JobInfo.getMinPeriodMillis()))`,
+`setRequiredNetworkType(NETWORK_TYPE_ANY)` and `setPersisted(true)`. The floor is read
+from the platform rather than repeated as a number. No dependency is added: `JobInfo` is
+in the framework at `minSdk` 24. The service is a plain service — `exported="false"`,
+`android:permission="android.permission.BIND_JOB_SERVICE"`, no `foregroundServiceType`,
+no `android:process` — so the job scheduler is the only thing that can start it and
+everything runs in the one process the ownership argument rests on.
+
+**Arming belongs to the session, not to the lifecycle.** A `MessageDeliverySession` arms
+the job once when it starts and disarms it when it stops; the supervisor no longer
+schedules or cancels anything. This is the correction of finding 2: a periodic job
+restarts its window each time it is registered.
+
+**Exactly one delivery owner, arbitrated in the process rather than in the database.**
+`onStartJob` runs on the application's main looper, and so does
+`FlutterActivity.configureFlutterEngine`. `MainActivity` registers its engine's channel as
+the delivery owner and clears it in `cleanUpFlutterEngine`. A tick therefore takes one of
+three paths, decided on that one thread:
+
+- a live activity engine exists → `runCatchUp` is invoked into that isolate, the
+  supervisor runs one cycle, and the job finishes when the reply arrives. This is the
+  common case: a cached process keeps its engine for as long as the system leaves it
+  alone, and starting a second engine beside it is precisely the hazard;
+- no engine exists → a headless `FlutterEngine` is created, this application's
+  protected-storage, message-alert and delivery channels are attached to it, and the
+  `backgroundDelivery` entry point runs;
+- a headless run is already in flight → the tick is dropped.
+
+For the one remaining race — the user opening the application while a headless run is in
+flight — the foreground **waits**. `MessageDeliverySession.compose` calls
+`awaitExclusiveOwnership()` before it opens storage or reads a token, and the platform
+completes it when the headless run ends.
+
+**A tick is acknowledged.** `BestEffortDeliveryTick.complete()` is what tells the platform
+the wake-up may end, and it is called unconditionally — including when the cycle failed or
+was refused for want of a network — because the scheduler is asking whether the process
+may be let go, not whether delivery succeeded. The adapter applies its own two-minute
+deadline so a stalled owner cannot hold the wake-up open until the platform's ten-minute
+limit kills it mid-drain.
+
+**The headless run holds nothing.** It opens **no socket**: a cached process is frozen and
+its TCP sockets are terminated, so a connection is not a thing a bounded wake-up can own.
+It restores the session, runs one `DurableSyncEngine.synchronize()` — the same engine, the
+same store, the same inspector, the same group stack — reconciles the alert from committed
+state, and stops. It runs the alert pass even when the drain failed, because an alert is a
+projection of committed local state and messages committed by an earlier run may still
+never have been announced.
+
+**Both entry points compose through one `ApplicationRuntime`.** The provisioned
+`SecurityContext`, the single `TokenCoordinator` and the environment-gated crypto core are
+built in one constructor that `bootstrap()` and the headless entry point both call. The
+dangerous background failure is not a crash; it is a quieter posture — the public root
+store instead of the provisioned authority, a second coordinator, a crypto core without
+the compiled environment's permit — and this removes the possibility rather than testing
+for its absence.
+
+**Which build a background run believes it is, is compiled in.** Each flavor's entry-point
+file exports a `@pragma('vm:entry-point')` `backgroundDelivery()` that names its own
+`AppEnvironment`. The platform picks a *name*; which environment that name resolves to is
+decided by which file was compiled, so nothing about the provisioned server, the trust
+anchor or the closed-beta group permit is selectable at runtime. A build asked for an
+entry point it does not contain fails to start one, which is the fail-closed direction.
+
+### Correctness questions, answered
+
+- **What causes the work, and what stops it?** A periodic job armed when a device-bound
+  full session starts. It stops on logout, when a headless run finds no session (it
+  disarms itself), on force-stop, and on uninstall. It does not stop on a locked phone or
+  a dropped connection, because neither says anything about the next attempt.
+- **What may it assume?** Nothing. It reconstructs storage, configuration, trust, crypto
+  and session for itself, in the same order and through the same constructor the activity
+  uses.
+- **What if protected state cannot be opened?** It concludes `storageUnavailable`: nothing
+  read, nothing written, nothing announced, no marker spent, schedule untouched. The
+  device being locked after a restart reaches here, and it can never be mistaken for
+  "nothing was waiting" because it does not touch the mailbox at all.
+- **What if another part of the application is doing the same job?** It cannot be. A live
+  engine takes the tick itself; a headless run blocks a foreground session from composing
+  until it finishes; a second job tick while one is in flight is dropped.
+- **What if it is interrupted mid-way?** Identical to process death, which the durable
+  engine is designed for: every write is a transaction, an abandoned drain leaves
+  committed state consistent, and an envelope left `inspecting` is picked up again.
+- **The very first time?** There is no session, so nothing is armed; enrollment arms it.
+- **After force-stop?** Nothing, until the user opens the application. Disclosed, not
+  engineered around.
+- **How is failure surfaced?** It is not surfaced as an event at all. There is no
+  background error state and no notification about failing to check — that would be noise
+  the user cannot act on. What the user has is the alert when something *is* delivered,
+  and one sentence in the enrollment disclosure telling them what not to rely on.
+- **What does the application now claim?** Revision 3, in both catalogues.
+
+### Security and privacy
+
+- **What the new entry point can reach**: exactly what the activity reaches, because it
+  composes from the same constructor — and nothing that needs a window. `FLAG_SECURE`,
+  the clipboard, the permission dialog and the settings screen stay on `MainActivity` and
+  are unreachable from a headless engine.
+- **Transport trust cannot be silently absent.** One `ApplicationRuntime` builds the
+  provisioned `SecurityContext`; the headless path contains no
+  `TransportSecurity.platformDefault`, no second `NetworkingFoundation`, no second
+  `TokenCoordinator` and no second `DioRestClient`, and an architecture test asserts each
+  of those absences.
+- **Credentials**: obtained by restoring the same device-bound session, refreshed through
+  the same single-flight coordinator, invalidated the same way. Two coordinators are what
+  this design exists to prevent, and the cost of failing was traced to its end: 401
+  `invalid_token` from the backend, `_endsSession`, `store.clear()`, and a user signed out
+  who did nothing.
+- **Protected material** is opened only when the platform can unwrap it, which is after
+  first unlock. The application is not direct-boot aware, so the platform itself withholds
+  the job until then; the Dart path fails closed on top of that rather than relying on it.
+- **What an untrusted server or a network attacker can cause.** Nothing new. The job's
+  cadence is set by the platform, not by anything on the wire, so a hostile relay cannot
+  increase how often this device wakes; it can only make each drain find nothing. Envelope
+  flooding costs battery, not correctness, and the existing backoff and circuit-breaker
+  paths bound it. Nothing that fails authentication reaches `messages`, so nothing a
+  server sends can produce an alert.
+- **What it writes or leaves behind**: one job record in the platform's own scheduler
+  store, containing an id, an interval and a component name. Nothing else. No log line,
+  no file, no preference. The Kotlin half contains no `Log.` and no `println`, asserted by
+  test.
+- **New metadata, stated plainly.** A device that catches up in the background makes its
+  online periods visible to the server on a roughly-fifteen-minute cadence whether or not
+  its owner is present. The server is already an untrusted relay that sees every drain, so
+  this creates no new party and no new class of observation — but it does make an idle
+  device look like an active one, and that is a real change from an artifact that only
+  ever spoke while its owner was looking at it.
+- **Truthfulness of what is declared to the platform.** The one service is what it says it
+  is: a job service, bound with `BIND_JOB_SERVICE`, showing no notification, holding no
+  connection, claiming no foreground-service type. `RECEIVE_BOOT_COMPLETED` is declared
+  because `setPersisted(true)` requires it and for no other purpose; no receiver is
+  declared. Nothing here describes work as something it is not in order to obtain
+  behaviour the platform would otherwise withhold.
+
+### Reliability, stated honestly
+
+**Guaranteed — these are guaranteed *restrictions*, and no test run can disprove them:**
+a force-stopped application runs nothing; the periodic floor is fifteen minutes and a
+shorter request is silently raised; the *rare* and *restricted* buckets disable background
+network; Android 13+ places an app in *restricted* after eight days without interaction
+unless exempt; a cached process is frozen and its TCP sockets terminated; a job is stopped
+after ten minutes when the system wants the resources; `setPeriodic` promises *at most*
+one run per interval, never at least one.
+
+**Merely permitted — a green run proves nothing:** that a job runs at any particular
+moment; that a maintenance window arrives promptly; that a vendor's build honours the
+schedule at all; that a cached process survives long enough for its engine to take the
+tick; that `setPersisted` work is restored across an application upgrade.
+
+**What was observed here:** nothing about timing. No device or emulator run was possible
+(see *Outstanding validation*), so every timing statement above is documentation, not
+measurement.
+
+| Condition | Tier | What actually happens |
+|---|---|---|
+| Foreground, network up | **Near-real-time** (seconds) | Socket hint → REST drain → commit → alert if the conversation is not on screen |
+| Backgrounded, process alive, *active*/*working set* bucket | **Eventual, minutes** | The job wakes the existing isolate; fifteen minutes at best, and only if Doze is not deferring it |
+| Backgrounded, process gone | **Eventual, minutes** | A headless engine is started for one drain; same cadence, higher cost per run |
+| Device in Doze | **Eventual, hours** | Jobs run only in maintenance windows, which the system schedules less frequently the longer the device is idle |
+| Not opened for eight days (Android 13+) | **None** | *Restricted* bucket: background network disabled, one batched job a day that will not run alone |
+| Data Saver on, metered network | **None** | Background data blocked; asking for the exemption is out of scope for this piece |
+| Force-stopped, or battery usage set to "Restricted" | **None** | Unfixable by any design |
+| After a reboot, before first unlock | **None, safely** | Not direct-boot aware, and the database key is credential-encrypted; the job is restored and waits |
+| After a reboot, after first unlock | **Best-effort** | `setPersisted(true)` restored the job with no receiver of this application's own |
+| Intermittent connectivity | **Eventual, no loss inside 7 days** | The network constraint holds the job until there is one; seven-day server retention; `pruned_through` turns permanent loss into a visible blocking state rather than silence |
+
+### Failure modes
+
+- **The platform refuses to schedule.** Caught; delivery reverts to foreground-only, which
+  is what the artifact already tells its users can happen.
+- **No implementation behind the channel** (a host test, a future Web build). The port
+  resolves to `UnscheduledBestEffortPolling` and says so; nothing pretends to be armed.
+- **The owner never acknowledges a tick.** The adapter answers after two minutes, and the
+  platform's own ten-minute limit is behind that.
+- **A headless run hangs.** The platform side tears the engine down after four minutes,
+  which is equivalent to process death and leaves committed state consistent.
+- **The platform stops the job** (`onStopJob`: constraints no longer met, quota, the
+  system wanting the resources). Whatever is in flight is released — the headless engine
+  is destroyed, or a tick handed to the foreground is settled — and `false` is returned so
+  the job is rescheduled by its own periodic policy rather than backed off. Nothing
+  inconsistent is left behind, because every durable write is a transaction.
+- **The user opens the application mid-run.** The session waits, bounded by that same
+  deadline. If the platform stops answering the ownership question altogether, the wait
+  fails after five minutes and the session composes nothing rather than proceeding as
+  though it had established that it is the only owner.
+- **A run finds no session.** It disarms the job, so a signed-out device is not woken
+  every interval to rediscover it.
+- **A run cannot open storage.** It concludes nothing and leaves the job armed.
+- **Logout while a job is armed.** The session disarms it; if that call fails, the next
+  headless run disarms it instead.
+- **An upgrade cancels the job.** Not established either way (see below); the next launch
+  re-arms it.
+
+### User requirements
+
+**None.** No permission the user can refuse, no exemption to grant, no vendor setting to
+change, no second application to install. The two permissions in the manifest that this
+piece touches are `RECEIVE_BOOT_COMPLETED` (normal, install-time, no prompt) and, from
+ADR-048, `POST_NOTIFICATIONS` — which gates being *told*, not being *delivered to*: a
+catch-up with notifications refused still drains, commits and marks unread.
+
+What the user can nevertheless do that silently disables it, all disclosed:
+
+1. Force-stop the application, or set its battery usage to "Restricted".
+2. Not open it for eight days on Android 13+, which moves it to the *restricted* bucket.
+3. Turn on Data Saver and stay on a metered network.
+4. A vendor's own battery manager doing any of the above on the user's behalf, which on
+   this fleet is the likeliest of the four and the one nothing in this repository can
+   detect.
+
+### Beta and production
+
+Suitable for both, now, subject to the device matrix below for any *claim* about timing.
+It adds no dependency, introduces no cryptographic surface, crosses no production gate,
+and leaves the Beta/Production separation exactly as ADR-042 and ADR-044 left it —
+verified after the change against the built artifact: the production release packages
+unsigned, carries the production application ID, and exports no beta MLS symbol.
+
+It changes what the artifact says about itself. ADR-045's `DisclosurePoint` is renamed
+`bestEffortDelivery`, its text is rewritten in both catalogues, and
+`DeploymentDisclosure.revision` moves 2 → 3. Per ADR-045's mechanism that makes every
+later enrollment re-acknowledge, and **re-delivering the written handover disclosure to
+existing recipients is release-blocking** — a requirement that was already outstanding
+from ADR-048 and is now outstanding at a higher revision.
+
+### Known limitations
+
+- **Eventual is the ceiling.** Nothing in this piece can produce near-real-time background
+  delivery; that is ADR-046's Layer 2 and it is deliberately out of scope here.
+- **An application nobody opens for eight days stops receiving anything in the
+  background**, and the user most likely to be caught by that is the one who has not been
+  messaged recently — which is exactly the person an urgent message would be for.
+- **The OEM half is unmeasured**, and 77% of the target fleet is Samsung or Xiaomi.
+- **A live-engine tick depends on the process still being cached.** How long that lasts is
+  the system's decision and varies by device and memory pressure.
+- **Battery and data cost are real but small**: one wake-up per interval at best, holding
+  a wakelock for the seconds a drain takes, over a connection that must already exist for
+  the job to start.
+
+### Outstanding validation
+
+None of the following could be established here, and none may be inferred from the passing
+checks:
+
+1. **That the job runs at all on a device.** No physical device was available, and the
+   installed emulator images are Play-Store images without root; reaching a signed-in
+   session on this workstation is additionally blocked by server-side account activation.
+   Everything about timing in this record is documentation, not observation.
+2. **That a headless `FlutterEngine` starts the `backgroundDelivery` entry point in the
+   release AOT snapshot.** What *is* established: the entry-point name, both channel names
+   and `runDeferredDeliveryEntryPoint` all survive tree-shaking into the shipped
+   `libapp.so`. That the platform can then look the function up and run it needs a device.
+3. **Whether a persisted job survives an in-place application upgrade.** Not specified by
+   the platform documentation that could be found, and therefore not assumed. Mitigated by
+   re-arming on every session start. `ACTION_MY_PACKAGE_REPLACED` was **not** used: the
+   background-execution-limits exemption list does not name it, and the page's note about
+   package broadcasts not being exempt names `ACTION_PACKAGE_REPLACED` rather than the
+   targeted variant, so its deliverability to a manifest receiver on a modern release is
+   undocumented either way.
+4. **The device matrix**: Doze, standby-bucket transitions, the eight-day restricted-bucket
+   move, reboot, force-stop, Data Saver, and vendor battery managers, on Samsung and Xiaomi
+   hardware and an AOSP image across Android 11 to 16. Release-blocking for any *claim*
+   about timeliness; not release-blocking for shipping the mechanism, which cannot make
+   anything worse than the absence it replaces.
+
+### Follow-up work
+
+1. **Re-deliver the written handover disclosure** at revision 3 to existing recipients.
+   Release-blocking, and inherited from ADR-048.
+2. **The device matrix** above.
+3. **ADR-046's Layer 2** (`specialUse` foreground service, opt-in, off by default) remains
+   the only route to near-real-time background delivery and remains unbuilt. Nothing here
+   forecloses it: it would hold the same connection, drive the same engine, and reuse the
+   ownership arbitration this decision introduces.
+4. **Group messages still produce no alert**, because the piece-18 group projection sets no
+   unread state (ADR-048). A background catch-up that drains a group message therefore
+   commits it silently.
+
+### Review and revisit conditions
+
+Reopen when any of the following becomes true:
+
+1. **The platform changes the job floor, the standby-bucket network rules, the eight-day
+   restricted-bucket rule, or the freezer.** Every tier above rests on those four.
+2. **Layer 2 ships.** The ownership arbitration then has a third owner to consider, and a
+   foreground service changes which bucket the application sits in.
+3. **The device matrix shows the job does not run on Samsung or Xiaomi even unconfigured.**
+   Then this floor is not a floor for this fleet, and the honest answer is to say so rather
+   than to keep the mechanism as reassurance.
+4. **The application ever needs a second process.** The whole ownership argument is that
+   there is one, and an `android:process` attribute anywhere would invalidate it. An
+   architecture test fails if one appears.
+5. **The backend grows a push endpoint**, which reopens ADR-046 alternative 6 and would
+   make this floor much less load-bearing.
+6. **The deployment stops being 20–30 known people receiving a written handover.** The
+   disclosure this decision rewrote is calibrated to a reader who was handed the artifact
+   in person.
+
+This decision implements ADR-046's Layer 1, replaces its `WorkManager` mechanism and its
+durable delivery lease for the reasons recorded above, amends ADR-045's delivery
+disclosure to revision 3, reaffirms ADR-013 and ADR-043, adds no dependency, changes no
+cryptographic behaviour, and opens no production gate.
 
 ## ADR-048 in full — how the user finds out a message arrived (2026-08-21)
 
@@ -456,7 +1026,8 @@ written handover disclosure to existing recipients is release-blocking**.
    channel settings, and the Persian rendering of both strings — on Samsung, Xiaomi and an
    AOSP image across Android 11 to 16. Release-blocking for any claim about what the user
    sees.
-2. **Re-deliver the written handover disclosure** to existing recipients at revision 2.
+2. **Re-deliver the written handover disclosure** to existing recipients — still not done,
+   and now outstanding at revision 3, which ADR-049 moved it to.
 3. **Group unread state** in the piece-18 projection, plus mark-read in `GroupChatPage`;
    the alert path then covers groups with no change.
 4. **Mark-read while a conversation is on screen**, which also makes read receipts correct.
@@ -469,10 +1040,13 @@ written handover disclosure to existing recipients is release-blocking**.
 
 Reopen when any of the following becomes true:
 
-1. **ADR-046's Layer 1 or Layer 2 ships.** The alert path itself needs no change — it is
-   already a projection of durable state — but a headless or service isolate reaching it
-   makes ADR-046's durable delivery lease a prerequisite, and the single automatic prompt
-   must not be spent from a context with no activity.
+1. ~~**ADR-046's Layer 1 or Layer 2 ships.**~~ **Layer 1 shipped 2026-08-21 — ADR-049**,
+   and this prediction held exactly: the alert path needed no change, because a headless
+   run supplies a `VisibleConversationPort` reporting the truth — nothing on screen, not
+   in the foreground — and the existing `visible.isForeground` guard is therefore what
+   keeps the single automatic prompt from being spent into a context with no activity.
+   What did *not* hold is the prerequisite: ADR-049 replaced the durable delivery lease
+   with in-process arbitration on evidence. Layer 2 shipping still reopens this.
 2. **The deployment stops being 20–30 known people receiving a written handover.** The
    sender-neutral default is calibrated to a threat model where a name on a lock screen
    implicates two people; a different population may weigh that differently.
@@ -1004,19 +1578,34 @@ In order. Each is a piece of work, not a checkbox.
    can announce but never withdraw; and a boolean `messages.alerted` rather than
    a `notified_at` timestamp nothing reads. The `POST_NOTIFICATIONS` request is
    at point of use and spent at most once automatically.
-3. **WorkManager adapter behind `AndroidPollingScheduler`** (Layer 1), with the headless
-   entry point reconstructing its own dependencies and failing closed before first unlock.
-4. **Durable delivery lease**, with a test that runs two owners against one store.
+3. ~~**WorkManager adapter behind `AndroidPollingScheduler`** (Layer 1), with the headless
+   entry point reconstructing its own dependencies and failing closed before first unlock.~~
+   **Done 2026-08-21 — ADR-049**, with the mechanism amended on evidence: a persisted
+   periodic `JobScheduler` job rather than `WorkManager`, because `JobInfo` is in the
+   framework at `minSdk` 24 and `setPersisted(true)` survives a reboot, so the dependency
+   would only have added a Room database, a service and a boot receiver to an audited
+   manifest. Arming also moved off the lifecycle and onto the session, because registering
+   a periodic job restarts its window. The headless entry point does reconstruct its own
+   dependencies and does fail closed before first unlock, as required here.
+4. ~~**Durable delivery lease**, with a test that runs two owners against one store.~~
+   **Replaced 2026-08-21 — ADR-049.** The lease was specified for a hazard that is real
+   and a topology that is not: the job service is declared with no `android:process`, and
+   the Flutter engine documents one Dart VM per process, so every owner this design can
+   produce is on one main looper. Ownership is arbitrated there instead — a tick goes to
+   the isolate that already exists, a headless engine starts only when none does, and a
+   foreground session waits for a headless run rather than racing it. The two-owner test
+   this line asked for exists as a composition test that holds ownership and asserts that
+   nothing authenticated happens until it is released.
 5. **`specialUse` foreground service, boot receiver, background-delivery setting, and the
    setup screen** (Layer 2), off by default.
-6. **Disclosure revision.** Shipping any of steps 2 to 5 makes ADR-045's
+6. **Disclosure revision.** Shipping any of steps 2 to 5 makes ADR-045's original
    `DisclosurePoint.foregroundDeliveryOnly` false. `DeploymentDisclosure.revision` must
    move, the text must be rewritten to the tier language above, and the written handover
-   must be re-delivered to existing recipients. Correcting the *current* text, which
-   overstates today's artifact, may not wait for step 5. **Half done 2026-08-21 —
-   ADR-048** moved the revision to 2 and rewrote the text, because step 2 shipped.
-   Re-delivering the written handover to existing recipients has **not** happened and
-   is release-blocking.
+   must be re-delivered to existing recipients. **Moved twice: 2026-08-21 — ADR-048**
+   took it to revision 2 when alerts shipped, and **ADR-049** took it to revision 3 when
+   background catch-up did, renaming the point `bestEffortDelivery`. Re-delivering the
+   written handover to existing recipients has **not** happened and is release-blocking
+   at revision 3.
 7. **Device matrix**: Doze, standby buckets, reboot, force-stop, permission revocation,
    exemption revocation and vendor battery settings, on Samsung and Xiaomi hardware and
    an AOSP image, across Android 11 to 16. This is a release gate for Layer 2.

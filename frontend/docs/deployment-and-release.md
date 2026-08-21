@@ -100,9 +100,11 @@ by contract tests and conservative client behavior, not runtime version guessing
    self-hosted/local distribution channel.
 8. For the Private Experimental deployment, deliver the ADR-044 written disclosure with
    the artifact. This is release-blocking, not a courtesy. It must state, in writing:
-   that no part of the cryptography has been independently reviewed; that messages
-   arrive only while the app is running, because there is no background delivery and no
-   notifications; that group messaging is experimental and its history can be lost on an
+   that no part of the cryptography has been independently reviewed; that messages arrive
+   immediately while the app is open but only when the phone gets round to checking while
+   it is closed — fifteen minutes apart at best, usually far less often, and not at all
+   after a force-stop, under Data Saver on a metered network, or once the app has gone
+   unopened for about a week; that group messaging is experimental and its history can be lost on an
    update; that history exists only on the device and uninstalling destroys it
    permanently; that a recovery secret plus a second enrolled device recovers identity
    but never history; and that the build is for evaluation among people who already

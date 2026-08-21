@@ -14,10 +14,16 @@ that a device contacted the service or eliminate traffic-analysis metadata.
 - Login and refresh credentials.
 - Recovery secrets.
 - Local decrypted indexes, thumbnails, drafts, and notification previews.
-- The fact that background delivery is armed: the opt-in `specialUse` foreground service
-  posts a persistent, visible notification. It is a durable on-device indication that this
-  application is running, it is why background delivery is opt-in rather than default, and
-  its channel is low importance, silent, and neutrally worded.
+- The fact that background delivery is armed. Two different exposures, and they are not
+  equal. The shipped floor (ADR-049) leaves nothing on the device to see — one record in
+  the platform's own job store holding an id, an interval and a component name — but it
+  does make this device's *online periods* visible to the server on a roughly
+  fifteen-minute cadence whether or not its owner is present, so an idle device now looks
+  like an active one to a relay that already saw every drain. The unbuilt opt-in
+  `specialUse` foreground service (ADR-046 Layer 2) is the heavier one: it posts a
+  persistent, visible notification, which is a durable on-device indication that this
+  application is running, and that is why that layer is opt-in rather than default; its
+  channel must be low importance, silent, and neutrally worded.
 - Who is talking to whom, as it would appear in a message alert. The shipped alert
   (ADR-048) is a single sender-neutral notification whose entire content is "New message"
   or "New messages": no sender, no conversation, no text, no count, no timestamp, one

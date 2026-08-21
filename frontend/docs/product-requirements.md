@@ -75,13 +75,17 @@ is not called the production release.
 
 ## Known platform limits
 
-- Android background messaging is layered and honestly tiered (ADR-046). There is no
-  foreign push and never will be. A mandatory best-effort polling floor gives *eventual*
-  delivery, and the *rare* and *restricted* standby buckets give it no network at all. An
-  opt-in `specialUse` foreground service, off by default, holds the same connection and
-  gives *near-real-time, best-effort* delivery when the user grants the battery-optimization
-  exemption and their vendor cooperates. Delayed delivery is expected under Doze, standby,
-  or OEM restrictions, and a force-stopped application is silent until it is opened again.
+- Android background messaging is layered and honestly tiered (ADR-046, ADR-049). There is
+  no foreign push and never will be. The mandatory floor — built, and requiring nothing
+  from the user — is one persisted periodic `JobScheduler` job at the platform's
+  fifteen-minute minimum with a network constraint; it gives *eventual* delivery, and it
+  gives **nothing** in the *rare* and *restricted* standby buckets, which is where Android
+  13+ places an application after eight days without user interaction. An opt-in
+  `specialUse` foreground service, off by default and **not yet built**, would hold the
+  same connection and give *near-real-time, best-effort* delivery when the user grants the
+  battery-optimization exemption and their vendor cooperates. Delayed delivery is expected
+  under Doze, standby, Data Saver, or OEM restrictions, and a force-stopped application is
+  silent until it is opened again.
   A microphone foreground service is used only while voice audio is actively connected.
 - Notifications are a projection of committed local state, never of a transport event, and
   reveal nothing but that something arrived. One alert, sender-neutral, announced when
