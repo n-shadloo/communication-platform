@@ -249,16 +249,18 @@ and Android's
 [`ConnectivityManager.NetworkCallback`](https://developer.android.com/reference/android/net/ConnectivityManager.NetworkCallback)
 and [network-state guidance](https://developer.android.com/develop/connectivity/network-ops/reading-network-state).
 
-**Correction recorded 2026-08-21 (ADR-046): none of this is composed.**
-`SyncLifecycleSupervisor`, `DioWebSocketGateway`, `GatewayRealtimeSyncAdapter` and
-`NetworkingFoundation` exist in `lib/`, are unit-tested, and are constructed **only in
-tests**; `durableSyncEngineProvider` is declared and read by nothing. `bootstrap.dart`
-composes `AuthenticationAssembly`, which builds a REST client and a token coordinator and
-no socket. The consequence reaches sending as well as receiving: `SendConversationEvents`
-ends at `fanout.prepareAndQueue`, which writes durable outbox rows, and the component that
-would transmit them never runs. Composing this path is step one of ADR-046's follow-up
-work; the two composition roots must also be resolved, because the socket has to attach to
-the live `TokenCoordinator` that `AuthenticationAssembly` owns rather than to a second one.
+**Composed on 2026-08-21 (ADR-047), correcting the gap ADR-046 recorded.** Until then
+`SyncLifecycleSupervisor`, `DioWebSocketGateway` and `GatewayRealtimeSyncAdapter` were
+constructed only in tests and `durableSyncEngineProvider` was read by nothing, so the
+artifact opened no socket, ran no drain, and — because `SendConversationEvents` ends at
+`fanout.prepareAndQueue` — transmitted no outbox row either. ADR-046's Layer 0 is now
+implemented: `MessageDeliveryController` starts one `MessageDeliverySession` per
+device-bound full session and stops it on logout, and the two composition roots are
+resolved into one, so the socket presents the same access token, refreshes through the
+same single-flight `TokenCoordinator`, and terminates its TLS chain at the same
+provisioned authority as every REST call. Layers 1 to 3 remain unbuilt: this build
+composes `UnscheduledBestEffortPolling`, which schedules nothing, so a backgrounded
+application still performs no catch-up and posts no notification.
 
 ## Notifications
 

@@ -220,11 +220,46 @@ ADR-046 makes delivery layered, and every layer drives this same engine.
 - A future browser service-worker background sync is optional enhancement only; limited
   cross-browser availability means correctness never depends on it.
 
-As of 2026-08-21 none of this is composed into the running application: the supervisor,
-the socket gateway and the realtime adapter are constructed only in tests, and
-`durableSyncEngineProvider` is read by nothing, so the artifact neither drains its mailbox
-nor transmits its outbox. Composing that path is the first item of ADR-046's follow-up
-work and precedes every layer above.
+## Composition and ownership
+
+ADR-046's Layer 0 was implemented on 2026-08-21 (ADR-047). Before that the supervisor, the
+socket gateway and the realtime adapter were constructed only in tests and
+`durableSyncEngineProvider` was read by nothing, so the artifact neither drained its
+mailbox nor transmitted its outbox. What runs now:
+
+- **One networking foundation.** `AuthenticationAssembly` owns a single
+  `NetworkingFoundation` — one `DioRestClient`, one `TokenCoordinator`, one provisioned
+  trust context — and builds the delivery socket from it. There is no second client and
+  no second coordinator: two coordinators would both rotate the same refresh token, and
+  the loser would present one the server has already retired, ending the session for
+  both.
+- **The application root owns delivery, not a screen.** `MessageDeliveryController` is a
+  Riverpod notifier that the root holds through `listenManual`, because subscriptions
+  created in `build` are paused when their widget leaves the view and a paused controller
+  would stop starting and stopping sessions. It runs exactly one
+  `MessageDeliverySession` at a time, serializing transitions onto one queue and
+  re-checking the wanted scope after every await.
+- **A session exists only for a device-bound full session.** It starts on `fullScope` or
+  `offlineFullScope` and stops when logout *begins* rather than when it completes,
+  because `TokenCoordinator.logout` wipes protected storage and closes the database
+  before it emits the termination.
+- **Sending is a durable write, not a call.** A composer writes exact per-recipient
+  ciphertext rows and returns; the supervisor watches the durable projection and requests
+  a cycle when the outbox depth *increases*. That is what makes a queued message leave
+  the device with no further stimulus, what drains rows queued before a restart, and what
+  keeps a row waiting out its backoff from spinning the engine — only a new durable
+  target grows the depth, while every engine run re-emits the projection.
+- **Platform edges are one port.** Connectivity, application lifecycle, wall-clock delay
+  and the deferred scheduler resolve and release together as `DeliveryPlatformPorts`. An
+  unreported platform lifecycle state at launch is read as foreground, because Flutter
+  leaves `lifecycleState` null until the first platform message and reading it as
+  background would make a session started at launch stand itself down. Every foreground
+  transition re-reads connectivity, because Android 8.0 and above does not deliver
+  connectivity changes to a backgrounded app.
+- **Layers 1 to 3 are not built.** This build composes `UnscheduledBestEffortPolling`,
+  which schedules nothing and emits nothing, so a backgrounded application performs no
+  catch-up and no notification is posted. Delivery happens while the application is
+  running, exactly as the enrollment disclosure states.
 
 ## Observability
 
