@@ -3,23 +3,19 @@
 **This is provisioning, not code.** Nothing in the backend reads these files; nginx
 and the client devices do.
 
-## Default posture: the existing wildcard certificate
+## Superseded posture: the wildcard certificate
 
-The public deployment at `chat.nimashadloo.dev` terminates TLS in the host's nginx
-with the wildcard Let's Encrypt certificate the VPS already renews;
-`ops/nginx/chat.nimashadloo.dev.conf` includes the shared `snippets/letsencrypt-ssl.conf`
-for the certificate paths and protocol settings, and coturn points at the same
-`/etc/letsencrypt/live/` directory. Nothing in this directory is needed for that
-path.
+The public deployment at `chat.nimashadloo.dev` used to terminate TLS in the host's
+nginx with the wildcard Let's Encrypt certificate the VPS already renews. Only the
+nginx site has moved off it; coturn still points at `/etc/letsencrypt/live/`.
 
-## Fallback posture: a private CA for a network shutdown
+## Active posture: a private CA for a network shutdown
 
 A public CA has to be reachable to issue and renew. If the system must keep working
 through a network shutdown, it can depend on no live foreign CA: the root generated
 by `make_ca.sh` is created once, kept offline, and pre-installed on the devices that
-will use the server. Switching to this posture means replacing the Let's Encrypt
-snippet in the nginx site with the private-CA `ssl_certificate` pair and pinning the
-CA in the clients, as described below.
+will use the server. `ops/nginx/chat.nimashadloo.dev.conf` now carries the private-CA
+`ssl_certificate` pair directly; the clients pin the CA as described below.
 
 ### Generating
 
@@ -32,6 +28,8 @@ anchor for every client: keep it off the server, offline, and backed up separate
 Only `server.crt` and `server.key` belong on the VPS, at `/etc/chat/tls/`.
 
 ### nginx posture under the private CA
+
+These are set in the site file, not in a snippet:
 
 - **TLS 1.3 only** (`ssl_protocols TLSv1.3`)
 - **0-RTT / early data off** (`ssl_early_data off`) — 0-RTT payloads are replayable
