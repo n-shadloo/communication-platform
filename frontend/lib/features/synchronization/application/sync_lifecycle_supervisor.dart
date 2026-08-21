@@ -58,6 +58,7 @@ final class SyncLifecycleSupervisor {
   bool _cycleActive = false;
   bool _cycleRequested = false;
   int _generation = 0;
+  int _observedOutboxDepth = 0;
 
   Stream<SyncProjection> get projections => _projections.stream;
 
@@ -67,7 +68,7 @@ final class SyncLifecycleSupervisor {
     }
     _started = true;
     _projectionSubscription = _store.watchProjection().listen(
-      _projections.add,
+      _onProjection,
       onError: (_) {},
     );
     _subscriptions
@@ -90,6 +91,32 @@ final class SyncLifecycleSupervisor {
       await _resumeForeground();
     } else {
       await _enterBackground();
+    }
+  }
+
+  /// Turns growth of the durable outbox into a delivery cycle.
+  ///
+  /// Sending is not a call into this supervisor. A composer writes exact
+  /// per-recipient ciphertext rows inside a Drift transaction and returns; the
+  /// rows are the request. Nothing else in the lifecycle would notice them —
+  /// socket hints announce *inbound* envelopes, and a foregrounded application
+  /// with a healthy connection has no other reason to run — so without this a
+  /// queued message would sit in local storage until an unrelated event
+  /// happened to wake the engine.
+  ///
+  /// The trigger is the durable queue's depth *increasing*, which is what makes
+  /// it both crash-safe and loop-safe. Crash-safe, because a restart replays
+  /// the depth as the stream's first value and drains what was queued before
+  /// the process died. Loop-safe, because every run of the engine writes a
+  /// connection phase and so re-emits this projection: reacting to "depth is
+  /// non-zero" would spin against a row waiting out its retry backoff, while
+  /// reacting to "depth grew" cannot, since only a new durable target grows it.
+  void _onProjection(SyncProjection projection) {
+    _projections.add(projection);
+    final previous = _observedOutboxDepth;
+    _observedOutboxDepth = projection.outboxDepth;
+    if (projection.outboxDepth > previous) {
+      unawaited(_requestCycle());
     }
   }
 

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:communication_platform/core/application/ports/time_source.dart';
+import 'package:communication_platform/core/result/failure.dart';
 import 'package:communication_platform/core/result/result.dart';
 import 'package:communication_platform/features/local_storage/infrastructure/database/local_database.dart';
 import 'package:communication_platform/features/networking/application/ports/realtime_gateway.dart';
@@ -145,6 +146,81 @@ void main() {
   );
 
   test(
+    'a growing durable outbox drives a cycle; a stalled one does not spin',
+    () async {
+      final database = LocalDatabase(NativeDatabase.memory());
+      final store = DriftSyncStore(database);
+      final remote = RefusingSendRemote();
+      // A frozen clock plus maximum jitter puts a failed target's next attempt
+      // firmly in the future, which is what lets this test distinguish "the
+      // queue grew" from "the queue is merely non-empty".
+      final engine = DurableSyncEngine(
+        store: store,
+        remote: remote,
+        inspector: const RetainingInspector(),
+        staleDeviceRefresh: const NoopStaleRefresh(),
+        clock: SupervisorClock(),
+        jitter: const MaximumJitter(),
+      );
+      final supervisor = SyncLifecycleSupervisor(
+        engine: engine,
+        store: store,
+        realtime: FakeRealtimeSyncPort(),
+        network: FakeNetworkPort(NetworkAvailability.available),
+        lifecycle: FakeLifecyclePort(ApplicationExecutionState.foreground),
+        polling: FakePollingPort(),
+        clock: SupervisorClock(),
+        jitter: const MaximumJitter(),
+        delay: const ImmediateDelay(),
+      );
+      await supervisor.start();
+      await pumpEvents();
+      expect(remote.sends, 0);
+
+      // What a send does: durable rows inside a Drift transaction, and no call
+      // into the supervisor at all.
+      final queued = await store.queuePreparedOperation(
+        operationId: 'operation',
+        eventId: 'event',
+        targets: [
+          PreparedOutboxTarget(
+            recipientUserId: 'user',
+            recipientDeviceId: '00000000-0000-4000-8000-000000000001',
+            exactCiphertext: Uint8List(1024),
+          ),
+        ],
+      );
+      expect(queued, isA<Success<void>>());
+      for (var index = 0; index < 6; index += 1) {
+        await pumpEvents();
+      }
+
+      expect(
+        remote.sends,
+        1,
+        reason: 'the queue growing is what asked for transmission',
+      );
+
+      // The send failed, so the target is still counted while it waits out its
+      // backoff, and every later engine run rewrites the connection phase and
+      // re-emits this projection. A supervisor that reacted to "depth is
+      // non-zero" would run forever here; this asserts it does not.
+      final settledDrains = remote.drains;
+      for (var index = 0; index < 6; index += 1) {
+        await pumpEvents();
+      }
+      final projection =
+          await store.readProjection() as Success<SyncProjection>;
+      expect(projection.value.outboxDepth, 1);
+      expect(remote.drains, settledDrains);
+      expect(remote.sends, 1);
+
+      await supervisor.dispose();
+      await database.close();
+    },
+  );
+
+  test(
     'gateway adapter maps all close codes and drops socket envelope bytes',
     () async {
       final adapter = GatewayRealtimeSyncAdapter();
@@ -229,6 +305,31 @@ final class CountingRemote implements SyncRemotePort {
       Result.success(
         OutboxAcceptance(accepted: batch.targets.length, staleDeviceIds: {}),
       );
+}
+
+/// Drains cleanly and refuses every send, so a queued target stays durable and
+/// keeps the outbox depth pinned above zero.
+final class RefusingSendRemote implements SyncRemotePort {
+  int drains = 0;
+  int sends = 0;
+
+  @override
+  Future<Result<DrainPage>> drain({required int limit}) async {
+    drains += 1;
+    return Result.success(
+      DrainPage(envelopes: const [], hasMore: false, prunedThrough: 0),
+    );
+  }
+
+  @override
+  Future<Result<int>> acknowledge(List<String> envelopeIds) async =>
+      Result.success(envelopeIds.length);
+
+  @override
+  Future<Result<OutboxAcceptance>> send(OutboxBatch batch) async {
+    sends += 1;
+    return const Result.failure(TransportFailure(TransportFailureKind.offline));
+  }
 }
 
 final class FakeRealtimeSyncPort implements RealtimeSyncPort {
@@ -371,6 +472,15 @@ final class NoopStaleRefresh implements StaleDeviceRefreshPort {
 final class SupervisorClock implements TimeSource {
   @override
   DateTime now() => DateTime.utc(2026, 7, 29);
+}
+
+/// The opposite bound of [SupervisorJitter]: a full-jitter draw that lands on
+/// the cap, so a scheduled retry is genuinely in the future.
+final class MaximumJitter implements JitterSource {
+  const MaximumJitter();
+
+  @override
+  int nextInt(int upperBoundExclusive) => upperBoundExclusive - 1;
 }
 
 final class SupervisorJitter implements JitterSource {
