@@ -170,3 +170,28 @@ abstract interface class RealtimeSyncPort implements Port {
 abstract interface class DelayPort implements Port {
   Future<void> wait(Duration delay);
 }
+
+/// The platform edges one delivery session binds to, resolved together.
+///
+/// They are grouped because they share a lifetime and a failure mode: each one
+/// holds an operating-system resource — an observer, a timer — that must be
+/// released when the session stops, and a session that resolved some of them
+/// has leaked the rest. Composing them behind one port is also what lets a test
+/// drive the real supervisor without a device: connectivity and the widget
+/// binding are platform channels, real timers cannot be waited out, and the
+/// deferred scheduler does not exist yet.
+abstract interface class DeliveryPlatformPorts implements Port {
+  NetworkAvailabilityPort get network;
+
+  ApplicationLifecyclePort get lifecycle;
+
+  BestEffortPollingPort get polling;
+
+  /// Wall-clock waiting, for reconnect backoff and the stable-connection
+  /// threshold. It belongs with the others because it is the same kind of
+  /// thing: a real timer the operating system owns, which a test must be able
+  /// to replace rather than wait out.
+  DelayPort get delay;
+
+  Future<void> dispose();
+}
