@@ -10,6 +10,7 @@ import 'package:communication_platform/features/authentication/presentation/auth
 import 'package:communication_platform/features/synchronization/application/ports/sync_ports.dart';
 import 'package:communication_platform/features/synchronization/application/sync_lifecycle_supervisor.dart';
 import 'package:communication_platform/features/synchronization/infrastructure/gateway_realtime_sync_adapter.dart';
+import 'package:communication_platform/features/synchronization/infrastructure/platform_deferred_delivery_scheduler.dart';
 import 'package:communication_platform/features/synchronization/infrastructure/sync_platform_adapters.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -26,11 +27,31 @@ final networkingFoundationProvider = Provider<NetworkingFoundation>(
 
 typedef DeliveryPlatformPortsFactory = Future<DeliveryPlatformPorts> Function();
 
+/// The interval a session asks the platform for.
+///
+/// It is the documented floor and not a promise: `JobInfo.getMinPeriodMillis()`
+/// is fifteen minutes and a shorter request is silently raised to it, while
+/// Doze, the app standby buckets and the Android 16 job quota all defer even
+/// that. Asking for the floor is asking for the best the platform allows; what
+/// the user is told is what the platform guarantees, which is less.
+const deferredCatchUpInterval = Duration(minutes: 15);
+
 /// How a delivery session reaches connectivity, the application lifecycle and
 /// the deferred scheduler. Overridden by tests, which have neither a platform
 /// channel nor a device.
 final deliveryPlatformPortsProvider = Provider<DeliveryPlatformPortsFactory>(
-  (ref) => FlutterDeliveryPlatformPorts.create,
+  (ref) => () {
+    // Only the Android artifact has a deferred scheduler behind it. Every other
+    // target composes no scheduler at all rather than one that would look armed
+    // and never fire.
+    final scheduler = defaultTargetPlatform == TargetPlatform.android
+        ? PlatformDeferredDeliveryScheduler()
+        : null;
+    return FlutterDeliveryPlatformPorts.create(
+      scheduler: scheduler,
+      releaseScheduler: scheduler?.dispose,
+    );
+  },
 );
 
 /// What the composed delivery path is doing, as application state.
@@ -72,11 +93,17 @@ final class MessageDeliverySession {
     Ref ref, {
     required PairwiseSyncScope scope,
   }) async {
-    final store = await ref.read(durableSyncStoreProvider.future);
-    final engine = await ref.read(durableSyncEngineProvider(scope).future);
     final platform = await ref.read(deliveryPlatformPortsProvider)();
     final realtime = GatewayRealtimeSyncAdapter();
     try {
+      // Before anything is opened, and before any token is read: a deferred
+      // catch-up the platform started a moment ago is a second delivery owner
+      // in this process, and two owners hold two token coordinators against one
+      // rotating refresh token. This waits for it instead of racing it, and
+      // returns immediately in the ordinary case where nothing is running.
+      await platform.polling.awaitExclusiveOwnership();
+      final store = await ref.read(durableSyncStoreProvider.future);
+      final engine = await ref.read(durableSyncEngineProvider(scope).future);
       // The gateway comes from the shared foundation, so this socket presents
       // the same access token, refreshes through the same single-flight
       // coordinator, and terminates its TLS chain at the same provisioned
@@ -110,10 +137,35 @@ final class MessageDeliverySession {
   final GatewayRealtimeSyncAdapter _realtime;
   final DeliveryPlatformPorts _platform;
 
-  Future<void> start() => _supervisor.start();
+  /// Starts the supervisor and arms the deferred catch-up for the whole
+  /// session.
+  ///
+  /// Arming is a property of being signed in, not of being backgrounded. A
+  /// periodic platform job restarts its window every time it is registered, so
+  /// arming on each background transition would mean a user who opens the
+  /// application more often than the interval never receives one wake-up, and a
+  /// process that dies while foregrounded would leave nothing scheduled at all.
+  Future<void> start() async {
+    await _supervisor.start();
+    await _platform.polling.schedule(minimumInterval: deferredCatchUpInterval);
+  }
 
+  /// Stops the session, and disarms the deferred catch-up with it.
+  ///
+  /// A session stops because there is no longer a signed-in device to deliver
+  /// to, so leaving the job armed would wake the process every interval to
+  /// discover exactly that.
   Future<void> dispose() async {
     await _supervisor.dispose();
+    // Before the platform ports are released, because releasing them takes the
+    // channel handler with them.
+    try {
+      await _platform.polling.cancel();
+    } on Object {
+      // The job outliving a session costs one wasted wake-up, which the
+      // headless entry point then disarms for itself. Failing to stop is never
+      // a reason to leave the rest of the session running.
+    }
     await _realtime.dispose();
     await _platform.dispose();
   }

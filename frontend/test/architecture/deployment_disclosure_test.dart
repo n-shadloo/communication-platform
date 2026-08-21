@@ -24,7 +24,7 @@ void main() {
   test('the disclosure states every fact ADR-045 requires, in order', () {
     expect(DeploymentDisclosure.privateExperimental.points, const [
       DisclosurePoint.noIndependentReview,
-      DisclosurePoint.foregroundDeliveryOnly,
+      DisclosurePoint.bestEffortDelivery,
       DisclosurePoint.deviceOnlyHistory,
       DisclosurePoint.recoveryExcludesHistory,
       DisclosurePoint.experimentalGroups,
@@ -47,7 +47,7 @@ void main() {
     // fails this test until the revision is raised with it, and raising the
     // revision is what makes re-delivering the written handover disclosure
     // release-blocking.
-    expect(DeploymentDisclosure.privateExperimental.revision, 2);
+    expect(DeploymentDisclosure.privateExperimental.revision, 3);
 
     final english =
         jsonDecode(File('lib/l10n/app_en.arb').readAsStringSync())
@@ -59,11 +59,13 @@ void main() {
       contains('Nobody outside'),
     );
     expect(
-      english['disclosureForegroundDeliveryOnly'],
-      'Messages arrive, and this app can alert you, only while it is running. '
-      'Nothing runs in the background: once Android stops it, nothing arrives '
-      'and nothing tells you until you open it again, so do not rely on it '
-      'for anything urgent.',
+      english['disclosureBestEffortDelivery'],
+      'While this app is open, messages arrive as they are sent. While it is '
+      'closed, your phone looks for new ones on its own schedule — fifteen '
+      'minutes apart at best, usually far less often, and not at all while it '
+      'is saving battery, if you have not opened the app for several days, or '
+      'if you have force-stopped it. Nothing about that is guaranteed, so do '
+      'not rely on it for anything urgent.',
     );
     expect(
       english['disclosureDeviceOnlyHistory'],
@@ -96,15 +98,17 @@ void main() {
     );
   });
 
-  test('the disclosure and the composed alert path agree', () {
+  test('the disclosure and the composed delivery path agree', () {
     // Revision 2 exists because revision 1 said "There are no notifications",
-    // and this build posts them. The two must move together: a build that
-    // composes an alert path may not carry text denying it, and text promising
-    // alerts may not ship without the path.
+    // and this build posts them. Revision 3 exists because revision 2 said
+    // nothing runs in the background, and this build schedules a deferred
+    // catch-up. The text and the composition must move together in both
+    // directions: a build that composes a background path may not carry text
+    // denying it, and text promising catch-up may not ship without the path.
     final english =
         jsonDecode(File('lib/l10n/app_en.arb').readAsStringSync())
             as Map<String, dynamic>;
-    final delivery = english['disclosureForegroundDeliveryOnly']! as String;
+    final delivery = english['disclosureBestEffortDelivery']! as String;
 
     expect(
       File('lib/app/app.dart').readAsStringSync(),
@@ -118,19 +122,26 @@ void main() {
     );
     expect(
       delivery.toLowerCase(),
-      contains('only while it is running'),
-      reason:
-          'and the one thing it must still say is that nothing reaches the '
-          'user once Android stops the process',
+      isNot(contains('nothing runs in the background')),
+      reason: 'the artifact schedules a deferred catch-up',
     );
-    // ADR-046 Layers 1 and 2 are still unbuilt, and the disclosure may not
-    // start implying otherwise while that is true.
-    expect(
-      File(
-        'lib/features/synchronization/infrastructure/sync_platform_adapters.dart',
-      ).readAsStringSync(),
-      contains('class UnscheduledBestEffortPolling'),
-    );
+    // The three things the text promises, and the three things the artifact
+    // must therefore contain: a periodic job at the platform floor, a network
+    // constraint, and persistence across a restart.
+    final scheduler = File(
+      'android/app/src/main/kotlin/com/example/communication_platform/'
+      'BackgroundDelivery.kt',
+    ).readAsStringSync();
+    expect(scheduler, contains('setPeriodic('));
+    expect(scheduler, contains('JobInfo.NETWORK_TYPE_ANY'));
+    expect(scheduler, contains('setPersisted(true)'));
+    // And the two limits it must keep stating, because no design removes them.
+    for (final promise in const [
+      'fifteen minutes apart at best',
+      'force-stopped',
+    ]) {
+      expect(delivery, contains(promise));
+    }
   });
 
   test('every disclosure point and maturity label is translated', () {
@@ -144,7 +155,7 @@ void main() {
     const keys = [
       'disclosureBuildTitle',
       'disclosureNoIndependentReview',
-      'disclosureForegroundDeliveryOnly',
+      'disclosureBestEffortDelivery',
       'disclosureDeviceOnlyHistory',
       'disclosureRecoveryExcludesHistory',
       'disclosureExperimentalGroups',
@@ -201,11 +212,20 @@ void main() {
     // banner and the router take the environment as an argument. Both come from
     // one parameter of `bootstrap()`, and they must keep coming from it: if
     // they ever diverged, one build could render another build's statement.
+    //
+    // Since ADR-049 both entry points - the activity and the headless
+    // catch-up - build that scope from `ApplicationRuntime`, so the
+    // environment, the provisioned trust and the crypto core cannot differ
+    // between them either.
+    final runtime = File(
+      'lib/app/dependencies/application_runtime.dart',
+    ).readAsStringSync();
     final source = File('lib/app/bootstrap.dart').readAsStringSync();
     expect(
-      source,
+      runtime,
       contains('appEnvironmentProvider.overrideWithValue(environment)'),
     );
+    expect(source, contains('ApplicationRuntime.create('));
     expect(source, contains('CommunicationPlatformApp('));
     expect(source, contains('environment: environment,'));
   });

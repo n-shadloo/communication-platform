@@ -14,8 +14,13 @@ void main() {
   final manifest = File(
     'android/app/src/main/AndroidManifest.xml',
   ).readAsStringSync();
+  // The alert is Context-bound rather than Activity-bound since ADR-049: a
+  // deferred catch-up runs in a headless engine with no activity, and an alert
+  // that only existed while an activity did would announce nothing at exactly
+  // the moment it matters.
   final activity = File(
-    'android/app/src/main/kotlin/com/example/communication_platform/MainActivity.kt',
+    'android/app/src/main/kotlin/com/example/communication_platform/'
+    'MessageAlertChannel.kt',
   ).readAsStringSync();
 
   test('the artifact asks for the notification permission and no more', () {
@@ -24,14 +29,26 @@ void main() {
     // behalf. Declaring it is the unambiguous reading and costs a normal
     // permission with no prompt and no exposure.
     expect(manifest, contains('android.permission.VIBRATE'));
-    // ADR-046 leaves the background layers unbuilt, and this piece may not
-    // smuggle one in behind a notification.
+    // ADR-049 built the deferred catch-up and nothing above it. A foreground
+    // service, an exact alarm and an SMS receiver are all still ways to buy
+    // timeliness with something the user must grant or that binds an account
+    // to a carrier, and none of them may appear behind an alert.
     expect(manifest, isNot(contains('FOREGROUND_SERVICE')));
-    expect(manifest, isNot(contains('RECEIVE_BOOT_COMPLETED')));
     expect(manifest, isNot(contains('SCHEDULE_EXACT_ALARM')));
     expect(manifest, isNot(contains('USE_EXACT_ALARM')));
     expect(manifest, isNot(contains('RECEIVE_SMS')));
-    expect(manifest, isNot(contains('<service')));
+    // The one permission ADR-049 adds, and the reason it is acceptable: normal
+    // protection level, granted at install with no prompt, and required only
+    // by `JobInfo.setPersisted(true)` so a restart does not silently end
+    // background delivery.
+    expect(manifest, contains('android.permission.RECEIVE_BOOT_COMPLETED'));
+    expect(
+      manifest,
+      isNot(contains('<receiver')),
+      reason:
+          'setPersisted is what survives a reboot; this application declares '
+          'no boot receiver of its own',
+    );
   });
 
   test('the alert is withheld from the lock screen by construction', () {
@@ -99,9 +116,14 @@ void main() {
     );
     // The channel id keys the user's own sound and importance settings.
     // Changing it discards them silently, so it is pinned here.
+    expect(activity, contains('CHANNEL_ID = "messages"'));
     expect(
-      activity,
-      contains('messageAlertNotificationChannelId = "messages"'),
+      File(
+        'android/app/src/main/kotlin/com/example/communication_platform/'
+        'MainActivity.kt',
+      ).readAsStringSync(),
+      isNot(contains('NotificationCompat.Builder')),
+      reason: 'there is one implementation of the alert, not one per engine',
     );
   });
 

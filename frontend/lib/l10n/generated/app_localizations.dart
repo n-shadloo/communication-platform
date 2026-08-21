@@ -926,11 +926,11 @@ abstract class AppLocalizations {
   /// **'Nobody outside the project has reviewed this app\'s encryption. It is written and tested by one person, and a mistake in it would not have been caught.'**
   String get disclosureNoIndependentReview;
 
-  /// No description provided for @disclosureForegroundDeliveryOnly.
+  /// No description provided for @disclosureBestEffortDelivery.
   ///
   /// In en, this message translates to:
-  /// **'Messages arrive, and this app can alert you, only while it is running. Nothing runs in the background: once Android stops it, nothing arrives and nothing tells you until you open it again, so do not rely on it for anything urgent.'**
-  String get disclosureForegroundDeliveryOnly;
+  /// **'While this app is open, messages arrive as they are sent. While it is closed, your phone looks for new ones on its own schedule — fifteen minutes apart at best, usually far less often, and not at all while it is saving battery, if you have not opened the app for several days, or if you have force-stopped it. Nothing about that is guaranteed, so do not rely on it for anything urgent.'**
+  String get disclosureBestEffortDelivery;
 
   /// No description provided for @disclosureDeviceOnlyHistory.
   ///

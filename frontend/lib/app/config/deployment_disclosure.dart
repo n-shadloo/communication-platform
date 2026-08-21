@@ -37,12 +37,13 @@ enum DisclosurePoint {
   /// open for every layer, pairwise included.
   noIndependentReview,
 
-  /// The composed build delivers and alerts only while its process is alive:
-  /// `AndroidPollingScheduler` still has no adapter, no service is declared,
-  /// and nothing re-arms after Android stops the app. Revised at revision 2,
-  /// when alerts stopped being absent and started being foreground-bound
-  /// (ADR-048).
-  foregroundDeliveryOnly,
+  /// Delivery is immediate while the application is open and *best effort*
+  /// otherwise: a deferred platform job at the fifteen-minute floor, deferred
+  /// further by Doze, and stopped outright by the *rare* and *restricted*
+  /// standby buckets, by a force-stop, and by a battery-restricted app. Revised
+  /// at revision 2 when alerts arrived (ADR-048), and at revision 3 when
+  /// background catch-up did (ADR-049).
+  bestEffortDelivery,
 
   /// The server stores no history, `allowBackup` is false and the database key
   /// is a non-exportable AndroidKeyStore key, so erasing app data is final.
@@ -64,8 +65,7 @@ enum DisclosurePoint {
 
   String text(AppLocalizations l10n) => switch (this) {
     DisclosurePoint.noIndependentReview => l10n.disclosureNoIndependentReview,
-    DisclosurePoint.foregroundDeliveryOnly =>
-      l10n.disclosureForegroundDeliveryOnly,
+    DisclosurePoint.bestEffortDelivery => l10n.disclosureBestEffortDelivery,
     DisclosurePoint.deviceOnlyHistory => l10n.disclosureDeviceOnlyHistory,
     DisclosurePoint.recoveryExcludesHistory =>
       l10n.disclosureRecoveryExcludesHistory,
@@ -91,10 +91,10 @@ final class DeploymentDisclosure {
 
   /// The statement carried by the Private Experimental artifact (ADR-044).
   static const privateExperimental = DeploymentDisclosure._(
-    revision: 2,
+    revision: 3,
     points: [
       DisclosurePoint.noIndependentReview,
-      DisclosurePoint.foregroundDeliveryOnly,
+      DisclosurePoint.bestEffortDelivery,
       DisclosurePoint.deviceOnlyHistory,
       DisclosurePoint.recoveryExcludesHistory,
       DisclosurePoint.experimentalGroups,

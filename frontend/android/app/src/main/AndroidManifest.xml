@@ -11,6 +11,13 @@
          at install with no prompt and exposes nothing about the device or its
          owner. -->
     <uses-permission android:name="android.permission.VIBRATE" />
+    <!-- Required by JobInfo.Builder.setPersisted(true), which is what makes the
+         deferred catch-up survive a restart without this application declaring
+         a boot receiver of its own. Normal protection level: granted at install
+         with no prompt, and it grants no data, no network and no location. The
+         job still cannot run before the first unlock, because the database key
+         is credential-encrypted and this application is not direct-boot aware. -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
     <application
         android:allowBackup="false"
@@ -41,6 +48,15 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
+        <!-- The deferred catch-up (ADR-049). A plain service, never a foreground
+             one: it shows no notification, holds no connection and asks for no
+             exemption. BIND_JOB_SERVICE is what makes the job scheduler the
+             only thing that can start it, and exported="false" is what keeps
+             every other application off it. -->
+        <service
+            android:name=".DeferredDeliveryJobService"
+            android:exported="false"
+            android:permission="android.permission.BIND_JOB_SERVICE" />
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.attachments"

@@ -64,16 +64,39 @@ void main() {
       lifecycle.set(ApplicationExecutionState.background);
       await pumpEvents();
       expect(realtime.closes, greaterThanOrEqualTo(1));
-      expect(polling.schedules, 1);
+      expect(
+        polling.schedules,
+        0,
+        reason:
+            'the supervisor does not arm the deferred catch-up: a periodic '
+            'platform job restarts its window every time it is registered, so '
+            'arming it on each background transition would mean a user who '
+            'opens the app more often than the interval never gets one',
+      );
 
       polling.trigger();
       await pumpEvents();
       expect(remote.drains, 3);
+      expect(
+        polling.acknowledged,
+        1,
+        reason:
+            'a deferred wake-up is a bounded moment the platform granted, and '
+            'an unacknowledged tick is a catch-up it stops mid-drain',
+      );
 
       network.set(NetworkAvailability.unavailable);
       polling.trigger();
       await pumpEvents();
       expect(remote.drains, 3);
+      expect(
+        polling.acknowledged,
+        2,
+        reason:
+            'a tick refused for want of a network is still acknowledged: the '
+            'scheduler is asking whether the process may be let go, not '
+            'whether delivery succeeded',
+      );
       final offline = await store.readProjection() as Success<SyncProjection>;
       expect(offline.value.connectionPhase, SyncConnectionPhase.offline);
 
@@ -403,13 +426,17 @@ final class FakeLifecyclePort implements ApplicationLifecyclePort {
 }
 
 final class FakePollingPort implements BestEffortPollingPort {
-  final StreamController<void> controller = StreamController<void>.broadcast();
+  final StreamController<BestEffortDeliveryTick> controller =
+      StreamController<BestEffortDeliveryTick>.broadcast();
   int schedules = 0;
+  int acknowledged = 0;
 
   @override
-  Stream<void> get triggers => controller.stream;
+  Stream<BestEffortDeliveryTick> get triggers => controller.stream;
 
-  void trigger() => controller.add(null);
+  void trigger() => controller.add(
+    BestEffortDeliveryTick(onComplete: () => acknowledged += 1),
+  );
 
   @override
   Future<void> schedule({required Duration minimumInterval}) async {
@@ -418,6 +445,9 @@ final class FakePollingPort implements BestEffortPollingPort {
 
   @override
   Future<void> cancel() async {}
+
+  @override
+  Future<void> awaitExclusiveOwnership() async {}
 }
 
 final class FakeGateway implements RealtimeGateway {

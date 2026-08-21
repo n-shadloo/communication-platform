@@ -1,106 +1,37 @@
 import 'package:communication_platform/app/app.dart';
-import 'package:communication_platform/app/config/app_configuration.dart';
 import 'package:communication_platform/app/config/app_environment.dart';
-import 'package:communication_platform/app/dependencies/authentication_assembly.dart';
-import 'package:communication_platform/app/dependencies/contact_providers.dart';
-import 'package:communication_platform/app/dependencies/core_providers.dart';
-import 'package:communication_platform/app/dependencies/local_storage_providers.dart';
-import 'package:communication_platform/app/dependencies/message_delivery.dart';
-import 'package:communication_platform/app/dependencies/provisioned_transport.dart';
-import 'package:communication_platform/core/application/ports/enrollment_crypto_port.dart';
-import 'package:communication_platform/features/authentication/presentation/authentication_controller.dart';
+import 'package:communication_platform/app/dependencies/application_runtime.dart';
 import 'package:communication_platform/features/bootstrap/application/bootstrap_flow.dart';
 import 'package:communication_platform/features/bootstrap/application/ports/bootstrap_ports.dart';
 import 'package:communication_platform/features/bootstrap/domain/bootstrap_model.dart';
 import 'package:communication_platform/features/bootstrap/infrastructure/dio_health_reachability_port.dart';
 import 'package:communication_platform/features/bootstrap/infrastructure/provisioned_trust_port.dart';
-import 'package:communication_platform/features/devices/presentation/device_enrollment_controller.dart';
-import 'package:communication_platform/features/local_storage/infrastructure/platform/platform_local_storage.dart';
 import 'package:communication_platform/features/local_storage/infrastructure/protected_storage_bootstrap_adapter.dart';
-import 'package:communication_platform/features/networking/infrastructure/tls/transport_security.dart';
-import 'package:communication_platform/shared/infrastructure/crypto/platform_crypto_core.dart';
-import 'package:communication_platform/shared/infrastructure/crypto/unsupported_enrollment_crypto.dart';
-import 'package:communication_platform/shared/infrastructure/time/system_time_source.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 Future<void> bootstrap(AppEnvironment environment) async {
   WidgetsFlutterBinding.ensureInitialized();
-  final platform = kIsWeb ? BootstrapPlatform.web : BootstrapPlatform.android;
-  final localStorageRuntime = createPlatformLocalStorageRuntime();
-  final configurationPort = CompileTimeBootstrapConfiguration(
-    environment: environment,
-    platform: platform,
+  final runtime = await ApplicationRuntime.create(
+    environment,
+    platform: kIsWeb ? BootstrapPlatform.web : BootstrapPlatform.android,
   );
-  final configurationResult = await configurationPort.load();
-  // Trust for the transport the app actually uses. Android's network security
-  // configuration does not reach dart:io, so without this the client would fall
-  // back to the public root store and never trust the provisioned server.
-  final transportSecurity = switch (configurationResult) {
-    ConfigurationLoaded(:final configuration) => provisionedTransportSecurity(
-      configuration.trustMaterial,
-    ),
-    ConfigurationNotProvisioned() => const TransportSecurity.platformDefault(),
-  };
-  final cryptoCore = createPlatformCryptoCore(
-    betaMlsEnabled: environment == AppEnvironment.beta,
-  );
-  final enrollmentCrypto = cryptoCore is EnrollmentCryptoPort
-      ? cryptoCore as EnrollmentCryptoPort
-      : const UnsupportedEnrollmentCrypto();
-  final authentication = switch (configurationResult) {
-    ConfigurationLoaded(:final configuration) => AuthenticationAssembly.create(
-      serverOrigin: configuration.serverOrigin.uri,
-      localStorage: localStorageRuntime,
-      timeSource: const SystemTimeSource(),
-      enrollmentCrypto: enrollmentCrypto,
-      transportSecurity: transportSecurity,
-    ),
-    ConfigurationNotProvisioned() => null,
-  };
   final flow = BootstrapFlow(
-    configuration: _ResolvedBootstrapConfiguration(configurationResult),
-    storage: ProtectedStorageBootstrapAdapter(localStorageRuntime),
+    configuration: _ResolvedBootstrapConfiguration(runtime.configuration),
+    storage: ProtectedStorageBootstrapAdapter(runtime.localStorage),
     trust: const ProvisionedTrustPort(),
-    health: DioHealthReachabilityPort(transportSecurity: transportSecurity),
-    platform: platform,
+    health: DioHealthReachabilityPort(
+      transportSecurity: runtime.transportSecurity,
+    ),
+    platform: runtime.platform,
   );
   runApp(
-    ProviderScope(
-      overrides: [
-        if (authentication != null)
-          authenticationUseCasesProvider.overrideWithValue(
-            authentication.useCases,
-          ),
-        if (authentication != null)
-          deviceEnrollmentCoordinatorProvider.overrideWithValue(
-            authentication.enrollment,
-          ),
-        if (authentication != null)
-          authenticatedRestClientProvider.overrideWithValue(
-            authentication.restClient,
-          ),
-        // The delivery path's socket is built from this, so it shares the one
-        // token coordinator and the one provisioned trust context above rather
-        // than opening a second authenticated transport beside them.
-        if (authentication != null)
-          networkingFoundationProvider.overrideWithValue(
-            authentication.networking,
-          ),
-        appEnvironmentProvider.overrideWithValue(environment),
-        cryptoCoreProvider.overrideWithValue(cryptoCore),
-        enrollmentCryptoProvider.overrideWithValue(enrollmentCrypto),
-        localStorageRuntimeProvider.overrideWith((ref) {
-          ref.onDispose(localStorageRuntime.close);
-          return localStorageRuntime;
-        }),
-      ],
+    runtime.scope(
       child: CommunicationPlatformApp(
         environment: environment,
         bootstrapFlow: flow,
-        bootstrapPlatform: platform,
-        authenticationEnabled: authentication != null,
+        bootstrapPlatform: runtime.platform,
+        authenticationEnabled: runtime.isAuthenticated,
       ),
     ),
   );

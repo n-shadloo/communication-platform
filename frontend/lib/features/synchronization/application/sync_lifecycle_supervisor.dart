@@ -25,7 +25,6 @@ final class SyncLifecycleSupervisor {
       maximumDelay: Duration(minutes: 5),
     ),
     this.stableConnectionThreshold = const Duration(seconds: 30),
-    this.backgroundPollingInterval = const Duration(minutes: 15),
   }) : _engine = engine,
        _store = store,
        _realtime = realtime,
@@ -47,7 +46,6 @@ final class SyncLifecycleSupervisor {
   final DelayPort _delay;
   final SyncRetryPolicy reconnectPolicy;
   final Duration stableConnectionThreshold;
-  final Duration backgroundPollingInterval;
 
   final StreamController<SyncProjection> _projections =
       StreamController<SyncProjection>.broadcast();
@@ -55,7 +53,7 @@ final class SyncLifecycleSupervisor {
   StreamSubscription<SyncProjection>? _projectionSubscription;
   bool _started = false;
   bool _disposed = false;
-  bool _cycleActive = false;
+  Future<void>? _activeCycle;
   bool _cycleRequested = false;
   int _generation = 0;
   int _observedOutboxDepth = 0;
@@ -74,7 +72,7 @@ final class SyncLifecycleSupervisor {
     _subscriptions
       ..add(_network.changes.listen(_onNetworkChanged))
       ..add(_lifecycle.changes.listen(_onLifecycleChanged))
-      ..add(_polling.triggers.listen((_) => unawaited(_requestCycle())))
+      ..add(_polling.triggers.listen(_onDeferredTick))
       ..add(
         _realtime.durableEnvelopeHints.listen((_) {
           unawaited(_recordHintAndDrain());
@@ -87,11 +85,21 @@ final class SyncLifecycleSupervisor {
       );
 
     if (_lifecycle.current == ApplicationExecutionState.foreground) {
-      await _polling.cancel();
       await _resumeForeground();
     } else {
       await _enterBackground();
     }
+  }
+
+  /// Runs one cycle for a deferred platform wake-up and then acknowledges it.
+  ///
+  /// The acknowledgement is unconditional and happens exactly once, including
+  /// when the cycle failed or was refused because the network is unavailable.
+  /// The scheduler is not asking whether delivery succeeded — it is asking
+  /// whether this process may be let go, and a tick that is never acknowledged
+  /// holds the wake-up open until the platform's own deadline kills it.
+  void _onDeferredTick(BestEffortDeliveryTick tick) {
+    unawaited(_requestCycle().whenComplete(tick.complete));
   }
 
   /// Turns growth of the durable outbox into a delivery cycle.
@@ -157,7 +165,6 @@ final class SyncLifecycleSupervisor {
     }
     _generation += 1;
     final generation = _generation;
-    await _polling.cancel();
     final reconnect = await _store.readReconnectState();
     if (reconnect case Success(value: final state)) {
       final dueAt = state.dueAt;
@@ -171,14 +178,19 @@ final class SyncLifecycleSupervisor {
     await _connectAndDrain(generation);
   }
 
+  /// Gives up the socket the moment the application stops being foregrounded.
+  ///
+  /// It does not arm or disarm the deferred catch-up. That is armed once for
+  /// the whole signed-in session by whoever owns the session, because a
+  /// periodic platform job restarts its window every time it is re-registered
+  /// and a process that dies while foregrounded would otherwise leave nothing
+  /// scheduled at all.
   Future<void> _enterBackground() async {
     _generation += 1;
     await _realtime.close();
     if (_lifecycle.current == ApplicationExecutionState.detached) {
       await _store.markConnectionPhase(SyncConnectionPhase.stopped);
-      return;
     }
-    await _polling.schedule(minimumInterval: backgroundPollingInterval);
   }
 
   Future<void> _connectAndDrain(int generation) async {
@@ -208,15 +220,27 @@ final class SyncLifecycleSupervisor {
     }
   }
 
-  Future<void> _requestCycle() async {
+  /// Requests one delivery cycle, and completes when the work it asked for is
+  /// over rather than when the request was accepted.
+  ///
+  /// A caller that already has a cycle in flight joins it instead of starting a
+  /// second one, which is what lets a deferred platform wake-up wait for the
+  /// real end of the drain even when a socket hint got there first.
+  Future<void> _requestCycle() {
     if (_disposed || _network.current == NetworkAvailability.unavailable) {
-      return;
+      return Future<void>.value();
     }
-    if (_cycleActive) {
+    final active = _activeCycle;
+    if (active != null) {
       _cycleRequested = true;
-      return;
+      return active;
     }
-    _cycleActive = true;
+    final run = _runCycles();
+    _activeCycle = run;
+    return run;
+  }
+
+  Future<void> _runCycles() async {
     try {
       do {
         _cycleRequested = false;
@@ -229,7 +253,10 @@ final class SyncLifecycleSupervisor {
         }
       } while (_cycleRequested && !_disposed);
     } finally {
-      _cycleActive = false;
+      // Cleared here rather than from a callback on the returned future, so
+      // that a request arriving in the microtask after this run finishes starts
+      // a new cycle instead of joining a completed one and being dropped.
+      _activeCycle = null;
     }
   }
 

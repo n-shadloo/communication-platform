@@ -147,12 +147,55 @@ abstract interface class ApplicationLifecyclePort implements Port {
   Stream<ApplicationExecutionState> get changes;
 }
 
+/// One deferred wake-up, and the acknowledgement its scheduler waits for.
+///
+/// The acknowledgement is the load-bearing half. A deferred wake-up exists
+/// because the operating system has un-frozen this process for a bounded
+/// moment; the moment ends when the scheduler is told the work is done, and
+/// everything still in flight then is abandoned wherever it stands. A tick that
+/// nobody completes is therefore not a slow tick, it is a catch-up the platform
+/// stops mid-drain — so a delivery owner must complete it, exactly once, when
+/// the cycle it asked for has finished or failed.
+final class BestEffortDeliveryTick {
+  BestEffortDeliveryTick({this.onComplete});
+
+  final void Function()? onComplete;
+  bool _completed = false;
+
+  bool get isCompleted => _completed;
+
+  void complete() {
+    if (_completed) {
+      return;
+    }
+    _completed = true;
+    onComplete?.call();
+  }
+}
+
+/// The deferred catch-up a delivery session arms, and the wake-ups it delivers.
+///
+/// [schedule] and [cancel] are owned by whatever owns the session, not by the
+/// lifecycle supervisor: a periodic platform job restarts its window every time
+/// it is re-registered, so arming it on every background transition and
+/// cancelling it on every foreground transition would mean a user who opens the
+/// application more often than the interval never receives a single wake-up. It
+/// is armed once, for as long as there is a signed-in device to deliver to.
 abstract interface class BestEffortPollingPort implements Port {
-  Stream<void> get triggers;
+  Stream<BestEffortDeliveryTick> get triggers;
 
   Future<void> schedule({required Duration minimumInterval});
 
   Future<void> cancel();
+
+  /// Completes once no deferred catch-up owns delivery in this process.
+  ///
+  /// A session waits on this before it composes anything, because a catch-up
+  /// that the platform started a moment earlier is a second delivery owner, and
+  /// two owners hold two token coordinators against one *rotating* refresh
+  /// token. It completes immediately when nothing is running, which is the
+  /// ordinary case.
+  Future<void> awaitExclusiveOwnership();
 }
 
 abstract interface class RealtimeSyncPort implements Port {
@@ -177,9 +220,9 @@ abstract interface class DelayPort implements Port {
 /// holds an operating-system resource — an observer, a timer — that must be
 /// released when the session stops, and a session that resolved some of them
 /// has leaked the rest. Composing them behind one port is also what lets a test
-/// drive the real supervisor without a device: connectivity and the widget
-/// binding are platform channels, real timers cannot be waited out, and the
-/// deferred scheduler does not exist yet.
+/// drive the real supervisor without a device: connectivity, the widget binding
+/// and the deferred scheduler are all platform channels, and real timers cannot
+/// be waited out.
 abstract interface class DeliveryPlatformPorts implements Port {
   NetworkAvailabilityPort get network;
 

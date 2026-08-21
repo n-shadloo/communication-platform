@@ -158,19 +158,31 @@ final class FlutterApplicationLifecyclePort
   };
 }
 
-/// Platform scheduling boundary for Android WorkManager integration.
+/// Platform scheduling boundary for Android deferred background delivery.
 ///
-/// The scheduler never promises an exact interval. A headless callback must construct
-/// its own database/network dependencies and invoke the same durable engine; no state
-/// from the foreground isolate is assumed to survive. Android implementations must
-/// request WorkManager's connected-network constraint rather than waking to probe a
-/// public host.
+/// The scheduler never promises an exact interval; the platform floor is the
+/// best it can ask for and the operating system defers even that. A headless
+/// callback must construct its own database/network dependencies and invoke the
+/// same durable engine; no state from the foreground isolate is assumed to
+/// survive. Android implementations must request the job scheduler's
+/// connected-network constraint rather than waking to probe a public host.
+///
+/// [awaitExclusiveOwnership] exists because a headless callback and a
+/// foregrounded application are two Dart root isolates in one operating-system
+/// process, and two of them running the delivery path at once would hold two
+/// token coordinators against one *rotating* refresh token: the loser presents
+/// a token the server has already retired, which is a 401 and an ended session.
+/// The foreground waits for a catch-up that is already in flight rather than
+/// racing it or killing it, because abandoning a call into the shared native
+/// cryptographic core mid-flight is a worse trade than waiting a few seconds.
 abstract interface class AndroidPollingScheduler {
-  Stream<void> get foregroundTriggers;
+  Stream<BestEffortDeliveryTick> get foregroundTriggers;
 
   Future<void> scheduleBestEffort({required Duration minimumInterval});
 
   Future<void> cancel();
+
+  Future<void> awaitExclusiveOwnership();
 }
 
 final class AndroidBestEffortPollingPort implements BestEffortPollingPort {
@@ -179,7 +191,7 @@ final class AndroidBestEffortPollingPort implements BestEffortPollingPort {
   final AndroidPollingScheduler scheduler;
 
   @override
-  Stream<void> get triggers => scheduler.foregroundTriggers;
+  Stream<BestEffortDeliveryTick> get triggers => scheduler.foregroundTriggers;
 
   @override
   Future<void> schedule({required Duration minimumInterval}) =>
@@ -187,27 +199,35 @@ final class AndroidBestEffortPollingPort implements BestEffortPollingPort {
 
   @override
   Future<void> cancel() => scheduler.cancel();
+
+  @override
+  Future<void> awaitExclusiveOwnership() => scheduler.awaitExclusiveOwnership();
 }
 
-/// The polling port for a build with no background scheduler composed.
+/// The polling port for a build with no deferred scheduler behind it.
 ///
-/// [AndroidPollingScheduler] still has no adapter: ADR-046's Layer 1 WorkManager
-/// registration is a later piece of work. This is the honest stand-in for that
-/// absence, and it deliberately does not pretend. It schedules nothing and emits
-/// nothing, so a backgrounded application performs no catch-up at all, exactly
-/// as the enrollment disclosure tells recipients. Queued work stays durable in
-/// Drift and is drained the next time the application is foregrounded.
+/// It schedules nothing and emits nothing, so a backgrounded application
+/// performs no catch-up at all. That is the truthful composition for any target
+/// that is not the version-1 Android artifact — a host test, a future Web
+/// build — and it is deliberately not a silent fallback for Android: queued
+/// work stays durable in Drift and is drained the next time the application is
+/// foregrounded, which is exactly what such a build should promise.
 final class UnscheduledBestEffortPolling implements BestEffortPollingPort {
   const UnscheduledBestEffortPolling();
 
   @override
-  Stream<void> get triggers => const Stream<void>.empty();
+  Stream<BestEffortDeliveryTick> get triggers =>
+      const Stream<BestEffortDeliveryTick>.empty();
 
   @override
   Future<void> schedule({required Duration minimumInterval}) async {}
 
   @override
   Future<void> cancel() async {}
+
+  /// Nothing else can be running delivery when nothing is ever scheduled.
+  @override
+  Future<void> awaitExclusiveOwnership() async {}
 }
 
 /// The platform edges of one delivery session on the version-1 Android target.
@@ -219,12 +239,22 @@ final class UnscheduledBestEffortPolling implements BestEffortPollingPort {
 /// delivered: every foreground transition re-reads the operating system's
 /// answer rather than trusting a value cached from before the application was
 /// backgrounded.
+///
+/// The deferred scheduler is supplied rather than constructed here, so that the
+/// composition root decides whether this build has one at all. A build with
+/// none composes [UnscheduledBestEffortPolling], which schedules nothing and
+/// says so, instead of a stand-in that quietly does nothing while looking like
+/// a scheduler.
 final class FlutterDeliveryPlatformPorts implements DeliveryPlatformPorts {
   FlutterDeliveryPlatformPorts._({
     required ConnectivityNetworkAvailabilityPort network,
     required FlutterApplicationLifecyclePort lifecycle,
+    required BestEffortPollingPort polling,
+    required Future<void> Function() releaseScheduler,
   }) : _network = network,
-       _lifecycle = lifecycle {
+       _lifecycle = lifecycle,
+       _polling = polling,
+       _releaseScheduler = releaseScheduler {
     _resumes = _lifecycle.changes.listen((state) {
       if (state == ApplicationExecutionState.foreground) {
         unawaited(_network.refresh());
@@ -234,15 +264,23 @@ final class FlutterDeliveryPlatformPorts implements DeliveryPlatformPorts {
 
   static Future<FlutterDeliveryPlatformPorts> create({
     Connectivity? connectivity,
+    AndroidPollingScheduler? scheduler,
+    Future<void> Function()? releaseScheduler,
   }) async => FlutterDeliveryPlatformPorts._(
     network: await ConnectivityNetworkAvailabilityPort.create(
       connectivity: connectivity,
     ),
     lifecycle: FlutterApplicationLifecyclePort(),
+    polling: scheduler == null
+        ? const UnscheduledBestEffortPolling()
+        : AndroidBestEffortPollingPort(scheduler),
+    releaseScheduler: releaseScheduler ?? () async {},
   );
 
   final ConnectivityNetworkAvailabilityPort _network;
   final FlutterApplicationLifecyclePort _lifecycle;
+  final BestEffortPollingPort _polling;
+  final Future<void> Function() _releaseScheduler;
   late final StreamSubscription<ApplicationExecutionState> _resumes;
 
   @override
@@ -252,7 +290,7 @@ final class FlutterDeliveryPlatformPorts implements DeliveryPlatformPorts {
   ApplicationLifecyclePort get lifecycle => _lifecycle;
 
   @override
-  BestEffortPollingPort get polling => const UnscheduledBestEffortPolling();
+  BestEffortPollingPort get polling => _polling;
 
   @override
   DelayPort get delay => const TimerDelayPort();
@@ -262,5 +300,9 @@ final class FlutterDeliveryPlatformPorts implements DeliveryPlatformPorts {
     await _resumes.cancel();
     await _lifecycle.dispose();
     await _network.dispose();
+    // Deliberately last, and deliberately not a cancel of the scheduled job:
+    // this releases the channel handler for a session that is ending, while the
+    // job stays armed or is disarmed by whoever owns the session.
+    await _releaseScheduler();
   }
 }

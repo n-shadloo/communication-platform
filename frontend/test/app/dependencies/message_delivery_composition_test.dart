@@ -265,6 +265,80 @@ void main() {
     expect(harness.sockets.connections, hasLength(1));
   });
 
+  test(
+    'a session arms the deferred catch-up once, for its whole life',
+    () async {
+      final harness = await DeliveryHarness.create();
+      addTearDown(harness.dispose);
+
+      await harness.signIn();
+
+      expect(
+        harness.deferred.scheduled,
+        [deferredCatchUpInterval],
+        reason:
+            'armed once when the session starts, at the platform floor, and not '
+            'again on any lifecycle transition',
+      );
+      expect(harness.deferred.cancels, 0);
+
+      // Every background and foreground transition the application will ever
+      // make. A periodic platform job restarts its window each time it is
+      // registered, so re-arming here would mean a user who opens the app more
+      // often than the interval never receives a single wake-up.
+      harness.lifecycleState = ApplicationExecutionState.background;
+      await harness.settle();
+      harness.lifecycleState = ApplicationExecutionState.foreground;
+      await harness.settle();
+
+      expect(harness.deferred.scheduled, hasLength(1));
+      expect(harness.deferred.cancels, 0);
+    },
+  );
+
+  test('logout disarms it, so nothing wakes for a signed-out device', () async {
+    final harness = await DeliveryHarness.create();
+    addTearDown(harness.dispose);
+    await harness.signIn();
+
+    await harness.signOut();
+
+    expect(harness.deferred.cancels, 1);
+  });
+
+  test('a session waits for a catch-up that already owns delivery', () async {
+    // Two Dart root isolates in one process would be two token coordinators
+    // against one *rotating* refresh token, and the loser presents one the
+    // server has already retired. The foreground therefore waits for a headless
+    // catch-up that is already in flight, before it opens storage or reads a
+    // token — not after.
+    final harness = await DeliveryHarness.create(holdOwnership: true);
+    addTearDown(harness.dispose);
+
+    unawaited(harness.signIn());
+    await pumpEvents();
+
+    expect(harness.deferred.ownershipWaits, 1);
+    expect(
+      harness.stage,
+      MessageDeliveryStage.starting,
+      reason: 'composition is held at the ownership question',
+    );
+    expect(
+      harness.http.requests,
+      isEmpty,
+      reason: 'nothing authenticated happens while another owner is running',
+    );
+    expect(harness.sockets.connections, isEmpty);
+
+    harness.deferred.releaseOwnership();
+    await harness.settle();
+    await pumpEvents();
+
+    expect(harness.stage, MessageDeliveryStage.running);
+    expect(harness.sockets.connections, hasLength(1));
+  });
+
   testWidgets('the application root is what instantiates the controller', (
     tester,
   ) async {
@@ -339,6 +413,7 @@ final class DeliveryHarness {
     required this.tokens,
     required this.termination,
     required this.lifecycle,
+    required this.platformPorts,
     ProviderContainer? container,
   }) : _owned = container,
        _container = container;
@@ -350,6 +425,7 @@ final class DeliveryHarness {
   static Future<DeliveryHarness> create({
     bool installNetworking = true,
     bool attachContainer = true,
+    bool holdOwnership = false,
     RecordingObserver? observer,
     FakeCoreBehaviour core = FakeCoreBehaviour.unauthenticated,
   }) async {
@@ -368,6 +444,7 @@ final class DeliveryHarness {
       socketConnector: sockets,
     );
     final session = FakeAuthenticationSession();
+    final platformPorts = <FakeDeliveryPlatformPorts>[];
     final overrides = [
       appEnvironmentProvider.overrideWithValue(AppEnvironment.production),
       localDatabaseProvider.overrideWith((ref) => Future.value(database)),
@@ -387,9 +464,11 @@ final class DeliveryHarness {
           lifecycle: lifecycle,
         ),
       ),
-      deliveryPlatformPortsProvider.overrideWithValue(
-        () async => FakeDeliveryPlatformPorts(),
-      ),
+      deliveryPlatformPortsProvider.overrideWithValue(() async {
+        final ports = FakeDeliveryPlatformPorts(holdOwnership: holdOwnership);
+        platformPorts.add(ports);
+        return ports;
+      }),
       if (installNetworking) ...[
         authenticatedRestClientProvider.overrideWithValue(
           foundation.restClient,
@@ -422,6 +501,7 @@ final class DeliveryHarness {
       tokens: tokens,
       termination: termination,
       lifecycle: lifecycle,
+      platformPorts: platformPorts,
     );
   }
 
@@ -433,6 +513,23 @@ final class DeliveryHarness {
   final InMemoryTokenStore tokens;
   final RecordingTermination termination;
   final AuthenticationLifecycleBus lifecycle;
+
+  /// Every platform-edge bundle a session resolved, newest last. One per
+  /// session, so a second entry means a second session was composed.
+  final List<FakeDeliveryPlatformPorts> platformPorts;
+
+  RecordingPolling get deferred => platformPorts.last.deferred;
+
+  /// Reports a platform lifecycle transition to the running session.
+  set lifecycleState(ApplicationExecutionState state) =>
+      platformPorts.last.lifecycleControl.set(state);
+
+  /// Lets every queued transition and cycle finish.
+  Future<void> settle() async {
+    await controller.settled;
+    await pumpEvents();
+    await controller.settled;
+  }
 
   /// The container this harness created and must dispose, if any. A container
   /// belonging to a pumped `ProviderScope` is owned by the widget tree.
@@ -674,8 +771,16 @@ final class FakeSocketConnection implements SocketConnection {
 }
 
 final class FakeDeliveryPlatformPorts implements DeliveryPlatformPorts {
+  FakeDeliveryPlatformPorts({bool holdOwnership = false})
+    : _polling = RecordingPolling(holdOwnership: holdOwnership);
+
   final FakeNetworkPort _network = FakeNetworkPort();
   final FakeLifecyclePort _lifecycle = FakeLifecyclePort();
+  final RecordingPolling _polling;
+
+  RecordingPolling get deferred => _polling;
+
+  FakeLifecyclePort get lifecycleControl => _lifecycle;
 
   @override
   NetworkAvailabilityPort get network => _network;
@@ -684,7 +789,7 @@ final class FakeDeliveryPlatformPorts implements DeliveryPlatformPorts {
   ApplicationLifecyclePort get lifecycle => _lifecycle;
 
   @override
-  BestEffortPollingPort get polling => const _NoPolling();
+  BestEffortPollingPort get polling => _polling;
 
   @override
   DelayPort get delay => const _ImmediateDelay();
@@ -712,12 +817,21 @@ final class FakeNetworkPort implements NetworkAvailabilityPort {
 final class FakeLifecyclePort implements ApplicationLifecyclePort {
   final StreamController<ApplicationExecutionState> _changes =
       StreamController<ApplicationExecutionState>.broadcast();
+  ApplicationExecutionState _current = ApplicationExecutionState.foreground;
 
   @override
-  ApplicationExecutionState get current => ApplicationExecutionState.foreground;
+  ApplicationExecutionState get current => _current;
 
   @override
   Stream<ApplicationExecutionState> get changes => _changes.stream;
+
+  void set(ApplicationExecutionState state) {
+    if (_current == state) {
+      return;
+    }
+    _current = state;
+    _changes.add(state);
+  }
 
   Future<void> dispose() => _changes.close();
 }
@@ -731,17 +845,41 @@ final class _ImmediateDelay implements DelayPort {
   Future<void> wait(Duration delay) async {}
 }
 
-final class _NoPolling implements BestEffortPollingPort {
-  const _NoPolling();
+/// Records what the session asks of the deferred scheduler without a platform.
+///
+/// [holdOwnership] stands in for the one race this design has to survive: a
+/// headless catch-up already in flight when the user opens the application.
+final class RecordingPolling implements BestEffortPollingPort {
+  RecordingPolling({bool holdOwnership = false})
+    : _owned = holdOwnership ? Completer<void>() : null;
+
+  final Completer<void>? _owned;
+  final List<Duration> scheduled = [];
+  int cancels = 0;
+  int ownershipWaits = 0;
+
+  void releaseOwnership() {
+    if (_owned != null && !_owned.isCompleted) {
+      _owned.complete();
+    }
+  }
 
   @override
-  Stream<void> get triggers => const Stream<void>.empty();
+  Stream<BestEffortDeliveryTick> get triggers =>
+      const Stream<BestEffortDeliveryTick>.empty();
 
   @override
-  Future<void> schedule({required Duration minimumInterval}) async {}
+  Future<void> schedule({required Duration minimumInterval}) async =>
+      scheduled.add(minimumInterval);
 
   @override
-  Future<void> cancel() async {}
+  Future<void> cancel() async => cancels += 1;
+
+  @override
+  Future<void> awaitExclusiveOwnership() async {
+    ownershipWaits += 1;
+    await _owned?.future;
+  }
 }
 
 // ---------------------------------------------------------------------------
