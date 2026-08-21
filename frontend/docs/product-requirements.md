@@ -75,10 +75,16 @@ is not called the production release.
 
 ## Known platform limits
 
-- Android background messaging uses best-effort local polling only. There is no
-  always-on messaging socket or foreign push; delayed delivery is expected under Doze,
-  force-stop, or OEM restrictions. A foreground service is used only while voice audio
-  is actively connected.
+- Android background messaging is layered and honestly tiered (ADR-046). There is no
+  foreign push and never will be. A mandatory best-effort polling floor gives *eventual*
+  delivery, and the *rare* and *restricted* standby buckets give it no network at all. An
+  opt-in `specialUse` foreground service, off by default, holds the same connection and
+  gives *near-real-time, best-effort* delivery when the user grants the battery-optimization
+  exemption and their vendor cooperates. Delayed delivery is expected under Doze, standby,
+  or OEM restrictions, and a force-stopped application is silent until it is opened again.
+  A microphone foreground service is used only while voice audio is actively connected.
+- Notifications are a projection of committed local state, never of a transport event, and
+  are hidden-preview by default.
 - A future closed browser cannot maintain the application WebSocket. Messages remain in
   the backend's durable device queue until the user returns.
 - A server able to replace a future web bundle can attack browser sessions. CSP and

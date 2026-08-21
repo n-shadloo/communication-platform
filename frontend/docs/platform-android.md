@@ -173,23 +173,59 @@ residual exposure that choice accepts.
 
 ## Background delivery
 
-There is no FCM/APNs fallback. Correctness therefore relies on the backend durable queue,
-not instant background notification.
+There is no FCM/APNs fallback and there never will be: the transport this deployment must
+survive without is exactly the one FCM depends on. Correctness therefore rests on the
+backend durable queue, not on instant background notification.
+
+ADR-046 replaces ADR-029's single mechanism with three layers, because measurement of the
+platform showed one mechanism cannot span the range. A backgrounded process with no
+running component is cached, and a frozen app's "active TCP sockets" are terminated by the
+system, so an unattended socket is closed rather than merely slow. `WorkManager`'s
+periodic floor is 15 minutes, Doze defers `JobScheduler` to maintenance windows that
+thin out over time, Android 16 enforces job runtime quota even in the *active* standby
+bucket, and the *rare* and *restricted* buckets disable background network entirely. The
+one app state Android documents as having unrestricted background network is "app process
+is running a foreground service".
 
 Modes:
 
-- **Active app:** WebSocket delivery plus REST drain.
-- **Background messaging:** WorkManager performs best-effort polling/drain under network
-  constraints. It is not advertised as instant or exact-periodic, and no persistent
-  foreground messaging service is started.
+- **Active app:** WebSocket wake-up hints plus authoritative REST drain. This is Layer 0
+  and is mandatory; it is also, as of 2026-08-21, not yet composed — see the piece-12
+  note below.
+- **Background floor (Layer 1, no user action):** `WorkManager` behind the existing
+  `AndroidPollingScheduler` port — one periodic request at the platform floor with a
+  connected-network constraint, plus one-shots on connectivity recovery and
+  `ACTION_BOOT_COMPLETED`. It is never advertised as instant or exact-periodic and starts
+  no service. Its honest tier is *eventual*, and in the *rare* and *restricted* buckets it
+  is nothing at all.
+- **Background near-real-time (Layer 2, opt-in, off by default):** a `specialUse`
+  foreground service that keeps the process non-cached so the same composed socket
+  survives, declared with a truthful `android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE`. It
+  hosts the same isolate and the same supervisor and adds no second delivery
+  implementation. Enabling it asks for `POST_NOTIFICATIONS`, asks for the
+  battery-optimization exemption through `ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS`,
+  and explains the vendor settings the app cannot check for itself.
 - **Active voice:** microphone/communication foreground service for the duration of the
   joined room with visible controls.
 
-The implementation spike MUST configure truthful Android foreground-service types only
-for active voice. Android 14+ requires the declared microphone type/permissions. The app
-MUST NOT label background polling as `remoteMessaging` or `dataSync` to evade lifecycle
-or distribution policy. Force-stop, Doze, and OEM restrictions may delay messages; resume
-always drains the authoritative queue and checks `pruned_through`.
+`specialUse` is chosen deliberately. `dataSync` is capped at six hours per twenty-four and
+cannot be launched from a `BOOT_COMPLETED` receiver at `targetSdk` 35+; `remoteMessaging`
+documents device-to-device message continuity, not holding a connection to the
+application's own server; `systemExempted` is gated on device-owner, VPN or exact-alarm
+roles this app does not have. **The app still MUST NOT label delivery work as
+`remoteMessaging` or `dataSync`**, and `test/architecture/sync_platform_policy_test.dart`
+continues to enforce that.
+
+Exactly one delivery owner runs at a time — foreground isolate, service isolate, or
+headless worker — held as a durable leased Drift row rather than an in-memory flag.
+Concurrent owners would open several sockets and, far worse, race several
+`TokenCoordinator` instances on a *rotating* refresh token, which can invalidate the
+session.
+
+Force-stop, Doze, standby buckets and OEM restrictions may delay messages or stop them
+entirely; resume always drains the authoritative queue and checks `pruned_through`. What
+the platform *guarantees* and what it merely *permits* are recorded separately in ADR-046
+and may not be conflated in any user-facing string.
 
 ### Piece-12 synchronization baseline
 
@@ -213,12 +249,36 @@ and Android's
 [`ConnectivityManager.NetworkCallback`](https://developer.android.com/reference/android/net/ConnectivityManager.NetworkCallback)
 and [network-state guidance](https://developer.android.com/develop/connectivity/network-ops/reading-network-state).
 
+**Correction recorded 2026-08-21 (ADR-046): none of this is composed.**
+`SyncLifecycleSupervisor`, `DioWebSocketGateway`, `GatewayRealtimeSyncAdapter` and
+`NetworkingFoundation` exist in `lib/`, are unit-tested, and are constructed **only in
+tests**; `durableSyncEngineProvider` is declared and read by nothing. `bootstrap.dart`
+composes `AuthenticationAssembly`, which builds a REST client and a token coordinator and
+no socket. The consequence reaches sending as well as receiving: `SendConversationEvents`
+ends at `fanout.prepareAndQueue`, which writes durable outbox rows, and the component that
+would transmit them never runs. Composing this path is step one of ADR-046's follow-up
+work; the two composition roots must also be resolved, because the socket has to attach to
+the live `TokenCoordinator` that `AuthenticationAssembly` owns rather than to a second one.
+
 ## Notifications
 
 - Local notifications are created only after authenticated decryption and durable local
-  commit.
+  commit, and only from the existing post-inbox-commit work port — never from a transport
+  event. A socket frame is a wake-up hint and can never produce a notification by itself.
+- A notification is a projection of committed local state: rows that are committed,
+  unread, and carry no durable `notified_at` marker. The marker is written in the same
+  transaction, because the isolate that notifies may not be the one that returns.
+- Missed notifications recover by query, not replay. Everything unread and un-notified is
+  eligible at the next successful commit pass, with a bounded number of individual
+  notifications and one grouped summary beyond that threshold.
+- An envelope that was quarantined, rejected, or retained by queue-gap recovery never
+  produces a notification.
 - Default preview is hidden: app name, sender-neutral "New message", and open action.
 - User may opt into decrypted previews with a clear lock-screen warning.
+- The Layer 2 foreground-service notification is itself a privacy surface: it is a
+  durable, visible indication on the device that this application is armed. Its channel is
+  low importance, silent, and neutrally worded, and that trade is why background delivery
+  is opt-in rather than default.
 - Conversation IDs/people shortcuts never expose backend capabilities or raw identifiers.
 - Tapping routes through unlock/session validation before opening content.
 - Notification actions are bounded signed local intents, validated again by application
@@ -228,10 +288,29 @@ and [network-state guidance](https://developer.android.com/develop/connectivity/
 
 Request only at point of use:
 
-- notifications for locally received message alerts and active-voice disclosure;
+- notifications (`POST_NOTIFICATIONS`, Android 13+) for locally received message alerts
+  and active-voice disclosure. Notifications are off by default on a fresh install and a
+  refusal blocks every non-exempt channel, so denial is a stated outcome, not a retry loop;
+- the battery-optimization exemption, requested through
+  `ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` only when the user enables background
+  delivery. Android's own Doze acceptable-use table rates this **acceptable** for a chat
+  application that cannot use FCM for a technical reason, which is this application
+  exactly; the grant is what lets the app "use the network and hold partial wake locks
+  during Doze and App Standby". Losing it degrades Layer 2 to Layer 1 and must be surfaced,
+  not hidden;
 - microphone for joining voice;
 - camera for capture/optional safety QR;
 - media/files through system pickers without broad storage permission.
+
+`RECEIVE_BOOT_COMPLETED` is declared for re-arming delivery after reboot. Only
+`ACTION_BOOT_COMPLETED` is handled; `ACTION_LOCKED_BOOT_COMPLETED` is deliberately not,
+because the database key is credential-encrypted and nothing can be decrypted before first
+unlock — a direct-boot start must fail closed rather than degrade.
+
+Vendor battery settings — Samsung's "put apps to sleep" and adaptive battery, Xiaomi's
+autostart and battery saver — govern roughly 77% of the target fleet and cannot be read or
+changed by the application. They are explained to the user once, as instructions, and never
+presented as something the app has verified.
 
 Denial has a functional fallback and never blocks unrelated messaging.
 
@@ -267,3 +346,16 @@ verification, and the upgrade-continuity proof are specified in
 - [Android background work](https://developer.android.com/develop/background-work)
 - [Foreground service types](https://developer.android.com/develop/background-work/services/fgs/service-types)
 - [Foreground-service timeouts](https://developer.android.com/develop/background-work/services/fgs/timeout)
+- [Restrictions on starting a foreground service from the background](https://developer.android.com/develop/background-work/services/fgs/restrictions-bg-start)
+- [Power-management restrictions and app standby buckets](https://developer.android.com/topic/performance/power/power-details)
+- [Doze and App Standby, including the exemption acceptable-use table](https://developer.android.com/training/monitoring-device-state/doze-standby)
+- [Cached apps freezer (AOSP)](https://source.android.com/docs/core/perf/cached-apps-freezer)
+- [Android 14 behavior changes: cached-app resource enforcement](https://developer.android.com/about/versions/14/behavior-changes-all)
+- [Android 15 behavior changes: foreground-service boot restrictions and timeouts](https://developer.android.com/about/versions/15/behavior-changes-15)
+- [Android 16 behavior changes: JobScheduler quota enforcement](https://developer.android.com/about/versions/16/behavior-changes-all)
+- [Notification runtime permission](https://developer.android.com/develop/ui/views/notifications/notification-permission)
+- [WorkManager periodic work and constraints](https://developer.android.com/develop/background-work/background-tasks/persistent/getting-started/define-work)
+
+The background-delivery and notification sources above were read at primary source on
+2026-08-21 for ADR-046, against `minSdk` 24 / `targetSdk` 36 / `compileSdk` 36 as pinned
+by Flutter 3.44.7.

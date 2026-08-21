@@ -130,7 +130,9 @@ with the backend/proxy configuration and a REST health probe only when necessary
 ## Token lifecycle
 
 - Access expiry is tracked from token claims with clock-skew allowance.
-- Refresh begins shortly before expiry and is guarded by one process-wide mutex.
+- Refresh begins shortly before expiry and is guarded by one mutex inside the owning
+  isolate. That mutex does not span isolates, so the durable delivery lease of ADR-046 is
+  what actually prevents two coordinators from racing the rotating refresh token.
 - Every successful refresh atomically replaces both access and rotated refresh tokens.
 - An invalid/replayed refresh token ends the session; it is not retried indefinitely.
 - WebSocket close 4001 attempts one valid refresh/reconnect cycle.
@@ -187,15 +189,42 @@ a signal into durable message or membership state.
 
 ## Android lifecycle and post-v1 Web direction
 
-- Android keeps the WebSocket only while the application lifecycle permits. WorkManager
-  performs best-effort background polling/drain; it is not instant, exact-periodic, or
-  reliable after force-stop. Messaging never starts a persistent foreground service.
+ADR-046 makes delivery layered, and every layer drives this same engine.
+
+- **Foreground.** Android holds the WebSocket while the application lifecycle permits.
+  Socket frames are wake-up hints; the authoritative REST drain is what moves messages.
+- **Background floor.** `WorkManager` performs best-effort polling/drain behind the
+  `AndroidPollingScheduler` port. It is not instant, not exact-periodic, and not reliable
+  after force-stop; its floor is the platform's 15 minutes, Doze defers it to maintenance
+  windows that thin out, and the *rare* and *restricted* standby buckets give it no
+  network at all.
+- **Background near-real-time, opt-in and off by default.** A `specialUse` foreground
+  service keeps the process out of the cached state so the same socket survives — a frozen
+  app's TCP sockets are terminated by the system — and gives the process the one app state
+  Android documents as having unrestricted background network. It hosts the same isolate
+  and the same supervisor. Messaging still never starts a `dataSync` or `remoteMessaging`
+  service.
+- **Exactly one delivery owner at a time**, held as a durable leased Drift row. The
+  foreground isolate, the service isolate and the headless worker isolate must never run
+  the engine concurrently: besides duplicate sockets, concurrent `TokenCoordinator`
+  instances race a *rotating* refresh token and can invalidate the session. The supervisor
+  already cancels polling whenever it takes over; the lease makes that crash-safe rather
+  than in-memory.
+- **Notifications are a projection of committed state**, emitted only from post-inbox-commit
+  work, deduplicated by a durable marker, and recovered by query rather than replay. They
+  are never produced from a transport event.
 - An active voice session alone uses the required microphone/communication foreground
   service.
 - A future Web client listens while the page is active. Visibility resume and network
   recovery refresh auth, reconnect, and drain.
 - A future browser service-worker background sync is optional enhancement only; limited
   cross-browser availability means correctness never depends on it.
+
+As of 2026-08-21 none of this is composed into the running application: the supervisor,
+the socket gateway and the realtime adapter are constructed only in tests, and
+`durableSyncEngineProvider` is read by nothing, so the artifact neither drains its mailbox
+nor transmits its outbox. Composing that path is the first item of ADR-046's follow-up
+work and precedes every layer above.
 
 ## Observability
 

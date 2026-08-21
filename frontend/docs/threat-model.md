@@ -14,6 +14,10 @@ that a device contacted the service or eliminate traffic-analysis metadata.
 - Login and refresh credentials.
 - Recovery secrets.
 - Local decrypted indexes, thumbnails, drafts, and notification previews.
+- The fact that background delivery is armed: the opt-in `specialUse` foreground service
+  posts a persistent, visible notification. It is a durable on-device indication that this
+  application is running, it is why background delivery is opt-in rather than default, and
+  its channel is low importance, silent, and neutrally worded.
 
 ## Adversaries considered
 
@@ -37,8 +41,9 @@ that a device contacted the service or eliminate traffic-analysis metadata.
 - Traffic-analysis resistance, anonymity, or cover traffic.
 - Availability against a server or network that refuses service.
 - Guaranteed remote deletion after another device decrypted content.
-- Reliable delivery to a terminated Android process or closed browser without a push
-  service; Android background polling remains best-effort.
+- Reliable delivery to a force-stopped Android process or closed browser without a push
+  service. Background delivery remains best-effort at every tier (ADR-046), and no tier
+  is a guarantee.
 - Hiding the social graph, group fan-out, or communication timing from live server root.
 
 ## Trust boundaries
