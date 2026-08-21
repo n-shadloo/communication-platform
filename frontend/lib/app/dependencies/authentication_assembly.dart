@@ -1,3 +1,4 @@
+import 'package:communication_platform/app/dependencies/networking_foundation.dart';
 import 'package:communication_platform/core/application/ports/enrollment_crypto_port.dart';
 import 'package:communication_platform/core/application/ports/time_source.dart';
 import 'package:communication_platform/features/authentication/application/authentication_use_cases.dart';
@@ -9,16 +10,21 @@ import 'package:communication_platform/features/devices/infrastructure/dio_devic
 import 'package:communication_platform/features/devices/infrastructure/drift_enrollment_journal_store.dart';
 import 'package:communication_platform/features/local_storage/infrastructure/local_storage_runtime.dart';
 import 'package:communication_platform/features/networking/infrastructure/api/dio_rest_client.dart';
-import 'package:communication_platform/features/networking/infrastructure/auth/dio_token_endpoints.dart';
-import 'package:communication_platform/features/networking/infrastructure/auth/token_coordinator.dart';
 import 'package:communication_platform/features/networking/infrastructure/tls/transport_security.dart';
 
+/// The application's authenticated composition root.
+///
+/// It owns exactly one [NetworkingFoundation], so the REST client, the token
+/// coordinator, the provisioned trust and the socket origin are one set of
+/// objects rather than one set per feature that happens to need them. Anything
+/// that needs an authenticated transport — including the delivery path's
+/// WebSocket — takes it from [networking] instead of building its own.
 final class AuthenticationAssembly {
   AuthenticationAssembly._({
     required this.useCases,
     required this.lifecycle,
     required this.enrollment,
-    required this.restClient,
+    required this.networking,
   });
 
   factory AuthenticationAssembly.create({
@@ -31,24 +37,20 @@ final class AuthenticationAssembly {
   }) {
     final lifecycle = AuthenticationLifecycleBus();
     final tokenStore = SecureSessionTokenAdapter(localStorage);
-    final restClient = DioRestClient(
+    final networking = NetworkingFoundation.create(
       serverOrigin: serverOrigin,
-      transportSecurity: transportSecurity,
-    );
-    final coordinator = TokenCoordinator(
-      store: tokenStore,
-      refreshExchange: DioRefreshTokenExchange(restClient),
-      logoutExchange: DioLogoutTokenExchange(restClient),
+      tokenStore: tokenStore,
       terminationHandler: LocalAuthenticationTerminationHandler(
         runtime: localStorage,
         lifecycle: lifecycle,
       ),
       timeSource: timeSource,
+      transportSecurity: transportSecurity,
     );
-    restClient.bindTokenCoordinator(coordinator);
+    final restClient = networking.restClient;
     final session = CoordinatedAuthenticationSession(
       tokens: tokenStore,
-      coordinator: coordinator,
+      coordinator: networking.tokenCoordinator,
       runtime: localStorage,
     );
     final enrollmentStore = DriftEnrollmentJournalStore(
@@ -65,7 +67,7 @@ final class AuthenticationAssembly {
     return AuthenticationAssembly._(
       lifecycle: lifecycle,
       enrollment: enrollment,
-      restClient: restClient,
+      networking: networking,
       useCases: AuthenticationUseCases(
         register: RegisterAccount(
           repository,
@@ -82,7 +84,9 @@ final class AuthenticationAssembly {
   final AuthenticationUseCases useCases;
   final AuthenticationLifecycleBus lifecycle;
   final DeviceEnrollmentCoordinator enrollment;
-  final DioRestClient restClient;
+  final NetworkingFoundation networking;
+
+  DioRestClient get restClient => networking.restClient;
 
   Future<void> close() => lifecycle.close();
 }

@@ -5,6 +5,7 @@ import 'package:communication_platform/app/dependencies/authentication_assembly.
 import 'package:communication_platform/app/dependencies/contact_providers.dart';
 import 'package:communication_platform/app/dependencies/core_providers.dart';
 import 'package:communication_platform/app/dependencies/local_storage_providers.dart';
+import 'package:communication_platform/app/dependencies/message_delivery.dart';
 import 'package:communication_platform/app/dependencies/provisioned_transport.dart';
 import 'package:communication_platform/core/application/ports/enrollment_crypto_port.dart';
 import 'package:communication_platform/features/authentication/presentation/authentication_controller.dart';
@@ -79,6 +80,13 @@ Future<void> bootstrap(AppEnvironment environment) async {
         if (authentication != null)
           authenticatedRestClientProvider.overrideWithValue(
             authentication.restClient,
+          ),
+        // The delivery path's socket is built from this, so it shares the one
+        // token coordinator and the one provisioned trust context above rather
+        // than opening a second authenticated transport beside them.
+        if (authentication != null)
+          networkingFoundationProvider.overrideWithValue(
+            authentication.networking,
           ),
         appEnvironmentProvider.overrideWithValue(environment),
         cryptoCoreProvider.overrideWithValue(cryptoCore),

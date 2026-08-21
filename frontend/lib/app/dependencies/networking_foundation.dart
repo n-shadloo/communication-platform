@@ -1,3 +1,5 @@
+// ignore_for_file: prefer_initializing_formals
+
 import 'package:communication_platform/core/application/ports/time_source.dart';
 import 'package:communication_platform/features/networking/application/ports/realtime_gateway.dart';
 import 'package:communication_platform/features/networking/application/ports/token_ports.dart';
@@ -10,20 +12,32 @@ import 'package:communication_platform/features/networking/infrastructure/realti
 import 'package:communication_platform/features/networking/infrastructure/tls/transport_security.dart';
 import 'package:dio/dio.dart';
 
-/// Scope-owned composition for the single reviewed REST client and socket gateway.
+/// Scope-owned composition for the single reviewed REST client, the single
+/// token coordinator, and the socket origin they share.
+///
+/// Exactly one of these exists per running application, and
+/// `AuthenticationAssembly` is what builds it. A second instance would be a
+/// second [TokenCoordinator] holding the same *rotating* refresh token: two
+/// coordinators that both rotate it race, and the loser presents a refresh
+/// token the server has already retired, which ends the session for both. The
+/// socket is therefore not given its own client or its own coordinator; it is
+/// built from this one by [realtimeGateway].
 final class NetworkingFoundation {
-  const NetworkingFoundation._({
+  NetworkingFoundation._({
     required this.restClient,
     required this.tokenCoordinator,
-    required this.webSocketGateway,
-  });
+    required Uri serverOrigin,
+    required SocketConnector socketConnector,
+    required NetworkDiagnostics diagnostics,
+  }) : _serverOrigin = serverOrigin,
+       _socketConnector = socketConnector,
+       _diagnostics = diagnostics;
 
   factory NetworkingFoundation.create({
     required Uri serverOrigin,
     required SessionTokenStore tokenStore,
     required SessionTerminationHandler terminationHandler,
     required TimeSource timeSource,
-    required RealtimeReconnectHook reconnectHook,
     Dio? dio,
     SocketConnector? socketConnector,
     TransportSecurity transportSecurity =
@@ -46,21 +60,38 @@ final class NetworkingFoundation {
       timeSource: timeSource,
     );
     restClient.bindTokenCoordinator(tokenCoordinator);
-    final webSocketGateway = DioWebSocketGateway(
-      serverOrigin: serverOrigin,
-      connector: socketConnector ?? transportSecurity.socketConnector,
-      tokenCoordinator: tokenCoordinator,
-      reconnectHook: reconnectHook,
-      diagnostics: diagnostics,
-    );
     return NetworkingFoundation._(
       restClient: restClient,
       tokenCoordinator: tokenCoordinator,
-      webSocketGateway: webSocketGateway,
+      serverOrigin: serverOrigin,
+      // Resolved once, from the same trust the REST client was built with, so
+      // the socket can never terminate its chain at an authority the REST
+      // client would refuse.
+      socketConnector: socketConnector ?? transportSecurity.socketConnector,
+      diagnostics: diagnostics,
     );
   }
 
   final DioRestClient restClient;
   final TokenCoordinator tokenCoordinator;
-  final DioWebSocketGateway webSocketGateway;
+  final Uri _serverOrigin;
+  final SocketConnector _socketConnector;
+  final NetworkDiagnostics _diagnostics;
+
+  /// Builds the authenticated gateway for one delivery session.
+  ///
+  /// The gateway is deliberately per-session rather than per-application: it
+  /// holds one connection and one close-code recovery budget, and a delivery
+  /// session that has stopped must not leave either behind. What it does *not*
+  /// own is the coordinator — close 4001 refreshes, and close 4003 revokes,
+  /// through the one coordinator the whole application shares, so a socket
+  /// revocation terminates the REST session too.
+  DioWebSocketGateway realtimeGateway(RealtimeReconnectHook reconnectHook) =>
+      DioWebSocketGateway(
+        serverOrigin: _serverOrigin,
+        connector: _socketConnector,
+        tokenCoordinator: tokenCoordinator,
+        reconnectHook: reconnectHook,
+        diagnostics: _diagnostics,
+      );
 }

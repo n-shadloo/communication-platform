@@ -1,5 +1,6 @@
 import 'package:communication_platform/app/config/app_environment.dart';
 import 'package:communication_platform/app/config/app_environment_banner.dart';
+import 'package:communication_platform/app/dependencies/message_delivery.dart';
 import 'package:communication_platform/app/design_system/app_theme.dart';
 import 'package:communication_platform/app/design_system/app_tokens.dart';
 import 'package:communication_platform/app/routing/app_router.dart';
@@ -48,6 +49,7 @@ class _CommunicationPlatformAppState
   late final GoRouter _router;
   AuthenticationRouteState? _authenticationRouteState;
   ProviderSubscription<AuthenticationViewState>? _authenticationSubscription;
+  ProviderSubscription<MessageDeliveryStage>? _deliverySubscription;
 
   @override
   void initState() {
@@ -58,6 +60,18 @@ class _CommunicationPlatformAppState
       _authenticationSubscription = ref.listenManual(
         authenticationControllerProvider,
         (previous, next) => routeState.update(next),
+        fireImmediately: true,
+      );
+      // Message delivery is owned here, for the life of the application, and
+      // deliberately not by a screen. `listenManual` is what makes that true:
+      // subscriptions created in `build` are paused by Riverpod when their
+      // widget leaves the view, and a paused delivery controller would stop
+      // starting and stopping sessions the moment the user opened a route that
+      // covered this one. Reading it is what instantiates it; the controller
+      // itself decides when a session may run.
+      _deliverySubscription = ref.listenManual(
+        messageDeliveryControllerProvider,
+        (previous, next) {},
         fireImmediately: true,
       );
     }
@@ -76,6 +90,7 @@ class _CommunicationPlatformAppState
 
   @override
   void dispose() {
+    _deliverySubscription?.close();
     _authenticationSubscription?.close();
     _authenticationRouteState?.dispose();
     _router.dispose();
