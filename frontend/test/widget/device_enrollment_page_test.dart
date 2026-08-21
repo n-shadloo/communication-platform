@@ -198,7 +198,7 @@ void main() {
       expect(find.text('What this build is'), findsOneWidget);
       for (final fragment in const [
         'Nobody outside the project has reviewed',
-        'only while this app is open',
+        'only while it is running',
         'stored only on this phone',
         'never restores messages',
         'experimental encryption',

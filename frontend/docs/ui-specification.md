@@ -684,10 +684,19 @@ appear pinned in the Chats list.
 2. **Saved Messages** → §14.
 3. **Linked Devices** → §16.
 4. **Security & recovery** → Security settings (§15.2).
-5. **Notifications** — global notification/mute preferences (a client-side preference).
+5. **Notifications** — what the operating system will actually do, read from the operating
+   system rather than from a stored preference (ADR-048). Three states: **on**, with a line
+   stating that an alert says only that something arrived, never who sent it or what it
+   says, and that it can only reach the user while the app is running; **off**, with one
+   action that asks Android and falls through to this app's system notification settings
+   when asking changes nothing, because a second refusal is permanent and the app can no
+   longer prompt; and **not available in this build**, on any target with no alert
+   implementation behind it.
    **[PRIVACY]** Active-app delivery uses the self-hosted connection and Android
    background delivery is best-effort polling, **not** Google/Apple push. Do not offer
-   push-service or always-instant options.
+   push-service or always-instant options, and do not offer a decrypted-preview switch
+   without the reviewed bilingual lock-screen warning that has to accompany it. Per-
+   conversation mute already lives on the conversation, not here.
 6. **Appearance** — client-only display preferences (the option *set* is your call; no
    styling prescribed here).
 7. **Security notice** — re-open the honest boundary screen (§5).

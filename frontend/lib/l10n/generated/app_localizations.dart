@@ -284,6 +284,60 @@ abstract class AppLocalizations {
   /// **'Appearance'**
   String get settingsAppearanceTitle;
 
+  /// No description provided for @settingsNotificationsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Notifications'**
+  String get settingsNotificationsTitle;
+
+  /// No description provided for @settingsNotificationsOn.
+  ///
+  /// In en, this message translates to:
+  /// **'On. An alert says only that something arrived, never who sent it or what it says, and it can only reach you while this app is running.'**
+  String get settingsNotificationsOn;
+
+  /// No description provided for @settingsNotificationsOff.
+  ///
+  /// In en, this message translates to:
+  /// **'Off. Nothing will tell you a message arrived unless you are looking at the app.'**
+  String get settingsNotificationsOff;
+
+  /// No description provided for @settingsNotificationsUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Not available in this build.'**
+  String get settingsNotificationsUnavailable;
+
+  /// One action for every off state. Android shows its permission prompt when it still will, and this opens the system notification settings for this app when it will not, because a second refusal is permanent and the app can no longer prompt.
+  ///
+  /// In en, this message translates to:
+  /// **'Turn on'**
+  String get settingsNotificationsTurnOn;
+
+  /// Names the notification category in Android system settings for this app. Users adjust sound and importance there, so the name has to be recognisable out of context.
+  ///
+  /// In en, this message translates to:
+  /// **'Messages'**
+  String get notificationsChannelName;
+
+  /// No description provided for @notificationsChannelDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Tells you that something arrived. It never shows who sent it or what it says.'**
+  String get notificationsChannelDescription;
+
+  /// No description provided for @notificationsNewMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'New message'**
+  String get notificationsNewMessage;
+
+  /// The entire content of the alert. It names nobody and quotes nothing, so a lock screen, a heads-up over another app, and a notification-listener app all learn only that the app has something waiting.
+  ///
+  /// In en, this message translates to:
+  /// **'New messages'**
+  String get notificationsNewMessages;
+
   /// No description provided for @chatsPlaceholderTitle.
   ///
   /// In en, this message translates to:
@@ -875,7 +929,7 @@ abstract class AppLocalizations {
   /// No description provided for @disclosureForegroundDeliveryOnly.
   ///
   /// In en, this message translates to:
-  /// **'Messages arrive only while this app is open. There are no notifications and nothing runs in the background, so do not rely on it for anything urgent.'**
+  /// **'Messages arrive, and this app can alert you, only while it is running. Nothing runs in the background: once Android stops it, nothing arrives and nothing tells you until you open it again, so do not rely on it for anything urgent.'**
   String get disclosureForegroundDeliveryOnly;
 
   /// No description provided for @disclosureDeviceOnlyHistory.

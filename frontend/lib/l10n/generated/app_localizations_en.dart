@@ -109,6 +109,36 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsAppearanceTitle => 'Appearance';
 
   @override
+  String get settingsNotificationsTitle => 'Notifications';
+
+  @override
+  String get settingsNotificationsOn =>
+      'On. An alert says only that something arrived, never who sent it or what it says, and it can only reach you while this app is running.';
+
+  @override
+  String get settingsNotificationsOff =>
+      'Off. Nothing will tell you a message arrived unless you are looking at the app.';
+
+  @override
+  String get settingsNotificationsUnavailable => 'Not available in this build.';
+
+  @override
+  String get settingsNotificationsTurnOn => 'Turn on';
+
+  @override
+  String get notificationsChannelName => 'Messages';
+
+  @override
+  String get notificationsChannelDescription =>
+      'Tells you that something arrived. It never shows who sent it or what it says.';
+
+  @override
+  String get notificationsNewMessage => 'New message';
+
+  @override
+  String get notificationsNewMessages => 'New messages';
+
+  @override
   String get chatsPlaceholderTitle => 'Chats structure';
 
   @override
@@ -454,7 +484,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get disclosureForegroundDeliveryOnly =>
-      'Messages arrive only while this app is open. There are no notifications and nothing runs in the background, so do not rely on it for anything urgent.';
+      'Messages arrive, and this app can alert you, only while it is running. Nothing runs in the background: once Android stops it, nothing arrives and nothing tells you until you open it again, so do not rely on it for anything urgent.';
 
   @override
   String get disclosureDeviceOnlyHistory =>

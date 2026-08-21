@@ -489,6 +489,17 @@ class Messages extends Table {
   BoolColumn get starred => boolean().withDefault(const Constant(false))();
   BoolColumn get unread => boolean().withDefault(const Constant(false))();
 
+  /// Whether the user has already been alerted that this message arrived.
+  ///
+  /// Local, durable, and deliberately separate from [unread]: [unread] is what
+  /// the timeline and the conversation badge project, while this marks the
+  /// one-shot alert as spent. The isolate that alerts may not be the one that
+  /// comes back, so an in-memory flag would re-alert after every restart. A
+  /// projection rebuild writes messages through `insertOnConflictUpdate`, whose
+  /// companion omits this column and therefore leaves it unchanged - the same
+  /// mechanism that already preserves [starred].
+  BoolColumn get alerted => boolean().withDefault(const Constant(false))();
+
   @override
   Set<Column<Object>> get primaryKey => {messageId};
 }
@@ -989,7 +1000,7 @@ final class LocalDatabase extends _$LocalDatabase {
   LocalDatabase(super.executor, {StorageMigrationHooks? migrationHooks})
     : _migrationHooks = migrationHooks ?? const StorageMigrationHooks();
 
-  static const currentSchemaVersion = 11;
+  static const currentSchemaVersion = 12;
   final StorageMigrationHooks _migrationHooks;
 
   @override
@@ -1302,6 +1313,18 @@ final class LocalDatabase extends _$LocalDatabase {
               groupControlEvents,
               groupControlEvents.signerAuthenticationProof,
             );
+          }
+        }
+        if (from < 12) {
+          // Checked rather than assumed, like the schema-7 and schema-11 steps
+          // above: a database whose recorded version is behind its actual shape
+          // is a real condition, and an upgrade that fails on it leaves the
+          // application unable to open its own storage.
+          final columns = await customSelect(
+            'PRAGMA table_info(messages)',
+          ).map((row) => row.read<String>('name')).get();
+          if (!columns.contains(messages.alerted.$name)) {
+            await migrator.addColumn(messages, messages.alerted);
           }
         }
         await _migrationHooks.afterUpgrade(from, to);

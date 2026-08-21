@@ -15,6 +15,7 @@ import 'package:communication_platform/features/messaging/domain/conversation_mo
 import 'package:communication_platform/features/messaging/presentation/chat_timeline.dart';
 import 'package:communication_platform/features/messaging/presentation/chat_view_model_mapper.dart';
 import 'package:communication_platform/features/messaging/presentation/chat_view_models.dart';
+import 'package:communication_platform/features/messaging/presentation/visible_conversation.dart';
 import 'package:communication_platform/l10n/generated/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -555,17 +556,26 @@ class _ProjectedConversationPage extends ConsumerWidget {
         errorCode: 'local_history_unavailable',
       ),
     );
-    return ChatConversationView(
-      model: model,
-      peerUserId: peerUserId,
-      initialDraft: summary?.draft,
-      forwardTargets: forwardTargets,
-      onIntent: (intent) => _dispatch(
-        context,
-        ref,
-        intent,
+    // Registering visibility here rather than inside the view keeps it tied to
+    // the route that actually resolved a conversation identity, and to the
+    // identity it resolved. A message arriving into the conversation on screen
+    // has already made the user aware of itself; the alert path reads this so
+    // it does not announce what they are looking at.
+    return VisibleConversationScope(
+      registry: ref.watch(visibleConversationProvider),
+      conversationId: conversationId,
+      child: ChatConversationView(
         model: model,
-        currentUserId: currentUserId,
+        peerUserId: peerUserId,
+        initialDraft: summary?.draft,
+        forwardTargets: forwardTargets,
+        onIntent: (intent) => _dispatch(
+          context,
+          ref,
+          intent,
+          model: model,
+          currentUserId: currentUserId,
+        ),
       ),
     );
   }

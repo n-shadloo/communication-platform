@@ -84,7 +84,11 @@ is not called the production release.
   or OEM restrictions, and a force-stopped application is silent until it is opened again.
   A microphone foreground service is used only while voice audio is actively connected.
 - Notifications are a projection of committed local state, never of a transport event, and
-  are hidden-preview by default.
+  reveal nothing but that something arrived. One alert, sender-neutral, announced when
+  something unread and unannounced survives mute and the conversation on screen, and
+  withdrawn when nothing does — including when the user reads on another device (ADR-048).
+  Decrypted previews are not built, and an alert reaches the user only while the
+  application's process is alive.
 - A future closed browser cannot maintain the application WebSocket. Messages remain in
   the backend's durable device queue until the user returns.
 - A server able to replace a future web bundle can attack browser sessions. CSP and

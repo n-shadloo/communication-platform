@@ -1,12 +1,16 @@
 package com.example.communication_platform
 
+import android.Manifest
+import android.app.PendingIntent
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import android.provider.Settings
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyInfo
 import android.security.keystore.KeyProperties
@@ -16,6 +20,10 @@ import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 import java.io.File
 import java.io.FileOutputStream
+import androidx.core.app.ActivityCompat
+import androidx.core.app.NotificationChannelCompat
+import androidx.core.app.NotificationCompat
+import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.FileProvider
 import java.security.KeyStore
 import java.security.SecureRandom
@@ -28,6 +36,17 @@ import javax.crypto.spec.GCMParameterSpec
 
 class MainActivity : FlutterActivity() {
     private val channelName = "communication_platform/protected_storage"
+    private val messageAlertChannelName = "communication_platform/message_alerts"
+
+    // Stable for the life of the installation. The channel id keys the user's
+    // own sound and importance settings, so changing it would silently discard
+    // them; the tag and id are what make show and hide address one notification
+    // rather than accumulate a shade full of them.
+    private val messageAlertNotificationChannelId = "messages"
+    private val messageAlertTag = "message-alert"
+    private val messageAlertId = 1
+    private val notificationPermissionRequestCode = 9101
+    private var pendingNotificationPermission: MethodChannel.Result? = null
     private val keyAlias = "communication_platform_storage_wrap_v1"
     private val aad = "communication-platform:android-storage-key:v1".toByteArray(Charsets.UTF_8)
     private val wrappedKeyFile: File
@@ -76,6 +95,37 @@ class MainActivity : FlutterActivity() {
                     else -> result.notImplemented()
                 }
             }
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, messageAlertChannelName)
+            .setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "platformState" -> result.success(notificationPlatformState())
+                    "requestPermission" -> requestNotificationPermission(result)
+                    "show" -> {
+                        val title = call.argument<String>("title")
+                        if (title.isNullOrEmpty()) {
+                            result.error("invalid_argument", null, null)
+                        } else {
+                            showMessageAlert(
+                                title = title,
+                                channelName = call.argument<String>("channelName").orEmpty(),
+                                channelDescription =
+                                    call.argument<String>("channelDescription").orEmpty(),
+                            )
+                            result.success(null)
+                        }
+                    }
+                    "hide" -> {
+                        NotificationManagerCompat.from(this)
+                            .cancel(messageAlertTag, messageAlertId)
+                        result.success(null)
+                    }
+                    "openSystemSettings" -> {
+                        openNotificationSettings()
+                        result.success(null)
+                    }
+                    else -> result.notImplemented()
+                }
+            }
         MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
             "communication_platform/attachments",
@@ -116,6 +166,165 @@ class MainActivity : FlutterActivity() {
                 }
                 else -> result.notImplemented()
             }
+        }
+    }
+
+    // ---------------------------------------------------------------------
+    // Message alerts
+    //
+    // This side holds no policy and keeps no state about messages. It reports
+    // what Android says, posts the one reviewed sentence Dart hands it, and
+    // withdraws it. Nothing that identifies a conversation, a sender, or a
+    // message ever crosses the channel, so nothing of the sort can reach the
+    // system notification service, a notification listener, or a lock screen.
+    // ---------------------------------------------------------------------
+
+    private fun notificationPlatformState(): Map<String, Any> {
+        val runtimePermission = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
+        return mapOf(
+            "enabled" to NotificationManagerCompat.from(this).areNotificationsEnabled(),
+            "runtimePermission" to runtimePermission,
+            // True in exactly one situation: the user has refused once and not
+            // yet twice. Dart uses it to make sure an automatic prompt is never
+            // the refusal that makes the denial permanent.
+            "rationale" to (
+                runtimePermission &&
+                    ActivityCompat.shouldShowRequestPermissionRationale(
+                        this,
+                        Manifest.permission.POST_NOTIFICATIONS,
+                    )
+                ),
+        )
+    }
+
+    private fun requestNotificationPermission(result: MethodChannel.Result) {
+        val alreadyEnabled = NotificationManagerCompat.from(this).areNotificationsEnabled()
+        if (alreadyEnabled ||
+            Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+            pendingNotificationPermission != null
+        ) {
+            // Below Android 13 there is no runtime permission to request, and a
+            // second concurrent caller gets the current answer rather than a
+            // second dialog and a lost reply.
+            result.success(notificationPlatformState())
+            return
+        }
+        pendingNotificationPermission = result
+        try {
+            ActivityCompat.requestPermissions(
+                this,
+                arrayOf(Manifest.permission.POST_NOTIFICATIONS),
+                notificationPermissionRequestCode,
+            )
+        } catch (_: Exception) {
+            pendingNotificationPermission = null
+            result.success(notificationPlatformState())
+        }
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray,
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode != notificationPermissionRequestCode) {
+            return
+        }
+        // The answer is read back from the notification manager rather than from
+        // grantResults, which is empty when the dialog is dismissed without a
+        // choice, and which says nothing about a user who has notifications
+        // switched off for the whole application.
+        val pending = pendingNotificationPermission
+        pendingNotificationPermission = null
+        pending?.success(notificationPlatformState())
+    }
+
+    private fun showMessageAlert(
+        title: String,
+        channelName: String,
+        channelDescription: String,
+    ) {
+        val notifications = NotificationManagerCompat.from(this)
+        if (!notifications.areNotificationsEnabled()) {
+            return
+        }
+        notifications.createNotificationChannel(
+            NotificationChannelCompat
+                .Builder(
+                    messageAlertNotificationChannelId,
+                    NotificationManagerCompat.IMPORTANCE_HIGH,
+                )
+                // Name and description are re-supplied on every post so a change
+                // of device language reaches the system settings screen. The
+                // importance is only honoured at creation: the user owns it
+                // afterwards, which is the correct division.
+                .setName(channelName)
+                .setDescription(channelDescription)
+                .setVibrationEnabled(true)
+                .build(),
+        )
+        notifications.notify(messageAlertTag, messageAlertId, messageAlert(title))
+    }
+
+    private fun messageAlert(title: String): android.app.Notification =
+        alertBuilder(title)
+            .setContentIntent(launchPendingIntent())
+            .setAutoCancel(true)
+            // Android 15 and above replaces notification content during screen
+            // sharing with the public version when one exists, and redacts it
+            // without any context when one does not. The public version here is
+            // the same sentence, because the sentence was written to be safe in
+            // front of anyone.
+            .setPublicVersion(alertBuilder(title).build())
+            .build()
+
+    private fun alertBuilder(title: String): NotificationCompat.Builder =
+        NotificationCompat.Builder(this, messageAlertNotificationChannelId)
+            .setSmallIcon(R.drawable.ic_message_alert)
+            .setContentTitle(title)
+            .setCategory(NotificationCompat.CATEGORY_MESSAGE)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
+            // The arrival time is not shown. It is not needed to act on the
+            // alert, and it is one more thing a lock screen would tell someone
+            // holding the phone.
+            .setShowWhen(false)
+
+    private fun launchPendingIntent(): PendingIntent {
+        // Deliberately the launcher intent and nothing else: no destination, no
+        // extras, no identifier. Tapping the alert opens the application exactly
+        // as its icon would, and the routing guards already in the application
+        // decide what may be shown, so there is no payload for a notification
+        // listener to read and none for anything to forge.
+        val intent =
+            packageManager.getLaunchIntentForPackage(packageName)
+                ?: Intent(this, MainActivity::class.java).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+        return PendingIntent.getActivity(
+            this,
+            0,
+            intent,
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
+    }
+
+    private fun openNotificationSettings() {
+        val intent =
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                    .putExtra(Settings.EXTRA_APP_PACKAGE, packageName)
+            } else {
+                Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
+                    .setData(Uri.fromParts("package", packageName, null))
+            }
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        try {
+            startActivity(intent)
+        } catch (_: Exception) {
+            // A device with no settings activity for this leaves the user where
+            // they were rather than crashing the application.
         }
     }
 

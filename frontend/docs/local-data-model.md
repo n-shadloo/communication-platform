@@ -44,7 +44,7 @@ Names are conceptual; migrations may refine physical layout without changing own
 | `group_outbound_objects` | Exact prepared opaque group object and send-readiness state; piece 18 never marks development preview data production-ready |
 | `conversations` | DM/group/saved identity and list projection |
 | `memberships` | Decrypted current group roles/policy projection |
-| `messages` | Current logical message projection and status |
+| `messages` | Current logical message projection and status, plus local-only flags the projector preserves rather than rebuilds: `deleted_for_me`, `pinned`, `starred`, `unread`, and `alerted` (the durable one-shot marker that stops an arrival being announced twice, ADR-048) |
 | `message_events` | Immutable create/edit/delete/reaction/control facts |
 | `attachments` | Encrypted descriptor, transfer state, bounded cache handle |
 | `inbox_envelopes` | Backend envelope ID/seq, processing and ack state |
@@ -53,7 +53,7 @@ Names are conceptual; migrations may refine physical layout without changing own
 | `voice_rooms` | Local room capability, encrypted metadata, live state |
 | `history_transfers` | Device-to-device content transfer manifests, event progress, source completeness |
 | `sync_checkpoint` | Highest contiguous acked seq, `pruned_through`, ETags, retry state, protocol version |
-| `local_preferences` | Theme, language, mute, pin, star, preview policy |
+| `local_preferences` | Theme, language, mute, pin, star, preview policy, and whether the notification permission prompt has ever been shown |
 | `quarantine` | Bounded metadata about rejected input; never plaintext or raw secrets |
 
 ## Identity and uniqueness

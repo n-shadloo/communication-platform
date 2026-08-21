@@ -539,6 +539,67 @@ void main() {
       await upgraded.close();
     },
   );
+
+  // Schema 12 adds the durable one-shot alert marker. An upgrade must leave
+  // every existing message unalerted rather than alerted: a marker fabricated
+  // as spent would silence the first message an upgraded install receives,
+  // while an unspent marker on an old message costs at most one alert saying
+  // something is waiting, which is true.
+  test('version-eleven upgrade adds an unspent alert marker', () async {
+    final current = LocalDatabase(NativeDatabase(databaseFile));
+    await current.customSelect('SELECT 1').getSingle();
+    await current.close();
+
+    final versionEleven = sqlite3.open(databaseFile.path)
+      ..execute('ALTER TABLE messages DROP COLUMN alerted')
+      ..execute(
+        'INSERT INTO conversations (conversation_id, kind, '
+        'list_projection_ciphertext, sort_key) VALUES (?, ?, ?, ?)',
+        <Object?>[
+          'conversation-v11',
+          0,
+          Uint8List.fromList(const [1]),
+          0,
+        ],
+      )
+      ..execute(
+        'INSERT INTO messages (message_id, conversation_id, current_event_id, '
+        'projection_ciphertext, status, revision, created_at, unread) '
+        'VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+        <Object?>[
+          'message-v11',
+          'conversation-v11',
+          'event-v11',
+          Uint8List.fromList(const [2]),
+          4,
+          0,
+          0,
+          1,
+        ],
+      )
+      ..execute('PRAGMA user_version = 11');
+    versionEleven.close();
+
+    final upgraded = LocalDatabase(NativeDatabase(databaseFile));
+    final row = await upgraded
+        .customSelect("SELECT * FROM messages WHERE message_id = 'message-v11'")
+        .getSingle();
+
+    expect(row.read<int>('alerted'), 0);
+    expect(
+      row.read<int>('unread'),
+      1,
+      reason: 'the upgrade adds a column and rewrites no projection',
+    );
+    expect(
+      await upgraded
+          .customSelect('PRAGMA user_version')
+          .map((row) => row.read<int>('user_version'))
+          .getSingle(),
+      LocalDatabase.currentSchemaVersion,
+    );
+    await upgraded.close();
+  });
 }
 
 void _dropPieceFourteenSchema(Database database) {

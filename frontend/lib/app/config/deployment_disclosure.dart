@@ -37,8 +37,11 @@ enum DisclosurePoint {
   /// open for every layer, pairwise included.
   noIndependentReview,
 
-  /// `AndroidPollingScheduler` is a port with no adapter and no notification
-  /// dependency is declared, so delivery happens only while the app runs.
+  /// The composed build delivers and alerts only while its process is alive:
+  /// `AndroidPollingScheduler` still has no adapter, no service is declared,
+  /// and nothing re-arms after Android stops the app. Revised at revision 2,
+  /// when alerts stopped being absent and started being foreground-bound
+  /// (ADR-048).
   foregroundDeliveryOnly,
 
   /// The server stores no history, `allowBackup` is false and the database key
@@ -88,7 +91,7 @@ final class DeploymentDisclosure {
 
   /// The statement carried by the Private Experimental artifact (ADR-044).
   static const privateExperimental = DeploymentDisclosure._(
-    revision: 1,
+    revision: 2,
     points: [
       DisclosurePoint.noIndependentReview,
       DisclosurePoint.foregroundDeliveryOnly,

@@ -1,5 +1,6 @@
 import 'package:communication_platform/app/config/app_environment.dart';
 import 'package:communication_platform/app/config/app_environment_banner.dart';
+import 'package:communication_platform/app/dependencies/message_alerts.dart';
 import 'package:communication_platform/app/dependencies/message_delivery.dart';
 import 'package:communication_platform/app/design_system/app_theme.dart';
 import 'package:communication_platform/app/design_system/app_tokens.dart';
@@ -50,6 +51,7 @@ class _CommunicationPlatformAppState
   AuthenticationRouteState? _authenticationRouteState;
   ProviderSubscription<AuthenticationViewState>? _authenticationSubscription;
   ProviderSubscription<MessageDeliveryStage>? _deliverySubscription;
+  ProviderSubscription<MessageAlertStage>? _alertSubscription;
 
   @override
   void initState() {
@@ -74,6 +76,15 @@ class _CommunicationPlatformAppState
         (previous, next) {},
         fireImmediately: true,
       );
+      // Alerts are owned here for the same reason and by the same mechanism,
+      // and separately from delivery: a delivery session that fails to compose
+      // still leaves messages in the database that arrived before it and have
+      // never been announced.
+      _alertSubscription = ref.listenManual(
+        messageAlertControllerProvider,
+        (previous, next) {},
+        fireImmediately: true,
+      );
     }
     _router = createAppRouter(
       environment: widget.environment,
@@ -90,6 +101,7 @@ class _CommunicationPlatformAppState
 
   @override
   void dispose() {
+    _alertSubscription?.close();
     _deliverySubscription?.close();
     _authenticationSubscription?.close();
     _authenticationRouteState?.dispose();

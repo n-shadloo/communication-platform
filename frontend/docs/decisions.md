@@ -58,6 +58,438 @@ is not silently edited out of history.
 
 | ADR-046 | Accepted | Background message delivery is layered — a composed foreground socket, a best-effort WorkManager floor, and an opt-in `specialUse` foreground service holding the same connection — and a notification is a projection of committed local state, never of the transport; supersedes ADR-029 (2026-08-21) | ADR-029 chose best-effort polling and no persistent service. Inspection of the composed artifact found something else entirely: `SyncLifecycleSupervisor`, `DioWebSocketGateway`, `GatewayRealtimeSyncAdapter` and `NetworkingFoundation` exist, are tested, and are constructed **only in tests**, and `durableSyncEngineProvider` is read by nothing, so the shipped build neither drains its mailbox nor transmits its outbox — `SendConversationEvents` ends at `fanout.prepareAndQueue` and the rows stay there. ADR-045's disclosure "messages arrive only while this app is open" is therefore wrong in the user's favour and is corrected here. On the platform, primary sources read 2026-08-21 leave a narrow design space: a backgrounded process is cached, and "if all processes for a particular app are frozen, the system terminates any active TCP sockets maintained by the app", so an unattended socket is closed rather than slow; `WorkManager`'s floor is 15 minutes, Doze defers `JobScheduler` to maintenance windows that thin out over time, Android 16 enforces job quota even in the active standby bucket, and the *rare* and *restricted* buckets disable background network outright, so deferrable work can only ever be *eventual*; while-idle alarms buy six minutes of best-case cadence for a user-revocable `SCHEDULE_EXACT_ALARM` and still wake an app that has no network. The one documented state with unrestricted background network is "app process is running a foreground service", and Android's own Doze acceptable-use table rates the battery-optimization exemption **Acceptable** for an "instant messaging, chat, or calling app" that "can't use FCM because of technical dependency", which is this application exactly — the exemption granting that an app "can use the network and hold partial wake locks during Doze and App Standby" and being itself an exemption from the Android 12 background FGS-start restriction. The type is `specialUse` with a truthful subtype property, because `dataSync` is capped at 6 h/24 h and barred from `BOOT_COMPLETED` at `targetSdk` 35+, `remoteMessaging` means device-to-device continuity, and `systemExempted` is gated on roles this app lacks; the existing test forbidding `remoteMessaging` and `FOREGROUND_SERVICE_DATA_SYNC` in the manifest stands unchanged. Exactly one delivery owner runs at a time, held as a durable Drift lease rather than an in-memory flag, because concurrent isolates would race a *rotating* refresh token and can invalidate the session. Notifications fire only from the existing `PostInboxCommitWorkPort` after the inbox transaction commits, deduplicated by a durable `notified_at`, recovered by query rather than replay, and bounded by a grouped summary. Reliability is stated in four tiers and never as a guarantee: near-real-time foregrounded; near-real-time best-effort backgrounded when the user has granted the exemption and their vendor cooperates; eventual otherwise, and nothing at all in the *rare* and *restricted* buckets; and nothing whatsoever after force-stop, which no design can change. The costs are accepted and disclosed: a persistent shade entry that makes the app observable on the device, real battery use, two permissions, and per-vendor setup on the 77% of the Iranian fleet that is Samsung or Xiaomi (Statcounter, July 2026). Layer 2 ships off by default and may not be enabled in any distributed artifact before the physical-device matrix runs; UnifiedPush was rejected because the backend has no push endpoint and may not be changed, it needs a second app and a second service per user, and it moves message-timing metadata outside the reviewed boundary without removing the Android constraint; SMS wake was rejected outright for binding accounts to carrier-held phone numbers. No experiment was run: only Play-Store emulator images without root were available and no Samsung or Xiaomi hardware, so a local result would have proved nothing about the fleet that matters. Reaffirms ADR-013, opens no production gate, changes no cryptographic behaviour, and adds no dependency by itself. |
 | ADR-047 | Accepted | The delivery path is composed at the application root, on the one networking foundation, and a send is a durable write the supervisor observes rather than a call it receives (2026-08-21) | Implements ADR-046's Layer 0 and closes its follow-up step 1. **The two composition roots are resolved into one**: `AuthenticationAssembly` owns a single `NetworkingFoundation` — one `DioRestClient`, one `TokenCoordinator`, one provisioned `SecurityContext` — and the socket is built from it by `NetworkingFoundation.realtimeGateway`, so close 4001 refreshes and close 4003 revokes through the coordinator the whole application shares. A second coordinator was rejected outright: both would rotate the same refresh token and the loser would present one the server has already retired, ending the session for both. `NetworkingFoundation` was dead code and, contrary to ADR-046's inventory, had no tests at all; it is kept and made live rather than deleted, because the role its name claims is the role the application needs. **Ownership sits at the application root**, as a Riverpod notifier the root holds through `listenManual`: `flutter_riverpod` 3.3.2 pauses subscriptions created in `build` when their widget leaves the view (`ConsumerStatefulElement._applyTickerMode`, verified in the pinned source), so a screen-owned or `ref.watch`-owned controller would silently stop managing sessions when a route covered it, while `listenManual` subscriptions are never ticker-mode managed. Exactly one session runs at a time, serialized on one transition queue with the wanted scope re-checked after every await; the durable cross-isolate lease ADR-046 requires is not built and is not yet needed, because this stage composes exactly one isolate. A session runs only for `fullScope`/`offlineFullScope` and stops when logout *begins*, because `TokenCoordinator.logout` wipes protected storage and closes the database before it emits the termination a completion-triggered stop would wait for. **A send is not a call into the supervisor**: composers write exact per-recipient ciphertext into `outbox_operations` and return, and the supervisor requests a cycle when the durable projection's outbox depth *increases*. Reacting to depth being non-zero was rejected — every engine run rewrites the connection phase and re-emits the projection, so it spins against a row waiting out its backoff (demonstrated: the rule inverted makes the loop-safety test hang) — and an in-memory trigger port was rejected for needing cross-feature wiring that the durable queue already provides, and for not surviving a restart. Two platform edges were corrected because they neutralised the composed path: Flutter leaves `WidgetsBinding.lifecycleState` null until the first `SystemChannels.lifecycle` message and documents the initial value as detached "updated to the current state (usually resumed) as soon as the first lifecycle update is received", so reading "not yet reported" as background made a session started at launch stand itself down and never connect; and connectivity_plus documents that Android 8.0+ does not deliver connectivity changes to a backgrounded app and that status should be re-checked on resume, so a cached *unavailable* could outlive the outage and block foreground reconnect. Connectivity, lifecycle, wall-clock delay and the deferred scheduler are resolved and released together as one `DeliveryPlatformPorts`, which is also what lets a test drive the real supervisor without a device. This build composes `UnscheduledBestEffortPolling`, which schedules nothing and emits nothing: ADR-046's Layers 1 to 3 stay unbuilt, a backgrounded application still performs no catch-up, and ADR-045's `foregroundDeliveryOnly` disclosure — previously wrong in the user's favour — is now true, so its revision does not move. Adds no dependency, changes no cryptographic behaviour, opens no production gate, and leaves the Beta/Production boundary untouched: the engine's group stack still resolves through the compile-time permit, and the production artifact verifies unsigned and free of the beta MLS symbol. |
+| ADR-048 | Accepted | The user is told a message arrived by one sender-neutral system notification that is a reconciliation of committed local state, not an event; amends ADR-046's Layer 3 and ADR-045's delivery disclosure (2026-08-21) | ADR-046 sketched Layer 3 in three sentences and ADR-047 built the delivery path under it; inspection of the composed artifact found no notification port, adapter, channel or dependency of any kind, and two things that change what could honestly be built — a message arriving into the conversation on screen is still marked unread, because `ChatConversationView` marks read exactly once from `initState`, so `messages.unread` alone cannot answer "is the user looking at this"; and inbound **group** messages set no unread state at all, because `commitMessageInsideTransaction` writes neither `unread` nor `unread_count`, which is a piece-18 gap left unfixed here because `GroupChatPage` also never marks a group read. Three of ADR-046's Layer 3 details are amended on evidence. **One aggregate notification, not bounded individual ones plus a summary**: with a sender-neutral preview, N notifications are N copies of one sentence, and the only thing they add is a per-message or per-conversation identifier visible to `system_server` and to any app holding notification access — which the threat model's "person with filesystem access to a locked device" adversary and its protection of "notification previews" both weigh against; `MessagingStyle` and conversation shortcuts were rejected outright for publishing a pseudonymous per-contact identifier into the launcher, and an unspecified per-package cap (AOSP near 50, OEM-variable, unqueryable) makes any count-growing design unspecified. **A reconciliation of durable state, not an emission from `PostInboxCommitWorkPort`**: that hook fires only when the engine runs, so it can announce but never *withdraw*, and read-elsewhere, withdrawn-by-sender, conversation-opened and mute are all changes to committed state that no post-drain hook observes; drift dispatches table updates only after `COMMIT` (`Transaction.complete()` precedes `disposeChildStreams()`, verified in pinned 2.34.2 source), so a stream over `messages` and `conversations` is a strictly post-commit trigger and preserves ADR-046's actual principle more directly than the hook did. **A boolean `messages.alerted` (schema 12), not `notified_at`**: nothing reads the time, and it survives projection rebuilds because the projector upserts with a companion that omits the column, the same mechanism that already preserves `starred`. Content is `New message` / `New messages` and nothing else — no sender, conversation, text, count or timestamp — `VISIBILITY_PRIVATE` with a matching `setPublicVersion`, because Android 15 shows that during screen sharing and otherwise redacts "without any further context". Tapping carries the launcher intent alone under `FLAG_IMMUTABLE`: no destination, no extra, no identifier, so there is nothing to forge and no path around the routing guards. Deliberate silence (muted, on screen) still spends the marker so it cannot surface late; a platform refusal spends nothing, so granting later announces the backlog. "On screen" requires a mounted route **and** a foregrounded application, with an unreported lifecycle read as foreground for ADR-047's reason. One automatic `POST_NOTIFICATIONS` prompt at the point of use, guarded by a durable marker and by `shouldShowRequestPermissionRationale` — true in exactly the one state where a second refusal would make the denial permanent — so the app never nags and never spends the user's last prompt. No dependency: `flutter_local_notifications` 22.3.0 would work but every API needed is in `androidx.core:core:1.16.0`, already declared for `FileProvider`, so the platform half is app-owned Kotlin behind a port that carries no identifier and holds no policy. Only `POST_NOTIFICATIONS` and `VIBRATE` are added; a new architecture test forbids every foreground-service, boot, exact-alarm and SMS permission while ADR-046's Layers 1 and 2 stay unbuilt. Reliability is unchanged and stated: an alert reaches the user only while the process is alive, so ADR-045's `foregroundDeliveryOnly` — which said "There are no notifications" — is now false, its revision moves 1 → 2, and re-delivering the written handover becomes release-blocking. The Kotlin half is **unmeasured**: no rooted image and no signed-in session are reachable from this workstation, so what the notification looks like on a device is a release gate, not a claim. Full reasoning in "ADR-048 in full" below. Opens no production gate and changes no cryptographic behaviour. |
+
+## ADR-048 in full — how the user finds out a message arrived (2026-08-21)
+
+### The question
+
+A message has been drained, authenticated, decrypted and committed to this device's
+database. The user is not looking at that conversation. **How do they find out — once,
+correctly, and without being told anything untrue?**
+
+ADR-046 answered the surrounding question, "how does a backgrounded client learn an
+envelope is waiting", and sketched an answer to this one in three sentences of its
+Layer 3. ADR-047 built its Layer 0. This decision is the piece in between: the one that
+turns a committed row into something a person notices. Nothing was assumed — not the
+presentation mechanism, not the trigger point, not the marker, not the dependency, and
+not ADR-046's own sketch.
+
+### What the repository actually did before
+
+Verified in the composed application on 2026-08-21, not in its documentation:
+
+| Component | Existed | Reachable at runtime |
+|---|---|---|
+| Delivery path (socket, engine, drain, commit) | yes | **yes**, since ADR-047 |
+| `messages.unread` written inside the inbox transaction | yes | yes |
+| `conversations.unread_count`, `muted_until` | yes | yes |
+| Any notification port, adapter, channel or dependency | **no** | no |
+| Any record of which conversation is on screen | **no** | no |
+
+So the delivery half was real and the alert half did not exist in any form. Two further
+findings came out of that inspection and are recorded here because they change what could
+honestly be built:
+
+1. **A message that arrives while its conversation is on screen is still marked unread.**
+   `ChatConversationView` marks a conversation read exactly once, from a post-frame
+   callback in `initState`. Nothing re-marks it while the route stays mounted. So
+   `messages.unread` alone cannot answer "is the user looking at this", and an alert path
+   that assumed it could would announce messages the user was watching arrive.
+2. **Inbound group messages set no unread state at all.**
+   `DriftGroupRepository.commitMessageInsideTransaction` inserts into `messages` without
+   `unread` and updates `conversations` without `unread_count`, so a group message leaves
+   no unread trace anywhere. This is a pre-existing gap in the piece-18 group projection,
+   not in this one; its consequence for this decision is stated under *Known limitations*
+   and it is deliberately **not** fixed here, because `GroupChatPage` also never marks a
+   group read, so setting the flag would produce a badge nothing could clear.
+
+### Research findings
+
+All read at primary source on 2026-08-21, against `minSdk` 24 / `targetSdk` 36 /
+`compileSdk` 36 as pinned by Flutter 3.44.7.
+
+**Notifications need a runtime permission that can be refused, and refused permanently.**
+`POST_NOTIFICATIONS` arrived in Android 13 (API 33); "if a user installs your app on a
+device that runs Android 13 or higher, your app's notifications are off by default", and
+on refusal "your app can't send notifications unless it qualifies for an exemption. All
+notification channels are blocked"
+([notification permission](https://developer.android.com/develop/ui/views/notifications/notification-permission)).
+An app targeting 33+ "has complete control over when the permission dialog is displayed" —
+and that control is finite: "if the user taps Deny for a specific permission more than once
+during your app's lifetime of installation on a device, the user will no longer see the
+system permissions dialog if your app requests that permission again. The user's action
+implies 'don't ask again,' and is considered a permanent denial"
+([requesting permissions](https://developer.android.com/training/permissions/requesting)).
+`shouldShowRequestPermissionRationale` is false both *before* the first request and *after*
+the permanent denial, so the platform cannot distinguish those two states for the
+application.
+
+**Every notification needs a channel, and its behaviour is the user's after the first
+post.** Channels are mandatory from Android 8.0 (API 26): "if you target Android 8.0 (API
+level 26) or higher and post a notification without specifying a notification channel, the
+notification doesn't appear and the system logs an error". "After you create a notification
+channel, you can't change the notification behaviors. The user has complete control at that
+point. However, you can still change a channel's name and description"
+([channels](https://developer.android.com/develop/ui/views/notifications/channels)).
+The platform source for `NotificationChannel` in the API 35 SDK confirms the constructor
+defaults this decision relies on: `mSound = Settings.System.DEFAULT_NOTIFICATION_URI`,
+`mVibrationEnabled = false`, `mLights = false`, `mShowBadge = true`, and
+`mLockscreenVisibility = VISIBILITY_NO_OVERRIDE` — so a per-notification visibility is what
+actually applies. `enableVibration(boolean)` carries no `@RequiresPermission` annotation.
+
+**What a lock screen shows is the application's choice.** `setVisibility()` takes
+`VISIBILITY_PUBLIC` ("the notification's full content shows on the lock screen"),
+`VISIBILITY_PRIVATE` ("only basic information, such as the notification's icon and the
+content title") or `VISIBILITY_SECRET` ("no part of the notification shows on the lock
+screen")
+([create a notification](https://developer.android.com/develop/ui/views/notifications/build-notification)).
+Android 15 adds a second consumer of the same mechanism: "notification content is hidden
+during screen sharing sessions to preserve the user's privacy. If the app implements
+`setPublicVersion()`, Android shows the public version of the notification which serves as
+a replacement notification in insecure contexts. Otherwise, the notification content is
+redacted without any further context"
+([Android 15 behavior changes](https://developer.android.com/about/versions/15/behavior-changes-all)).
+
+**Tapping must go through a `PendingIntent`, and it must be immutable.** "Apps that target
+Android 12 or higher can't start activities from services or broadcast receivers that are
+used as notification trampolines", and "if your app targets Android 12, you must specify the
+mutability of each `PendingIntent` object that your app creates"
+([Android 12 behavior changes](https://developer.android.com/about/versions/12/behavior-changes-12)).
+
+**More than one notification is a shade full of them.** "If your app sends four or more
+notifications and doesn't specify a group, the system automatically groups them on Android
+7.0 and higher", and grouping requires the app to build and maintain a summary
+notification; "you always need to manually set a summary to enable grouped notifications"
+([grouped notifications](https://developer.android.com/develop/ui/views/notifications/group)).
+Conversation notifications go further still: "**MessagingStyle**: … Your notifications must
+be created with this style to use Android's conversation features", together with long-lived
+share shortcuts
+([conversations](https://developer.android.com/social-and-messaging/guides/communication/notifications-conversations)).
+The per-package notification cap is not a documented API — `NotificationManagerService`
+carries a constant near 50, OEMs vary it, and there is no way to query it — so a design
+whose count grows with traffic is a design whose behaviour is unspecified. Android also
+rate-limits: updates posted many times in less than a second may be dropped, and from
+Android 8.1 an app "cannot make a notification sound more than once per second".
+
+**Android 16 introduces nothing here.** Its all-apps behaviour changes cover JobScheduler
+quota, broadcasts, ART, 16 KB pages, accessibility announcements, navigation, themed icons,
+intent redirection and Bluetooth; none of them touches posting, channels, ranking or the
+permission
+([Android 16 behavior changes](https://developer.android.com/about/versions/16/behavior-changes-all)).
+
+**The dependency question answers itself.** `flutter_local_notifications` 22.3.0 (pub.dev,
+read 2026-08-21) is current, requires Flutter 3.38.1 or newer, needs no Firebase and no
+Play services — it would work. But `NotificationCompat`, `NotificationManagerCompat`,
+`NotificationChannelCompat` and `ActivityCompat` all live in `androidx.core:core`, which
+this build **already declares at 1.16.0** for `FileProvider`, and `MainActivity` already
+owns two method channels. Every API this decision needs is therefore already on the
+classpath.
+
+### Alternatives evaluated
+
+**Presentation.**
+
+**1 — Nothing; rely on the unread badge (the status quo).** Costs no permission, leaks
+nothing, needs no platform code. Rejected: it answers "how does a user who opens the app
+find out" and the question is about a user who does not.
+
+**2 — An in-app banner only.** Correct and free while the app is foregrounded, and worth
+having later. Rejected as the answer, because it says nothing to a user who has switched to
+another app, which is most of the window in which delivery still works.
+
+**3 — One notification per message, bounded, plus a group summary.** This is the shape
+ADR-046 sketched. Rejected on the evidence above. With a sender-neutral preview, N
+notifications are N copies of one sentence, so the only thing they add over one
+notification is a per-message identifier visible to the system notification service and to
+any application the user has granted notification access. They also drag in summary
+management, automatic-grouping differences across OEMs, and an unspecified per-package cap.
+
+**4 — One notification per conversation, with `MessagingStyle` and conversation
+shortcuts.** The mainstream messenger design, and the one Android optimises for. Rejected
+squarely on the threat model. It requires a stable per-conversation notification id and a
+long-lived share shortcut, which publish a pseudonymous per-contact identifier into
+`system_server` and the launcher, where they persist and can be correlated over time by
+anything holding notification access. `MessagingStyle` exists to show senders and message
+text. The threat model names "a person with filesystem access to a locked but otherwise
+uncompromised Android device" as an adversary and lists "notification previews" among
+protected assets; this option trades directly against both, and buys a per-conversation tap
+target that a sender-neutral alert cannot use anyway.
+
+**5 — One aggregate notification, sender-neutral, tapping to the launcher. Selected.**
+One id, one tag, one channel, one sentence. See below.
+
+**6 — Full previews (sender and message text) by default.** Rejected. It is the single
+change that would most improve the experience and it is the wrong default for a deployment
+of 20–30 people in Iran, where a name on a lock screen implicates two people rather than
+one. Not shipped even as an opt-in in this piece: the switch is small, but the reviewed
+bilingual warning around it is not, and adding a way for a user to make themselves less
+safe is not a good use of the first notification release. Recorded as follow-up.
+
+**Trigger.**
+
+**7 — Emit from `PostInboxCommitWorkPort`, as ADR-046 specified.** It is a real
+post-commit hook and it would work for the announce case. Rejected as the whole answer:
+it fires only when the sync engine runs, so it cannot *withdraw*. A user who opens the app
+and reads a conversation, or who reads it on another device, leaves the alert standing in
+the shade until the next drain. Every question this piece has to answer that is not
+"announce" — read elsewhere, withdrawn by its sender, conversation opened, mute applied —
+is a change to committed state that no post-drain hook observes.
+
+**8 — Reconcile from a durable-state signal. Selected.** Drift buffers table updates
+inside a transaction and dispatches them to the parent stream store only after `COMMIT`
+(`Transaction.complete()` runs before `disposeChildStreams()`, verified in the pinned
+drift 2.34.2 source), so a stream over `messages` and `conversations` is a strictly
+post-commit trigger. This preserves ADR-046's actual principle — an alert is a projection
+of committed local state and never of a transport event — more directly than the hook did,
+and it makes withdrawal fall out of the same rule as announcement.
+
+**Marker.**
+
+**9 — `notified_at` timestamp, per ADR-046.** Rejected in favour of a boolean
+`messages.alerted`. Nothing in the design reads the time, a timestamp would be one more
+wall-clock value to reason about under skew, and a column nothing reads is a column that
+will eventually be read for the wrong reason.
+
+**Dependency.**
+
+**10 — `flutter_local_notifications` 22.3.0.** Rejected: it would add a maintained
+dependency, a plugin registration, and a second scheduling/timezone surface, to reach APIs
+already on the classpath through `androidx.core:core:1.16.0`. ADR-046 step 8 stated the
+preference for app-owned Kotlin behind a port for exactly this surface, and the evidence
+supports it. No dependency is added by this decision.
+
+### Decision
+
+**The user is told by one system notification that says only that something arrived, and
+that notification is a reconciliation of committed local state rather than an event.**
+
+**One alert.** A single notification, fixed id and tag, in one channel whose id
+(`"messages"`) is frozen for the life of the installation because it keys the user's own
+sound and importance settings. Its entire content is `New message` or `New messages` —
+grammatical number and nothing else. No sender, no conversation, no text, no count, no
+timestamp (`setShowWhen(false)`). It is `VISIBILITY_PRIVATE` and supplies a
+`setPublicVersion` carrying the same sentence, so a lock screen and a screen-sharing
+session show exactly what the application chose rather than whatever the system's own
+redaction produces.
+
+**Tapping carries nothing.** The content intent is the launcher intent obtained from
+`getLaunchIntentForPackage`, wrapped `FLAG_IMMUTABLE`, with `setAutoCancel(true)`. There is
+no destination, no extra, and no identifier — so there is nothing to validate, nothing to
+forge, and no path that could bypass the routing guards that already stand between an entry
+point and content. Tapping opens the application exactly as its icon does, and the guards
+decide what may be shown.
+
+**A reconciliation, not an emission.** Each pass reads the committed rows that are unread,
+not deleted for this device, not withdrawn by their sender, and not in Saved Messages;
+subtracts the muted conversations and the conversation currently on screen; and brings the
+shade into agreement with what is left. Announce when something un-alerted survives that
+subtraction, withdraw when nothing survives it at all. Every hard case falls out of that
+one rule instead of needing its own.
+
+**Idempotence is durable.** `messages.alerted` (schema 12) is spent in the same pass that
+posts. It survives a projection rebuild because the projector writes messages through
+`insertOnConflictUpdate` with a companion that omits the column — drift documents that
+"columns from the old row that are not present on [entity] are unchanged" — the same
+mechanism that already preserves `starred`. It is written *after* a successful post, never
+before: a crash in between costs one repeated alert on the same notification id, while the
+opposite order costs a message the user is never told about.
+
+**Deliberate silence still spends the marker.** A message suppressed because its
+conversation is muted or on screen is marked alerted without being announced. Without that,
+leaving the conversation or outliving the mute would produce a late alert for something the
+user has already seen or has asked not to hear about.
+
+**What could not be delivered is not spent.** When the platform refuses — no permission, no
+implementation, a failed post — no marker is spent, so granting permission later announces
+the backlog instead of losing it.
+
+**"On screen" is a conjunction.** `VisibleConversationRegistry` reports a conversation only
+when its route is mounted *and* the application is in the foreground. A chat route left
+mounted behind a backgrounded application is not something anyone is looking at. An
+unreported lifecycle state at launch is read as foreground, for the same reason ADR-047
+gave: Flutter leaves `lifecycleState` null until the first platform message, and the
+opposite reading would silence every alert until one arrives.
+
+**One automatic prompt, at the point of use, guarded twice.** The permission is requested
+the first time a message is waiting that cannot be announced, and only while the
+application is foregrounded, because the prompt belongs to an activity the user is looking
+at. It is guarded by a durable marker in `local_preferences` — which stops it repeating on
+every launch — and by Android's own `shouldShowRequestPermissionRationale`, which is true
+in exactly one situation, the user has refused once and not yet twice. Honouring the second
+guard means an automatic prompt can never be the refusal that makes the denial permanent,
+and it means a refusal the user made from Settings is respected even though Settings writes
+no marker of its own.
+
+**Settings states the truth and offers one action.** The row reads the operating system,
+not the application's beliefs, and shows three states: on, off, or not available in this
+build. When off, one button asks Android, and falls through to this application's own
+notification settings screen when asking changed nothing — so one tap always ends somewhere
+the user can act, and never on a button that silently does nothing.
+
+**The platform side holds no policy.** `MainActivity` gains one method channel that reports
+what Android says, posts the sentence Dart hands it, withdraws it, and opens the settings
+screen. Nothing identifying a conversation, a sender or a message crosses it. Every
+decision is Dart, so every decision is covered by host tests.
+
+### What is guaranteed and what is merely permitted
+
+**Guaranteed, and testing cannot disprove it:** a refused `POST_NOTIFICATIONS` blocks every
+non-exempt channel; a second refusal is permanent and the application can no longer prompt;
+a channel's importance cannot be changed after creation; a notification posted without a
+channel on API 26+ does not appear; sound is capped at once per second from Android 8.1.
+
+**Merely permitted, and a green test run is evidence of nothing:** that a heads-up appears
+on a given vendor's build; that vibration occurs; that the notification survives however
+long the user leaves it; that a vector drawable renders identically as a status-bar icon
+across the fleet; that the per-package cap is where AOSP puts it.
+
+**And the tier this piece actually delivers:** an alert reaches the user only while the
+application's process is alive. ADR-046's Layers 1 and 2 remain unbuilt, this build still
+composes `UnscheduledBestEffortPolling`, and nothing re-arms after Android stops the app.
+That is a real limit and it is now what the enrollment disclosure says.
+
+### Failure modes
+
+- **Permission refused, or revoked after being granted.** Nothing is announced, no marker
+  is spent, and Settings says so plainly. Granting later announces the backlog.
+- **A crash between posting and marking.** The same notification id is re-posted on the
+  next pass, so the user sees one notification and may hear one extra sound. Chosen over
+  the alternative, which loses the message silently.
+- **A burst of arrivals.** Passes are serialized behind a dirty flag and a pass spends every
+  marker it read, so a wave of commits collapses into one alert. Verified at 25 messages in
+  one transaction.
+- **A backlog larger than one read page.** The read is ordered so unspent markers come
+  first, so consecutive passes drain it rather than returning the same page. Because there
+  is only ever one notification, those extra passes update it rather than adding to a pile.
+- **Storage unavailable.** The pass concludes nothing: nothing posted, nothing withdrawn,
+  no marker spent, so the next pass reaches the same conclusion.
+- **No platform implementation.** Resolves to *unavailable*; nothing is posted and the
+  Settings row says so, rather than a screen failing.
+- **A hostile relay floods envelopes.** Nothing that fails authentication reaches
+  `messages`, so nothing it sends can produce an alert. What it can do is cause repeated
+  bounded drains, which is the cost ADR-046 already accepted.
+- **A stale alert from a previous process.** The first pass of a session assumes one may be
+  posted and withdraws it when nothing is outstanding, which is what covers a message read
+  on another device while this one was not running.
+
+### Security and privacy
+
+- **On an unlocked device, a bystander sees** the application name and `New messages`.
+  **On a locked one, the same**, by declaration rather than by the system's redaction.
+  **During screen sharing on Android 15+, the same again**, through `setPublicVersion`.
+- **To an application holding notification access**: the package name, that same sentence,
+  one constant id and one constant tag. No conversation, no sender, no count, no timing
+  beyond the moment of posting, and nothing that can be correlated per contact.
+- **New metadata created on the device**: one boolean per message row inside the existing
+  SQLCipher database, and one preference key recording that the permission prompt was
+  shown. Both are erased with the database by the existing wipe paths. Nothing is written
+  outside it, and `allowBackup="false"` is unchanged.
+- **Logs**: nothing is logged. The channel carries a localized sentence and nothing derived
+  from content, identifiers or keys.
+- **Forgery and suppression by a server or a network attacker**: an alert can only be
+  produced by a row that survived authenticated decryption and a durable commit, so a relay
+  cannot cause one. It can suppress by withholding envelopes, which it could already do.
+- **Credentials and keys**: no component gains access to anything it did not hold. The
+  platform side receives strings.
+- **The safe posture is the only posture.** There is no preview setting to get wrong, and
+  the one user action available — turning notifications on — increases what the device
+  shows only by the sentence above.
+- **Permissions added**: `POST_NOTIFICATIONS` (dangerous, runtime, requested at point of
+  use) and `VIBRATE` (normal, granted at install, no prompt). No foreground service, no
+  boot receiver, no exact alarm, no SMS. The architecture test that forbids
+  `remoteMessaging` and `FOREGROUND_SERVICE_DATA_SYNC` is untouched and a new one forbids
+  every foreground-service and boot permission outright while ADR-046's layers stay
+  unbuilt.
+
+### User requirements
+
+One, and it is unavoidable: on Android 13 and above the user must allow notifications.
+They are asked once, automatically, at the moment a message is waiting that cannot be
+announced, and never again automatically. Everything after that is theirs: Settings offers
+the action whenever they want it, and the channel's sound, vibration and importance are
+theirs to change from the moment it first appears. There is no vendor setup to explain,
+because this piece starts no service and schedules no work.
+
+### Beta and production
+
+Suitable for both, now. It introduces no cryptographic surface, crosses no production gate,
+adds no dependency, and leaves the Beta/Production separation exactly as ADR-042 and
+ADR-044 left it — verified after the change: the production release still packages
+unsigned, still carries the production application ID, and still contains no beta MLS
+symbol.
+
+It does change what the artifact says about itself. ADR-045's
+`DisclosurePoint.foregroundDeliveryOnly` read "Messages arrive only while this app is open.
+There are no notifications and nothing runs in the background", and the second clause is now
+false. `DeploymentDisclosure.revision` moves 1 → 2, the text is rewritten to say that
+messages arrive and the application can alert only while it is running and that nothing
+re-arms once Android stops it, and both language catalogues move with it. Per ADR-045's
+mechanism, that makes every later enrollment re-acknowledge, and **re-delivering the
+written handover disclosure to existing recipients is release-blocking**.
+
+### Known limitations
+
+- **Nothing reaches a user whose application Android has stopped.** This is ADR-046's
+  Layers 1 and 2, and they are still unbuilt.
+- **Group messages produce no alert**, because the piece-18 group projection sets no unread
+  state (see *What the repository actually did before*). The alert path needs no change when
+  that is fixed; the group projection and `GroupChatPage` do.
+- **A message that arrives while its conversation is on screen stays unread** after the user
+  leaves it. That is the pre-existing mark-read behaviour, unchanged here; this decision only
+  makes sure it is never announced.
+- **No preview option**, so a user cannot tell which conversation an alert is about without
+  opening the application.
+- **The Kotlin half is unmeasured.** No device or emulator run was possible: the available
+  images are Play-Store images without root, and reaching a signed-in session on this
+  workstation is blocked by server-side account activation. What the notification looks like,
+  whether the vector icon renders correctly in the status bar, whether the channel vibrates,
+  and how the permission dialog behaves are all **unverified on a device**.
+- **A refusal made from Settings is not recorded durably**, so in one sequence — turn on
+  from Settings, refuse — the automatic prompt may still be spent later. Android's rationale
+  flag prevents that in the common case; the residue is at most one extra dialog, ever.
+
+### Follow-up work
+
+1. **Device matrix for this piece**: Android 13 first-install prompt, refusal, second
+   refusal, revocation after grant, lock-screen rendering, heads-up, status-bar icon,
+   channel settings, and the Persian rendering of both strings — on Samsung, Xiaomi and an
+   AOSP image across Android 11 to 16. Release-blocking for any claim about what the user
+   sees.
+2. **Re-deliver the written handover disclosure** to existing recipients at revision 2.
+3. **Group unread state** in the piece-18 projection, plus mark-read in `GroupChatPage`;
+   the alert path then covers groups with no change.
+4. **Mark-read while a conversation is on screen**, which also makes read receipts correct.
+5. **An in-app presentation** for the foregrounded case, so an alert does not appear over
+   the application that produced it.
+6. **A preview setting**, if and only if the reviewed bilingual lock-screen warning is
+   written first.
+
+### Review and revisit conditions
+
+Reopen when any of the following becomes true:
+
+1. **ADR-046's Layer 1 or Layer 2 ships.** The alert path itself needs no change — it is
+   already a projection of durable state — but a headless or service isolate reaching it
+   makes ADR-046's durable delivery lease a prerequisite, and the single automatic prompt
+   must not be spent from a context with no activity.
+2. **The deployment stops being 20–30 known people receiving a written handover.** The
+   sender-neutral default is calibrated to a threat model where a name on a lock screen
+   implicates two people; a different population may weigh that differently.
+3. **Voice ships.** A microphone foreground service posts its own notification, and the
+   interaction between the two must be decided rather than discovered.
+4. **Android changes the permission model, the channel contract, or lock-screen
+   redaction.** Every claim above about what a bystander sees rests on `setVisibility`,
+   `setPublicVersion` and channel-level user control.
+5. **The device matrix contradicts anything in "merely permitted".**
+
+This decision implements ADR-046's step 2 and amends its Layer 3 sketch — one aggregate
+alert instead of bounded individual notifications plus a summary, a durable-state
+reconciliation instead of a post-inbox-commit emission, and a boolean marker instead of a
+timestamp — for the reasons recorded above. It amends ADR-045's
+`DisclosurePoint.foregroundDeliveryOnly` and moves the disclosure to revision 2. It adds no
+dependency, changes no cryptographic behaviour, opens no production gate, and leaves the
+Beta/Production boundary untouched.
 
 ## ADR-046 in full — how a backgrounded Android client learns a message arrived (2026-08-21)
 
@@ -563,9 +995,15 @@ In order. Each is a piece of work, not a checkbox.
    and the socket attaches to the live coordinator. One correction to the inventory
    above: `NetworkingFoundation` was not "tested and constructed only in tests" — it had
    no tests and no callers at all.
-2. **Notification port, `notified_at` column, post-inbox-commit notifier,
+2. ~~**Notification port, `notified_at` column, post-inbox-commit notifier,
    `POST_NOTIFICATIONS` request at point of use.** Useful on its own, before any
-   background layer exists.
+   background layer exists.~~ **Done 2026-08-21 — ADR-048**, with three of this
+   line amended on evidence: one aggregate alert rather than bounded individual
+   notifications plus a grouped summary; a reconciliation driven by committed
+   durable state rather than an emission from `PostInboxCommitWorkPort`, which
+   can announce but never withdraw; and a boolean `messages.alerted` rather than
+   a `notified_at` timestamp nothing reads. The `POST_NOTIFICATIONS` request is
+   at point of use and spent at most once automatically.
 3. **WorkManager adapter behind `AndroidPollingScheduler`** (Layer 1), with the headless
    entry point reconstructing its own dependencies and failing closed before first unlock.
 4. **Durable delivery lease**, with a test that runs two owners against one store.
@@ -575,7 +1013,10 @@ In order. Each is a piece of work, not a checkbox.
    `DisclosurePoint.foregroundDeliveryOnly` false. `DeploymentDisclosure.revision` must
    move, the text must be rewritten to the tier language above, and the written handover
    must be re-delivered to existing recipients. Correcting the *current* text, which
-   overstates today's artifact, may not wait for step 5.
+   overstates today's artifact, may not wait for step 5. **Half done 2026-08-21 —
+   ADR-048** moved the revision to 2 and rewrote the text, because step 2 shipped.
+   Re-delivering the written handover to existing recipients has **not** happened and
+   is release-blocking.
 7. **Device matrix**: Doze, standby buckets, reboot, force-stop, permission revocation,
    exemption revocation and vendor battery settings, on Samsung and Xiaomi hardware and
    an AOSP image, across Android 11 to 16. This is a release gate for Layer 2.

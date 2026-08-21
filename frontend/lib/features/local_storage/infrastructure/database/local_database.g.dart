@@ -12187,6 +12187,21 @@ class $MessagesTable extends Messages with TableInfo<$MessagesTable, Message> {
     ),
     defaultValue: const Constant(false),
   );
+  static const VerificationMeta _alertedMeta = const VerificationMeta(
+    'alerted',
+  );
+  @override
+  late final GeneratedColumn<bool> alerted = GeneratedColumn<bool>(
+    'alerted',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("alerted" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     messageId,
@@ -12208,6 +12223,7 @@ class $MessagesTable extends Messages with TableInfo<$MessagesTable, Message> {
     pinned,
     starred,
     unread,
+    alerted,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -12382,6 +12398,12 @@ class $MessagesTable extends Messages with TableInfo<$MessagesTable, Message> {
         unread.isAcceptableOrUnknown(data['unread']!, _unreadMeta),
       );
     }
+    if (data.containsKey('alerted')) {
+      context.handle(
+        _alertedMeta,
+        alerted.isAcceptableOrUnknown(data['alerted']!, _alertedMeta),
+      );
+    }
     return context;
   }
 
@@ -12467,6 +12489,10 @@ class $MessagesTable extends Messages with TableInfo<$MessagesTable, Message> {
         DriftSqlType.bool,
         data['${effectivePrefix}unread'],
       )!,
+      alerted: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}alerted'],
+      )!,
     );
   }
 
@@ -12496,6 +12522,17 @@ class Message extends DataClass implements Insertable<Message> {
   final bool pinned;
   final bool starred;
   final bool unread;
+
+  /// Whether the user has already been alerted that this message arrived.
+  ///
+  /// Local, durable, and deliberately separate from [unread]: [unread] is what
+  /// the timeline and the conversation badge project, while this marks the
+  /// one-shot alert as spent. The isolate that alerts may not be the one that
+  /// comes back, so an in-memory flag would re-alert after every restart. A
+  /// projection rebuild writes messages through `insertOnConflictUpdate`, whose
+  /// companion omits this column and therefore leaves it unchanged - the same
+  /// mechanism that already preserves [starred].
+  final bool alerted;
   const Message({
     required this.messageId,
     required this.conversationId,
@@ -12516,6 +12553,7 @@ class Message extends DataClass implements Insertable<Message> {
     required this.pinned,
     required this.starred,
     required this.unread,
+    required this.alerted,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -12545,6 +12583,7 @@ class Message extends DataClass implements Insertable<Message> {
     map['pinned'] = Variable<bool>(pinned);
     map['starred'] = Variable<bool>(starred);
     map['unread'] = Variable<bool>(unread);
+    map['alerted'] = Variable<bool>(alerted);
     return map;
   }
 
@@ -12573,6 +12612,7 @@ class Message extends DataClass implements Insertable<Message> {
       pinned: Value(pinned),
       starred: Value(starred),
       unread: Value(unread),
+      alerted: Value(alerted),
     );
   }
 
@@ -12605,6 +12645,7 @@ class Message extends DataClass implements Insertable<Message> {
       pinned: serializer.fromJson<bool>(json['pinned']),
       starred: serializer.fromJson<bool>(json['starred']),
       unread: serializer.fromJson<bool>(json['unread']),
+      alerted: serializer.fromJson<bool>(json['alerted']),
     );
   }
   @override
@@ -12634,6 +12675,7 @@ class Message extends DataClass implements Insertable<Message> {
       'pinned': serializer.toJson<bool>(pinned),
       'starred': serializer.toJson<bool>(starred),
       'unread': serializer.toJson<bool>(unread),
+      'alerted': serializer.toJson<bool>(alerted),
     };
   }
 
@@ -12657,6 +12699,7 @@ class Message extends DataClass implements Insertable<Message> {
     bool? pinned,
     bool? starred,
     bool? unread,
+    bool? alerted,
   }) => Message(
     messageId: messageId ?? this.messageId,
     conversationId: conversationId ?? this.conversationId,
@@ -12681,6 +12724,7 @@ class Message extends DataClass implements Insertable<Message> {
     pinned: pinned ?? this.pinned,
     starred: starred ?? this.starred,
     unread: unread ?? this.unread,
+    alerted: alerted ?? this.alerted,
   );
   Message copyWithCompanion(MessagesCompanion data) {
     return Message(
@@ -12727,6 +12771,7 @@ class Message extends DataClass implements Insertable<Message> {
       pinned: data.pinned.present ? data.pinned.value : this.pinned,
       starred: data.starred.present ? data.starred.value : this.starred,
       unread: data.unread.present ? data.unread.value : this.unread,
+      alerted: data.alerted.present ? data.alerted.value : this.alerted,
     );
   }
 
@@ -12751,7 +12796,8 @@ class Message extends DataClass implements Insertable<Message> {
           ..write('deletedForMe: $deletedForMe, ')
           ..write('pinned: $pinned, ')
           ..write('starred: $starred, ')
-          ..write('unread: $unread')
+          ..write('unread: $unread, ')
+          ..write('alerted: $alerted')
           ..write(')'))
         .toString();
   }
@@ -12777,6 +12823,7 @@ class Message extends DataClass implements Insertable<Message> {
     pinned,
     starred,
     unread,
+    alerted,
   );
   @override
   bool operator ==(Object other) =>
@@ -12806,7 +12853,8 @@ class Message extends DataClass implements Insertable<Message> {
           other.deletedForMe == this.deletedForMe &&
           other.pinned == this.pinned &&
           other.starred == this.starred &&
-          other.unread == this.unread);
+          other.unread == this.unread &&
+          other.alerted == this.alerted);
 }
 
 class MessagesCompanion extends UpdateCompanion<Message> {
@@ -12829,6 +12877,7 @@ class MessagesCompanion extends UpdateCompanion<Message> {
   final Value<bool> pinned;
   final Value<bool> starred;
   final Value<bool> unread;
+  final Value<bool> alerted;
   final Value<int> rowid;
   const MessagesCompanion({
     this.messageId = const Value.absent(),
@@ -12850,6 +12899,7 @@ class MessagesCompanion extends UpdateCompanion<Message> {
     this.pinned = const Value.absent(),
     this.starred = const Value.absent(),
     this.unread = const Value.absent(),
+    this.alerted = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   MessagesCompanion.insert({
@@ -12872,6 +12922,7 @@ class MessagesCompanion extends UpdateCompanion<Message> {
     this.pinned = const Value.absent(),
     this.starred = const Value.absent(),
     this.unread = const Value.absent(),
+    this.alerted = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : messageId = Value(messageId),
        conversationId = Value(conversationId),
@@ -12900,6 +12951,7 @@ class MessagesCompanion extends UpdateCompanion<Message> {
     Expression<bool>? pinned,
     Expression<bool>? starred,
     Expression<bool>? unread,
+    Expression<bool>? alerted,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -12925,6 +12977,7 @@ class MessagesCompanion extends UpdateCompanion<Message> {
       if (pinned != null) 'pinned': pinned,
       if (starred != null) 'starred': starred,
       if (unread != null) 'unread': unread,
+      if (alerted != null) 'alerted': alerted,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -12949,6 +13002,7 @@ class MessagesCompanion extends UpdateCompanion<Message> {
     Value<bool>? pinned,
     Value<bool>? starred,
     Value<bool>? unread,
+    Value<bool>? alerted,
     Value<int>? rowid,
   }) {
     return MessagesCompanion(
@@ -12972,6 +13026,7 @@ class MessagesCompanion extends UpdateCompanion<Message> {
       pinned: pinned ?? this.pinned,
       starred: starred ?? this.starred,
       unread: unread ?? this.unread,
+      alerted: alerted ?? this.alerted,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -13040,6 +13095,9 @@ class MessagesCompanion extends UpdateCompanion<Message> {
     if (unread.present) {
       map['unread'] = Variable<bool>(unread.value);
     }
+    if (alerted.present) {
+      map['alerted'] = Variable<bool>(alerted.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -13068,6 +13126,7 @@ class MessagesCompanion extends UpdateCompanion<Message> {
           ..write('pinned: $pinned, ')
           ..write('starred: $starred, ')
           ..write('unread: $unread, ')
+          ..write('alerted: $alerted, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -31704,6 +31763,7 @@ typedef $$MessagesTableCreateCompanionBuilder =
       Value<bool> pinned,
       Value<bool> starred,
       Value<bool> unread,
+      Value<bool> alerted,
       Value<int> rowid,
     });
 typedef $$MessagesTableUpdateCompanionBuilder =
@@ -31727,6 +31787,7 @@ typedef $$MessagesTableUpdateCompanionBuilder =
       Value<bool> pinned,
       Value<bool> starred,
       Value<bool> unread,
+      Value<bool> alerted,
       Value<int> rowid,
     });
 
@@ -31942,6 +32003,11 @@ class $$MessagesTableFilterComposer
 
   ColumnFilters<bool> get unread => $composableBuilder(
     column: $table.unread,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get alerted => $composableBuilder(
+    column: $table.alerted,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -32170,6 +32236,11 @@ class $$MessagesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<bool> get alerted => $composableBuilder(
+    column: $table.alerted,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   $$ConversationsTableOrderingComposer get conversationId {
     final $$ConversationsTableOrderingComposer composer = $composerBuilder(
       composer: this,
@@ -32278,6 +32349,9 @@ class $$MessagesTableAnnotationComposer
 
   GeneratedColumn<bool> get unread =>
       $composableBuilder(column: $table.unread, builder: (column) => column);
+
+  GeneratedColumn<bool> get alerted =>
+      $composableBuilder(column: $table.alerted, builder: (column) => column);
 
   $$ConversationsTableAnnotationComposer get conversationId {
     final $$ConversationsTableAnnotationComposer composer = $composerBuilder(
@@ -32461,6 +32535,7 @@ class $$MessagesTableTableManager
                 Value<bool> pinned = const Value.absent(),
                 Value<bool> starred = const Value.absent(),
                 Value<bool> unread = const Value.absent(),
+                Value<bool> alerted = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => MessagesCompanion(
                 messageId: messageId,
@@ -32482,6 +32557,7 @@ class $$MessagesTableTableManager
                 pinned: pinned,
                 starred: starred,
                 unread: unread,
+                alerted: alerted,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -32506,6 +32582,7 @@ class $$MessagesTableTableManager
                 Value<bool> pinned = const Value.absent(),
                 Value<bool> starred = const Value.absent(),
                 Value<bool> unread = const Value.absent(),
+                Value<bool> alerted = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => MessagesCompanion.insert(
                 messageId: messageId,
@@ -32527,6 +32604,7 @@ class $$MessagesTableTableManager
                 pinned: pinned,
                 starred: starred,
                 unread: unread,
+                alerted: alerted,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0

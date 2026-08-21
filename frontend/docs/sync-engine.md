@@ -210,9 +210,14 @@ ADR-046 makes delivery layered, and every layer drives this same engine.
   instances race a *rotating* refresh token and can invalidate the session. The supervisor
   already cancels polling whenever it takes over; the lease makes that crash-safe rather
   than in-memory.
-- **Notifications are a projection of committed state**, emitted only from post-inbox-commit
-  work, deduplicated by a durable marker, and recovered by query rather than replay. They
-  are never produced from a transport event.
+- **Notifications are a projection of committed state.** Implemented 2026-08-21 under
+  ADR-048, which amends this line: the trigger is a durable-state signal rather than
+  post-inbox-commit work, because that hook fires only when the engine runs and so can
+  announce but never *withdraw* — and reading elsewhere, a sender withdrawing content,
+  opening the conversation and muting it are all changes to committed state no post-drain
+  hook observes. Drift dispatches table updates only after `COMMIT`, so the signal is
+  strictly post-commit. Deduplication is a durable boolean marker, recovery is by query
+  rather than replay, and no transport event can produce an alert.
 - An active voice session alone uses the required microphone/communication foreground
   service.
 - A future Web client listens while the page is active. Visibility resume and network
@@ -256,10 +261,16 @@ mailbox nor transmitted its outbox. What runs now:
   background would make a session started at launch stand itself down. Every foreground
   transition re-reads connectivity, because Android 8.0 and above does not deliver
   connectivity changes to a backgrounded app.
-- **Layers 1 to 3 are not built.** This build composes `UnscheduledBestEffortPolling`,
+- **Layers 1 and 2 are not built.** This build composes `UnscheduledBestEffortPolling`,
   which schedules nothing and emits nothing, so a backgrounded application performs no
-  catch-up and no notification is posted. Delivery happens while the application is
-  running, exactly as the enrollment disclosure states.
+  catch-up. Delivery happens while the application is running, exactly as the enrollment
+  disclosure states.
+- **Layer 3 is built and is not part of the delivery session.** ADR-048 composes
+  `MessageAlertController` at the application root, beside `MessageDeliveryController` and
+  deliberately not inside it: a delivery session that fails to compose still leaves
+  messages in the database that arrived before it and have never been announced. It
+  observes committed rows, not the engine, so it needs nothing from the transport and
+  announces nothing when the process is not alive.
 
 ## Observability
 

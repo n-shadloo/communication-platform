@@ -18,6 +18,14 @@ that a device contacted the service or eliminate traffic-analysis metadata.
   posts a persistent, visible notification. It is a durable on-device indication that this
   application is running, it is why background delivery is opt-in rather than default, and
   its channel is low importance, silent, and neutrally worded.
+- Who is talking to whom, as it would appear in a message alert. The shipped alert
+  (ADR-048) is a single sender-neutral notification whose entire content is "New message"
+  or "New messages": no sender, no conversation, no text, no count, no timestamp, one
+  constant id and tag, and a tap intent carrying no identifier. That is what a bystander
+  sees on a locked or unlocked screen, what an Android 15+ screen-sharing session shows,
+  and what an application holding notification access can read. Conversation notifications,
+  `MessagingStyle` and long-lived conversation shortcuts are excluded by decision, because
+  each publishes a stable per-contact identifier outside the encrypted database.
 
 ## Adversaries considered
 

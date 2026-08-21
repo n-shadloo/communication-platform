@@ -119,7 +119,10 @@ Use at least two accounts and multiple Android devices for version 1:
 - device-to-device full/partial history transfer, no source online, wrong/lost recovery
   secret, identity recovered without history, and mailbox-gap fresh-Welcome recovery;
 - voice create/invite/join/reconnect/remove with encrypted media validation;
-- logout, remote revocation, local wipe, deep links, and hidden notifications.
+- logout, remote revocation, local wipe, deep links, and hidden notifications. The alert
+  policy is decided entirely in Dart and is covered by host tests; what a device actually
+  renders - lock screen, status-bar icon, heads-up, channel vibration, and the permission
+  dialog across Android 13 to 16 - is a release gate that has not been run (ADR-048).
 
 Patrol may drive Android native flows. Browser E2E is post-v1 and is not required for the
 Android release.

@@ -1,5 +1,6 @@
 import 'package:communication_platform/app/design_system/app_icons.dart';
 import 'package:communication_platform/app/design_system/app_tokens.dart';
+import 'package:communication_platform/features/notifications/presentation/notification_settings_entry.dart';
 import 'package:communication_platform/l10n/generated/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
@@ -31,6 +32,10 @@ final class SettingsPage extends StatelessWidget {
             title: l10n.authSecurityNoticeAction,
             onTap: () => context.push('/security-notice'),
           ),
+          // What the operating system will and will not do about an arriving
+          // message, read from the operating system rather than from what this
+          // application would prefer to be true.
+          const NotificationSettingsEntry(),
           _SettingsEntry(
             icon: AppIcons.settings,
             title: l10n.settingsAppearanceTitle,

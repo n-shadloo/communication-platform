@@ -260,31 +260,74 @@ resolved into one, so the socket presents the same access token, refreshes throu
 same single-flight `TokenCoordinator`, and terminates its TLS chain at the same
 provisioned authority as every REST call. Layers 1 to 3 remain unbuilt: this build
 composes `UnscheduledBestEffortPolling`, which schedules nothing, so a backgrounded
-application still performs no catch-up and posts no notification.
+application still performs no catch-up. Layer 3 — the alert itself — was implemented
+separately on 2026-08-21 under ADR-048 and is described below; it depends on committed
+local state rather than on any delivery layer, so it works whenever the process is alive
+and does nothing when it is not.
 
 ## Notifications
 
-- Local notifications are created only after authenticated decryption and durable local
-  commit, and only from the existing post-inbox-commit work port — never from a transport
-  event. A socket frame is a wake-up hint and can never produce a notification by itself.
-- A notification is a projection of committed local state: rows that are committed,
-  unread, and carry no durable `notified_at` marker. The marker is written in the same
-  transaction, because the isolate that notifies may not be the one that returns.
-- Missed notifications recover by query, not replay. Everything unread and un-notified is
-  eligible at the next successful commit pass, with a bounded number of individual
-  notifications and one grouped summary beyond that threshold.
-- An envelope that was quarantined, rejected, or retained by queue-gap recovery never
-  produces a notification.
-- Default preview is hidden: app name, sender-neutral "New message", and open action.
-- User may opt into decrypted previews with a clear lock-screen warning.
-- The Layer 2 foreground-service notification is itself a privacy surface: it is a
-  durable, visible indication on the device that this application is armed. Its channel is
-  low importance, silent, and neutrally worded, and that trade is why background delivery
-  is opt-in rather than default.
-- Conversation IDs/people shortcuts never expose backend capabilities or raw identifiers.
-- Tapping routes through unlock/session validation before opening content.
-- Notification actions are bounded signed local intents, validated again by application
-  use cases.
+Implemented on 2026-08-21 under ADR-048, which amends three details of ADR-046's Layer 3
+sketch on evidence. What ships:
+
+- **One notification, not one per message or per conversation.** A fixed id and tag in one
+  channel (`"messages"`, frozen for the life of the installation because it keys the
+  user's own sound and importance settings). With a sender-neutral preview, several
+  notifications would be several copies of one sentence, and the only thing they would add
+  is a per-message or per-conversation identifier visible to the system notification
+  service and to any application holding notification access. `MessagingStyle` and
+  conversation shortcuts are forbidden for the same reason: they exist to show senders and
+  text, and their long-lived shortcuts publish a per-contact identifier into the launcher.
+- **Its entire content is `New message` or `New messages`.** No sender, no conversation, no
+  message text, no count, and no timestamp (`setShowWhen(false)`). It is
+  `VISIBILITY_PRIVATE` and supplies a `setPublicVersion` carrying the same sentence, so a
+  lock screen and an Android 15+ screen-sharing session show what the application chose
+  rather than the system's contextless redaction.
+- **It is a reconciliation of committed local state, never an emission.** Each pass reads
+  rows that are unread, not deleted for this device, not withdrawn by their sender and not
+  in Saved Messages; subtracts muted conversations and the conversation on screen; then
+  announces what is left over or withdraws the alert when nothing is. Announcement,
+  withdrawal after a read on another device, withdrawal of content its sender deleted, and
+  silence for the conversation being read all fall out of that one rule. A transport event
+  can never produce one: an envelope that was quarantined, rejected or held by queue-gap
+  recovery never becomes a message row.
+- **The trigger is a committed write.** Drift dispatches table updates only after the
+  transaction commits, so a stream over `messages` and `conversations` is strictly
+  post-commit. Passes are serialized behind a dirty flag, so a drain that commits many
+  envelopes produces one alert.
+- **Idempotence is the durable `messages.alerted` boolean.** It is spent after a
+  successful post, never before: a crash in between costs one repeated alert on the same
+  notification id, while the opposite order loses a message silently. A deliberate
+  suppression — muted, or on screen — spends it too, so leaving the conversation or
+  outliving the mute cannot produce a late alert. A platform refusal spends nothing, so
+  granting permission later announces the backlog.
+- **"On screen" means a mounted conversation route and a foregrounded application.** A
+  chat route left mounted behind a backgrounded application is not something anyone is
+  looking at. An unreported lifecycle state at launch is read as foreground.
+- **Tapping carries nothing.** The content intent is the launcher intent under
+  `FLAG_IMMUTABLE` with `setAutoCancel(true)`: no destination, no extra, no identifier. It
+  opens the application exactly as its icon does, and the routing guards that already stand
+  between an entry point and content decide what may be shown. There are no notification
+  actions.
+- **The platform side holds no policy.** One method channel reports what Android says,
+  posts the reviewed localized sentence Dart hands it, withdraws it, and opens the system
+  notification settings. Nothing identifying a conversation, a sender or a message crosses
+  it. No notification dependency is declared: `NotificationCompat`,
+  `NotificationManagerCompat`, `NotificationChannelCompat` and `ActivityCompat` all come
+  from `androidx.core:core`, already declared for `FileProvider`.
+- **The honest tier**: an alert reaches the user only while the application's process is
+  alive. ADR-046's Layers 1 and 2 are unbuilt, so nothing arrives and nothing announces
+  once Android stops the app.
+- Still true and still pending: **decrypted previews are not built**, and would need a
+  reviewed bilingual lock-screen warning before they could be. When ADR-046's Layer 2
+  ships, its foreground-service notification is its own privacy surface — a durable,
+  visible indication that the application is armed — and its channel must be low
+  importance, silent and neutrally worded.
+- **Group messages produce no alert**, because the piece-18 group projection writes neither
+  `messages.unread` nor `conversations.unread_count`. The alert path needs no change when
+  that is fixed; the group projection and `GroupChatPage` do.
+- `test/architecture/message_alert_policy_test.dart` pins the parts of this that live in
+  Kotlin and in the manifest, because no device is available to exercise them.
 
 ## Permissions
 
@@ -292,7 +335,17 @@ Request only at point of use:
 
 - notifications (`POST_NOTIFICATIONS`, Android 13+) for locally received message alerts
   and active-voice disclosure. Notifications are off by default on a fresh install and a
-  refusal blocks every non-exempt channel, so denial is a stated outcome, not a retry loop;
+  refusal blocks every non-exempt channel, so denial is a stated outcome, not a retry loop.
+  It is requested at the moment a message is waiting that cannot be announced, and only
+  while the application is foregrounded, because the prompt belongs to an activity the user
+  is looking at. It is spent **at most once automatically**, guarded both by a durable
+  marker in `local_preferences` and by `shouldShowRequestPermissionRationale`, which is
+  true in exactly the one state — refused once, not yet twice — where an automatic prompt
+  would be the refusal that makes the denial permanent. Every later attempt is the user's
+  own, from the Settings row, which asks Android and falls through to this application's
+  system notification settings when asking changes nothing;
+- vibration (`VIBRATE`, normal protection level, granted at install with no prompt) for the
+  message alert channel, which is what reaches a phone in a pocket;
 - the battery-optimization exemption, requested through
   `ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` only when the user enables background
   delivery. Android's own Doze acceptable-use table rates this **acceptable** for a chat
@@ -356,6 +409,13 @@ verification, and the upgrade-continuity proof are specified in
 - [Android 15 behavior changes: foreground-service boot restrictions and timeouts](https://developer.android.com/about/versions/15/behavior-changes-15)
 - [Android 16 behavior changes: JobScheduler quota enforcement](https://developer.android.com/about/versions/16/behavior-changes-all)
 - [Notification runtime permission](https://developer.android.com/develop/ui/views/notifications/notification-permission)
+- [Requesting runtime permissions, including the two-refusal permanent denial](https://developer.android.com/training/permissions/requesting)
+- [Notification channels](https://developer.android.com/develop/ui/views/notifications/channels)
+- [Creating a notification, including lock-screen visibility](https://developer.android.com/develop/ui/views/notifications/build-notification)
+- [Grouped notifications and summaries](https://developer.android.com/develop/ui/views/notifications/group)
+- [Conversation notifications and their shortcut requirement](https://developer.android.com/social-and-messaging/guides/communication/notifications-conversations)
+- [Android 12 behavior changes: notification trampolines and PendingIntent mutability](https://developer.android.com/about/versions/12/behavior-changes-12)
+- [Android 15 behavior changes: notification content during screen sharing](https://developer.android.com/about/versions/15/behavior-changes-all)
 - [WorkManager periodic work and constraints](https://developer.android.com/develop/background-work/background-tasks/persistent/getting-started/define-work)
 
 The background-delivery and notification sources above were read at primary source on

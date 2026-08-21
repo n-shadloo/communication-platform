@@ -11,6 +11,7 @@ import 'package:communication_platform/features/messaging/domain/conversation_mo
 import 'package:communication_platform/features/messaging/infrastructure/drift_conversation_domain_repository.dart';
 import 'package:communication_platform/features/messaging/infrastructure/memory_volatile_conversation_state.dart';
 import 'package:communication_platform/features/messaging/infrastructure/pairwise_application_fanout_adapter.dart';
+import 'package:communication_platform/features/messaging/presentation/visible_conversation.dart';
 import 'package:communication_platform/features/pairwise/application/pairwise_fanout_coordinator.dart';
 import 'package:communication_platform/features/pairwise/infrastructure/contact_selective_pairwise_claim_adapter.dart';
 import 'package:communication_platform/features/pairwise/infrastructure/drift_pairwise_transport_store.dart';
@@ -81,6 +82,17 @@ final conversationMessagesProvider = StreamProvider.autoDispose
         conversationId: request.conversationId,
       );
     });
+
+/// Which conversation the user is looking at, owned for the life of the
+/// application because it is read by something that is not a screen: the alert
+/// path has to know what is already on screen in order not to announce it.
+final visibleConversationProvider = Provider<VisibleConversationRegistry>((
+  ref,
+) {
+  final registry = VisibleConversationRegistry();
+  ref.onDispose(registry.dispose);
+  return registry;
+});
 
 final volatileConversationStateProvider =
     Provider<VolatileConversationStatePort>((ref) {

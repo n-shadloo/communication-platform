@@ -47,7 +47,7 @@ void main() {
     // fails this test until the revision is raised with it, and raising the
     // revision is what makes re-delivering the written handover disclosure
     // release-blocking.
-    expect(DeploymentDisclosure.privateExperimental.revision, 1);
+    expect(DeploymentDisclosure.privateExperimental.revision, 2);
 
     final english =
         jsonDecode(File('lib/l10n/app_en.arb').readAsStringSync())
@@ -60,8 +60,9 @@ void main() {
     );
     expect(
       english['disclosureForegroundDeliveryOnly'],
-      'Messages arrive only while this app is open. There are no '
-      'notifications and nothing runs in the background, so do not rely on it '
+      'Messages arrive, and this app can alert you, only while it is running. '
+      'Nothing runs in the background: once Android stops it, nothing arrives '
+      'and nothing tells you until you open it again, so do not rely on it '
       'for anything urgent.',
     );
     expect(
@@ -92,6 +93,43 @@ void main() {
       'This build is for trying out among people who already trust each '
       'other. It is not suitable if your safety depends on your messages '
       'staying private.',
+    );
+  });
+
+  test('the disclosure and the composed alert path agree', () {
+    // Revision 2 exists because revision 1 said "There are no notifications",
+    // and this build posts them. The two must move together: a build that
+    // composes an alert path may not carry text denying it, and text promising
+    // alerts may not ship without the path.
+    final english =
+        jsonDecode(File('lib/l10n/app_en.arb').readAsStringSync())
+            as Map<String, dynamic>;
+    final delivery = english['disclosureForegroundDeliveryOnly']! as String;
+
+    expect(
+      File('lib/app/app.dart').readAsStringSync(),
+      contains('messageAlertControllerProvider'),
+      reason: 'the application root is what makes an alert possible at all',
+    );
+    expect(
+      delivery.toLowerCase(),
+      isNot(contains('there are no notifications')),
+      reason: 'the artifact posts them',
+    );
+    expect(
+      delivery.toLowerCase(),
+      contains('only while it is running'),
+      reason:
+          'and the one thing it must still say is that nothing reaches the '
+          'user once Android stops the process',
+    );
+    // ADR-046 Layers 1 and 2 are still unbuilt, and the disclosure may not
+    // start implying otherwise while that is true.
+    expect(
+      File(
+        'lib/features/synchronization/infrastructure/sync_platform_adapters.dart',
+      ).readAsStringSync(),
+      contains('class UnscheduledBestEffortPolling'),
     );
   });
 

@@ -55,6 +55,10 @@ abstract final class AppIcons {
   static const copy = AppIconData._(FLucideIcons.copy, 'copy');
   static const star = AppIconData._(FLucideIcons.star, 'star');
   static const muted = AppIconData._(FLucideIcons.bellOff, 'muted');
+  static const notifications = AppIconData._(
+    FLucideIcons.bell,
+    'notifications',
+  );
   static const accepted = AppIconData._(FLucideIcons.check, 'accepted');
   static const delivered = AppIconData._(FLucideIcons.checkCheck, 'delivered');
   static const jumpDown = AppIconData._(

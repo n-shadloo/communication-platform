@@ -109,6 +109,36 @@ class AppLocalizationsFa extends AppLocalizations {
   String get settingsAppearanceTitle => 'نمایش';
 
   @override
+  String get settingsNotificationsTitle => 'اعلان‌ها';
+
+  @override
+  String get settingsNotificationsOn =>
+      'روشن. اعلان فقط می‌گوید چیزی رسیده است؛ هرگز نمی‌گوید از طرف چه کسی است یا چه نوشته شده، و فقط تا وقتی به شما می‌رسد که این برنامه در حال اجرا باشد.';
+
+  @override
+  String get settingsNotificationsOff =>
+      'خاموش. تا وقتی به برنامه نگاه نکنید، هیچ چیز به شما نمی‌گوید پیامی رسیده است.';
+
+  @override
+  String get settingsNotificationsUnavailable => 'در این نسخه در دسترس نیست.';
+
+  @override
+  String get settingsNotificationsTurnOn => 'روشن کن';
+
+  @override
+  String get notificationsChannelName => 'پیام‌ها';
+
+  @override
+  String get notificationsChannelDescription =>
+      'به شما خبر می‌دهد که چیزی رسیده است. هرگز نشان نمی‌دهد از طرف چه کسی است یا چه نوشته شده.';
+
+  @override
+  String get notificationsNewMessage => 'پیام تازه';
+
+  @override
+  String get notificationsNewMessages => 'پیام‌های تازه';
+
+  @override
   String get chatsPlaceholderTitle => 'ساختار گفت‌وگوها';
 
   @override
@@ -451,7 +481,7 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get disclosureForegroundDeliveryOnly =>
-      'پیام‌ها فقط وقتی می‌رسند که این برنامه باز باشد. هیچ اعلانی وجود ندارد و چیزی در پس‌زمینه اجرا نمی‌شود، پس برای کار فوری به آن تکیه نکنید.';
+      'پیام‌ها فقط تا وقتی می‌رسند و این برنامه فقط تا وقتی می‌تواند به شما خبر بدهد که در حال اجرا باشد. هیچ چیز در پس‌زمینه اجرا نمی‌شود: به‌محض اینکه اندروید آن را متوقف کند، نه پیامی می‌رسد و نه چیزی به شما خبر می‌دهد تا دوباره بازش کنید، پس برای کار فوری به آن تکیه نکنید.';
 
   @override
   String get disclosureDeviceOnlyHistory =>
