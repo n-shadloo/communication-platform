@@ -403,6 +403,11 @@ final class DriftEnrollmentJournalStore
             .into(database.accountIdentities)
             .insertOnConflictUpdate(
               AccountIdentitiesCompanion.insert(
+                // See `SecureSessionTokenAdapter`: a singleton rowid alias is
+                // auto-assigned when an insert omits it, so the column default
+                // never applies and the second write to this table would fail
+                // its own check.
+                singletonId: const Value(1),
                 verifiedPublicStateCiphertext: publicIdentity,
                 backupVersion: Value(journal.backupVersion),
                 recoveryStatus: 4,

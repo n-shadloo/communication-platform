@@ -145,6 +145,13 @@ final class SecureSessionTokenAdapter implements SessionTokenStore {
         .into(database.accountSessions)
         .insertOnConflictUpdate(
           AccountSessionsCompanion.insert(
+            // Stated rather than left to the column default. `singleton_id` is
+            // the sole INTEGER PRIMARY KEY of a rowid table, so SQLite treats
+            // it as an alias for the rowid and assigns `max(rowid) + 1` when an
+            // insert omits it — the `DEFAULT 1` is never reached. Omitting it
+            // therefore works exactly once per database and fails the
+            // `singleton_id = 1` check on every write after that.
+            singletonId: const Value(1),
             userIdCiphertext: Uint8List.fromList(utf8.encode(userId)),
             deviceIdCiphertext: Value(
               Uint8List.fromList(utf8.encode(deviceId)),
