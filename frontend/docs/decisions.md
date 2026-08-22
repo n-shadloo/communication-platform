@@ -59,7 +59,482 @@ is not silently edited out of history.
 | ADR-046 | Accepted, Layers 0 and 1 amended by ADR-047 and ADR-049 | Background message delivery is layered — a composed foreground socket, a best-effort WorkManager floor, and an opt-in `specialUse` foreground service holding the same connection — and a notification is a projection of committed local state, never of the transport; supersedes ADR-029 (2026-08-21) | ADR-029 chose best-effort polling and no persistent service. Inspection of the composed artifact found something else entirely: `SyncLifecycleSupervisor`, `DioWebSocketGateway`, `GatewayRealtimeSyncAdapter` and `NetworkingFoundation` exist, are tested, and are constructed **only in tests**, and `durableSyncEngineProvider` is read by nothing, so the shipped build neither drains its mailbox nor transmits its outbox — `SendConversationEvents` ends at `fanout.prepareAndQueue` and the rows stay there. ADR-045's disclosure "messages arrive only while this app is open" is therefore wrong in the user's favour and is corrected here. On the platform, primary sources read 2026-08-21 leave a narrow design space: a backgrounded process is cached, and "if all processes for a particular app are frozen, the system terminates any active TCP sockets maintained by the app", so an unattended socket is closed rather than slow; `WorkManager`'s floor is 15 minutes, Doze defers `JobScheduler` to maintenance windows that thin out over time, Android 16 enforces job quota even in the active standby bucket, and the *rare* and *restricted* buckets disable background network outright, so deferrable work can only ever be *eventual*; while-idle alarms buy six minutes of best-case cadence for a user-revocable `SCHEDULE_EXACT_ALARM` and still wake an app that has no network. The one documented state with unrestricted background network is "app process is running a foreground service", and Android's own Doze acceptable-use table rates the battery-optimization exemption **Acceptable** for an "instant messaging, chat, or calling app" that "can't use FCM because of technical dependency", which is this application exactly — the exemption granting that an app "can use the network and hold partial wake locks during Doze and App Standby" and being itself an exemption from the Android 12 background FGS-start restriction. The type is `specialUse` with a truthful subtype property, because `dataSync` is capped at 6 h/24 h and barred from `BOOT_COMPLETED` at `targetSdk` 35+, `remoteMessaging` means device-to-device continuity, and `systemExempted` is gated on roles this app lacks; the existing test forbidding `remoteMessaging` and `FOREGROUND_SERVICE_DATA_SYNC` in the manifest stands unchanged. Exactly one delivery owner runs at a time, held as a durable Drift lease rather than an in-memory flag, because concurrent isolates would race a *rotating* refresh token and can invalidate the session. Notifications fire only from the existing `PostInboxCommitWorkPort` after the inbox transaction commits, deduplicated by a durable `notified_at`, recovered by query rather than replay, and bounded by a grouped summary. Reliability is stated in four tiers and never as a guarantee: near-real-time foregrounded; near-real-time best-effort backgrounded when the user has granted the exemption and their vendor cooperates; eventual otherwise, and nothing at all in the *rare* and *restricted* buckets; and nothing whatsoever after force-stop, which no design can change. The costs are accepted and disclosed: a persistent shade entry that makes the app observable on the device, real battery use, two permissions, and per-vendor setup on the 77% of the Iranian fleet that is Samsung or Xiaomi (Statcounter, July 2026). Layer 2 ships off by default and may not be enabled in any distributed artifact before the physical-device matrix runs; UnifiedPush was rejected because the backend has no push endpoint and may not be changed, it needs a second app and a second service per user, and it moves message-timing metadata outside the reviewed boundary without removing the Android constraint; SMS wake was rejected outright for binding accounts to carrier-held phone numbers. No experiment was run: only Play-Store emulator images without root were available and no Samsung or Xiaomi hardware, so a local result would have proved nothing about the fleet that matters. Reaffirms ADR-013, opens no production gate, changes no cryptographic behaviour, and adds no dependency by itself. |
 | ADR-047 | Accepted | The delivery path is composed at the application root, on the one networking foundation, and a send is a durable write the supervisor observes rather than a call it receives (2026-08-21) | Implements ADR-046's Layer 0 and closes its follow-up step 1. **The two composition roots are resolved into one**: `AuthenticationAssembly` owns a single `NetworkingFoundation` — one `DioRestClient`, one `TokenCoordinator`, one provisioned `SecurityContext` — and the socket is built from it by `NetworkingFoundation.realtimeGateway`, so close 4001 refreshes and close 4003 revokes through the coordinator the whole application shares. A second coordinator was rejected outright: both would rotate the same refresh token and the loser would present one the server has already retired, ending the session for both. `NetworkingFoundation` was dead code and, contrary to ADR-046's inventory, had no tests at all; it is kept and made live rather than deleted, because the role its name claims is the role the application needs. **Ownership sits at the application root**, as a Riverpod notifier the root holds through `listenManual`: `flutter_riverpod` 3.3.2 pauses subscriptions created in `build` when their widget leaves the view (`ConsumerStatefulElement._applyTickerMode`, verified in the pinned source), so a screen-owned or `ref.watch`-owned controller would silently stop managing sessions when a route covered it, while `listenManual` subscriptions are never ticker-mode managed. Exactly one session runs at a time, serialized on one transition queue with the wanted scope re-checked after every await; the durable cross-isolate lease ADR-046 requires is not built and is not yet needed, because this stage composes exactly one isolate. A session runs only for `fullScope`/`offlineFullScope` and stops when logout *begins*, because `TokenCoordinator.logout` wipes protected storage and closes the database before it emits the termination a completion-triggered stop would wait for. **A send is not a call into the supervisor**: composers write exact per-recipient ciphertext into `outbox_operations` and return, and the supervisor requests a cycle when the durable projection's outbox depth *increases*. Reacting to depth being non-zero was rejected — every engine run rewrites the connection phase and re-emits the projection, so it spins against a row waiting out its backoff (demonstrated: the rule inverted makes the loop-safety test hang) — and an in-memory trigger port was rejected for needing cross-feature wiring that the durable queue already provides, and for not surviving a restart. Two platform edges were corrected because they neutralised the composed path: Flutter leaves `WidgetsBinding.lifecycleState` null until the first `SystemChannels.lifecycle` message and documents the initial value as detached "updated to the current state (usually resumed) as soon as the first lifecycle update is received", so reading "not yet reported" as background made a session started at launch stand itself down and never connect; and connectivity_plus documents that Android 8.0+ does not deliver connectivity changes to a backgrounded app and that status should be re-checked on resume, so a cached *unavailable* could outlive the outage and block foreground reconnect. Connectivity, lifecycle, wall-clock delay and the deferred scheduler are resolved and released together as one `DeliveryPlatformPorts`, which is also what lets a test drive the real supervisor without a device. This build composes `UnscheduledBestEffortPolling`, which schedules nothing and emits nothing: ADR-046's Layers 1 to 3 stay unbuilt, a backgrounded application still performs no catch-up, and ADR-045's `foregroundDeliveryOnly` disclosure — previously wrong in the user's favour — is now true, so its revision does not move. Adds no dependency, changes no cryptographic behaviour, opens no production gate, and leaves the Beta/Production boundary untouched: the engine's group stack still resolves through the compile-time permit, and the production artifact verifies unsigned and free of the beta MLS symbol. |
 | ADR-048 | Accepted | The user is told a message arrived by one sender-neutral system notification that is a reconciliation of committed local state, not an event; amends ADR-046's Layer 3 and ADR-045's delivery disclosure (2026-08-21) | ADR-046 sketched Layer 3 in three sentences and ADR-047 built the delivery path under it; inspection of the composed artifact found no notification port, adapter, channel or dependency of any kind, and two things that change what could honestly be built — a message arriving into the conversation on screen is still marked unread, because `ChatConversationView` marks read exactly once from `initState`, so `messages.unread` alone cannot answer "is the user looking at this"; and inbound **group** messages set no unread state at all, because `commitMessageInsideTransaction` writes neither `unread` nor `unread_count`, which is a piece-18 gap left unfixed here because `GroupChatPage` also never marks a group read. Three of ADR-046's Layer 3 details are amended on evidence. **One aggregate notification, not bounded individual ones plus a summary**: with a sender-neutral preview, N notifications are N copies of one sentence, and the only thing they add is a per-message or per-conversation identifier visible to `system_server` and to any app holding notification access — which the threat model's "person with filesystem access to a locked device" adversary and its protection of "notification previews" both weigh against; `MessagingStyle` and conversation shortcuts were rejected outright for publishing a pseudonymous per-contact identifier into the launcher, and an unspecified per-package cap (AOSP near 50, OEM-variable, unqueryable) makes any count-growing design unspecified. **A reconciliation of durable state, not an emission from `PostInboxCommitWorkPort`**: that hook fires only when the engine runs, so it can announce but never *withdraw*, and read-elsewhere, withdrawn-by-sender, conversation-opened and mute are all changes to committed state that no post-drain hook observes; drift dispatches table updates only after `COMMIT` (`Transaction.complete()` precedes `disposeChildStreams()`, verified in pinned 2.34.2 source), so a stream over `messages` and `conversations` is a strictly post-commit trigger and preserves ADR-046's actual principle more directly than the hook did. **A boolean `messages.alerted` (schema 12), not `notified_at`**: nothing reads the time, and it survives projection rebuilds because the projector upserts with a companion that omits the column, the same mechanism that already preserves `starred`. Content is `New message` / `New messages` and nothing else — no sender, conversation, text, count or timestamp — `VISIBILITY_PRIVATE` with a matching `setPublicVersion`, because Android 15 shows that during screen sharing and otherwise redacts "without any further context". Tapping carries the launcher intent alone under `FLAG_IMMUTABLE`: no destination, no extra, no identifier, so there is nothing to forge and no path around the routing guards. Deliberate silence (muted, on screen) still spends the marker so it cannot surface late; a platform refusal spends nothing, so granting later announces the backlog. "On screen" requires a mounted route **and** a foregrounded application, with an unreported lifecycle read as foreground for ADR-047's reason. One automatic `POST_NOTIFICATIONS` prompt at the point of use, guarded by a durable marker and by `shouldShowRequestPermissionRationale` — true in exactly the one state where a second refusal would make the denial permanent — so the app never nags and never spends the user's last prompt. No dependency: `flutter_local_notifications` 22.3.0 would work but every API needed is in `androidx.core:core:1.16.0`, already declared for `FileProvider`, so the platform half is app-owned Kotlin behind a port that carries no identifier and holds no policy. Only `POST_NOTIFICATIONS` and `VIBRATE` are added; a new architecture test forbids every foreground-service, boot, exact-alarm and SMS permission while ADR-046's Layers 1 and 2 stay unbuilt. Reliability is unchanged and stated: an alert reaches the user only while the process is alive, so ADR-045's `foregroundDeliveryOnly` — which said "There are no notifications" — is now false, its revision moves 1 → 2, and re-delivering the written handover becomes release-blocking. The Kotlin half is **unmeasured**: no rooted image and no signed-in session are reachable from this workstation, so what the notification looks like on a device is a release gate, not a claim. Full reasoning in "ADR-048 in full" below. Opens no production gate and changes no cryptographic behaviour. |
-| ADR-049 | Accepted | A backgrounded client catches up through one persisted periodic `JobScheduler` job at the platform floor, delivered to the isolate that already exists or to a headless one when none does, and never to both; ADR-046's WorkManager dependency and its durable delivery lease are both replaced (2026-08-21) | ADR-046's Layer 1. Nothing was assumed: every Android mechanism that runs without the user was re-derived from primary sources read 2026-08-21, and the scope excludes anything the user must grant, configure or change, which removes the foreground service, the exact alarm and the battery-optimization exemption by definition and leaves deferrable jobs as the only floor. **The dependency is dropped.** `JobInfo` is in the framework at `minSdk` 24 and `setPersisted(true)` survives a reboot with no receiver of this application's own, so `androidx.work` would have added a Room database, a service and a boot receiver to the merged manifest of a security-reviewed artifact in order to schedule one job; the existing test forbidding the `workmanager` package therefore stands and now records a decision rather than an absence. **The durable Drift lease is dropped too, and replaced by something exact.** Verified in the pinned engine source, `DartVMRef::Create` documents that "there can only be one VM running in the process at any given time", the `IsolateNameServer` belongs to that VM, and the job service is declared with no `android:process` — so every delivery owner this design can produce is in one process, on one main looper, and in-process arbitration is not weaker than a heartbeat lease but strictly more precise: a job whose process holds a live activity engine sends `runCatchUp` into that isolate and waits for the reply, and only a process with no engine starts a headless one. The hazard being removed is concrete and now evidenced twice over: two `TokenCoordinator`s rotate one refresh token, the loser presents a retired one, the backend returns 401 `invalid_token` (accounts `API.md`) and `TokenCoordinator._endsSession` clears the session — and `beginNextEnvelopeInspection` selects rows in `received` *or* `inspecting`, so two engines would hand the same envelope to the ratchet twice. A foreground session therefore asks the platform for exclusive ownership *before* it opens storage or reads a token, and waits for a headless run rather than killing one mid-call into the shared native core. **A tick is acknowledged, not fired and forgotten**, because a job that is finished lets the process be frozen again and an unacknowledged tick is a catch-up the platform stops mid-drain. **Arming moved off the lifecycle**: a periodic job restarts its window every time it is registered, so ADR-046's arm-on-background/cancel-on-foreground would have meant a user who opens the app more often than the interval never receives one wake-up, and a process that died while foregrounded would have left nothing scheduled at all; it is armed once for the life of a signed-in session and disarmed on logout, and a headless run that finds no session disarms it for itself. **Both entry points now compose through one `ApplicationRuntime`**, so the provisioned authority, the single token coordinator and the environment-gated crypto core cannot be silently absent from the background path; `MainActivity`'s protected-storage and message-alert channels were Activity-scoped and unreachable from a headless engine, and are now Context-bound classes with one implementation each. The alert path needs no change and asks for no permission in the background, because `ReconcileMessageAlerts` already gates the single automatic prompt on `visible.isForeground`. Reliability is stated in four tiers and never as a guarantee: near-real-time foregrounded; *eventual* backgrounded, fifteen minutes at best and bound to Doze maintenance windows that thin out; **nothing** in the *rare* and *restricted* buckets, where Android disables background network and which Android 13+ applies after eight days without interaction; and nothing whatsoever after a force-stop. ADR-045's disclosure moves to revision 3 in both catalogues, which makes re-delivering the written handover release-blocking again. Adds no dependency, changes no cryptographic behaviour, opens no production gate, and leaves the Beta/Production boundary untouched — verified after the change against the built artifact, which packages unsigned, carries the production application ID, exports no beta MLS symbol, and declares exactly one service, bound with `BIND_JOB_SERVICE`, unexported, in the default process, with no foreground-service permission of any kind. |
+| ADR-049 | Accepted, ownership arbitration corrected by ADR-050 | A backgrounded client catches up through one persisted periodic `JobScheduler` job at the platform floor, delivered to the isolate that already exists or to a headless one when none does, and never to both; ADR-046's WorkManager dependency and its durable delivery lease are both replaced (2026-08-21) | ADR-046's Layer 1. Nothing was assumed: every Android mechanism that runs without the user was re-derived from primary sources read 2026-08-21, and the scope excludes anything the user must grant, configure or change, which removes the foreground service, the exact alarm and the battery-optimization exemption by definition and leaves deferrable jobs as the only floor. **The dependency is dropped.** `JobInfo` is in the framework at `minSdk` 24 and `setPersisted(true)` survives a reboot with no receiver of this application's own, so `androidx.work` would have added a Room database, a service and a boot receiver to the merged manifest of a security-reviewed artifact in order to schedule one job; the existing test forbidding the `workmanager` package therefore stands and now records a decision rather than an absence. **The durable Drift lease is dropped too, and replaced by something exact.** Verified in the pinned engine source, `DartVMRef::Create` documents that "there can only be one VM running in the process at any given time", the `IsolateNameServer` belongs to that VM, and the job service is declared with no `android:process` — so every delivery owner this design can produce is in one process, on one main looper, and in-process arbitration is not weaker than a heartbeat lease but strictly more precise: a job whose process holds a live activity engine sends `runCatchUp` into that isolate and waits for the reply, and only a process with no engine starts a headless one. The hazard being removed is concrete and now evidenced twice over: two `TokenCoordinator`s rotate one refresh token, the loser presents a retired one, the backend returns 401 `invalid_token` (accounts `API.md`) and `TokenCoordinator._endsSession` clears the session — and `beginNextEnvelopeInspection` selects rows in `received` *or* `inspecting`, so two engines would hand the same envelope to the ratchet twice. A foreground session therefore asks the platform for exclusive ownership *before* it opens storage or reads a token, and waits for a headless run rather than killing one mid-call into the shared native core. **A tick is acknowledged, not fired and forgotten**, because a job that is finished lets the process be frozen again and an unacknowledged tick is a catch-up the platform stops mid-drain. **Arming moved off the lifecycle**: a periodic job restarts its window every time it is registered, so ADR-046's arm-on-background/cancel-on-foreground would have meant a user who opens the app more often than the interval never receives one wake-up, and a process that died while foregrounded would have left nothing scheduled at all; it is armed once for the life of a signed-in session and disarmed on logout, and a headless run that finds no session disarms it for itself. **Both entry points now compose through one `ApplicationRuntime`**, so the provisioned authority, the single token coordinator and the environment-gated crypto core cannot be silently absent from the background path; `MainActivity`'s protected-storage and message-alert channels were Activity-scoped and unreachable from a headless engine, and are now Context-bound classes with one implementation each. The alert path needs no change and asks for no permission in the background, because `ReconcileMessageAlerts` already gates the single automatic prompt on `visible.isForeground`. Reliability is stated in four tiers and never as a guarantee: near-real-time foregrounded; *eventual* backgrounded, fifteen minutes at best and bound to Doze maintenance windows that thin out; **nothing** in the *rare* and *restricted* buckets, where Android disables background network and which Android 13+ applies after eight days without interaction; and nothing whatsoever after a force-stop. ADR-045's disclosure moves to revision 3 in both catalogues, which makes re-delivering the written handover release-blocking again. Adds no dependency, changes no cryptographic behaviour, opens no production gate, and leaves the Beta/Production boundary untouched — verified after the change against the built artifact, which packages unsigned, carries the production application ID, exports no beta MLS symbol, and declares exactly one service, bound with `BIND_JOB_SERVICE`, unexported, in the default process, with no foreground-service permission of any kind. |
+| ADR-050 | Accepted | Exactly one part of the application drives delivery, arbitrated in the process and asked for by the *entry point* rather than by the delivery session; the losing owner is asked to stand down and gives way between units of work; and losing a refresh-token rotation to another owner is repaired instead of read as the server ending the session; corrects ADR-049 (2026-08-22) | The hazard ADR-049 named is real and reachable on an ordinary user action - a headless catch-up posts a notification (ADR-048), the user taps it, and two Dart root isolates in one process both rotate one shared refresh token that the backend blacklists on use (`ROTATE_REFRESH_TOKENS` with `BLACKLIST_AFTER_ROTATION`), signing out a user who did nothing. ADR-049 chose the right mechanism and put it in the wrong place: `awaitExclusiveOwnership` was called by `MessageDeliverySession.compose`, which is reached only after `AuthenticationController.restore()` - and that restore *is* the rotation. A test asserted the opposite and passed, because its harness replaced the real `TokenCoordinator`; `sync-engine.md` simultaneously claimed a durable lease ADR-049 had already removed. The gate moves to `bootstrap()`, before storage is opened or a token is read; `attachForeground` now asks an in-flight catch-up to stand down, which `DurableSyncEngine` reads between envelopes, pages and batches, so the foreground waits for one unit of work rather than a whole drain; and the coordinator tells a lost race apart from a real session ending by re-reading the shared durable row rather than its own per-isolate cache. ADR-046's durable lease was re-derived independently and rejected again: every owner is in one process, so a lease coordinates things that always die together while adding an expiry, a clock and a stale-holder window - and it would be *weaker* where it matters, because a headless engine destroyed while the process survives leaves a lease nobody releases, whereas the Kotlin arbiter is the code that destroys it. Nothing durable records ownership and no wait is unbounded, so the mechanism cannot wedge delivery. Proved with two real isolates over one real shared SQLCipher store, in both orderings, under repeated contention, and with a contender killed mid-rotation. Separately corrects a pre-existing defect the work uncovered: `account_session` and `account_identity` were upserted without `singleton_id`, which SQLite treats as a rowid alias and auto-assigns, so every write after the first threw `SqliteException(275)`. Adds no dependency, changes no cryptographic behaviour, touches no backend, opens no production gate, and changes nothing the application says about itself. |
+
+## ADR-050 in full — guaranteeing that one part of the application drives delivery (2026-08-22)
+
+**Status:** Accepted. Corrects ADR-049's ownership arbitration, which was placed downstream
+of the operation it existed to protect, and adds the repair that makes the shared durable
+row safe when the arbitration cannot run at all. Reaffirms ADR-049's *choice* of mechanism
+on re-derived evidence. Adds no dependency, changes no cryptographic behaviour, touches no
+backend, opens no production gate.
+
+### The question
+
+> More than one part of this application may be capable of driving the same delivery work
+> against the same device, at the same time, without sharing memory. Is that true, exactly
+> which shared things are unsafe when it is, and what makes it impossible for two of them
+> to be doing the unsafe part at once — including when one of them stops existing
+> mid-operation and never gets to clean up?
+
+Nothing was assumed: not that the hazard exists, not the mechanism, not where the
+coordinating state lives, not the unit of exclusion, not what a loser does, and not that
+ADR-049's answer was right.
+
+### Exact environment, fixed
+
+Unchanged from ADR-044 and ADR-049. 20–30 users, all in Iran, private handover, no foreign
+runtime dependency at any layer, backend inside Iran and reachable, Android/Flutter client
+installed as a signed artifact, server an untrusted relay, devices killed and restarted
+without cooperation. `minSdk` 24, `targetSdk` 36, Flutter 3.44.7 / Dart 3.12.2.
+
+### Is the hazard real? Yes, and it is reachable on an ordinary user action
+
+Established from the composed artifact on 2026-08-22, by trace rather than by inference.
+
+**Two drivers can exist.** `DeferredDeliveryJobService` is declared with no
+`android:process`, so it runs in the default process; `beginCatchUp` starts a headless
+`FlutterEngine` when no activity engine is attached. Two `FlutterEngine`s in one process
+share one Dart VM but **not** one heap: two Dart *root isolates*, no shared memory, one
+shared SQLCipher file.
+
+**They meet on a user action, not on a rare interleaving.** The job fires while the process
+is gone → a headless run starts → the user opens the application. ADR-048 makes that
+sequence *more* likely rather than less: a catch-up that finds a message posts a
+notification, and tapping it is what starts the activity.
+
+**What they both touch, and how badly.**
+
+| Shared thing | What two drivers do to it | Severity |
+|---|---|---|
+| `account_session.token_metadata_ciphertext` — the **rotating** refresh token | both read `R0`; both present it; the backend blacklists on rotation, so the loser gets `401 invalid_token`, which `_endsSession` reads as the server ending the session → `store.clear()` deletes the shared row | **destroys session state**: the device is signed out and the user must log in again |
+| `inbox_envelopes` rows in `received`/`inspecting` | `beginNextEnvelopeInspection` deliberately re-offers `inspecting` rows so a crashed inspection is retried, so both claim the same lowest-sequence envelope and hand one ciphertext to the ratchet twice | corrupted/duplicated ratchet work |
+| outbox target rows | same claim-and-send shape | duplicated sends; recipients deduplicate by event id, so mostly wasted effort |
+| alert markers (ADR-048) | two reconciliations of one shade | cosmetic |
+| group KeyPackage maintenance, pending eviction, outbound dispatch | concurrency properties never established | unknown, therefore treated as unsafe |
+
+The first row is the sharp one and it is not theoretical. `config/settings/base.py` sets
+`ROTATE_REFRESH_TOKENS: True` and `BLACKLIST_AFTER_ROTATION: True`;
+`backend/accounts/API.md` states it in the contract — "the presented token is blacklisted
+and a new access/refresh pair is issued", "replaying an already-rotated token is a 401",
+and that `401 invalid_token` "also covers expired and already-blacklisted tokens". In the
+client, `BackendFailureCode.invalidToken` is in `_endsSession`, so the loser terminates.
+
+**And the window is not narrow.** `SecureSessionTokenAdapter` never persists an access
+token; a restored process reconstructs one with `expiresAt` at the epoch, precisely so that
+"the coordinator rotates the persisted refresh token before any authenticated request can
+be sent". So the *first* authenticated act of *every* fresh root isolate is a rotation of
+the shared row. Two isolates starting within one network round trip of each other both
+present `R0`.
+
+### What the repository actually did before, and where it disagreed with itself
+
+ADR-049 identified this hazard precisely and named the right mechanism. Its arbitration is
+sound: `BackgroundDelivery` is a Kotlin object in the one process, mutated only on the main
+looper — `JobService` "executes each incoming job on a `Handler` running on your
+application's main thread", and `FlutterActivity.configureFlutterEngine` is on the same
+looper.
+
+**But the gate was in the wrong place.** ADR-049 states: "`MessageDeliverySession.compose`
+calls `awaitExclusiveOwnership()` before it opens storage or reads a token". Traced through
+the composed application, that is false:
+
+1. `MessageDeliveryController` starts a session only for `fullScope`/`offlineFullScope`;
+2. that access state is produced only by `AuthenticationController.restore()`;
+3. `restore()` calls `CoordinatedAuthenticationSession.restore()` → `tokens.read()` (opens
+   protected storage) → `coordinator.accessToken()` (**rotates the shared refresh token**);
+4. the router sends a dormant launch to `/session-restoring`, whose first post-frame
+   callback is that `restore()`.
+
+So the ownership question was asked *strictly after* the operation it existed to protect.
+The mechanism prevented two engines; it did not prevent the two token coordinators whose
+collision ADR-049 traced to "401 `invalid_token`, `_endsSession`, `store.clear()`, and a
+user signed out who did nothing".
+
+**A test asserted the opposite and passed.**
+`test/app/dependencies/message_delivery_composition_test.dart` — "a session waits for a
+catch-up that already owns delivery" — asserts `harness.http.requests` is empty while
+ownership is held, with the comment "before it opens storage or reads a token — not
+after". It passes because its harness overrides `restore` with a fake session, so the real
+`TokenCoordinator` never runs. It is a true statement about the delivery session and was
+read as a true statement about the application.
+
+**Documentation contradicted itself.** `docs/sync-engine.md` said, in *Token lifecycle*,
+that "the durable delivery lease of ADR-046 is what actually prevents two coordinators from
+racing the rotating refresh token" — while, forty lines later, recording that ADR-049 had
+removed that lease. Both halves cannot be true, and the half that was load-bearing for the
+sharpest hazard named a mechanism that does not exist in the artifact.
+
+**A separate, pre-existing defect made the whole area unverifiable.**
+`SecureSessionTokenAdapter._writeFullSession` built `AccountSessionsCompanion.insert`
+without `singletonId`. `singleton_id` is the sole `INTEGER` primary key of a rowid table, so
+SQLite treats it as an alias for the rowid: an insert that omits it is assigned
+`max(rowid) + 1` and the `DEFAULT 1` is never reached. The first write to a database
+succeeds with rowid 1; **every write after it fails** `CHECK("singleton_id" = 1)` with
+`SqliteException(275)`, thrown out of `store.replace(...)` inside `_performRefresh`. Every
+token rotation after the first, on any given device, would have thrown. Reproduced directly
+on 2026-08-22 against a real `LocalDatabase`; no test covered a second write.
+`drift_enrollment_journal_store.dart` had the identical omission for `account_identity`.
+`DriftSyncStore._ensureCheckpoint` has it too but is harmless by accident, because
+`INSERT OR IGNORE` swallows the CHECK violation and the "ensure exists" intent is met
+anyway.
+
+### Research findings
+
+Primary sources only; blogs and forums were used for discovery and are cited nowhere.
+
+**One Dart VM per process, and one `IsolateNameServer` owned by it.** Read at the exact
+pinned revision — `flutter/flutter@84fc5cbb22` (Flutter 3.44.7), 2026-08-22.
+`engine/src/flutter/runtime/dart_vm_lifecycle.h`: "There can only be one VM running in the
+process at any given time." `dart_vm_lifecycle.cc`: `DartVMRef::Create` takes `gVMMutex`,
+and "If there is already a running VM in the process, grab a strong reference to it" —
+returning the existing VM and logging "Ignoring arguments for current VM create call and
+reusing the old VM". The name server is created once per VM
+(`auto isolate_name_server = std::make_shared<IsolateNameServer>()`), stored as
+`gVMIsolateNameServer`, and served to every caller by `DartVMRef::GetIsolateNameServer()`.
+`dart:ui`'s own documentation: "All isolates share a global mapping of names to ports."
+ADR-049 asserted this; it is now verified at the pinned revision.
+
+**Which settles what the storage layer actually is.** `drift_flutter` 0.3.1
+(`lib/src/native.dart`, read 2026-08-22) implements `shareAcrossIsolates: true` by looking
+up `drift-db/<name>` in `IsolateNameServer` and, if present,
+`DriftIsolate.fromConnectPort(port).connect()`; only when absent does it spawn an isolate
+that registers itself. Because the name server is VM-wide, the headless root isolate and
+the activity root isolate **connect to the same database server isolate**: one
+`NativeDatabase`, one SQLCipher connection, one file. There is no second connection and no
+file-level locking question to answer.
+
+**What that server guarantees under concurrent clients.** drift 2.34.2,
+`lib/src/remote/server_impl.dart`: "when a transaction is active, all queries that don't
+operate on another query executor have to wait", implemented by `_executorBacklog` and
+`_waitForTurn`; and `lib/src/runtime/executor/helpers/engines.dart`, where
+`_StatementBasedTransactionExecutor.ensureOpen` holds the parent executor's `Lock` until
+the transaction completes ("Block the main database or the parent transaction while this
+transaction is active"). So **a drift write transaction is already mutually exclusive
+across isolates**. `singleClientMode` defaults to `false` on this path, so closing one
+client does not shut the server down for the other, and table-update notifications are
+forwarded to every *other* connected client (`dispatchTableUpdateNotification`).
+
+This is a precise and load-bearing limit: transactions are atomic and serialized across
+owners, so nothing is half-written. What is *not* protected is any logical operation that
+spans transactions with I/O in between — read token → rotate over the network → write
+token, or claim envelope → decrypt → commit. Those are exactly the unsafe operations above.
+
+**Platform threading and process death.** `JobService`: "This service executes each
+incoming job on a `Handler` running on your application's main thread"; "Job services must
+be protected with this permission" (`BIND_JOB_SERVICE`), and one that is not "will be
+ignored by the system"; `jobFinished` releases the wakelock the system holds for the job
+(developer.android.com/reference/android/app/job/JobService, read 2026-08-22). AOSP cached
+apps freezer: "If all processes for a particular app are frozen, the system terminates any
+active TCP sockets maintained by the app" (source.android.com/docs/core/perf/
+cached-apps-freezer, read 2026-08-22).
+
+**Clocks.** Deliberately not researched into a dependency, because the design uses none.
+No part of this decision reads wall-clock time, elapsed time, or a timer whose value
+affects who owns delivery. That removes the entire class of failures a lease-based design
+inherits from a clock a user can set.
+
+**Backend, read-only.** `backend/config/settings/base.py` and `backend/accounts/API.md`, as
+quoted above. No backend file was read for anything other than its contract, and none was
+changed.
+
+### Alternatives evaluated
+
+**1 — Nothing; the hazard is not real.** Rejected on the trace above and on
+`delivery_owner_contention_test.dart`, which reproduces the damage with two real isolates
+over one real shared store.
+
+**2 — Keep ADR-049's arbitration exactly as it is.** Rejected: it does not cover
+`restore()`, which is where the damage is. This is a placement defect, not a mechanism
+defect.
+
+**3 — Reinstate ADR-046's durable Drift delivery lease.** Re-examined independently rather
+than inherited from ADR-049's rejection, and rejected again, more firmly. Every owner that
+can exist lives in one OS process (no `android:process`; one Dart VM per process; the job
+service runs in the default process), so a durable lease coordinates between things that
+always die together. What it *adds* is the entire stale-holder problem: an expiry, a clock
+to measure it with, a heartbeat writing to an encrypted database forever, and a window
+after every crash in which delivery is blocked by a lease nobody holds. That is a permanent
+availability failure introduced to fix an intermittent correctness one, which the brief
+names as the worse outcome. It is also strictly weaker in the case that matters most: the
+headless engine is destroyed by `onStopJob` or by the four-minute deadline **while the
+process survives**, and a durable lease would then be stale with nothing to release it,
+whereas the Kotlin arbiter is *the same code that destroys the engine* and releases in the
+same call.
+
+**4 — A Dart-side lock over `IsolateNameServer`.** Genuinely available — it is VM-wide and
+`registerPortWithName` is an atomic test-and-set, which is how `drift_flutter` elects its
+database server. Rejected: `FlutterEngine.destroy()` kills the headless root isolate
+abruptly and leaves the name registered, wedging the foreground until the process dies.
+Recovering from that needs `Isolate.ping` liveness probing with a timeout — more machinery,
+a new failure mode, and no advantage over an arbiter that already owns the engine's
+lifetime.
+
+**5 — Remove the concurrency instead of coordinating it.** Two shapes. Delete the headless
+entry point: rejected, that is ADR-049's whole value and a backgrounded client would
+receive nothing. Or never start a headless run when an activity might appear: impossible,
+the platform starts the activity, not this application.
+
+**6 — Kill the in-flight headless run when the user opens the application.** Rejected for
+ADR-049's reason, re-checked: the run may be inside the shared native cryptographic core
+(on a worker isolate spawned from the headless root, so engine teardown takes the whole
+group). Abandoning remains what happens when the *platform* takes the decision — `onStopJob`
+and the four-minute deadline — and is not made the ordinary path.
+
+**7 — Let the foreground wait for the headless run to finish naturally.** This is what
+ADR-049's design does. Rejected as the *whole* answer once the gate moves to launch: the
+bound on that wait is a complete drain — up to 100 pages of 100 envelopes — and blocking
+application launch on it is a visible failure. Waiting is kept; what changes is that the
+thing being waited for is asked to stop.
+
+**8 — Protect only the refresh token and let the rest overlap.** Rejected for ADR-049's
+reason, which still holds: `beginNextEnvelopeInspection` re-offers `inspecting` rows by
+design, and the post-inbox composite's concurrency properties are not established.
+Exclusion covers the whole cycle.
+
+**9 — Make the refresh token safe and *also* exclude.** Selected. The two are not
+alternatives: one is the guarantee, the other is what the guarantee's own failure costs.
+
+### Decision
+
+**Three changes. One moves the gate to where the damage is, one makes the losing owner give
+way promptly, and one makes the sharpest shared row survive the mechanism failing
+altogether.**
+
+**A. The ownership question is asked by the entry point, before anything exists.**
+`bootstrap()` awaits `DeliveryOwnershipGate.awaitExclusiveOwnership()` before
+`ApplicationRuntime.create` — before protected storage is opened, before a token is read,
+before `runApp`. One gate, at the one place every foreground path passes through, covering
+session restoration, delivery, alerts, and anything added later. The session-level
+`awaitExclusiveOwnership` in `MessageDeliverySession.compose` stays as a second, normally
+instant check.
+
+**B. The catch-up gives way; the foreground never yields.** The two owners are not
+symmetric. A catch-up runs *because* nobody is looking; the moment somebody is, the
+foreground drains the same mailbox within seconds and the run has no reason left to exist.
+`BackgroundDelivery.attachForeground` — which runs in `configureFlutterEngine`, before that
+engine's Dart entry point does anything — invokes `standDown` on the headless engine's
+channel. `DeferredCatchUpHandshake` latches it and *is* the `DeliveryStandDownSignal` the
+engine reads, so what the platform says and what the engine sees cannot drift apart through
+a mapping layer. `DurableSyncEngine` reads it between units of work: before each envelope
+inspection, each drain page, and each outbox batch. A displaced cycle finishes the
+transaction it holds, reports `deferred`, and stops; the catch-up returns `displaced`,
+skips the alert pass, and reports finished. Nothing is abandoned part-way.
+
+**C. Losing a rotation is repaired, not read as the session ending.** `TokenCoordinator`
+now distinguishes the two things a `401 invalid_token` can mean, using the shared durable
+row rather than its own per-isolate cache:
+
+- the success path compares against `store.readDurable()`, so a rotation cannot overwrite a
+  newer pair another owner persisted while it was in flight;
+- the failure path, and only for `invalid_token`/`token_not_valid` (never `token_revoked`,
+  which means a revoked device or a dead account and cannot be repaired by presenting a
+  different token), waits briefly and finitely for the row to move. If it moves, another
+  owner rotated first: adopt what it wrote and rotate that, up to a small budget. If it
+  never moves, the session really is over and is ended exactly as before.
+- Exhausting the budget while the row keeps moving is reported as a **transient** failure,
+  never a termination — a row that keeps moving is positive evidence that the session is
+  alive, and ending it there would be the one outcome that cannot be undone.
+
+The wait is bounded by a **count**, not by elapsed time (default 40 × 25 ms), because a
+device clock can move backwards and a wait that cannot terminate is the failure this whole
+piece exists to avoid. `readDurable()` is a new `SessionTokenStore` method; it reads the row
+without disturbing the in-memory access token, which the durable row never holds.
+
+**D (correction, separately reported).** `singletonId: const Value(1)` is now stated
+explicitly in the `account_session` and `account_identity` upserts. Without it the second
+write to either table on any device throws.
+
+### Correctness questions, answered
+
+- **Can two contexts genuinely run at once in the shipped artifact?** Yes — two Dart root
+  isolates in one process, shown above, and reproduced in test.
+- **What is the unit of exclusion, and why that unit?** *All of what one delivery owner
+  does with the application runtime*, from the entry point until the run ends. Not a job,
+  not a resource, not an envelope: the unsafe operations span transactions with network I/O
+  in between, and the composite post-inbox work has no established concurrency properties.
+  A finer unit would require establishing safety for every one of them.
+- **How does a contender acquire, and what does it observe when it cannot?** It asks the
+  platform on the main looper. A headless run in flight is recorded; the question is
+  answered when that run ends. When the platform cannot answer at all, the foreground
+  proceeds after a bounded wait — see *worst case* below.
+- **How does a holder release, on the ordinary path and every extraordinary one?** Ordinary:
+  the Dart side reports finished, Kotlin destroys the engine, `headless = null`, waiters
+  released. Displaced: the same path, reached sooner. `onStopJob`: `abandonCatchUp` →
+  `finish()` → same release. Four-minute deadline: same. Engine start failure: `headless`
+  cleared and waiters released in the same statement. **Process death: nothing to release,
+  because nothing durable was held.**
+- **How is a holder that will never release detected, and how long does that take?** It is
+  not detected, because it cannot exist. Every holder is inside one process; the release is
+  performed by the object that owns the holder's lifetime, on the same thread. The only
+  "undetected" case is a Dart side that never reports, and that is bounded by Kotlin's
+  four-minute deadline and, behind it, the platform's ten-minute job limit.
+- **What stops a displaced holder still running from acting as though it holds?** The
+  latched signal it reads between units of work, plus the fact that its engine is destroyed
+  when it reports. In the interval between the two, it holds no exclusive resource: its
+  transactions are serialized by the one drift server, and its token rotation is repairable.
+- **Can the mechanism deadlock, starve, or wedge delivery permanently?** No. The arbiter has
+  one waiter list and one release path, all on one thread. Every wait has a bound: 20 s at
+  the entry point, 5 min at the session, 4 min for the headless engine, 2 min for a tick.
+  Every bound expires into *proceeding*, never into stopping. Nothing durable records
+  ownership, so nothing survives a restart to block the next run.
+- **What happens on the very first run, before any coordinating state exists?** Nothing to
+  wait for: `headless` is null and the question returns immediately. There is no first-run
+  case because there is no state to create.
+- **What if the coordinating state is corrupt, from an older version, or absent?** It cannot
+  be any of those. It is two fields in a process-lifetime Kotlin object; a new process
+  starts with them empty, which is the correct state.
+- **Does anything the user sees change?** No new screen, no new string, no new permission,
+  no new notification. The only visible change is the *absence* of an unexplained sign-out.
+
+### Guarantees, assumptions, observations — three different things
+
+**Guaranteed by construction, with the argument:**
+
+1. *No stale holder can exist.* Every owner lives in the one process (manifest declares no
+   `android:process`; the Flutter engine documents one Dart VM per process and reuses it),
+   and the only coordinating state is process-lifetime memory. Process death releases
+   everything simultaneously with the things it was protecting.
+2. *The mechanism cannot block delivery permanently.* Every wait is bounded and every bound
+   expires into proceeding. Nothing durable is written by it.
+3. *Transactions cannot interleave destructively.* One SQLCipher connection behind one drift
+   server, and drift serializes transactions across clients at the pinned version.
+4. *An unanswerable ownership question is never read as "somebody else rotated".* The repair
+   adopts only a value that is present *and* different; a store that cannot be read answers
+   null and the session ends as it would have.
+
+**Guaranteed only under assumptions, and here they are:**
+
+5. *Exactly one owner drives the engine* — assuming `JobService` callbacks and
+   `FlutterActivity.configureFlutterEngine` really are delivered on one looper in order
+   (documented, not measured here), and assuming no future code path starts a Dart root
+   isolate outside `BackgroundDelivery`.
+6. *The foreground's wait is short* — assuming the displaced run reaches a unit boundary
+   promptly. The bound is one envelope's inspection, one drain page, or one outbox batch,
+   not a whole cycle. It is not a bound on wall-clock time.
+7. *The repair converges* — assuming the losing owner can read the durable row and that the
+   winner persists what it was issued.
+
+**Merely not observed to fail, and proving nothing:**
+
+8. That a job runs at all on a device. No device or emulator run was possible; every
+   Android-side statement rests on documentation and on source assertions.
+9. That the Kotlin arbiter behaves as argued. No Dart test can drive it, and what is pinned
+   is the *shape* of the source, not its behaviour.
+10. That a headless engine starts the `backgroundDelivery` entry point in a release AOT
+    snapshot. Inherited unchanged from ADR-049.
+
+### Failure modes, including of the mechanism itself
+
+- **The platform never answers the ownership question.** The entry point proceeds after
+  20 s. Exclusion is then absent for that launch, and the sharpest damage is bounded by the
+  repair in C: a redundant rotation instead of a sign-out.
+- **The stand-down request never arrives, or arrives at an engine not yet listening.**
+  Kotlin re-sends on a second attach, and `standDownImmediately` covers a run started while
+  an activity was already attaching. If it is still missed, the foreground waits for the run
+  to end naturally — ADR-049's behaviour, with ADR-049's bounds.
+- **The displaced run ignores the request.** It cannot ignore it for longer than one unit of
+  work; if it is wedged inside one, the four-minute engine deadline ends it.
+- **The repair adopts a token that is itself immediately retired.** Bounded by the adoption
+  budget and then reported as transient. The user stays signed in and the next call retries.
+- **The winner dies between being issued a token and persisting it.** The loser waits, sees
+  a row that never moves, and ends the session — which is *correct*: the issued pair is lost
+  and the presented one is blacklisted, so no working token exists. Covered by test.
+- **The durable store is unavailable during the repair.** Fail-closed: no adoption, session
+  ends as before.
+- **A future second process.** Invalidates the entire argument. An architecture test fails
+  if `android:process` appears anywhere in the manifest.
+
+### Worst case if the mechanism itself fails
+
+Both gates absent and both owners running: the loser's rotation is repaired, so the user
+stays signed in; the same envelope may be handed to the ratchet twice and the same outbox
+batch sent twice. The first is a decryption failure that is retried; the second is
+deduplicated by recipients on the logical event id. Nothing is destroyed that a later
+session cannot re-derive. That is a strictly better worst case than the one this decision
+found in the artifact, where the user was signed out.
+
+### Security and privacy
+
+- **Can failure invalidate a session, lock a user out, or destroy account state?** That was
+  the *pre-existing* behaviour and it is what C removes. The remaining path to a
+  termination is a durable row that genuinely never moves, which means no working token
+  exists.
+- **Can anything an attacker controls influence who holds, or displace a holder?** No. The
+  arbitration reads no network input and no server-supplied value. A hostile relay can
+  answer `token_revoked` to end a session, which it could already do, and which the repair
+  deliberately does not soften.
+- **Does the coordinating state reveal anything?** It is two in-memory fields holding a
+  channel reference and a run object. Nothing is written to disk, no log line, no
+  preference. The stand-down call carries no arguments.
+- **Can an interrupted operation leave security-relevant state in a middle position?** The
+  refresh is the one that can: a rotation may be issued and not persisted. That is the case
+  in *Failure modes* above, and its resolution is to end the session, not to guess.
+- **Can this be used to suppress delivery or notification silently?** A displaced catch-up
+  skips its alert pass — but it skips it *because* the foreground owns the shade from that
+  moment and reconciles from the same committed state, and `MessageAlertController` starts
+  with `_alertPosted = true` precisely so a new process can withdraw or re-post what a
+  previous one left. Nothing an attacker can reach triggers a displacement.
+- **No existing invariant was weakened.** Both entry points still compose through one
+  `ApplicationRuntime`; the headless container's one extra override is additive and typed
+  as `DeliveryStandDownSignal`, so it cannot replace a transport, storage or crypto
+  override.
+
+### Beta and production
+
+Suitable for both, now. No dependency added, no cryptographic surface touched, no production
+gate crossed, and the Beta/Production separation is exactly where ADR-042 and ADR-044 left
+it. It changes nothing the application says about itself: ADR-045's disclosure revision is
+unchanged at 3, because the delivery *tiers* are unchanged — this decision makes the
+existing claims true rather than making new ones.
+
+### Known limitations
+
+- **The Kotlin arbiter is argued, not tested.** Its correctness rests on the one-looper
+  argument and on source assertions.
+- **The foreground's wait is bounded by a unit of work, not by a duration.** A single
+  pathological envelope inspection bounds it, and nothing here caps that.
+- **The repair costs up to a second before a genuinely ended session signs out.** Deliberate:
+  a user who is being signed out anyway is not harmed by a second, and a user who is not
+  being signed out is spared entirely.
+- **`MessageAlertController` has no gate of its own.** It starts after restoration, by which
+  time any headless run has been asked to stand down; its worst case is a duplicate
+  notification, and it is not made a reason to add a second gate.
+
+### Outstanding validation
+
+1. **Everything Android-side.** No device and no usable emulator (all installed AVDs are
+   Play-Store images). The displacement path, the stand-down channel call, the headless
+   engine teardown and the one-looper ordering are unexercised on hardware.
+2. **The interaction with `onStopJob` under real Doze/quota pressure.**
+3. **That the pre-existing singleton-write defect is now genuinely absent end-to-end**, i.e.
+   that a real device can rotate twice. Verified against a real `LocalDatabase` on the host;
+   not on a device.
+4. **The device matrix** from ADR-049 remains open and unchanged.
+
+### Follow-up work
+
+1. Device validation of everything in *Outstanding validation*.
+2. `DriftSyncStore._ensureCheckpoint` relies on `INSERT OR IGNORE` swallowing a CHECK
+   violation that a stated `singletonId` would turn into an intended primary-key conflict.
+   Harmless today, fragile if the insert mode ever changes.
+3. ADR-046's Layer 2 (`specialUse` foreground service) remains unbuilt. When it ships it is
+   a third owner and this arbitration must be re-derived, not extended by assumption.
+4. Re-delivering the ADR-049/ADR-048 handover disclosure at revision 3 remains
+   release-blocking and is untouched by this decision.
+
+### Review and revisit conditions
+
+1. **Any second process appears** — the whole argument is that there is one. The
+   architecture test fails first.
+2. **A third delivery owner appears** (Layer 2, or anything else that starts a root isolate).
+3. **The Flutter engine stops guaranteeing one Dart VM per process**, or `drift_flutter`
+   stops sharing one database server across isolates. Both are pinned-version facts.
+4. **The backend stops blacklisting on rotation, or starts revoking the whole token family
+   on reuse.** The second would make the repair in C useless and would demand real exclusion
+   over the refresh, not repair.
+5. **Any wait here becomes unbounded**, or any coordinating state becomes durable.
 
 ## ADR-049 in full — what makes a backgrounded client take delivery (2026-08-21)
 
@@ -1595,7 +2070,16 @@ In order. Each is a piece of work, not a checkbox.
    the isolate that already exists, a headless engine starts only when none does, and a
    foreground session waits for a headless run rather than racing it. The two-owner test
    this line asked for exists as a composition test that holds ownership and asserts that
-   nothing authenticated happens until it is released.
+   nothing authenticated happens until it is released. **Corrected 2026-08-22 — ADR-050.**
+   That test proves less than this sentence claims: its harness replaces the real
+   `TokenCoordinator` with a fake session, so "nothing authenticated happens" was true of
+   the delivery session and untrue of the application, which rotates the shared refresh
+   token during session restoration well before a session composes. The two-owner test
+   this line originally asked for now exists as
+   `test/features/networking/delivery_owner_contention_test.dart`: two real isolates, one
+   real shared SQLCipher store, both orderings, repeated contention, and a contender
+   killed mid-rotation. The conclusion that a lease was specified for a topology that does
+   not exist is unchanged and was re-derived independently.
 5. **`specialUse` foreground service, boot receiver, background-delivery setting, and the
    setup screen** (Layer 2), off by default.
 6. **Disclosure revision.** Shipping any of steps 2 to 5 makes ADR-045's original

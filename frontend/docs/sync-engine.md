@@ -131,10 +131,23 @@ with the backend/proxy configuration and a REST health probe only when necessary
 
 - Access expiry is tracked from token claims with clock-skew allowance.
 - Refresh begins shortly before expiry and is guarded by one mutex inside the owning
-  isolate. That mutex does not span isolates, so the durable delivery lease of ADR-046 is
-  what actually prevents two coordinators from racing the rotating refresh token.
-- Every successful refresh atomically replaces both access and rotated refresh tokens.
-- An invalid/replayed refresh token ends the session; it is not retried indefinitely.
+  isolate. That mutex does not span isolates. ADR-046's durable delivery lease, which an
+  earlier revision of this document credited with covering that gap, was removed by
+  ADR-049 and never shipped; what prevents two coordinators from racing the rotating
+  refresh token is ADR-050's in-process ownership gate, asked for by the *entry point*
+  before storage is opened or a token is read.
+- Every successful refresh atomically replaces both access and rotated refresh tokens, and
+  compares against the durable row rather than the isolate's own cache, so a rotation
+  cannot overwrite a newer pair another owner persisted while it was in flight.
+- An invalid/replayed refresh token ends the session; it is not retried indefinitely. One
+  case is excepted, because the backend blacklists a refresh token the moment it is
+  rotated and so answers a lost race and a real session ending identically: if the durable
+  row no longer holds the token just presented, another owner in this process rotated
+  first, and the coordinator adopts what that owner wrote instead of ending the session
+  (ADR-050). It waits a bounded number of re-reads for the row to move; a row that never
+  moves means no working token exists, and the session is ended exactly as before.
+  `token_revoked` is never repaired this way — a revoked device or a dead account cannot be
+  fixed by presenting a different token.
 - WebSocket close 4001 attempts one valid refresh/reconnect cycle.
 - Close 4003 or REST `token_revoked` immediately wipes the local device session.
 - Close 4008 is a client protocol defect/security event and uses a circuit breaker.
@@ -210,15 +223,38 @@ ADR-046 makes delivery layered, and every layer drives this same engine.
   and the same supervisor. Messaging still never starts a `dataSync` or `remoteMessaging`
   service.
 - **Exactly one delivery owner at a time**, arbitrated in the process rather than in the
-  database (ADR-049, replacing ADR-046's durable lease). Concurrent owners would race
-  `TokenCoordinator` instances on a *rotating* refresh token — the loser presents a
-  retired one, the backend answers 401 `invalid_token`, and the session ends — and would
-  hand the same envelope to the ratchet twice, because `beginNextEnvelopeInspection`
-  deliberately re-offers rows left `inspecting` by a crash. The job service runs in the
-  default process and the Flutter engine documents one Dart VM per process, so every owner
-  is on one main looper: a wake-up goes to the isolate that already exists, a headless
-  engine starts only when none does, and a foreground session waits for a headless run
-  before it opens storage or reads a token.
+  database (ADR-049, replacing ADR-046's durable lease; placement corrected by ADR-050).
+  Concurrent owners would race `TokenCoordinator` instances on a *rotating* refresh token
+  — the loser presents a retired one, the backend answers 401 `invalid_token`, and the
+  session ends — and would hand the same envelope to the ratchet twice, because
+  `beginNextEnvelopeInspection` deliberately re-offers rows left `inspecting` by a crash.
+  The job service runs in the default process and the Flutter engine documents one Dart VM
+  per process, so every owner is on one main looper: a wake-up goes to the isolate that
+  already exists, and a headless engine starts only when none does.
+- **The foreground asks for ownership at the entry point, not at the delivery session.**
+  ADR-049 placed that question in `MessageDeliverySession.compose`, which is reached only
+  after `AuthenticationController.restore()` — and that restore is itself a rotation of the
+  shared refresh token, so the gate sat downstream of the damage it existed to prevent.
+  `bootstrap()` now asks before `ApplicationRuntime` is built, which covers restoration,
+  delivery, alerts and anything added later with one gate. The session-level check remains
+  as a second, normally instant one.
+- **The catch-up is the owner that gives way, and it is asked rather than killed.** A
+  deferred run exists only because nobody was looking; the moment somebody is, the
+  foreground drains the same mailbox within seconds. Attaching a foreground engine —
+  which happens in `configureFlutterEngine`, before that engine's Dart entry point runs —
+  asks the run in flight to stand down. `DurableSyncEngine` reads that signal *between*
+  units of work: before each envelope inspection, each drain page and each outbox batch. A
+  displaced cycle finishes the transaction it holds, reports `deferred`, and stops; the
+  run reports `displaced`, skips its alert pass because the foreground now owns the shade,
+  and reports finished. Abandoning mid-flight is what `onStopJob` and the engine deadline
+  do, because the platform has already taken that decision; it is never the ordinary path,
+  because a call into the shared native cryptographic core must be allowed to finish.
+- **Nothing about the arbitration is durable, deliberately.** Every owner it arbitrates
+  between lives in the one process, so process death releases all of it at once and there
+  is no stale holder to detect, expire or displace — and no clock to be wrong about. Every
+  wait it imposes is bounded, and every bound expires into *proceeding* rather than into
+  stopping, so the mechanism cannot wedge delivery. What that costs when it fails is one
+  redundant token rotation, which the coordinator repairs, rather than a sign-out.
 - **A deferred wake-up is acknowledged, not fired and forgotten.** The platform lets the
   process be frozen again once the job is finished, so an unacknowledged tick is a drain
   the system stops part-way. `BestEffortDeliveryTick.complete()` is called unconditionally,
@@ -285,7 +321,17 @@ mailbox nor transmitted its outbox. What runs now:
   crypto core for both entry points, so the background path cannot quietly establish a
   weaker posture than the foreground one. It opens no socket — a cached process is frozen
   and its TCP sockets are terminated — and runs one `synchronize()` followed by one alert
-  reconciliation.
+  reconciliation. Its container takes exactly one override the activity's does not: the
+  signal that tells it it is no longer the delivery owner.
+- **One SQLCipher connection, shared, not two.** `drift_flutter`'s `shareAcrossIsolates`
+  resolves through `IsolateNameServer`, which the Flutter engine owns per Dart VM and
+  therefore per process, so a headless isolate connects to the *same* database server
+  isolate rather than opening a second connection to the same file. Drift serializes
+  transactions across every connected client, so a transaction is already mutually
+  exclusive between owners. That is a precise limit: it makes writes atomic, and it does
+  nothing for a logical operation that spans transactions with network I/O in between —
+  read token, rotate, write token; claim envelope, decrypt, commit. Those are exactly the
+  operations ADR-050 excludes.
 - **Layer 3 is built and is not part of the delivery session.** ADR-048 composes
   `MessageAlertController` at the application root, beside `MessageDeliveryController` and
   deliberately not inside it: a delivery session that fails to compose still leaves
