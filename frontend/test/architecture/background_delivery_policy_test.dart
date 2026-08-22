@@ -188,6 +188,94 @@ void main() {
     });
   });
 
+  group('what makes exactly one part of this drive delivery (ADR-050)', () {
+    final bootstrap = File('lib/app/bootstrap.dart').readAsStringSync();
+    final headless = File(
+      'lib/app/dependencies/deferred_delivery_catch_up.dart',
+    ).readAsStringSync();
+
+    test('the foreground asks before it builds anything', () {
+      // The correction ADR-050 makes to ADR-049. The ownership question used to
+      // be asked by `MessageDeliverySession.compose`, which is reached only
+      // after session restoration - and restoration *is* a rotation of the
+      // shared refresh token. Asked there, the gate was downstream of the
+      // damage it existed to prevent. Source order is what pins it, because no
+      // host test can compose `bootstrap`.
+      final asked = bootstrap.indexOf(
+        'DeliveryOwnershipGate().awaitExclusiveOwnership()',
+      );
+      final built = bootstrap.indexOf('ApplicationRuntime.create(');
+      expect(asked, greaterThan(-1), reason: 'the gate is opened at all');
+      expect(
+        asked,
+        lessThan(built),
+        reason:
+            'nothing that touches protected storage or a token may precede it',
+      );
+    });
+
+    test('the two owners are not symmetric: the catch-up gives way', () {
+      // A foreground engine attaching is the earliest this process can know a
+      // user is present, and it is where the run in flight is asked to stop.
+      expect(delivery, contains('fun requestStandDown()'));
+      expect(
+        delivery,
+        contains('headless?.requestStandDown()'),
+        reason: 'attaching a foreground engine is what displaces a catch-up',
+      );
+      expect(
+        delivery,
+        contains('standDownImmediately = foreground != null'),
+        reason:
+            'a run started while an activity is already attaching is displaced '
+            'before it has done anything',
+      );
+    });
+
+    test('it is asked to stop, never killed for convenience', () {
+      // Abandoning a run mid-flight is what `onStopJob` and the four-minute
+      // deadline do, because the platform has already taken the decision. It is
+      // not what an ordinary displacement does: a call into the shared native
+      // cryptographic core, or a transaction, must be allowed to finish.
+      final attach = delivery.indexOf('fun attachForeground(');
+      final detach = delivery.indexOf('fun detachForeground(');
+      final body = delivery.substring(attach, detach);
+      expect(body, isNot(contains('abandon')));
+      expect(body, isNot(contains('destroy')));
+    });
+
+    test('the headless run listens for it, and stops listening when over', () {
+      expect(headless, contains('channel.listen()'));
+      expect(headless, contains('channel.release()'));
+      expect(
+        headless,
+        contains('DeferredCatchUpOutcome.displaced'),
+        reason: 'giving way is an outcome of its own, not a failure',
+      );
+      expect(
+        headless,
+        contains('standDown: handshake'),
+        reason: 'the engine reads the same signal the platform speaks to',
+      );
+    });
+
+    test('nothing about the arbitration is durable', () {
+      // The whole argument for arbitrating in the process is that every owner
+      // dies with it, so there is no stale holder to expire and nothing that
+      // can outlive a crash and block delivery. A file, a preference or a
+      // database row here would reintroduce exactly that.
+      for (final forbidden in const [
+        'SharedPreferences',
+        'getSharedPreferences',
+        'FileOutputStream',
+        'openFileOutput',
+        'ContentProvider',
+      ]) {
+        expect(delivery, isNot(contains(forbidden)));
+      }
+    });
+  });
+
   group('which build a background run believes it is', () {
     test('the compiled entry point fixes the environment, not the platform', () {
       // ADR-036 and ADR-044 hold that the environment decides the provisioned

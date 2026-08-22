@@ -38,9 +38,22 @@ import io.flutter.plugin.common.MethodChannel
  * exists whenever there is one, and only starts a headless engine when there is
  * not.
  *
- * That arbitration needs no lock. `JobService` callbacks and `FlutterActivity`
- * engine callbacks are both delivered on this process's main looper, so every
- * transition below happens on one thread, in order.
+ * That arbitration needs no lock, and nothing about it is durable. `JobService`
+ * callbacks and `FlutterActivity` engine callbacks are both delivered on this
+ * process's main looper, so every transition below happens on one thread, in
+ * order; and every owner it arbitrates between lives inside this process, so
+ * process death releases all of it at once and there is no stale holder to
+ * detect, expire or displace.
+ *
+ * ## Who gives way
+ *
+ * The two owners are not symmetric. A catch-up runs precisely because nobody was
+ * looking; the moment somebody is, the foreground drains the same mailbox within
+ * seconds and this run has no reason left to exist. So the foreground does not
+ * wait for a whole drain: attaching a foreground engine asks the run in flight
+ * to stand down, and it gives way between units of work. It is asked rather than
+ * killed, because abandoning a transaction or a call into the shared native
+ * cryptographic core part-way is the one thing worse than waiting.
  */
 internal object BackgroundDelivery {
     const val CHANNEL = "communication_platform/background_delivery"
@@ -136,9 +149,19 @@ internal object BackgroundDelivery {
     // Ownership, all on the main thread
     // ---------------------------------------------------------------------
 
-    /** Registers the isolate the user is looking at as the delivery owner. */
+    /**
+     * Registers the isolate the user is looking at as the delivery owner.
+     *
+     * This is also the earliest moment this process can know a foreground
+     * isolate is coming: it runs in `configureFlutterEngine`, before that
+     * engine's Dart entry point does anything at all. A catch-up in flight is
+     * asked to stand down here rather than when the foreground gets round to
+     * asking, so that by the time Dart reaches its ownership question the run it
+     * would otherwise wait for is already winding up.
+     */
     fun attachForeground(channel: MethodChannel) {
         foreground = channel
+        headless?.requestStandDown()
     }
 
     fun detachForeground(channel: MethodChannel) {
@@ -220,6 +243,11 @@ internal object BackgroundDelivery {
         val applicationContext = context.applicationContext
         val run = HeadlessRun(
             context = applicationContext,
+            // A run started while an activity is already attaching is displaced
+            // before it has done anything, which is the cheapest moment there
+            // is. Both callbacks are on one looper, so this reads a value that
+            // cannot change underneath it.
+            standDownImmediately = foreground != null,
             attachChannels = { messenger ->
                 // A headless engine reaches only the plugins Flutter registers
                 // automatically. Everything this application owns has to be put
@@ -298,11 +326,13 @@ internal object BackgroundDelivery {
      */
     private class HeadlessRun(
         private val context: Context,
-        private val attachChannels: (BinaryMessenger) -> Unit,
+        private val standDownImmediately: Boolean,
+        private val attachChannels: (BinaryMessenger) -> MethodChannel,
         private val onDone: () -> Unit,
     ) {
         private val handler = Handler(Looper.getMainLooper())
         private var engine: FlutterEngine? = null
+        private var channel: MethodChannel? = null
         private var settled = false
         private val timeout = Runnable { finish() }
 
@@ -313,17 +343,36 @@ internal object BackgroundDelivery {
                 loader.ensureInitializationComplete(context, null)
                 val created = FlutterEngine(context)
                 engine = created
-                attachChannels(created.dartExecutor.binaryMessenger)
+                channel = attachChannels(created.dartExecutor.binaryMessenger)
                 handler.postDelayed(timeout, HEADLESS_RUN_TIMEOUT_MS)
                 created.dartExecutor.executeDartEntrypoint(
                     DartExecutor.DartEntrypoint(loader.findAppBundlePath(), ENTRYPOINT),
                 )
+                if (standDownImmediately) {
+                    requestStandDown()
+                }
                 true
             } catch (_: Exception) {
                 handler.removeCallbacks(timeout)
                 destroy()
                 false
             }
+        }
+
+        /**
+         * Tells this run it is no longer the delivery owner.
+         *
+         * Best-effort and deliberately unacknowledged: the Dart side latches the
+         * request, reads it between units of work, and answers by reporting
+         * finished — the same reply the ordinary path sends. If it never
+         * arrives, the four-minute deadline above ends the run instead, and the
+         * foreground has a deadline of its own for waiting.
+         */
+        fun requestStandDown() {
+            if (settled) {
+                return
+            }
+            channel?.invokeMethod("standDown", null)
         }
 
         /** The ordinary end: the Dart side reported that its run is over. */
@@ -333,6 +382,7 @@ internal object BackgroundDelivery {
             }
             settled = true
             handler.removeCallbacks(timeout)
+            channel = null
             destroy()
             onDone()
         }

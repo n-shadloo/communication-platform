@@ -32,6 +32,16 @@ void main() {
     ),
   );
 
+  group('what a catch-up concludes about the wake-up itself', () {
+    test('being displaced disarms nothing', () {
+      // Giving delivery up to the application the user just opened says
+      // nothing about whether the next wake-up should happen. Disarming here
+      // would mean that opening the application once, at the wrong moment,
+      // permanently ended background delivery until the next sign-in.
+      expect(deferredCatchUpDisarms(DeferredCatchUpOutcome.displaced), isFalse);
+    });
+  });
+
   group('what a catch-up refuses to start', () {
     test('a full, set-up, device-bound, online session may proceed', () {
       expect(deferredCatchUpRefusal(restored()), isNull);

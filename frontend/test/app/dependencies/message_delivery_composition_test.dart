@@ -307,11 +307,16 @@ void main() {
   });
 
   test('a session waits for a catch-up that already owns delivery', () async {
-    // Two Dart root isolates in one process would be two token coordinators
-    // against one *rotating* refresh token, and the loser presents one the
-    // server has already retired. The foreground therefore waits for a headless
-    // catch-up that is already in flight, before it opens storage or reads a
-    // token — not after.
+    // What this proves, exactly: a *session* composes nothing while another
+    // owner holds delivery. It does not prove that the application does
+    // nothing, and an earlier version of this comment claimed it did — the
+    // harness overrides `restore` with a fake session, so the real
+    // `TokenCoordinator` never runs here, and in the composed application that
+    // restore is itself a rotation of the shared refresh token and happens
+    // before any session composes (ADR-050). The entry-point gate is asserted
+    // in `test/architecture/background_delivery_policy_test.dart`, and real
+    // contention over a real shared store in
+    // `test/features/networking/delivery_owner_contention_test.dart`.
     final harness = await DeliveryHarness.create(holdOwnership: true);
     addTearDown(harness.dispose);
 
@@ -327,7 +332,10 @@ void main() {
     expect(
       harness.http.requests,
       isEmpty,
-      reason: 'nothing authenticated happens while another owner is running',
+      reason:
+          'this session issues nothing authenticated while another owner is '
+          'running - which is a statement about the session, not about the '
+          'application',
     );
     expect(harness.sockets.connections, isEmpty);
 
@@ -902,6 +910,9 @@ final class InMemoryTokenStore implements SessionTokenStore {
 
   @override
   Future<SessionTokens?> read() async => current;
+
+  @override
+  Future<SessionTokens?> readDurable() async => current;
 
   @override
   Future<void> replace(SessionTokens tokens) async => current = tokens;

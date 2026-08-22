@@ -4,7 +4,18 @@ import 'package:communication_platform/features/networking/domain/session_tokens
 
 /// Protected token persistence. Replacing a rotated pair must be atomic.
 abstract interface class SessionTokenStore implements Port {
+  /// The tokens this owner believes are current, which an implementation may
+  /// answer from its own memory.
   Future<SessionTokens?> read();
+
+  /// The tokens the durable store actually holds, ignoring anything this owner
+  /// has cached.
+  ///
+  /// The refresh token rotates, and the durable row it lives in is shared with
+  /// every other delivery owner in this process (ADR-050). A cached answer is
+  /// this owner's last observation, not the truth, so every decision that could
+  /// *end a session* is made against this rather than against [read].
+  Future<SessionTokens?> readDurable();
 
   Future<void> replace(SessionTokens tokens);
 

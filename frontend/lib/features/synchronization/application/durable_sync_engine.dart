@@ -78,6 +78,7 @@ final class DurableSyncEngine {
     required TimeSource clock,
     required JitterSource jitter,
     PostInboxCommitWorkPort? postInboxCommitWork,
+    DeliveryStandDownSignal standDown = const NeverStandsDown(),
     this.retryPolicy = const SyncRetryPolicy(),
     this.limits = const SyncEngineLimits(),
   }) : _store = store,
@@ -86,7 +87,8 @@ final class DurableSyncEngine {
        _staleDeviceRefresh = staleDeviceRefresh,
        _clock = clock,
        _jitter = jitter,
-       _postInboxCommitWork = postInboxCommitWork;
+       _postInboxCommitWork = postInboxCommitWork,
+       _standDown = standDown;
 
   final DurableSyncStore _store;
   final SyncRemotePort _remote;
@@ -95,6 +97,13 @@ final class DurableSyncEngine {
   final TimeSource _clock;
   final JitterSource _jitter;
   final PostInboxCommitWorkPort? _postInboxCommitWork;
+
+  /// Read between units of work, never in the middle of one. A cycle that is
+  /// asked to give way finishes the envelope, batch or transaction it is
+  /// holding and then reports `deferred`, which is the same thing it reports
+  /// when it hits a per-run limit: work remains, and the next owner does it.
+  final DeliveryStandDownSignal _standDown;
+
   final SyncRetryPolicy retryPolicy;
   final SyncEngineLimits limits;
 
@@ -156,6 +165,10 @@ final class DurableSyncEngine {
       pageIndex < limits.maximumDrainPagesPerRun;
       pageIndex += 1
     ) {
+      if (_standDown.standDownRequested) {
+        deferred = true;
+        break;
+      }
       final drain = await _remote.drain(limit: limits.drainPageSize);
       if (drain case FailureResult(failure: final failure)) {
         return Result.failure(failure);
@@ -195,6 +208,10 @@ final class DurableSyncEngine {
     }
 
     for (var index = 0; index < limits.maximumOutboxBatchesPerRun; index += 1) {
+      if (_standDown.standDownRequested) {
+        deferred = true;
+        break;
+      }
       final now = _clock.now();
       final batchResult = await _store.beginNextOutboxBatch(now: now);
       if (batchResult case FailureResult(failure: final failure)) {
@@ -303,6 +320,9 @@ final class DurableSyncEngine {
     var inspected = 0;
     var blocked = 0;
     for (var index = 0; index < limits.maximumInspectionsPerRun; index += 1) {
+      if (_standDown.standDownRequested) {
+        break;
+      }
       final projection = await _store.readProjection();
       if (projection case FailureResult(failure: final failure)) {
         return Result.failure(failure);

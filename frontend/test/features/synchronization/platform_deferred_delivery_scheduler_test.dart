@@ -213,8 +213,119 @@ void main() {
     expect(platformCalls, isEmpty);
   });
 
+  group('the ownership gate a foreground entry point opens with', () {
+    test('it asks the platform before anything else has happened', () async {
+      // The whole correction ADR-050 makes. The question used to be asked by
+      // the delivery session, which composes behind session restoration - and
+      // restoration is itself a token rotation against the shared durable row.
+      // Asking here means nothing authenticated has happened yet.
+      await const DeliveryOwnershipGate().awaitExclusiveOwnership();
+
+      expect(platformCalls.map((call) => call.method), [
+        'awaitExclusiveOwnership',
+      ]);
+    });
+
+    test('a platform that never answers does not stop the launch', () async {
+      // Refusing to start would replace an intermittent correctness bug with a
+      // permanent availability one: an application that cannot be opened. What
+      // makes starting anyway survivable is that the shared row this protects
+      // repairs itself rather than ending the session.
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(
+            channel,
+            (call) => Completer<Object?>().future,
+          );
+
+      await expectLater(
+        const DeliveryOwnershipGate(
+          deadline: Duration(milliseconds: 50),
+        ).awaitExclusiveOwnership(),
+        completes,
+      );
+    });
+
+    test(
+      'a target with no implementation behind it waits for nobody',
+      () async {
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(channel, null);
+
+        await expectLater(
+          const DeliveryOwnershipGate().awaitExclusiveOwnership(),
+          completes,
+        );
+      },
+    );
+
+    test('nothing is asked of a target that is not Android', () async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+
+      await const DeliveryOwnershipGate().awaitExclusiveOwnership();
+
+      expect(platformCalls, isEmpty);
+    });
+  });
+
+  group('being told to stop being the delivery owner', () {
+    test('a headless run latches the request and keeps it latched', () async {
+      final handshake = DeferredCatchUpHandshake()..listen();
+      addTearDown(handshake.release);
+
+      expect(handshake.standDownRequested, isFalse);
+      await platformCallsIn('standDown');
+      expect(handshake.standDownRequested, isTrue);
+
+      // Nothing un-displaces a displaced run. The owner that displaced it is
+      // the one that continues, and a second request changes nothing.
+      await platformCallsIn('standDown');
+      expect(handshake.standDownRequested, isTrue);
+    });
+
+    test('it is the signal the engine reads, without any adapter', () async {
+      // The handshake *is* a DeliveryStandDownSignal, so what the platform says
+      // and what the engine reads cannot drift apart through a mapping layer.
+      final DeliveryStandDownSignal signal = DeferredCatchUpHandshake()
+        ..listen();
+      addTearDown((signal as DeferredCatchUpHandshake).release);
+
+      await platformCallsIn('standDown');
+
+      expect(signal.standDownRequested, isTrue);
+    });
+
+    test('a released handshake stops answering the platform', () async {
+      final handshake = DeferredCatchUpHandshake()
+        ..listen()
+        ..release();
+
+      await platformCallsIn('standDown');
+
+      expect(
+        handshake.standDownRequested,
+        isFalse,
+        reason: 'a finished run is not displaced, it is over',
+      );
+    });
+
+    test('an unknown platform call is refused rather than absorbed', () async {
+      final handshake = DeferredCatchUpHandshake()..listen();
+      addTearDown(handshake.release);
+
+      await expectLater(
+        platformCallsIn('runCatchUp'),
+        completes,
+        reason:
+            'MissingPluginException is what Flutter turns into an empty reply '
+            'and the platform reads as notImplemented, so a future method the '
+            'Kotlin half invents cannot be silently taken as a success',
+      );
+      expect(handshake.standDownRequested, isFalse);
+    });
+  });
+
   test('the headless handshake reports finishing and can disarm', () async {
-    const handshake = DeferredCatchUpHandshake();
+    final handshake = DeferredCatchUpHandshake();
 
     await handshake.cancelSchedule();
     await handshake.reportFinished();

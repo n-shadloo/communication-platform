@@ -12,6 +12,7 @@ import 'package:communication_platform/features/bootstrap/domain/bootstrap_model
 import 'package:communication_platform/features/notifications/application/ports/message_alert_ports.dart';
 import 'package:communication_platform/features/notifications/application/reconcile_message_alerts.dart';
 import 'package:communication_platform/features/notifications/infrastructure/drift_message_alert_store.dart';
+import 'package:communication_platform/features/synchronization/application/ports/sync_ports.dart';
 import 'package:communication_platform/features/synchronization/infrastructure/platform_deferred_delivery_scheduler.dart';
 import 'package:communication_platform/shared/infrastructure/time/system_time_source.dart';
 import 'package:flutter/widgets.dart';
@@ -44,6 +45,11 @@ enum DeferredCatchUpOutcome {
 
   /// This build carries no provisioning, so it has no server to reach.
   unprovisioned,
+
+  /// Somebody opened the application, so this run gave delivery up. Whatever it
+  /// committed stands; the rest is the foreground's to do, and it will do it
+  /// within seconds rather than at the next interval.
+  displaced,
 }
 
 /// One deferred catch-up: open protected state, drain the mailbox once, bring
@@ -64,9 +70,9 @@ enum DeferredCatchUpOutcome {
 /// messages committed by an earlier run may still never have been announced —
 /// an alert is a projection of committed local state, not of this cycle.
 Future<DeferredCatchUpOutcome> runDeferredDeliveryCatchUp(
-  AppEnvironment environment, {
-  DeferredCatchUpHandshake handshake = const DeferredCatchUpHandshake(),
-}) async {
+  AppEnvironment environment,
+  DeferredCatchUpHandshake handshake,
+) async {
   final runtime = await ApplicationRuntime.create(
     environment,
     platform: BootstrapPlatform.android,
@@ -77,9 +83,11 @@ Future<DeferredCatchUpOutcome> runDeferredDeliveryCatchUp(
     await handshake.cancelSchedule();
     return DeferredCatchUpOutcome.unprovisioned;
   }
-  final container = runtime.container();
+  // The engine this run drives is told, through the same handshake, when this
+  // run stops being the delivery owner.
+  final container = runtime.container(standDown: handshake);
   try {
-    final outcome = await _catchUp(runtime, container);
+    final outcome = await _catchUp(runtime, handshake, container);
     if (deferredCatchUpDisarms(outcome)) {
       await handshake.cancelSchedule();
     }
@@ -148,8 +156,15 @@ DeferredCatchUpOutcome? deferredCatchUpRefusal(
 
 Future<DeferredCatchUpOutcome> _catchUp(
   ApplicationRuntime runtime,
+  DeliveryStandDownSignal standDown,
   ProviderContainer container,
 ) async {
+  // Nothing has been read and nothing has been established yet, so giving way
+  // here costs exactly nothing. This is the ordinary case when the platform
+  // started this run a moment before the user opened the application.
+  if (standDown.standDownRequested) {
+    return DeferredCatchUpOutcome.displaced;
+  }
   // Restoring is what establishes the session, and it is also the first thing
   // that touches protected storage. Everything this run needs — the database
   // key, the device-bound tokens, a refreshed access token — is behind it, and
@@ -160,10 +175,21 @@ Future<DeferredCatchUpOutcome> _catchUp(
   if (refusal != null) {
     return refusal;
   }
+  if (standDown.standDownRequested) {
+    return DeferredCatchUpOutcome.displaced;
+  }
   final boundary = (restored as Success<AccountSessionBoundary>).value;
   final scope = (userId: boundary.userId, deviceId: boundary.deviceId!);
   final engine = await container.read(durableSyncEngineProvider(scope).future);
+  // The engine reads the same signal between envelopes, batches and pages, so
+  // a run displaced mid-drain stops after the transaction it is holding rather
+  // than after the whole cycle.
   final cycle = await engine.synchronize();
+  if (standDown.standDownRequested) {
+    // The alert pass is deliberately skipped: the foreground owns the shade
+    // from here, and it reconciles from the same committed state.
+    return DeferredCatchUpOutcome.displaced;
+  }
   await _reconcileAlerts(container);
   return cycle is Success
       ? DeferredCatchUpOutcome.delivered
@@ -218,12 +244,17 @@ final class BackgroundVisibleConversation implements VisibleConversationPort {
 /// would be torn down by the platform's deadline instead.
 Future<DeferredCatchUpOutcome> runDeferredDeliveryEntryPoint(
   AppEnvironment environment, {
-  DeferredCatchUpHandshake handshake = const DeferredCatchUpHandshake(),
+  DeferredCatchUpHandshake? handshake,
 }) async {
   WidgetsFlutterBinding.ensureInitialized();
+  final channel = handshake ?? DeferredCatchUpHandshake();
+  // Before any work begins, so that a foreground engine attaching one
+  // millisecond later is heard rather than missed.
+  channel.listen();
   try {
-    return await runDeferredDeliveryCatchUp(environment, handshake: handshake);
+    return await runDeferredDeliveryCatchUp(environment, channel);
   } finally {
-    await handshake.reportFinished();
+    channel.release();
+    await channel.reportFinished();
   }
 }

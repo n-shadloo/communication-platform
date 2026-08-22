@@ -198,6 +198,28 @@ abstract interface class BestEffortPollingPort implements Port {
   Future<void> awaitExclusiveOwnership();
 }
 
+/// Whether the owner driving a delivery cycle still owns delivery.
+///
+/// Exactly one part of this application drives delivery at a time (ADR-050).
+/// The owner that has to give way is the deferred catch-up: it exists only
+/// because nobody was looking, and the moment somebody is, the foreground will
+/// drain the same mailbox anyway. This is how it is told, and it is read
+/// between units of work rather than acted on immediately, so that giving way
+/// never means abandoning a transaction, a ratchet step or a call into the
+/// native cryptographic core part-way.
+abstract interface class DeliveryStandDownSignal implements Port {
+  bool get standDownRequested;
+}
+
+/// The signal for an owner nothing can displace, which is every owner outside
+/// the Android deferred catch-up.
+final class NeverStandsDown implements DeliveryStandDownSignal {
+  const NeverStandsDown();
+
+  @override
+  bool get standDownRequested => false;
+}
+
 abstract interface class RealtimeSyncPort implements Port {
   Stream<void> get durableEnvelopeHints;
 

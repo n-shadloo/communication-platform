@@ -20,6 +20,7 @@ void main() {
   late FixtureInspector inspector;
   late FakeClock clock;
   late RecordingStaleRefresh staleRefresh;
+  late DisplaceableOwner owner;
   late DurableSyncEngine engine;
 
   setUp(() {
@@ -29,6 +30,7 @@ void main() {
     inspector = FixtureInspector();
     clock = FakeClock(DateTime.utc(2026, 7, 29));
     staleRefresh = RecordingStaleRefresh();
+    owner = DisplaceableOwner();
     engine = DurableSyncEngine(
       store: store,
       remote: remote,
@@ -36,11 +38,117 @@ void main() {
       staleDeviceRefresh: staleRefresh,
       clock: clock,
       jitter: const ZeroJitter(),
+      standDown: owner,
     );
   });
 
   tearDown(() async {
     await database.close();
+  });
+
+  group('giving delivery up between units of work', () {
+    test(
+      'a cycle displaced mid-drain stops after the envelope it holds',
+      () async {
+        // Three envelopes are waiting. The owner is displaced as soon as the
+        // first one has been inspected, which is the moment the foreground
+        // engine attached in the artifact.
+        await store.persistDrainPage(
+          DrainPage(
+            envelopes: [
+              SyncEnvelope(id: uuid(41), sequence: 1, exactCiphertext: blob(1)),
+              SyncEnvelope(id: uuid(42), sequence: 2, exactCiphertext: blob(2)),
+              SyncEnvelope(id: uuid(43), sequence: 3, exactCiphertext: blob(3)),
+            ],
+            hasMore: false,
+            prunedThrough: 0,
+          ),
+        );
+        inspector.onInspected = (calls) {
+          if (calls == 1) {
+            owner.displaced = true;
+          }
+        };
+
+        final result = await engine.synchronize();
+
+        expect(result, isA<Success<SyncRunReport>>());
+        final report = (result as Success<SyncRunReport>).value;
+        expect(
+          report.inspectedEnvelopes,
+          1,
+          reason:
+              'the envelope in hand is finished, and no further one is begun',
+        );
+        expect(
+          report.deferred,
+          isTrue,
+          reason: 'work remains, which is what the next owner is told',
+        );
+
+        // The one it did commit is committed and acknowledged, so its row is
+        // gone. The two it did not are exactly as they were, ready for whoever
+        // runs next - not half-processed, not lost, and not left carrying a
+        // spent attempt.
+        final rows = await database.select(database.inboxEnvelopes).get();
+        expect(rows.map((row) => row.sequence), [2, 3]);
+        expect(rows.every((row) => row.processingState == 0), isTrue);
+        expect(rows.every((row) => row.attemptCount == 0), isTrue);
+        expect(rows.every((row) => row.nextAttemptAt == null), isTrue);
+      },
+    );
+
+    test('a displaced cycle drains no further page', () async {
+      remote.pages
+        ..add(
+          DrainPage(
+            envelopes: [
+              SyncEnvelope(id: uuid(44), sequence: 1, exactCiphertext: blob(1)),
+            ],
+            hasMore: true,
+            prunedThrough: 0,
+          ),
+        )
+        ..add(
+          DrainPage(
+            envelopes: [
+              SyncEnvelope(id: uuid(45), sequence: 2, exactCiphertext: blob(2)),
+            ],
+            hasMore: false,
+            prunedThrough: 0,
+          ),
+        );
+      inspector.onInspected = (calls) => owner.displaced = true;
+
+      final result = await engine.synchronize();
+
+      expect(result, isA<Success<SyncRunReport>>());
+      final report = (result as Success<SyncRunReport>).value;
+      expect(report.drainedPages, 1);
+      expect(report.deferred, isTrue);
+      expect(remote.pages, hasLength(1), reason: 'the second page is untaken');
+    });
+
+    test('an owner nothing displaces runs the whole cycle', () async {
+      // The cost of the signal when nobody is contending, which is the normal
+      // case: nothing at all beyond a boolean read per unit of work.
+      await store.persistDrainPage(
+        DrainPage(
+          envelopes: [
+            SyncEnvelope(id: uuid(46), sequence: 1, exactCiphertext: blob(1)),
+            SyncEnvelope(id: uuid(47), sequence: 2, exactCiphertext: blob(2)),
+          ],
+          hasMore: false,
+          prunedThrough: 0,
+        ),
+      );
+
+      final result = await engine.synchronize();
+
+      final report = (result as Success<SyncRunReport>).value;
+      expect(report.inspectedEnvelopes, 2);
+      expect(report.deferred, isFalse);
+    });
   });
 
   test(
@@ -570,6 +678,20 @@ void main() {
   );
 }
 
+/// A delivery owner that can be told, mid-cycle, that it no longer owns
+/// delivery.
+///
+/// This is the losing half of ADR-050. The deferred catch-up gives way to the
+/// application the user has just opened, and it must do that *between* units of
+/// work: not by being killed part-way through a ratchet step, and not only
+/// after a whole drain it has no reason left to finish.
+final class DisplaceableOwner implements DeliveryStandDownSignal {
+  bool displaced = false;
+
+  @override
+  bool get standDownRequested => displaced;
+}
+
 final class FakeSyncRemote implements SyncRemotePort {
   final List<DrainPage> pages = [];
   final List<OutboxBatch> sentBatches = [];
@@ -628,6 +750,10 @@ final class FixtureInspector implements OpaqueEnvelopeInspector {
   int calls = 0;
   final List<bool> allowMlsValues = [];
 
+  /// Called with the running inspection count, so a test can change the world
+  /// at an exact point inside a cycle.
+  void Function(int calls)? onInspected;
+
   @override
   Future<Result<OpaqueEnvelopeInspection>> inspect({
     required String envelopeId,
@@ -636,6 +762,7 @@ final class FixtureInspector implements OpaqueEnvelopeInspector {
   }) async {
     calls += 1;
     allowMlsValues.add(allowPotentiallyMls);
+    onInspected?.call(calls);
     final marker = exactCiphertext.first;
     return Result.success(
       OpaqueEnvelopeInspection(

@@ -6,6 +6,7 @@ import 'package:communication_platform/app/dependencies/core_providers.dart';
 import 'package:communication_platform/app/dependencies/local_storage_providers.dart';
 import 'package:communication_platform/app/dependencies/message_delivery.dart';
 import 'package:communication_platform/app/dependencies/provisioned_transport.dart';
+import 'package:communication_platform/app/dependencies/sync_providers.dart';
 import 'package:communication_platform/core/application/ports/crypto_core_port.dart';
 import 'package:communication_platform/core/application/ports/enrollment_crypto_port.dart';
 import 'package:communication_platform/features/authentication/presentation/authentication_controller.dart';
@@ -14,6 +15,7 @@ import 'package:communication_platform/features/devices/presentation/device_enro
 import 'package:communication_platform/features/local_storage/infrastructure/local_storage_runtime.dart';
 import 'package:communication_platform/features/local_storage/infrastructure/platform/platform_local_storage.dart';
 import 'package:communication_platform/features/networking/infrastructure/tls/transport_security.dart';
+import 'package:communication_platform/features/synchronization/application/ports/sync_ports.dart';
 import 'package:communication_platform/shared/infrastructure/crypto/platform_crypto_core.dart';
 import 'package:communication_platform/shared/infrastructure/crypto/unsupported_enrollment_crypto.dart';
 import 'package:communication_platform/shared/infrastructure/time/system_time_source.dart';
@@ -140,7 +142,19 @@ final class ApplicationRuntime {
   /// The container a headless entry point runs in, with the same overrides and
   /// therefore the same transport trust, the same token coordinator and the
   /// same crypto core as the scope above.
-  ProviderContainer container() => ProviderContainer(overrides: _overrides);
+  ///
+  /// [standDown] is the one thing only a headless run has and the activity
+  /// cannot: a way to be told it no longer owns delivery. It is an addition to
+  /// the overrides above and never a replacement for one, which is what keeps
+  /// the two entry points from drifting into different security postures.
+  ProviderContainer container({DeliveryStandDownSignal? standDown}) =>
+      ProviderContainer(
+        overrides: [
+          ..._overrides,
+          if (standDown != null)
+            deliveryStandDownProvider.overrideWithValue(standDown),
+        ],
+      );
 
   /// Releases what a short-lived entry point owns.
   ///

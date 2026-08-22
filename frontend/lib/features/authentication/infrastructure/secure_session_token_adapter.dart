@@ -27,6 +27,26 @@ final class SecureSessionTokenAdapter implements SessionTokenStore {
     if (memory != null) {
       return memory;
     }
+    final restored = await _readDurableRow();
+    if (restored != null) {
+      _memoryTokens = restored;
+    }
+    return restored;
+  }
+
+  /// The durable row, never this adapter's memory.
+  ///
+  /// [read] answers from `_memoryTokens` so an ordinary request does not pay a
+  /// SQLCipher round trip for a value this isolate already has. That cache is
+  /// per-isolate and the row behind it is shared with every other delivery
+  /// owner in this process, so a decision that could *end a session* is made
+  /// against this instead (ADR-050). It deliberately does not disturb the
+  /// cache: the cached access token is still this owner's, and it is the only
+  /// copy of it — the durable row never holds one.
+  @override
+  Future<SessionTokens?> readDurable() => _readDurableRow();
+
+  Future<SessionTokens?> _readDurableRow() async {
     final database = await _database();
     if (database == null) {
       return null;
@@ -67,7 +87,6 @@ final class SecureSessionTokenAdapter implements SessionTokenStore {
         deviceId: deviceId,
         username: username,
       );
-      _memoryTokens = restored;
       return restored;
     } on Object {
       await _deleteSession(database);

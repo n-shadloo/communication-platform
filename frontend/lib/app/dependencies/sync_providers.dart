@@ -41,6 +41,16 @@ final syncProjectionProvider = StreamProvider<SyncProjection>((ref) async* {
 
 typedef PairwiseSyncScope = ({String userId, String deviceId});
 
+/// Whether the owner driving the engine has been asked to give delivery up.
+///
+/// The application root never is: it is the owner everything else gives way to.
+/// The Android deferred catch-up overrides this with the handshake the platform
+/// speaks to, so that a user opening the application displaces a catch-up
+/// between units of work instead of racing it (ADR-050).
+final deliveryStandDownProvider = Provider<DeliveryStandDownSignal>(
+  (ref) => const NeverStandsDown(),
+);
+
 /// Fully composed Android v1 durable sync engine. Envelope bytes reach the
 /// native pairwise inspector before the Drift commit; unknown protocols fail
 /// closed in the inspector.
@@ -116,6 +126,7 @@ final durableSyncEngineProvider =
         staleDeviceRefresh: ContactStaleDeviceRefreshAdapter(authentication),
         clock: ref.watch(timeSourceProvider),
         jitter: FullJitterSource(),
+        standDown: ref.watch(deliveryStandDownProvider),
         postInboxCommitWork: _CompositePostInboxWork([
           if (groupKeyPackageMaintenance != null)
             _GroupKeyPackagePostInboxWork(

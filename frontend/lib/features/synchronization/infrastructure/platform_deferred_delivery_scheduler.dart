@@ -144,21 +144,102 @@ final class PlatformDeferredDeliveryScheduler
   }
 }
 
-/// What a headless catch-up tells the platform when it is done.
+/// Asks the platform whether anything else in this process owns delivery, and
+/// waits until nothing does.
+///
+/// This is the *first* thing a foreground entry point does, before it builds a
+/// runtime, opens protected storage or reads a token — because those are the
+/// operations a second owner makes unsafe, not the delivery session that comes
+/// long afterwards. Arriving here is also what tells the platform a foreground
+/// engine now exists, which is what makes an in-flight catch-up stand down
+/// instead of running to completion.
+///
+/// It is deliberately not a [MethodChannel] handler: the foreground engine's
+/// handler for this channel belongs to [PlatformDeferredDeliveryScheduler],
+/// which is composed later and for a different purpose.
+final class DeliveryOwnershipGate {
+  const DeliveryOwnershipGate({
+    MethodChannel channel = const MethodChannel(
+      PlatformDeferredDeliveryScheduler.channelName,
+    ),
+    this.deadline = const Duration(seconds: 20),
+  }) : _channel = channel;
+
+  final MethodChannel _channel;
+
+  /// How long an entry point waits before it gives up and starts anyway.
+  ///
+  /// Giving up is not fail-open by accident. Refusing to start would turn a
+  /// platform that stopped answering into an application that cannot be opened,
+  /// which is a permanent availability failure in place of an intermittent
+  /// correctness one. What makes starting anyway survivable is that the
+  /// rotating refresh token — the one piece of shared state a lost race
+  /// destroys — repairs itself rather than ending the session (ADR-050).
+  final Duration deadline;
+
+  Future<void> awaitExclusiveOwnership() async {
+    if (defaultTargetPlatform != TargetPlatform.android) {
+      return;
+    }
+    try {
+      await _channel
+          .invokeMethod<void>(
+            'awaitExclusiveOwnership',
+            const <String, Object?>{},
+          )
+          .timeout(deadline);
+    } on TimeoutException {
+      // The platform did not answer in time. Reported by no one: there is
+      // nothing the user could do about it and nothing that would be true
+      // about the next launch.
+    } on MissingPluginException {
+      // No implementation behind the channel, so nothing schedules a catch-up
+      // and there is no second owner to wait for.
+    } on PlatformException {
+      // Same conclusion: the thing that could not answer is also the thing that
+      // would have started the other owner.
+    }
+  }
+}
+
+/// What a headless catch-up tells the platform when it is done, and how the
+/// platform tells it that it is no longer the delivery owner.
 ///
 /// A deferred wake-up is a bounded moment the operating system granted, and the
 /// process is frozen again once it is released. The Dart half of a headless run
 /// is therefore responsible for saying that it has finished: the platform side
 /// keeps the engine alive until then, and enforces its own deadline so a run
 /// that never reports cannot hold the wake-up open indefinitely.
-final class DeferredCatchUpHandshake {
-  const DeferredCatchUpHandshake({
+///
+/// The other direction is [standDown]. A catch-up runs because nobody was
+/// looking; when somebody starts looking, the foreground will drain the same
+/// mailbox within seconds and this run has no reason left to exist. It is asked
+/// to stop rather than killed, so that it gives way between units of work
+/// instead of part-way through a transaction or a call into the native
+/// cryptographic core.
+final class DeferredCatchUpHandshake implements DeliveryStandDownSignal {
+  DeferredCatchUpHandshake({
     MethodChannel channel = const MethodChannel(
       PlatformDeferredDeliveryScheduler.channelName,
     ),
   }) : _channel = channel;
 
   final MethodChannel _channel;
+  bool _standDown = false;
+
+  /// Once true, always true. A run that has been displaced is not un-displaced
+  /// by anything the platform could say next; the owner that displaced it is
+  /// the one that continues.
+  @override
+  bool get standDownRequested => _standDown;
+
+  /// Starts listening for the platform's stand-down request.
+  ///
+  /// Called by the headless entry point before it does anything else, and
+  /// released in the same `finally` that reports the run finished.
+  void listen() => _channel.setMethodCallHandler(_onPlatformCall);
+
+  void release() => _channel.setMethodCallHandler(null);
 
   /// Stops the periodic wake-up. Called by a headless run that found nothing to
   /// deliver to, so an application nobody is signed into stops being woken.
@@ -166,6 +247,14 @@ final class DeferredCatchUpHandshake {
 
   /// Reports that this headless run is over and its engine may be torn down.
   Future<void> reportFinished() => _report('finished');
+
+  Future<Object?> _onPlatformCall(MethodCall call) async {
+    if (call.method != 'standDown') {
+      throw MissingPluginException('Unknown method ${call.method}.');
+    }
+    _standDown = true;
+    return null;
+  }
 
   Future<void> _report(String method) async {
     if (defaultTargetPlatform != TargetPlatform.android) {
