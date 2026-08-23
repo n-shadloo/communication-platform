@@ -1336,11 +1336,15 @@ class AppLocalizationsFa extends AppLocalizations {
   String get settingsSustainedUnavailable => 'در این نسخه در دسترس نیست.';
 
   @override
+  String get settingsSustainedWithheld =>
+      'در این نسخه ارائه نمی‌شود. هنوز روی گوشی‌هایی مثل گوشی شما آزمایش نشده است.';
+
+  @override
   String get sustainedTitle => 'دریافت هنگام بسته بودن';
 
   @override
   String get sustainedWhatItDoes =>
-      'به‌طور معمول وقتی از برنامه بیرون می‌روید گوشی آن را متوقف می‌کند و دست‌بالا هر پانزده دقیقه اجازه می‌دهد دنبال پیام تازه بگردد. با روشن کردن این گزینه، برنامه در پس‌زمینه باز نگه داشته می‌شود و پیام‌ها می‌توانند چند ثانیه پس از ارسال به شما برسند.';
+      'به‌طور معمول وقتی از برنامه بیرون می‌روید گوشی آن را متوقف می‌کند و دست‌بالا هر پانزده دقیقه اجازه می‌دهد دنبال پیام تازه بگردد. با روشن کردن این گزینه، برنامه در پس‌زمینه باز نگه داشته می‌شود تا پیام بدون انتظار برای آن بازه به شما برسد. اینکه روی گوشی شما چقدر طول می‌کشد، اندازه‌گیری نشده است.';
 
   @override
   String get sustainedWhatItCosts =>
@@ -1397,6 +1401,10 @@ class AppLocalizationsFa extends AppLocalizations {
   String get sustainedStatusUnavailable => 'در این نسخه در دسترس نیست.';
 
   @override
+  String get sustainedStatusWithheld =>
+      'این نسخه این گزینه را روشن نمی‌کند. کاری که انجام می‌دهد روی گوشی‌هایی مثل گوشی شما اندازه‌گیری نشده است، و ارائهٔ آن پیش از این کار یعنی قول دادن چیزی که کسی بررسی‌اش نکرده است. چیزی در حال اجرا نیست و چیزی روی گوشی شما نمایش داده نمی‌شود.';
+
+  @override
   String get sustainedRefusedAlerts =>
       'روشن نشد: اعلان‌های این برنامه هنوز خاموش است.';
 
@@ -1414,4 +1422,8 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get sustainedRefusedUnavailable => 'در این نسخه در دسترس نیست.';
+
+  @override
+  String get sustainedRefusedWithheld =>
+      'روشن نشد: این نسخه هنوز این گزینه را ارائه نمی‌دهد.';
 }

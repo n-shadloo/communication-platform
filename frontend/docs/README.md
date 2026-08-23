@@ -47,6 +47,7 @@ The documents use three requirement words:
 - [Ordered Codex implementation prompts](implementation-prompts.md)
 - [Backend/Flutter implementation checklist](implementation-checklist.md)
 - [Testing strategy](testing-strategy.md)
+- [Sustained delivery: field validation and its gate](sustained-delivery-validation.md)
 - [Deployment and release](deployment-and-release.md)
 - [Beta release signing and key continuity](release-signing.md)
 

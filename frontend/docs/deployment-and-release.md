@@ -232,6 +232,11 @@ downgrade.
 - [ ] Database and crypto-state migrations pass from all supported Android versions.
 - [ ] Backend contract and multi-device E2E suites pass.
 - [ ] Accessibility, RTL, performance, battery, and voice gates pass.
+- [ ] Sustained delivery: either every mandatory cell of the matrix in
+  [sustained-delivery-validation.md](sustained-delivery-validation.md) has an admissible
+  record in `SustainedDeliveryGate.releaseAssertion`, or the capability is still withheld.
+  **Currently withheld; the gate is CLOSED and no cell has been run.** A partially
+  satisfied matrix opens nothing, and an emulator record can never satisfy a cell.
 - [ ] No forbidden network calls or sensitive logs/artifacts detected.
 - [ ] SBOM, hashes, signatures, update metadata, and rollback plan archived.
 - [ ] Staging rehearsal and isolated-network production rehearsal completed.

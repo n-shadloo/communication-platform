@@ -1,0 +1,17 @@
+{
+  "schema": "sustained-delivery-probe/1",
+  "recorded_at_host_ms": 1787504163699,
+  "manufacturer": "Google",
+  "model": "sdk_gphone_x86",
+  "platform_release": "11",
+  "api_level": "30",
+  "build_type": "user",
+  "security_patch": "2020-09-05",
+  "vendor_skin": "",
+  "emulated": true,
+  "app_uid": "absent",
+  "can_force_doze": true,
+  "can_read_sockets": true,
+  "can_query_standby_bucket": true,
+  "doze_constants": "deviceidle.txt"
+}

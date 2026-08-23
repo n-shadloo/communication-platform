@@ -2456,6 +2456,12 @@ abstract class AppLocalizations {
   /// **'Not available in this build.'**
   String get settingsSustainedUnavailable;
 
+  /// No description provided for @settingsSustainedWithheld.
+  ///
+  /// In en, this message translates to:
+  /// **'Not offered in this build. It has not been tested on phones like yours yet.'**
+  String get settingsSustainedWithheld;
+
   /// No description provided for @sustainedTitle.
   ///
   /// In en, this message translates to:
@@ -2465,7 +2471,7 @@ abstract class AppLocalizations {
   /// No description provided for @sustainedWhatItDoes.
   ///
   /// In en, this message translates to:
-  /// **'Normally your phone stops this app when you leave it, and only lets it look for new messages every fifteen minutes at best. Turned on, the app is kept open in the background instead and messages can reach you within seconds of being sent.'**
+  /// **'Normally your phone stops this app when you leave it, and only lets it look for new messages every fifteen minutes at best. Turned on, the app is kept open in the background instead, so a message can reach you without waiting for that. How quickly it does on your phone has not been measured.'**
   String get sustainedWhatItDoes;
 
   /// No description provided for @sustainedWhatItCosts.
@@ -2558,6 +2564,12 @@ abstract class AppLocalizations {
   /// **'Not available in this build.'**
   String get sustainedStatusUnavailable;
 
+  /// No description provided for @sustainedStatusWithheld.
+  ///
+  /// In en, this message translates to:
+  /// **'This build will not turn this on. What it does has not been measured on phones like yours, and offering it before that would be promising something nobody has checked. Nothing is running and nothing is shown on your phone.'**
+  String get sustainedStatusWithheld;
+
   /// No description provided for @sustainedRefusedAlerts.
   ///
   /// In en, this message translates to:
@@ -2587,6 +2599,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Not available in this build.'**
   String get sustainedRefusedUnavailable;
+
+  /// No description provided for @sustainedRefusedWithheld.
+  ///
+  /// In en, this message translates to:
+  /// **'Not turned on: this build does not offer it yet.'**
+  String get sustainedRefusedWithheld;
 }
 
 class _AppLocalizationsDelegate

@@ -1,0 +1,104 @@
+  Settings:
+    flex_time_short=+1m0s0ms
+    light_after_inactive_to=+1m0s0ms
+    light_idle_to=+5m0s0ms
+    light_idle_to_initial_flex=+1m0s0ms
+    light_max_idle_to_flex=+15m0s0ms
+    light_idle_factor=2.0
+    light_idle_increase_linearly=true
+    light_idle_linear_increase_factor_ms=300000
+    light_idle_flex_linear_increase_factor_ms=60000
+    light_max_idle_to=+30m0s0ms
+    light_idle_maintenance_min_budget=+1m0s0ms
+    light_idle_maintenance_max_budget=+5m0s0ms
+    min_light_maintenance_time=+5s0ms
+    min_deep_maintenance_time=+30s0ms
+    inactive_to=+1m0s0ms
+    sensing_to=+30s0ms
+    locating_to=+15s0ms
+    location_accuracy=20.0m
+    motion_inactive_to=+10m0s0ms
+    motion_inactive_to_flex=+1m0s0ms
+    idle_after_inactive_to=+1m0s0ms
+    idle_pending_to=+5m0s0ms
+    max_idle_pending_to=+10m0s0ms
+    idle_pending_factor=2.0
+    quick_doze_delay_to=+1m0s0ms
+    idle_to=+15m0s0ms
+    max_idle_to=+6h0m0s0ms
+    idle_factor=2.0
+    min_time_to_alarm=+1h0m0s0ms
+    max_temp_app_allowlist_duration_ms=+5m0s0ms
+    mms_temp_app_allowlist_duration_ms=+1m0s0ms
+    sms_temp_app_allowlist_duration_ms=+20s0ms
+    notification_allowlist_duration_ms=+30s0ms
+    wait_for_unlock=true
+    use_window_alarms=true
+    use_mode_manager=false
+  Idling history:
+      deep-idle: -12m13s364ms
+         normal: -12m13s126ms (exit-force)
+      deep-idle: -233ms
+         normal: -171ms (exit-force)
+  Whitelist (except idle) system apps:
+    com.android.providers.calendar
+    com.android.providers.downloads
+    com.android.vending
+    com.google.android.devicelockcontroller
+    com.android.cellbroadcastreceiver
+    com.google.android.gms
+    com.android.proxyhandler
+    com.android.imsserviceentitlement
+    com.android.shell
+    com.android.emergency
+    com.google.android.cellbroadcastreceiver
+    com.android.providers.contacts
+  Whitelist system apps:
+    com.android.providers.calendar
+    com.android.providers.downloads
+    com.google.android.devicelockcontroller
+    com.android.cellbroadcastreceiver
+    com.google.android.gms
+    com.android.shell
+    com.android.emergency
+    com.google.android.cellbroadcastreceiver
+  Whitelist (except idle) all app ids:
+    2000
+    10085
+    10086
+    10088
+    10090
+    10099
+    10125
+    10134
+    10136
+    10165
+    10174
+    10179
+  Whitelist all app ids:
+    2000
+    10086
+    10088
+    10090
+    10136
+    10165
+    10174
+    10179
+  mLightEnabled=true  mDeepEnabled=true
+  mForceIdle=false
+  mUseMotionSensor=true mMotionSensor=null
+  mScreenOn=true
+  mScreenLocked=false
+  mNetworkConnected=true
+  mCharging=false
+  activeEmergencyCall=false
+  mMotionActive=false
+  mNotMoving=false
+  mMotionListener.activatedTimeElapsed=0
+  mLastMotionEventElapsed=0
+  0 stationary listeners registered
+  mLocating=false mHasGps=true mHasFused=true mLocated=false
+  mState=ACTIVE mLightState=ACTIVE
+  mInactiveTimeout=+1m0s0ms
+  mNextLightIdleDelay=+5m0s0ms (flex=+1m0s0ms)
+  mCurLightIdleBudget=+1m0s0ms

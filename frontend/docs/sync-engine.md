@@ -228,7 +228,10 @@ ADR-046 makes delivery layered, and every layer drives this same engine.
   application into *restricted* after eight days without user interaction. The job is
   armed once for the life of a signed-in session rather than on each background
   transition, because registering a periodic job restarts its window.
-- **Background near-real-time, opt-in and off by default** (ADR-051). A `specialUse`
+- **Background near-real-time, opt-in, and withheld from every distributed artifact**
+  (ADR-051, gated closed by ADR-053 until the device matrix in
+  [sustained-delivery-validation.md](sustained-delivery-validation.md) has been run).
+  A `specialUse`
   foreground service keeps the process out of the cached state so a socket survives — a
   frozen app's TCP sockets are terminated by the system — and gives the process the one app
   state Android documents as having unrestricted background network. It hosts its own
@@ -337,9 +340,11 @@ mailbox nor transmitted its outbox. What runs now:
   `PlatformDeferredDeliveryScheduler` behind `AndroidBestEffortPollingPort`, so a
   backgrounded application performs an *eventual* catch-up. Every other target composes
   `UnscheduledBestEffortPolling`, which schedules nothing and says so. Above that floor,
-  ADR-051's opt-in sustained delivery is present and **off by default**: nothing about it
-  runs, is requested or appears anywhere until a user turns it on from Settings, and it stops
-  itself whenever the platform withdraws what it needs. The enrollment disclosure states the
+  ADR-051's opt-in sustained delivery is present and, since ADR-053,
+  **withheld**: in the beta and production artifacts the Settings screen offers no switch
+  at all, nothing is requested, no service is started, and a service an earlier build left
+  running is stopped. Only a development build resolves it, so that the matrix can be run.
+  Where it does resolve, it stops itself whenever the platform withdraws what it needs. The enrollment disclosure states the
   difference between the two tiers at revision 4.
 - **A sustained run is the same engine with one thing different.** It reports the
   application lifecycle as *backgrounded*, which is true, and its connection policy as *may

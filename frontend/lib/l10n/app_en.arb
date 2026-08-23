@@ -512,8 +512,9 @@
   "settingsSustainedExemptionWithdrawn": "On, but your phone has taken back permission to run while it saves battery.",
   "settingsSustainedStopped": "On, but it is not running right now.",
   "settingsSustainedUnavailable": "Not available in this build.",
+  "settingsSustainedWithheld": "Not offered in this build. It has not been tested on phones like yours yet.",
   "sustainedTitle": "Receiving while closed",
-  "sustainedWhatItDoes": "Normally your phone stops this app when you leave it, and only lets it look for new messages every fifteen minutes at best. Turned on, the app is kept open in the background instead and messages can reach you within seconds of being sent.",
+  "sustainedWhatItDoes": "Normally your phone stops this app when you leave it, and only lets it look for new messages every fifteen minutes at best. Turned on, the app is kept open in the background instead, so a message can reach you without waiting for that. How quickly it does on your phone has not been measured.",
   "sustainedWhatItCosts": "It uses more battery, because the app stays connected. It puts a permanent notice on your phone saying the app is running: anyone who unlocks your phone and looks can see it, and it stays there until you turn this off. It is hidden on the lock screen.",
   "sustainedWhatItCannotPromise": "Your phone is allowed to stop it at any time and will not say so. It stops completely if you force-stop the app, or set its battery use to restricted. This app cannot promise it will keep working, only that it will tell you here when it can see that it is not.",
   "sustainedNeedsTitle": "What your phone needs from you",
@@ -529,9 +530,11 @@
   "sustainedStatusExemptionWithdrawn": "Your phone has taken back permission to work while it saves battery, so this has been stopped. This can happen on its own after a phone update. Turn it on again to ask for the permission once more.",
   "sustainedStatusStopped": "Not running at the moment. Your phone may have stopped it.",
   "sustainedStatusUnavailable": "Not available in this build.",
+  "sustainedStatusWithheld": "This build will not turn this on. What it does has not been measured on phones like yours, and offering it before that would be promising something nobody has checked. Nothing is running and nothing is shown on your phone.",
   "sustainedRefusedAlerts": "Not turned on: notifications are still switched off for this app.",
   "sustainedRefusedExemption": "Not turned on: your phone did not give permission to work while it saves battery.",
   "sustainedRefusedPlatform": "Not turned on: your phone refused to let the app keep running. Some phones do this until the app is excluded from putting apps to sleep.",
   "sustainedRefusedNotRecorded": "Not turned on: the choice could not be saved on this phone, and it would not survive a restart.",
-  "sustainedRefusedUnavailable": "Not available in this build."
+  "sustainedRefusedUnavailable": "Not available in this build.",
+  "sustainedRefusedWithheld": "Not turned on: this build does not offer it yet."
 }

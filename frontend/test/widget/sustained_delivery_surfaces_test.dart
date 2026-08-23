@@ -75,7 +75,22 @@ void main() {
     ) async {
       await _pumpPage(tester, SustainedDeliveryStatus.off);
 
-      expect(find.textContaining('within seconds'), findsOneWidget);
+      expect(
+        find.textContaining('kept open in the background'),
+        findsOneWidget,
+      );
+      expect(
+        find.textContaining('has not been measured'),
+        findsOneWidget,
+        reason:
+            'ADR-053: a latency claim may only ever come from a measurement, '
+            'and none has been made on any phone',
+      );
+      expect(
+        find.textContaining('within seconds'),
+        findsNothing,
+        reason: 'the promise this screen shipped with, withdrawn',
+      );
       expect(find.textContaining('uses more battery'), findsOneWidget);
       expect(find.textContaining('permanent notice'), findsOneWidget);
       expect(find.textContaining('cannot promise'), findsOneWidget);
@@ -180,6 +195,35 @@ void main() {
             .onPressed,
         isNull,
       );
+    });
+
+    testWidgets('a build withholding it offers no switch, and says why', (
+      tester,
+    ) async {
+      await _pumpPage(tester, SustainedDeliveryStatus.withheld);
+
+      expect(
+        find.textContaining('has not been measured on phones like yours'),
+        findsOneWidget,
+        reason:
+            'ADR-053: "there is nothing behind this" and "there is something '
+            'behind this and nobody has measured it" are different facts',
+      );
+      expect(
+        find.text('Not available in this build.'),
+        findsNothing,
+        reason: 'which is the other one, and it is not the true one here',
+      );
+      for (final key in const [
+        ValueKey('sustained-toggle'),
+        ValueKey('sustained-vendor-settings'),
+      ]) {
+        expect(
+          tester.widget<ButtonStyleButton>(find.byKey(key)).onPressed,
+          isNull,
+          reason: 'nothing on this screen may start anything',
+        );
+      }
     });
 
     testWidgets('the screen is translated and laid out right to left', (

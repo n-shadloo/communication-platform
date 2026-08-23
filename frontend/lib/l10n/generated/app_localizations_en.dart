@@ -1337,11 +1337,15 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsSustainedUnavailable => 'Not available in this build.';
 
   @override
+  String get settingsSustainedWithheld =>
+      'Not offered in this build. It has not been tested on phones like yours yet.';
+
+  @override
   String get sustainedTitle => 'Receiving while closed';
 
   @override
   String get sustainedWhatItDoes =>
-      'Normally your phone stops this app when you leave it, and only lets it look for new messages every fifteen minutes at best. Turned on, the app is kept open in the background instead and messages can reach you within seconds of being sent.';
+      'Normally your phone stops this app when you leave it, and only lets it look for new messages every fifteen minutes at best. Turned on, the app is kept open in the background instead, so a message can reach you without waiting for that. How quickly it does on your phone has not been measured.';
 
   @override
   String get sustainedWhatItCosts =>
@@ -1398,6 +1402,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get sustainedStatusUnavailable => 'Not available in this build.';
 
   @override
+  String get sustainedStatusWithheld =>
+      'This build will not turn this on. What it does has not been measured on phones like yours, and offering it before that would be promising something nobody has checked. Nothing is running and nothing is shown on your phone.';
+
+  @override
   String get sustainedRefusedAlerts =>
       'Not turned on: notifications are still switched off for this app.';
 
@@ -1415,4 +1423,8 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get sustainedRefusedUnavailable => 'Not available in this build.';
+
+  @override
+  String get sustainedRefusedWithheld =>
+      'Not turned on: this build does not offer it yet.';
 }

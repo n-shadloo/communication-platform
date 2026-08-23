@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'package:communication_platform/app/config/sustained_delivery_gate.dart';
+import 'package:communication_platform/app/dependencies/core_providers.dart';
 import 'package:communication_platform/app/dependencies/local_storage_providers.dart';
 import 'package:communication_platform/app/dependencies/message_alerts.dart';
 import 'package:communication_platform/features/authentication/presentation/authentication_controller.dart';
@@ -62,6 +64,21 @@ final sustainedConnectionPolicyProvider = Provider<SustainedConnectionPolicy>((
   return policy;
 });
 
+/// Whether this build may offer sustained delivery at all (ADR-053).
+///
+/// It reads the compiled environment, which is fixed by the entry point and
+/// cannot be selected at runtime, and the source-only evidence ledger in
+/// [SustainedDeliveryGate]. There is no override: a build reaching a user is
+/// withheld until the ledger says the capability has been measured on real
+/// phones, and a development build is permitted so that the measuring can be
+/// done at all.
+final sustainedDeliveryAvailabilityProvider =
+    Provider<SustainedDeliveryAvailability>(
+      (ref) => SustainedDeliveryGate.availabilityIn(
+        ref.watch(appEnvironmentProvider),
+      ),
+    );
+
 /// Notifications, as the sustained-delivery enable flow needs them.
 ///
 /// It adapts the one notification-permission implementation in the artifact
@@ -106,6 +123,12 @@ base class SustainedDeliveryController
   bool _closed = false;
   bool _signedIn = false;
 
+  /// Whether ADR-053's gate withholds the capability in this build.
+  ///
+  /// Read once, at build, because it is a compiled fact: the environment is
+  /// fixed by the entry point and the evidence ledger is a source constant.
+  bool _withheld = false;
+
   /// The last refusal the user asked for and did not get, so the surface can
   /// say which one it was. Cleared by any later successful transition.
   SustainedDeliveryRefusal? lastRefusal;
@@ -117,6 +140,19 @@ base class SustainedDeliveryController
   @override
   SustainedDeliveryStatus build() {
     ref.onDispose(() => _closed = true);
+    _withheld = !ref.read(sustainedDeliveryAvailabilityProvider).mayOffer;
+    if (_withheld) {
+      // Nothing is reconciled, nothing is started, and the authentication
+      // listener is never attached, so no signed-in session can bring this
+      // back. The one thing that does happen is a stand-down: an install
+      // upgraded from a build that offered this may have left a service
+      // running and a permanent entry displayed, and neither may outlive the
+      // decision to withhold the capability. It does not clear the durable
+      // choice, because the choice is the user's and a later evidenced build
+      // is entitled to honour it.
+      _enqueue(_standDown);
+      return SustainedDeliveryStatus.withheld;
+    }
     ref.listen(authenticationControllerProvider, (previous, next) {
       final signedIn = _deliverable(next);
       if (signedIn == _signedIn) {
@@ -146,11 +182,28 @@ base class SustainedDeliveryController
   /// transition, because the two things this depends on are both changeable
   /// from outside the application and neither change is reported to it.
   Future<void> refresh() {
+    if (_withheld) {
+      // There is nothing to reconcile towards. Re-asserting the stand-down is
+      // deliberate rather than a no-op: a resume is the moment to notice that
+      // something outside this application started a service this build will
+      // not stand behind.
+      _enqueue(_standDown);
+      return _work;
+    }
     _enqueue(_signedIn ? _reconcile : _standDown);
     return _work;
   }
 
   Future<SustainedDeliveryRefusal?> enable() async {
+    if (_withheld) {
+      // Refused here, before the platform is asked anything at all. No dialog
+      // is shown, no permission is requested, and no durable choice is written,
+      // so an attempt to enable a withheld capability leaves the installation
+      // exactly as it found it.
+      lastRefusal = SustainedDeliveryRefusal.withheld;
+      _publish(SustainedDeliveryStatus.withheld);
+      return lastRefusal;
+    }
     _enqueue(() async {
       final outcome = await EnableSustainedDelivery(
         platform: ref.read(sustainedDeliveryPlatformProvider),
@@ -215,6 +268,15 @@ base class SustainedDeliveryController
     );
   }
 
+  /// What a status becomes once ADR-053's gate has had its say.
+  ///
+  /// The gate outranks every platform reading. A withheld build reports
+  /// *withheld* whatever the operating system would otherwise permit, because
+  /// the question the user is owed an answer to is not "could this phone do
+  /// it" but "will this build ask it to".
+  SustainedDeliveryStatus _gated(SustainedDeliveryStatus status) =>
+      _withheld ? SustainedDeliveryStatus.withheld : status;
+
   Future<SustainedDeliveryStorePort> _store() async =>
       DriftSustainedDeliveryStore(await ref.read(localDatabaseProvider.future));
 
@@ -242,7 +304,8 @@ base class SustainedDeliveryController
     if (_closed) {
       return;
     }
-    state = status;
-    ref.read(sustainedConnectionPolicyProvider).update(status);
+    final gated = _gated(status);
+    state = gated;
+    ref.read(sustainedConnectionPolicyProvider).update(gated);
   }
 }

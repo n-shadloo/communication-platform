@@ -61,8 +61,418 @@ is not silently edited out of history.
 | ADR-048 | Accepted, notification claim corrected by ADR-052 | The user is told a message arrived by one sender-neutral system notification that is a reconciliation of committed local state, not an event; amends ADR-046's Layer 3 and ADR-045's delivery disclosure (2026-08-21) | ADR-046 sketched Layer 3 in three sentences and ADR-047 built the delivery path under it; inspection of the composed artifact found no notification port, adapter, channel or dependency of any kind, and two things that change what could honestly be built — a message arriving into the conversation on screen is still marked unread, because `ChatConversationView` marks read exactly once from `initState`, so `messages.unread` alone cannot answer "is the user looking at this"; and inbound **group** messages set no unread state at all, because `commitMessageInsideTransaction` writes neither `unread` nor `unread_count`, which is a piece-18 gap left unfixed here because `GroupChatPage` also never marks a group read. Three of ADR-046's Layer 3 details are amended on evidence. **One aggregate notification, not bounded individual ones plus a summary**: with a sender-neutral preview, N notifications are N copies of one sentence, and the only thing they add is a per-message or per-conversation identifier visible to `system_server` and to any app holding notification access — which the threat model's "person with filesystem access to a locked device" adversary and its protection of "notification previews" both weigh against; `MessagingStyle` and conversation shortcuts were rejected outright for publishing a pseudonymous per-contact identifier into the launcher, and an unspecified per-package cap (AOSP near 50, OEM-variable, unqueryable) makes any count-growing design unspecified. **A reconciliation of durable state, not an emission from `PostInboxCommitWorkPort`**: that hook fires only when the engine runs, so it can announce but never *withdraw*, and read-elsewhere, withdrawn-by-sender, conversation-opened and mute are all changes to committed state that no post-drain hook observes; drift dispatches table updates only after `COMMIT` (`Transaction.complete()` precedes `disposeChildStreams()`, verified in pinned 2.34.2 source), so a stream over `messages` and `conversations` is a strictly post-commit trigger and preserves ADR-046's actual principle more directly than the hook did. **A boolean `messages.alerted` (schema 12), not `notified_at`**: nothing reads the time, and it survives projection rebuilds because the projector upserts with a companion that omits the column, the same mechanism that already preserves `starred`. Content is `New message` / `New messages` and nothing else — no sender, conversation, text, count or timestamp — `VISIBILITY_PRIVATE` with a matching `setPublicVersion`, because Android 15 shows that during screen sharing and otherwise redacts "without any further context". Tapping carries the launcher intent alone under `FLAG_IMMUTABLE`: no destination, no extra, no identifier, so there is nothing to forge and no path around the routing guards. Deliberate silence (muted, on screen) still spends the marker so it cannot surface late; a platform refusal spends nothing, so granting later announces the backlog. "On screen" requires a mounted route **and** a foregrounded application, with an unreported lifecycle read as foreground for ADR-047's reason. One automatic `POST_NOTIFICATIONS` prompt at the point of use, guarded by a durable marker and by `shouldShowRequestPermissionRationale` — true in exactly the one state where a second refusal would make the denial permanent — so the app never nags and never spends the user's last prompt. No dependency: `flutter_local_notifications` 22.3.0 would work but every API needed is in `androidx.core:core:1.16.0`, already declared for `FileProvider`, so the platform half is app-owned Kotlin behind a port that carries no identifier and holds no policy. Only `POST_NOTIFICATIONS` and `VIBRATE` are added; a new architecture test forbids every foreground-service, boot, exact-alarm and SMS permission while ADR-046's Layers 1 and 2 stay unbuilt. Reliability is unchanged and stated: an alert reaches the user only while the process is alive, so ADR-045's `foregroundDeliveryOnly` — which said "There are no notifications" — is now false, its revision moves 1 → 2, and re-delivering the written handover becomes release-blocking. The Kotlin half is **unmeasured**: no rooted image and no signed-in session are reachable from this workstation, so what the notification looks like on a device is a release gate, not a claim. Full reasoning in "ADR-048 in full" below. Opens no production gate and changes no cryptographic behaviour. |
 | ADR-049 | Accepted, ownership arbitration corrected by ADR-050, delivery disclosure extended by ADR-052 | A backgrounded client catches up through one persisted periodic `JobScheduler` job at the platform floor, delivered to the isolate that already exists or to a headless one when none does, and never to both; ADR-046's WorkManager dependency and its durable delivery lease are both replaced (2026-08-21) | ADR-046's Layer 1. Nothing was assumed: every Android mechanism that runs without the user was re-derived from primary sources read 2026-08-21, and the scope excludes anything the user must grant, configure or change, which removes the foreground service, the exact alarm and the battery-optimization exemption by definition and leaves deferrable jobs as the only floor. **The dependency is dropped.** `JobInfo` is in the framework at `minSdk` 24 and `setPersisted(true)` survives a reboot with no receiver of this application's own, so `androidx.work` would have added a Room database, a service and a boot receiver to the merged manifest of a security-reviewed artifact in order to schedule one job; the existing test forbidding the `workmanager` package therefore stands and now records a decision rather than an absence. **The durable Drift lease is dropped too, and replaced by something exact.** Verified in the pinned engine source, `DartVMRef::Create` documents that "there can only be one VM running in the process at any given time", the `IsolateNameServer` belongs to that VM, and the job service is declared with no `android:process` — so every delivery owner this design can produce is in one process, on one main looper, and in-process arbitration is not weaker than a heartbeat lease but strictly more precise: a job whose process holds a live activity engine sends `runCatchUp` into that isolate and waits for the reply, and only a process with no engine starts a headless one. The hazard being removed is concrete and now evidenced twice over: two `TokenCoordinator`s rotate one refresh token, the loser presents a retired one, the backend returns 401 `invalid_token` (accounts `API.md`) and `TokenCoordinator._endsSession` clears the session — and `beginNextEnvelopeInspection` selects rows in `received` *or* `inspecting`, so two engines would hand the same envelope to the ratchet twice. A foreground session therefore asks the platform for exclusive ownership *before* it opens storage or reads a token, and waits for a headless run rather than killing one mid-call into the shared native core. **A tick is acknowledged, not fired and forgotten**, because a job that is finished lets the process be frozen again and an unacknowledged tick is a catch-up the platform stops mid-drain. **Arming moved off the lifecycle**: a periodic job restarts its window every time it is registered, so ADR-046's arm-on-background/cancel-on-foreground would have meant a user who opens the app more often than the interval never receives one wake-up, and a process that died while foregrounded would have left nothing scheduled at all; it is armed once for the life of a signed-in session and disarmed on logout, and a headless run that finds no session disarms it for itself. **Both entry points now compose through one `ApplicationRuntime`**, so the provisioned authority, the single token coordinator and the environment-gated crypto core cannot be silently absent from the background path; `MainActivity`'s protected-storage and message-alert channels were Activity-scoped and unreachable from a headless engine, and are now Context-bound classes with one implementation each. The alert path needs no change and asks for no permission in the background, because `ReconcileMessageAlerts` already gates the single automatic prompt on `visible.isForeground`. Reliability is stated in four tiers and never as a guarantee: near-real-time foregrounded; *eventual* backgrounded, fifteen minutes at best and bound to Doze maintenance windows that thin out; **nothing** in the *rare* and *restricted* buckets, where Android disables background network and which Android 13+ applies after eight days without interaction; and nothing whatsoever after a force-stop. ADR-045's disclosure moves to revision 3 in both catalogues, which makes re-delivering the written handover release-blocking again. Adds no dependency, changes no cryptographic behaviour, opens no production gate, and leaves the Beta/Production boundary untouched — verified after the change against the built artifact, which packages unsigned, carries the production application ID, exports no beta MLS symbol, and declares exactly one service, bound with `BIND_JOB_SERVICE`, unexported, in the default process, with no foreground-service permission of any kind. |
 | ADR-050 | Accepted | Exactly one part of the application drives delivery, arbitrated in the process and asked for by the *entry point* rather than by the delivery session; the losing owner is asked to stand down and gives way between units of work; and losing a refresh-token rotation to another owner is repaired instead of read as the server ending the session; corrects ADR-049 (2026-08-22) | The hazard ADR-049 named is real and reachable on an ordinary user action - a headless catch-up posts a notification (ADR-048), the user taps it, and two Dart root isolates in one process both rotate one shared refresh token that the backend blacklists on use (`ROTATE_REFRESH_TOKENS` with `BLACKLIST_AFTER_ROTATION`), signing out a user who did nothing. ADR-049 chose the right mechanism and put it in the wrong place: `awaitExclusiveOwnership` was called by `MessageDeliverySession.compose`, which is reached only after `AuthenticationController.restore()` - and that restore *is* the rotation. A test asserted the opposite and passed, because its harness replaced the real `TokenCoordinator`; `sync-engine.md` simultaneously claimed a durable lease ADR-049 had already removed. The gate moves to `bootstrap()`, before storage is opened or a token is read; `attachForeground` now asks an in-flight catch-up to stand down, which `DurableSyncEngine` reads between envelopes, pages and batches, so the foreground waits for one unit of work rather than a whole drain; and the coordinator tells a lost race apart from a real session ending by re-reading the shared durable row rather than its own per-isolate cache. ADR-046's durable lease was re-derived independently and rejected again: every owner is in one process, so a lease coordinates things that always die together while adding an expiry, a clock and a stale-holder window - and it would be *weaker* where it matters, because a headless engine destroyed while the process survives leaves a lease nobody releases, whereas the Kotlin arbiter is the code that destroys it. Nothing durable records ownership and no wait is unbounded, so the mechanism cannot wedge delivery. Proved with two real isolates over one real shared SQLCipher store, in both orderings, under repeated contention, and with a contender killed mid-rotation. Separately corrects a pre-existing defect the work uncovered: `account_session` and `account_identity` were upserted without `singleton_id`, which SQLite treats as a rowid alias and auto-assigns, so every write after the first threw `SqliteException(275)`. Adds no dependency, changes no cryptographic behaviour, touches no backend, opens no production gate, and changes nothing the application says about itself. |
-| ADR-051 | Accepted | Receiving while the application is not in use is an opt-in capability, off by default: a `specialUse` foreground service that keeps the process out of the cached state so the composed delivery path can keep its connection, armed only after the user grants notifications and the battery-optimization exemption, and stopped by the application itself the moment either is withdrawn; builds ADR-046's Layer 2, amends its distribution clause, extends ADR-050 to a third owner, and takes ADR-045's delivery disclosure to revision 4 (2026-08-22) | ADR-046 sketched this layer and left it unbuilt, and ADR-049 recorded the ceiling it was meant to lift: fifteen minutes at best, Doze deferral, and **no background network at all** in the *rare* and *restricted* standby buckets, where Android 13+ puts an app after eight unopened days. Every mechanism was re-derived from primary sources read 2026-08-22, including Android 17, and two facts neither earlier decision recorded changed the arithmetic: apps on the Doze exemption list are exempt from **App Standby Bucket restrictions entirely**, so enabling this repairs the mandatory floor as well as adding a layer above it; and a long-running foreground service by itself keeps the app in the *active* bucket. The manufacturer half is no longer community reporting: Samsung publishes that sleeping apps (3 days unused and poor system health) have "Job, Alarm, and Foreground-service … restricted", publishes the user's exception path and a deep-link intent to it, and states that since One UI 6.0 foreground services of apps targeting Android 14 "will be guaranteed to work as intended"; Xiaomi publishes only a per-app Background autostart permission. That is better evidence than ADR-046 had and still not measurement, so the vendor half stays **unresolved** and the device matrix stays open. `specialUse` is selected because it is accurate: `dataSync` is capped at six hours per twenty-four and forbidden from a boot receiver at `targetSdk` 35+, `remoteMessaging` documents device-to-device message continuity, `systemExempted` is gated on roles this application does not have — and `specialUse` still carries no timeout, no runtime prerequisite and no boot restriction at API 37. The alternative of **building nothing** was evaluated on the same footing and rejected on three findings, the decisive one being that the brief's own failure mode is avoidable by construction: the platform displays the permanent entry only while the service is genuinely running, and the application re-reads every precondition on every resume and stops the service, and says so, whenever the arrangement is incomplete. No dependency is added, no boot receiver is declared, the choice lives in the encrypted preference table and is deleted rather than falsified when turned off, and the socket gains a four-minute keepalive because a connection a carrier's NAT dropped is never heard from again and must not sit behind a notice saying the application is kept open. Full reasoning, the alternatives, the three separated classes of claim and the enumerated outstanding validation are in "ADR-051 in full" below. This decision opens no production gate. |
+| ADR-051 | Accepted, distribution clause and delivery claim amended by ADR-053 | Receiving while the application is not in use is an opt-in capability, off by default: a `specialUse` foreground service that keeps the process out of the cached state so the composed delivery path can keep its connection, armed only after the user grants notifications and the battery-optimization exemption, and stopped by the application itself the moment either is withdrawn; builds ADR-046's Layer 2, amends its distribution clause, extends ADR-050 to a third owner, and takes ADR-045's delivery disclosure to revision 4 (2026-08-22) | ADR-046 sketched this layer and left it unbuilt, and ADR-049 recorded the ceiling it was meant to lift: fifteen minutes at best, Doze deferral, and **no background network at all** in the *rare* and *restricted* standby buckets, where Android 13+ puts an app after eight unopened days. Every mechanism was re-derived from primary sources read 2026-08-22, including Android 17, and two facts neither earlier decision recorded changed the arithmetic: apps on the Doze exemption list are exempt from **App Standby Bucket restrictions entirely**, so enabling this repairs the mandatory floor as well as adding a layer above it; and a long-running foreground service by itself keeps the app in the *active* bucket. The manufacturer half is no longer community reporting: Samsung publishes that sleeping apps (3 days unused and poor system health) have "Job, Alarm, and Foreground-service … restricted", publishes the user's exception path and a deep-link intent to it, and states that since One UI 6.0 foreground services of apps targeting Android 14 "will be guaranteed to work as intended"; Xiaomi publishes only a per-app Background autostart permission. That is better evidence than ADR-046 had and still not measurement, so the vendor half stays **unresolved** and the device matrix stays open. `specialUse` is selected because it is accurate: `dataSync` is capped at six hours per twenty-four and forbidden from a boot receiver at `targetSdk` 35+, `remoteMessaging` documents device-to-device message continuity, `systemExempted` is gated on roles this application does not have — and `specialUse` still carries no timeout, no runtime prerequisite and no boot restriction at API 37. The alternative of **building nothing** was evaluated on the same footing and rejected on three findings, the decisive one being that the brief's own failure mode is avoidable by construction: the platform displays the permanent entry only while the service is genuinely running, and the application re-reads every precondition on every resume and stops the service, and says so, whenever the arrangement is incomplete. No dependency is added, no boot receiver is declared, the choice lives in the encrypted preference table and is deleted rather than falsified when turned off, and the socket gains a four-minute keepalive because a connection a carrier's NAT dropped is never heard from again and must not sit behind a notice saying the application is kept open. Full reasoning, the alternatives, the three separated classes of claim and the enumerated outstanding validation are in "ADR-051 in full" below. This decision opens no production gate. |
 | ADR-052 | Accepted | Four user-facing claims were false or read as promising more than the artifact delivers and are corrected; the permanent half of the security notice may no longer name a feature; the disclosure revision becomes a derived value that an edit cannot skip; and the revision a user accepted becomes a durable device-side record that re-presents a corrected statement once — completing the half of ADR-045 that was never built (2026-08-23) | ADR-045 established the disclosure and rejected periodic re-consent correctly, on evidence that still holds. What it did not build was the device side: nothing recorded which revision a user had accepted, so when the revision moved at ADR-048, ADR-049 and ADR-051 the only thing reaching an existing recipient was a release-checklist step a human had to remember, and their install could not distinguish "accepted the current statement" from "accepted one that is no longer true". Auditing the composed artifact rather than its documentation found **four wrong claims, two of them outside the disclosure**. `settingsNotificationsOn` said an alert "can only reach you while this app is running" — false since ADR-049: `deferred_delivery_catch_up.dart` and `sustained_delivery_run.dart` both call `ReconcileMessageAlerts` from isolates with no activity in the process, and the string had never been edited since ADR-048 wrote it. `disclosureUnbuiltSurfaces` said search "do[es] nothing" — false: the chat list filters on title and last-message preview, and a conversation's own search reads that conversation's entire local history, because `watchMessages` applies no limit. `enrollmentProtectsBody` promised that "messages, files, and voice audio" were unreadable to the server, in an artifact that can send no file and carry no audio; it is a **permanent** section, so the fix is structural — it now describes the boundary and names no feature at all, and a test forbids feature words in it, because an enumeration goes stale every time the feature set moves. `chatsSearchHint` promised "chats and messages on this device" for a box that matches names and one preview line. Two further statements were true but read as promising more: `disclosureBestEffortDelivery` described delivery as slow, which a reader takes to mean *eventual*, while the server prunes undelivered envelopes on a retention timer clients are never told (`ENVELOPE_TTL_DAYS`, default 7) — late and never are different outcomes and only one was disclosed, so a new point states it, and states that the client will not name what was lost, because `SyncProjection.isSecurityBlocked` is dead code and a one-to-one queue gap surfaces nowhere; and the same point omitted Data Saver, which blocks the catch-up's `NETWORK_TYPE_ANY` request on exactly the metered connection this audience pays for, and which the written handover had been stating while the application did not. `enrollmentDoesNotProtectBody` stated a real limitation in vocabulary the reader cannot decode — "social graph", "out of band", "compare fingerprints" — while the screen it instructs them to use is titled *Safety number*; a limitation a reader cannot act on is a limitation that was not disclosed. **The mechanism is corrected rather than the strings.** Each `DisclosurePoint` now carries the revision at which its wording last moved, `DeploymentDisclosure.revision` must equal the highest of them, and the pinned-text test fails on any edit — so an edit forces a `since` bump and a `since` bump forces the revision, and the bump can no longer be forgotten by a person, which is how three revisions shipped with nothing checking them. The accepted revision is recorded in the encrypted preference table as one integer and nothing else — no timestamp, no identifier — never lowered, written by enrollment before the session opens, and read by a gate that wraps the routed child above the router, so no route, deep link or notification tap reaches the application without passing it. A reader from revision 4 sees the statement again with the four moved points badged; a reader with no record at all — every recipient who enrolled before this — sees the whole statement with nothing badged, because 0 means the application does not know what they saw and may assume nothing read. Periodic re-consent stays rejected on the evidence ADR-045 cited and on newer evidence that strengthens it: Vance et al. (MIS Quarterly 2018) show attention to a repeated warning collapsing within days and polymorphic variation restoring adherence at three weeks, and Vance et al. (MIS Quarterly 2025, "The Fog of Warnings") show habituation *generalising* from ordinary notifications to security warnings never seen before, which is decisive here because this artifact now posts message alerts and a permanent foreground-service notice — so the correction is a full screen the application shows nowhere else, and the "changed" mark is a labelled badge rather than a colour. It **fails open** in exactly one direction: an unreadable preference row withholds the gate rather than the application, because an honesty mechanism must not become a denial of service, and a failed write costs one extra showing. The written re-delivery stays release-blocking and is corrected too — `deployment-and-release.md` claimed "the same seven facts" while listing six, omitted the unbuilt surfaces and the ADR-051 opt-in, and is now generated from the same point list. Language parity is enforced catalogue-wide instead of by three hand-maintained key lists that a new English-only key passed. Adds no dependency, changes no feature behaviour, touches no backend file, opens no production gate, and leaves the Beta/Production boundary untouched: production and development still carry no disclosure and cannot render Private Experimental wording. Disclosure revision moves 4 → 5. Full audit, evidence, alternatives and sources in "ADR-052 in full" below. |
+| ADR-053 | Accepted | Sustained delivery is withheld from every build that reaches a user until it has been measured on real phones: a source-only evidence ledger with seven mandatory matrix cells, admissibility rules that refuse an emulator, a short run or a single observation, and ten falsifiable criteria fixed before anything was measured; amends ADR-051 and restores ADR-046's distribution clause in an enforced form (2026-08-23) | ADR-046 required the physical-device matrix before this layer could be enabled in a distributed artifact; ADR-051 removed that clause because the matrix could not be run in the available environment. It still cannot: there is no physical Android device of any kind here, and behind that the capability cannot start on any target without an operator-activated account, because `runSustainedDelivery` refuses anything short of a full device-bound session. So **no cell of the matrix has been run**, and "we cannot measure this" is a reason to withhold a capability, never a reason to ship it — the failure it risks is a person who was told messages would arrive and was not told about one for hours, a failure whose entire signature is absence. The gate is a compile-time constant with an empty ledger: beta and production resolve `withheld`, development resolves `measurementOnly` so the matrix can be run at all. A withheld build never asks the platform for anything, never writes the durable choice, never starts the service, and **stops** one an earlier build left running. Opening it needs seven records that each pass `isAdmissible` — not emulated, a strict ISO date, a committed run record, ≥ 24 holding hours, ≥ 20 timed deliveries, ≥ 3 repetitions — and an inadmissible record simply does not count rather than being refused. Two fleet figures ADR-051 recorded are corrected on a re-read of Statcounter (2026-08-23): Samsung and Xiaomi are **90%** of the *Android* fleet rather than 77% of all mobile, and Android 13-or-earlier is **60%** rather than "roughly half", so the fraction covered by no vendor statement is about 78%. One user-facing claim is withdrawn: `sustainedWhatItDoes` promised delivery "within seconds" in a build where nothing had ever been timed. Measured, on two AOSP emulator images only: every observation surface works unrooted, and their Doze constants differ by a factor of thirty with the freezer off at API 30 and on at API 35 — so the procedure reads constants per device, and whether the freezer even exists on Android 11–12 is now an explicit question for two cells. `docs/sustained-delivery-validation.md` holds the criteria, the matrix and the results; `tool/measure_sustained_delivery.sh` is the instrument |
+
+## ADR-053 in full — whether receiving while the application is not in use actually works (2026-08-23)
+
+**Status:** Accepted. Amends ADR-051's *Beta and production* clause and restores, in a
+stronger form, the distribution clause ADR-046 wrote and ADR-051 removed. Adds a release
+gate, a validation document and a measurement instrument. Changes nothing about the
+capability itself, no cryptography, no protocol, no backend. Corrects two fleet figures
+and one user-facing claim.
+
+### The question
+
+> The capability under test depends on behaviour the platform permits but does not
+> guarantee, and on behaviour that individual manufacturers are free to override. What
+> actually happens on real devices, over real durations, under the conditions real users
+> create — and what should this repository do about the fact that nobody knows?
+
+Nothing was assumed: not the fleet, not what "works" means, not the way to observe it,
+not the durations, not the tooling, not the answer. That the capability works and that it
+fails were treated as equally open.
+
+### Exact environment, fixed
+
+Unchanged from ADR-044 and ADR-051. 20–30 known users, all in Iran, private handover with
+written instructions, international connectivity possibly absent while domestic
+connectivity reaches the backend, no foreign runtime dependency at any layer, an
+Android/Flutter client installed as a directly signed artifact, and a server that is an
+untrusted relay for end-to-end encrypted content. `minSdk` 24, `targetSdk` 36, Flutter
+3.44.7 / Dart 3.12.2.
+
+### How the fleet was derived, and two corrections
+
+Statcounter Global Stats for Iran, twelve months 2025-08 to 2026-07, **read 2026-08-23**:
+`gs.statcounter.com/vendor-market-share/mobile/iran` and
+`gs.statcounter.com/android-version-market-share/mobile-tablet/iran`. Re-read rather than
+carried forward. The vendor headline figures ADR-046 and ADR-051 quote survive — Samsung
+46.31%, Xiaomi 30.99% for July 2026 — but the use both decisions made of them does not.
+
+**Correction 1.** ADR-051 says Samsung and Xiaomi are "roughly 77% of this fleet". That is
+their share of all mobile devices, iPhones included, and this is an Android-only artifact.
+Excluding Apple's 14.25%, the two are **about 90%** of the Android fleet this deployment
+will meet — Samsung 54.0%, Xiaomi 36.1%. The repository understated its own vendor
+concentration by thirteen points, in the one place where that concentration is the whole
+argument.
+
+**Correction 2.** ADR-051 says "roughly half this fleet by version share is Android 13 or
+earlier", and uses it to bound how much of the fleet Samsung's One UI 6.0 statement
+covers. The figure is **60.0%**. Android 14 and later — the only band One UI 6.0+ can
+occupy — is 39.98%. So at most two fifths of this fleet is covered by any vendor statement
+at all, and once every Xiaomi device is removed from the covered side, the uncovered
+fraction is about **78%**, not half.
+
+**And the limit of all of it.** This deployment has 20–30 *known* users. A country panel
+statistic is a prior over an unobserved fleet, not the fleet. The strongest available
+derivation is to ask the twenty-odd people what phone they have; nobody has, and until
+somebody does the matrix rests on a proxy. That is recorded as follow-up F1 rather than
+hidden.
+
+### What was found in the repository, by trace rather than by documentation
+
+- The capability is genuinely composed and reachable: `SustainedDelivery.attach` on the
+  activity's engine, a listener in `app.dart` refreshing on resume, a Settings row, and a
+  route at `/settings/receiving-while-closed`. This is not a feature that exists only in
+  tests.
+- **It cannot be exercised at all without an activated account.** `runSustainedDelivery`
+  refuses any session that is not `AccountSessionScope.full` with `securitySetupComplete`
+  and a `deviceId`, and the screen sits behind the signed-in shell.
+  `backend/accounts/API.md` creates every account inactive and makes activation a human
+  action by the operator. So the measurement needs hardware **and** an operator-activated
+  pair of test accounts.
+- `SustainedDeliveryService` is `exported="false"`, so nothing outside the application can
+  start it — correct, pinned by test, and also the reason there is no shortcut around the
+  previous point.
+- **`platform-android.md` already said the physical-device matrix "remains a release
+  validation gate for any *claim* about timeliness".** It was enforced by nothing. A gate
+  expressed only as prose in a document is a sentence, not a gate; this decision is the
+  difference.
+- `sustainedWhatItDoes` told users "messages can reach you within seconds of being sent",
+  in a build where no latency had ever been timed by anybody. A user-facing latency claim
+  may only ever come from a measurement. It is corrected here, and a test now fails on the
+  phrase.
+
+### Defining "works", before measuring anything
+
+Ten falsifiable criteria were written on 2026-08-23 **before any measurement of any kind
+was attempted**, and are in `docs/sustained-delivery-validation.md` §3 in full. Their
+thresholds:
+
+| # | Condition | Observed | Threshold | Reps |
+|---|---|---|---|---|
+| C1 | idle, unplugged, screen off, stationary | `dumpsys activity services` | service present and `isForeground=true` at 100% of samples for ≥ 24 h | 3/3 |
+| C2 | as C1 | `/proc/net/tcp6` by app UID and origin port, state `01` | socket present at ≥ 99% of samples, no gap > 10 min | 3/3 |
+| C3 | receiver in deep Doze ≥ 60 min | host clock from send mark to `dumpsys notification` | p50 ≤ 30 s, p95 ≤ 120 s; > 1 miss in 20 fails | ≥ 20 sends |
+| C4 | ≥ 9 days genuinely unused | bucket, plus C1/C2/C3 | all still hold on day 9 | 1 |
+| C5 | reboot | time to service running | ≤ 20 min after first unlock | 3/3 |
+| C6 | in-place update | as C5 | ≤ 20 min after first unlock | 3/3 |
+| C7 | factory-default vendor settings, step **not** performed | as C1/C2 | C1 and C2 hold | 3/3 |
+| C8 | vendor exclusion set, then a manufacturer OTA | exemption list and a photograph | both still set | opportunistic |
+| C9 | capability on | `dumpsys notification --noredact`, lock screen | `vis=SECRET`, low importance, nothing on a secure lock screen | 1 |
+| C10 | never enabled; enabled then disabled | service, notification, socket, durable row | all absent | 1 each |
+
+Three of these are answers to questions this piece had to decide rather than inherit.
+**Intermittent is failure**: a cell passing 2 of 3 runs fails, because a background
+capability that works most of the time is one that fails silently, which is the whole
+hazard. **The platform behaving while the manufacturer does not is failure**: the gate is
+about the phone in a user's hand, not about AOSP. **A single failure closes its own cell
+and generalises to nothing** — a Samsung result is not a Xiaomi result and one day is not
+the next — but it keeps the gate closed, because the gate wants every cell.
+
+A criterion later found wrong is corrected in the open and its measurements discarded or
+marked unusable. It is never kept under a relaxed threshold.
+
+### The matrix
+
+Seven cells: Samsung and Xiaomi crossed with Android 11–12, 13, and 14+, plus a
+platform-reference cell with no manufacturer layer. Together the six fleet cells cover
+about **79%** of the Android devices this deployment expects — two manufacturers at 90%
+combined, crossed with three version bands at 87.5%. The seventh is mandatory and not for
+coverage: without a device whose behaviour is the platform's own, a failure cannot be
+attributed, and "broken" cannot be told apart from "this manufacturer kills it".
+
+**Every one of the seven is NOT RUN.** Not covered at all: Huawei (~3.7% of the Android
+fleet, its own PowerGenie management), Honor, "Unknown", the long tail, and Android 10 and
+below (12.49% of version share, and installable at `minSdk` 24).
+
+### The measurement design, and why it is this
+
+**Nothing is added to the application.** No log line, no counter, no diagnostic screen, no
+export, no outbound call. This project forbids the application reporting anything about
+itself to anybody, and an instrument requiring such a report is an instrument that could
+survive into a distributed build. Everything is read instead from the *platform's* own
+debug surfaces over adb by `tool/measure_sustained_delivery.sh`: service state from
+`dumpsys activity services`, socket state from `/proc/net/tcp6` by UID, freeze state from
+`dumpsys activity processes`, Doze from `dumpsys deviceidle`, bucket from
+`am get-standby-bucket`, the exemption from `dumpsys deviceidle whitelist`, and the
+permanent entry from `dumpsys notification --noredact`. The device therefore runs exactly
+the artifact a user would run, and there is nothing to remove afterwards.
+
+**The measuring host is the single time base.** It drives the sender and reads the
+receiver, both over adb, so a send mark and the sample that first shows the alert are two
+readings of one clock. Device offset is recorded before and after. No time service,
+domestic or foreign, is contacted.
+
+**Forced and natural Doze are two arms of one cell, and whether they agree is a result.**
+`force-idle` reaches deep idle in seconds and skips light Doze, the inactivity timer and
+the motion gate; the natural arm unplugs nothing and only watches. A cell whose arms
+disagree has no usable forced result. That is written down before any measurement so that
+a convenient forced number cannot later be presented as a natural one.
+
+**An idle device is not a device on a cable.** Runs are unplugged, screen off, stationary,
+reached over adb on the local Wi-Fi; `dumpsys battery unplug` is used only in the forced
+arm and never in a 24-hour or 9-day run.
+
+### What was actually run, and what stopped the rest
+
+**Two environment probes, both on emulators, and that is all.** No cell of the matrix was
+run. Six were blocked by there being no physical Android device of any kind available —
+not a Samsung, not a Xiaomi, not a Pixel. The seventh, the platform reference, was
+*substituted* with an emulator, and the substitution answers a different question: an
+emulator can say whether AOSP behaves as documented; it cannot say whether this service
+survives 24 hours on a device with a radio, a carrier NAT and a battery, and it has no
+manufacturer to be distinguished from, which is the control cell's entire purpose.
+
+A third blocker sits behind both and would survive the arrival of hardware: the capability
+cannot be exercised without an operator-activated account, as above.
+
+### Guarantees, permissions, observations — three different things
+
+**Guaranteed by the platform (as restrictions; measurement cannot disprove them).** "When
+an app process is frozen, all of its threads are suspended"; "If all processes for a
+particular app are frozen, the system terminates any active TCP sockets maintained by the
+app"; "App processes in the cached state are frozen 10 seconds after entering the cached
+state", Android 14+ (source.android.com/docs/core/perf/cached-apps-freezer, 2026-06-17).
+Network is **Disabled** in the *rare* and *restricted* buckets and **Restricted during
+doze** at device level (developer.android.com/topic/performance/power/power-details,
+2026-05-19).
+
+**Permitted, never promised.** App state "app process is running a foreground service"
+gives Network **"No restrictions"** (same page). `specialUse` carries permission
+`FOREGROUND_SERVICE_SPECIAL_USE`, runtime prerequisites **None**, and no timeout — the
+6 h/24 h cap is `dataSync` and `mediaProcessing`, `shortService` is tighter
+(fgs/service-types and fgs/timeout, both 2026-08-14). "The user turns off battery
+optimizations for your app" is an enumerated exemption from the background-start
+restriction (fgs/restrictions-bg-start, 2026-08-14). An app is in the *active* bucket
+while it "Runs a long running foreground service", and "Apps that are on the Doze exemption
+list are exempted from the App Standby Bucket-based restrictions"
+(topic/performance/appstandby, 2026-08-14) — both of ADR-051's load-bearing claims here
+were re-checked and both hold. Android 17 (API 37) adds no foreground-service or network
+change; its background hardening is about audio. It does add "app memory limits based on
+the device's total RAM", which is new pressure on a long-lived process and is recorded for
+the next re-run.
+
+**Observed here, on two AOSP emulator images, 2026-08-23, one reading each.** Every
+observation surface the procedure needs works from an unrooted `user` build:
+`dumpsys deviceidle force-idle` reaches deep idle, `am set-standby-bucket` and
+`get-standby-bucket` work, `/proc/net/tcp6` is readable by the shell user, and
+`dumpsys notification --noredact` and `dumpsys deviceidle whitelist` are both readable. And
+one finding that changed the design: **the two images' Doze constants differ by a factor of
+thirty** — `inactive_to` 30 m at API 30 against 1 m at API 35, `idle_to` 1 h against 15 m —
+and **`use_freezer` is false on the API 30 image and true on the API 35 one**, consistent
+with AOSP documenting the ten-second freeze for Android 14 and higher. So the procedure
+reads each device's own constants rather than assuming a schedule, and the two Android
+11–12 cells now have to answer explicitly whether the mechanism this capability defeats
+even exists there.
+
+**Nothing else.** Nothing about Samsung, nothing about Xiaomi, nothing about a real radio,
+nothing about battery, nothing about a system update.
+
+### The strongest claim the evidence supports
+
+*On two AOSP emulator images on 2026-08-23, every observation surface this procedure
+depends on worked from an unrooted shell, and the two images' Doze constants differed by a
+factor of thirty with the cached-apps freezer off on one and on on the other — which
+establishes that the procedure is runnable and that its timings must be read per device,
+and establishes nothing whatsoever about whether sustained delivery works on any phone.*
+
+### The weakest link
+
+A Xiaomi device on Android 13 or 14 whose owner has not touched the autostart setting.
+Roughly a fifth of the fleet on its own; the manufacturer publishes nothing about
+foreground services; "Background autostart" is off by default for sideloaded applications;
+and this application is sideloaded by definition, because it is never distributed through a
+store.
+
+### Decision
+
+**A. The capability is withheld from every build that reaches a user, until the matrix is
+run.** `lib/app/config/sustained_delivery_gate.dart` holds a compile-time constant with an
+evidence ledger, which is empty. Beta — the artifact ADR-044's people receive — and
+production both resolve `withheld`; development resolves `measurementOnly`, so the matrix
+can be run at all, including in a release AOT build, which is the only way ADR-051's
+outstanding item 7 can ever close.
+
+**B. Withheld is a complete state, and it is fail-closed.** The controller publishes
+`SustainedDeliveryStatus.withheld`, never attaches its authentication listener, never
+reconciles, and refuses `enable()` before the platform is asked anything — so no
+permission is requested, no system dialog appears, no durable choice is written, and the
+service is never started. The connection policy therefore answers *no* in every
+distributed build and `SyncLifecycleSupervisor` closes its socket on backgrounding exactly
+as it did before ADR-051. One positive act: a withheld build **stops** a service an
+earlier build may have left running, because a permanent notification must never outlive
+the decision to stand behind it. It does not clear the user's durable choice, which is
+theirs.
+
+**C. The gate cannot be satisfied by assumption.** Opening it needs seven records, one per
+cell, each passing `SustainedDeliveryFieldEvidence.isAdmissible`: `emulated` false,
+hardware and platform version as the device reports them, a strict ISO date that survives
+a round trip, a committed run record, ≥ 24 holding hours, ≥ 20 timed deliveries, ≥ 3
+repetitions. An inadmissible record is not rejected — it may and should be written down —
+it simply does not count, so its cell stays outstanding. There is no environment define, no
+remote value, no runtime setter and no debug override, and
+`test/architecture/sustained_delivery_gate_test.dart` fails if one appears.
+
+**D. A partially satisfied matrix opens nothing**, and every cell is mandatory. A per-cell
+release would be a claim about which phone a user has, and this deployment does not know.
+
+**E. `withheld` is its own sentence in both catalogues, not borrowed from `unavailable`.**
+"There is nothing behind this" and "there is something behind this and nobody has measured
+it" are different facts, and the user is owed the one that is true.
+
+**F. The user-facing latency claim is withdrawn.** "Messages can reach you within seconds
+of being sent" becomes a statement of the mechanism plus "How quickly it does on your
+phone has not been measured", in both languages, and a test fails on the old phrase.
+
+**G. The procedure is an instrument, not a paragraph.**
+`tool/measure_sustained_delivery.sh` has `probe`, `doze`, `watch`, `mark` and `verdict`;
+`verdict` prints each threshold beside its result so that a reader is not asked to take the
+word PASS on trust. Run records live under `docs/validation/sustained-delivery/`.
+
+### Alternatives evaluated
+
+**1 — Leave ADR-051's amendment standing and ship the capability off-by-default.** Its
+argument was that the matrix could not be run here, so the clause would cancel the
+capability rather than defer it, and that the permanent indicator cannot lie because the
+platform displays it only while the service is genuinely running. The second half is true
+and is not the risk. The risk is a user who turns this on, is told what it does, sees the
+notification, and is not told about a message for nine hours because their Xiaomi put the
+app to sleep — a failure whose entire signature is *absence*, which the design's own
+honesty about status cannot surface, because a stopped service reports *stopped* only to
+somebody who opens the screen and looks. Rejected: "we cannot measure this" is a reason to
+withhold a capability, never a reason to ship it.
+
+**2 — Ship it, but only to users who confirm they have a device the matrix covers.** Needs
+the matrix to have been run, which is the thing that has not happened, and needs users to
+maintain a setting, which ADR-044 says they do not.
+
+**3 — A runtime flag or a signed configuration switch.** A gate a build flag can open is a
+gate that opens on the machine of whoever is in a hurry. Rejected for the reason
+`GroupProductionGate` was made source-only.
+
+**4 — Document the gate and enforce nothing.** This is what `platform-android.md` already
+did, and the capability shipped anyway. Rejected by its own outcome.
+
+**5 — Write a throwaway probe application with a `specialUse` service and measure that on
+the emulator.** It would answer a real question — whether AOSP permits *a* foreground
+service to hold *a* socket — and not this one, which is about this application on a
+manufacturer's build. It would also produce exactly the green cell this piece exists to
+prevent. Rejected; the platform-reference cell is recorded as substituted and unrun
+instead.
+
+**6 — Remove the capability entirely.** Premature. Nothing measured says it does not work;
+nothing measured says it does. Withholding preserves the work and the honesty at once. If
+the matrix is run and fails on Samsung or Xiaomi even when configured, ADR-051's own
+revisit condition 3 applies and removal becomes the honest answer.
+
+### Correctness questions, answered
+
+- **Which cells were run?** None. Two emulator probes, neither of which is a cell.
+- **What prevented the rest?** No physical device of any kind; and, behind that, no
+  operator-activated test account, without which the capability cannot start on any target.
+- **What remains unknown for every unrun cell?** Everything the criteria ask: whether the
+  service survives a day, whether the socket does, how fast delivery is, whether nine
+  unused days end it, whether a reboot restores it, whether the manufacturer kills it with
+  and without the vendor step, and whether an update undoes the arrangement.
+- **What would it take to know it?** Seven phones, a pair of activated test accounts, and
+  about a fortnight of elapsed time running the cells in parallel; three months on one
+  device.
+- **Where a substitute was used, what does it answer?** The emulator answers whether the
+  observation surfaces work and what a given image's Doze constants are. It does not
+  answer anything about hardware, radios, batteries, or manufacturers.
+- **Which results are measurements?** The six emulator observations above, and only those.
+- **Does anything recorded here survive contact with what was measured?** Two fleet
+  figures and one user-facing claim do not, and are corrected. ADR-051's platform findings
+  were re-checked against the same sources and all hold.
+- **What does the gate require?** Section C.
+
+### Security and privacy
+
+- **What the measurement records.** Timestamps, booleans, counts, and the device's own
+  build identity, under `docs/validation/sustained-delivery/`. Kept for as long as the
+  gate references them, because a ledger row naming a run record that has been deleted is
+  a row with nothing behind it.
+- **What it may never record.** Message content, conversation, account, username, token,
+  key, notification text, server host, IP address. The origin is passed to the harness as a
+  port and reduced to a socket *count* before anything is written, so a run record can be
+  committed here without disclosing where this deployment lives or who is on it. Runs use
+  dedicated test accounts and never a real user's device.
+- **Could instrumentation survive into a distributed build?** There is none to survive.
+  Nothing was added to the application; the instrument is a shell script under `tool/`,
+  which is not compiled, not packaged, and not reachable from any Dart or Kotlin source.
+- **Does anything introduce an outbound call?** No. The harness speaks adb to a device on
+  the local network and nothing else. No time service, no telemetry, no reporting endpoint.
+- **Does the gate itself weaken anything?** It removes a capability from the distributed
+  artifact. Everything it touches moves in the fail-closed direction: no service, no
+  exemption request, no notification permission request, no held socket.
+
+### Beta and production
+
+**The results apply to nothing, because there are none.** The gate applies to the beta and
+production artifacts by the same compiled constant, so it is not a developer-build
+convention. Measurement will have to run on a development build, which shares the entire
+`main` Android source set — manifest, `SustainedDelivery.kt`, `BackgroundDelivery.kt`,
+`MainActivity.kt` — and `minSdk`/`targetSdk`/`compileSdk` with beta, and differs in
+application ID, launcher label, signing identity, provisioning prefix and packaged native
+crypto profile. A result therefore transfers for the Android platform mechanics and does
+**not** transfer for the beta MLS core, the provisioned origin's TLS path, or the frozen
+signing identity across an upgrade — and can never measure the beta artifact's *gate*,
+only its mechanics, because a build with the gate open is by construction not the build
+users get. Nothing about the Beta/Production separation, the two Cargo profiles, the frozen
+signing identity or `signingConfig = null` on release is touched, and no production gate is
+opened.
+
+### Known limitations of this validation
+
+- The fleet is a country panel statistic, not this deployment's twenty-odd actual phones.
+- Statcounter's own series has two months (2026-03, 2026-04) in which Apple's share moves
+  by sixteen points; a panel that can do that is not a precision instrument.
+- C8 cannot be scheduled and may never be observed. It is also the criterion whose failure
+  mode is exactly this deployment's users: people who do not repeat setup and do not notice
+  when an update undoes it.
+- The four-minute keepalive has still never been measured against an Iranian carrier's NAT.
+- Battery and data cost are measured by no criterion here. They should be, and are not,
+  because they need hardware too.
+- Huawei, Honor and Android 10-and-below are outside the matrix entirely.
+
+### What would change the conclusion
+
+1. Seven devices and an activated test-account pair — then the matrix can be run and the
+   gate can open or the capability can be withdrawn on evidence.
+2. Enumerating the twenty-odd real devices (F1), which could shrink the matrix to what
+   this deployment actually meets.
+3. A measured failure on Samsung or Xiaomi *with* the vendor step performed. Then
+   near-real-time background delivery is not achievable for this fleet, ADR-051's revisit
+   condition 3 fires, and the capability should be removed rather than left withheld.
+4. Android changing the `specialUse` contract, the freezer, or the standby-bucket network
+   rules.
+5. The backend growing a push endpoint, which reopens ADR-046's alternative 6.
+
+### When this must be re-run
+
+The earliest of: **2027-02-23** (six months from the fleet read — Android 16 gained
+fourteen points of share in the last twelve); any new Android major version reaching
+material share in this country; any change to `specialUse`, the freezer, the standby-bucket
+rules, or the Doze-exemption implication for buckets; any change to the capability, its
+service type, its keepalive or its reconciliation; or the user base ceasing to be 20–30
+known people receiving a written handover.
+
+### Follow-up work
+
+1. **F1** — enumerate the real fleet at handover and replace the panel statistic.
+2. Obtain the seven devices and the activated test-account pair, and run the matrix.
+3. Add battery and data cost as criteria once hardware exists; ADR-051's follow-up 4 —
+   the keepalive interval — depends on them.
+4. If the capability is later withdrawn rather than evidenced, the handover disclosure
+   moves again, as ADR-051's revisit condition 3 requires.
+
+This decision amends ADR-051's *Beta and production* clause and restores ADR-046's
+distribution requirement in an enforced form; corrects two fleet figures and one
+user-facing claim; adds no dependency; changes no cryptographic behaviour; touches no
+backend file; and opens no production gate.
 
 ## ADR-052 in full — making what the application says about itself true (2026-08-23)
 
@@ -360,6 +770,16 @@ it: every corrected claim moves in the conservative direction, and the two addit
   being a workable remedy and the in-application mechanism becomes the only one.
 
 ## ADR-051 in full — receiving while the application is not in use (2026-08-22)
+
+**Amended 2026-08-23 by [ADR-053](#adr-053-in-full--whether-receiving-while-the-application-is-not-in-use-actually-works-2026-08-23):**
+the *Beta and production* clause below is superseded. ADR-046's distribution requirement
+is restored in an enforced form — a compile-time gate with an empty evidence ledger — and
+the capability is withheld from the beta and production artifacts until the matrix in
+*Outstanding validation* has actually been run. ADR-053 also corrects two fleet figures
+used below (Samsung and Xiaomi are ~90% of the *Android* fleet, not 77% of all mobile;
+Android 13-or-earlier is 60%, not "roughly half") and withdraws the "within seconds"
+delivery sentence this decision shipped. Everything else here stands, and its platform
+findings were re-checked against the same sources on 2026-08-23 and all hold.
 
 **Status:** Accepted. Builds ADR-046's Layer 2 and closes its follow-up step 5, on
 re-derived evidence rather than by inheritance. Amends ADR-046's distribution clause and
@@ -888,6 +1308,15 @@ And, ongoing: do not force-stop the application, and do not set its battery use 
 on a timer, and the surface never implies that completing the steps guarantees the result.
 
 ### Beta and production
+
+> **Superseded 2026-08-23 by ADR-053.** This clause no longer holds. The matrix below
+> still cannot be run here — there is no physical Android device of any kind, and the
+> capability additionally cannot start on any target without an operator-activated
+> account — so the capability is now **withheld from the beta and production artifacts**
+> by a compile-time gate with an empty evidence ledger, rather than shipped off by
+> default. The argument this clause rests on treats "we cannot measure this" as a reason
+> to ship; ADR-053 holds that it is a reason to withhold. The paragraph is kept as
+> written, because a changed decision is not edited out of history.
 
 **Present and enableable in the distributed artifact now, off by default.** ADR-046 held
 that Layer 2 "may not be enabled in any distributed artifact before the physical-device

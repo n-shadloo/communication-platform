@@ -1,0 +1,85 @@
+  Settings:
+    light_after_inactive_to=+3m0s0ms
+    light_pre_idle_to=+3m0s0ms
+    light_idle_to=+5m0s0ms
+    light_idle_factor=2.0
+    light_max_idle_to=+15m0s0ms
+    light_idle_maintenance_min_budget=+1m0s0ms
+    light_idle_maintenance_max_budget=+5m0s0ms
+    min_light_maintenance_time=+5s0ms
+    min_deep_maintenance_time=+30s0ms
+    inactive_to=+30m0s0ms
+    sensing_to=+4m0s0ms
+    locating_to=+30s0ms
+    location_accuracy=20.0m
+    motion_inactive_to=+10m0s0ms
+    idle_after_inactive_to=+30m0s0ms
+    idle_pending_to=+5m0s0ms
+    max_idle_pending_to=+10m0s0ms
+    idle_pending_factor=2.0
+    quick_doze_delay_to=+1m0s0ms
+    idle_to=+1h0m0s0ms
+    max_idle_to=+6h0m0s0ms
+    idle_factor=2.0
+    min_time_to_alarm=+30m0s0ms
+    max_temp_app_whitelist_duration=+5m0s0ms
+    mms_temp_app_whitelist_duration=+1m0s0ms
+    sms_temp_app_whitelist_duration=+20s0ms
+    notification_whitelist_duration=+30s0ms
+    wait_for_unlock=true
+    pre_idle_factor_long=1.67
+    pre_idle_factor_short=0.33
+  Idling history:
+      deep-idle: -257ms
+         normal: -179ms (exit-force)
+  Whitelist (except idle) system apps:
+    com.android.providers.calendar
+    com.android.providers.downloads
+    com.android.vending
+    com.android.cellbroadcastreceiver
+    com.google.android.gms
+    com.google.android.ims
+    com.android.proxyhandler
+    com.android.shell
+    com.google.android.cellbroadcastreceiver
+    com.android.providers.contacts
+  Whitelist system apps:
+    com.android.providers.downloads
+    com.android.cellbroadcastreceiver
+    com.google.android.gms
+    com.google.android.ims
+    com.android.shell
+    com.google.android.cellbroadcastreceiver
+  Whitelist (except idle) all app ids:
+    2000
+    10061
+    10062
+    10071
+    10072
+    10073
+    10101
+    10102
+    10108
+    10153
+  Whitelist all app ids:
+    2000
+    10071
+    10073
+    10101
+    10108
+    10153
+  mLightEnabled=true  mDeepEnabled=true
+  mForceIdle=false
+  mUseMotionSensor=true mMotionSensor=null
+  mScreenOn=true
+  mScreenLocked=false
+  mNetworkConnected=true
+  mCharging=false
+  mMotionActive=false
+  mNotMoving=false
+  mMotionListener.activatedTimeElapsed=0
+  mLastMotionEventElapsed=0
+  0 stationary listeners registered
+  mLocating=false mHasGps=true mHasNetwork=false mLocated=false
+  mState=ACTIVE mLightState=ACTIVE
+  mInactiveTimeout=+30m0s0ms

@@ -81,10 +81,13 @@ is not called the production release.
   minimum with a network constraint; it gives *eventual* delivery, and it gives **nothing**
   in the *rare* and *restricted* standby buckets, which is where Android 13+ places an
   application after eight days without user interaction. Above it, an opt-in `specialUse`
-  foreground service — built, and **off by default** — holds the connection and gives
-  *near-real-time, best-effort* delivery once the user grants notifications and the
-  battery-optimization exemption; that exemption also lifts the standby-bucket ceiling
-  underneath, so the floor improves for the same user. It is not a guarantee: the platform
+  foreground service is **built and withheld** (ADR-053): it would hold the connection,
+  and what that is worth has never been measured on a single phone, so it is gated out of
+  every artifact a user receives and the floor is the whole of what they get. If the
+  matrix in [sustained-delivery-validation.md](sustained-delivery-validation.md) is run
+  and passes, it becomes *near-real-time, best-effort* for a user who grants
+  notifications and the battery-optimization exemption, and that exemption also lifts the
+  standby-bucket ceiling underneath. It is not a guarantee: the platform
   may end it at any time, and on Samsung and Xiaomi the user must additionally exclude the
   application from the manufacturer's own app-sleeping — which this application cannot
   check and never claims to have checked. Delayed delivery is expected under Doze, standby,

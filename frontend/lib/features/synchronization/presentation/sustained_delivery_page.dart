@@ -62,6 +62,7 @@ String settingsSustainedSummary(
   SustainedDeliveryStatus status,
 ) => switch (status) {
   SustainedDeliveryStatus.unavailable => l10n.settingsSustainedUnavailable,
+  SustainedDeliveryStatus.withheld => l10n.settingsSustainedWithheld,
   SustainedDeliveryStatus.off => l10n.settingsSustainedOff,
   SustainedDeliveryStatus.holding => l10n.settingsSustainedHolding,
   SustainedDeliveryStatus.alertsWithheld =>
@@ -77,6 +78,7 @@ String sustainedStatusText(
   SustainedDeliveryStatus status,
 ) => switch (status) {
   SustainedDeliveryStatus.unavailable => l10n.sustainedStatusUnavailable,
+  SustainedDeliveryStatus.withheld => l10n.sustainedStatusWithheld,
   SustainedDeliveryStatus.off => l10n.sustainedStatusOff,
   SustainedDeliveryStatus.holding => l10n.sustainedStatusHolding,
   SustainedDeliveryStatus.alertsWithheld => l10n.sustainedStatusAlertsWithheld,
@@ -91,6 +93,7 @@ String sustainedRefusalText(
   SustainedDeliveryRefusal refusal,
 ) => switch (refusal) {
   SustainedDeliveryRefusal.unavailable => l10n.sustainedRefusedUnavailable,
+  SustainedDeliveryRefusal.withheld => l10n.sustainedRefusedWithheld,
   SustainedDeliveryRefusal.alertsRefused => l10n.sustainedRefusedAlerts,
   SustainedDeliveryRefusal.exemptionRefused => l10n.sustainedRefusedExemption,
   SustainedDeliveryRefusal.platformRefused => l10n.sustainedRefusedPlatform,
@@ -147,8 +150,12 @@ class _SustainedDeliveryPageState extends ConsumerState<SustainedDeliveryPage> {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final status = ref.watch(sustainedDeliveryControllerProvider);
-    final unavailable = status == SustainedDeliveryStatus.unavailable;
-    final on = status != SustainedDeliveryStatus.off && !unavailable;
+    // Two states offer nothing: a build with no implementation, and a build
+    // withholding one it has (ADR-053). Both leave the switch and the vendor
+    // shortcut inert, because in neither would pressing anything change what
+    // this phone does.
+    final offersSwitch = status.offersSwitch;
+    final on = status != SustainedDeliveryStatus.off && offersSwitch;
     return Scaffold(
       appBar: AppBar(title: Text(l10n.sustainedTitle)),
       body: ListView(
@@ -170,11 +177,11 @@ class _SustainedDeliveryPageState extends ConsumerState<SustainedDeliveryPage> {
             alignment: AlignmentDirectional.centerStart,
             child: TextButton(
               key: const ValueKey('sustained-vendor-settings'),
-              onPressed: unavailable
-                  ? null
-                  : () => ref
+              onPressed: offersSwitch
+                  ? () => ref
                         .read(sustainedDeliveryControllerProvider.notifier)
-                        .openVendorSettings(),
+                        .openVendorSettings()
+                  : null,
               child: Text(l10n.sustainedVendorAction),
             ),
           ),
@@ -202,7 +209,7 @@ class _SustainedDeliveryPageState extends ConsumerState<SustainedDeliveryPage> {
                   const SizedBox(height: AppSpacing.x3),
                   FilledButton(
                     key: const ValueKey('sustained-toggle'),
-                    onPressed: _busy || unavailable
+                    onPressed: _busy || !offersSwitch
                         ? null
                         : (on ? _turnOff : _turnOn),
                     child: Text(

@@ -57,6 +57,21 @@ not a version-1 target or release gate.
 - Negative vectors for altered headers, signatures, associated data, padding, counters,
   final tags, credentials, and group commits.
 
+### Device validation
+
+Some questions no test in this repository can answer, because they are questions about
+what a manufacturer's Android build does to this application over hours and days. Those
+are measured on hardware, against criteria fixed before the measurement, and recorded as
+evidence that a release gate reads. The first such gate is sustained delivery
+([sustained-delivery-validation.md](sustained-delivery-validation.md), ADR-053): its
+criteria, its seven-cell matrix, its instrument (`tool/measure_sustained_delivery.sh`)
+and its current state — **closed, no cell run** — live there.
+
+A green test suite says nothing about such a matrix, and the two are never reported as
+one result. Nothing is added to the application to make this measurable: the instrument
+reads the platform's own debug surfaces over adb, so the device under test runs exactly
+the artifact a user would run.
+
 ### Database tests
 
 - Constraints and exactly-once event application.

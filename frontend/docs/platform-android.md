@@ -198,7 +198,9 @@ Modes:
   service, asks for nothing the user can refuse, and is never advertised as instant or
   exact-periodic. Its honest tier is *eventual*; in the *rare* and *restricted* buckets it
   is nothing at all.
-- **Background near-real-time (Layer 2, opt-in, off by default):** a `specialUse`
+- **Background near-real-time (Layer 2, opt-in, and WITHHELD from every distributed
+  artifact since 2026-08-23 — see [sustained-delivery-validation.md](sustained-delivery-validation.md)
+  and ADR-053):** a `specialUse`
   foreground service that keeps the process non-cached so the composed socket survives,
   declared with a truthful `android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE`. It hosts its own
   isolate and adds no second delivery implementation — the engine, the store, the inspector,
@@ -206,7 +208,10 @@ Modes:
   from the same `ApplicationRuntime`. Enabling it asks for `POST_NOTIFICATIONS`, asks for the
   battery-optimization exemption through `ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS`, and
   explains the vendor settings the app cannot check for itself. **Built 2026-08-22
-  (ADR-051)**; described in full below.
+  (ADR-051)** and described in full below, but **not offered to anyone**: ADR-053 found
+  that no cell of the physical-device matrix had ever been run, and gates the capability
+  closed in the beta and production artifacts until it is. Only the development flavour
+  resolves it, so that the matrix can be run at all.
 - **Active voice:** microphone/communication foreground service for the duration of the
   joined room with visible controls.
 
@@ -290,7 +295,12 @@ the service keeps running — which is why the truthful status lives on the Sett
 and not in the shade.
 
 `test/architecture/sustained_delivery_policy_test.dart` pins the parts of this that live in
-Kotlin and in the manifest, because no device is available to exercise them.
+Kotlin and in the manifest, because no device is available to exercise them. That no
+device is available is the whole finding of ADR-053: source shape is not behaviour, and
+the capability is gated closed until behaviour has been observed. The criteria, the
+matrix, the measurement procedure and the current results are in
+[sustained-delivery-validation.md](sustained-delivery-validation.md), and
+`tool/measure_sustained_delivery.sh` is the instrument.
 
 ### Layer 1 as built (ADR-049)
 
@@ -362,7 +372,11 @@ assumes foreground-isolate memory survived. The port makes no exact-periodic or
 instant-delivery promise and starts no service of its own; the opt-in Layer 2 service is a
 separate capability the user turns on, and the floor is unchanged whether it is on or off.
 The physical-device Doze, standby, reboot, force-stop and vendor-battery matrix remains a
-release validation gate for any *claim* about timeliness.
+release validation gate for any *claim* about timeliness. Until 2026-08-23 that sentence
+was enforced by nothing, which is how Layer 2 came to ship with the matrix unrun; the
+gate now lives in `lib/app/config/sustained_delivery_gate.dart` and in
+[sustained-delivery-validation.md](sustained-delivery-validation.md), and
+`test/architecture/sustained_delivery_gate_test.dart` fails if it opens without evidence.
 
 This choice was verified on 2026-07-29 against the
 [`connectivity_plus` 6.0.5 release](https://pub.dev/packages/connectivity_plus/versions/6.0.5)
@@ -380,9 +394,11 @@ device-bound full session and stops it on logout, and the two composition roots 
 resolved into one, so the socket presents the same access token, refreshes through the
 same single-flight `TokenCoordinator`, and terminates its TLS chain at the same
 provisioned authority as every REST call. Layer 1 followed on 2026-08-21 under ADR-049 and
-is described above. Layer 2 followed on 2026-08-22 under ADR-051, so background delivery is
-*eventual* by default and *near-real-time, best-effort* for a user who has turned that
-capability on and whose phone permits it. Layer 3 — the alert itself — was implemented
+is described above. Layer 2 followed on 2026-08-22 under ADR-051 and was
+withheld again on 2026-08-23 under ADR-053, so in every artifact a user receives
+background delivery is **eventual, and nothing else**. Layer 2 is present in the source
+and unreachable in the build; what it would give if it worked is unmeasured, which is
+precisely why it is unreachable. Layer 3 — the alert itself — was implemented
 separately on 2026-08-21 under ADR-048 and is described below; it depends on committed local
 state rather than on any delivery layer, so both a headless catch-up and a sustained run
 reach it with no change.
