@@ -56,7 +56,10 @@
   "settingsLinkedDevicesSummary": "Review, rename, or revoke devices on this account",
   "settingsAppearanceTitle": "Appearance",
   "settingsNotificationsTitle": "Notifications",
-  "settingsNotificationsOn": "On. An alert says only that something arrived, never who sent it or what it says, and it can only reach you while this app is running.",
+  "settingsNotificationsOn": "On. An alert says only that something arrived, never who sent it or what it says. It can reach you while the app is closed, but only when your phone next lets the app look for messages.",
+  "@settingsNotificationsOn": {
+    "description": "Revision 5 (ADR-052) corrected the second half. Until then this said an alert 'can only reach you while this app is running', which stopped being true when the deferred catch-up (ADR-049) and the sustained delivery run (ADR-051) began reconciling alerts from isolates with no activity at all."
+  },
   "settingsNotificationsOff": "Off. Nothing will tell you a message arrived unless you are looking at the app.",
   "settingsNotificationsUnavailable": "Not available in this build.",
   "settingsNotificationsTurnOn": "Turn on",
@@ -178,21 +181,40 @@
   "enrollmentIdentityRecoveredTitle": "Identity recovered",
   "enrollmentNoHistoryMessage": "Your cryptographic identity is ready. No message history was restored: history can only come later from an existing online device, and history transfer is not part of this setup.",
   "enrollmentProtectsHeading": "What it DOES protect",
-  "enrollmentProtectsBody": "The content of messages, files, and voice audio is unreadable to the server, network observers, and anyone who seizes the server.",
+  "enrollmentProtectsBody": "Everything you write is encrypted on this phone before it leaves it. The server, anyone watching the network, and anyone who takes the server can see that you are using this app, but not what you wrote.",
+  "@enrollmentProtectsBody": {
+    "description": "The permanent half of the security notice, so it must stay true of every build. It deliberately names no feature: until ADR-052 it read 'messages, files, and voice audio', and the artifact that carried it could not send a file or carry a second of audio (ADR-052)."
+  },
   "enrollmentDoesNotProtectHeading": "What it does NOT protect",
-  "enrollmentDoesNotProtectBody": "It does not hide connection timing, IP addresses, traffic patterns, or the social graph from a live hostile server operator. First contact is not protected until users compare fingerprints out of band. Encryption also cannot protect content already decrypted on a compromised or seized device.",
+  "enrollmentDoesNotProtectBody": "It does not hide when you connect, from where, how much you send, or who you talk to. Whoever runs the server can see all of that. It cannot tell you that a new contact is really who they say they are until you and they compare the safety number this app shows, in person or over another channel you trust. And it cannot protect messages already open on a phone somebody else has taken or broken into.",
+  "@enrollmentDoesNotProtectBody": {
+    "description": "Rewritten at ADR-052 out of the project's own vocabulary and into the reader's. It previously said 'social graph', 'out of band' and 'compare fingerprints'; the screen it points at is titled Safety number, so a reader could not follow the instruction they were given."
+  },
   "enrollmentUnderstandAction": "I understand",
   "disclosureBuildTitle": "What this build is",
   "@disclosureBuildTitle": {
     "description": "Heading of the deployment disclosure section, rendered only by a build that is handed to someone else (ADR-045)."
   },
   "disclosureNoIndependentReview": "Nobody outside the project has reviewed this app's encryption. It is written and tested by one person, and a mistake in it would not have been caught.",
-  "disclosureBestEffortDelivery": "While this app is open, messages arrive as they are sent. While it is closed, your phone looks for new ones on its own schedule \u2014 fifteen minutes apart at best, usually far less often, and not at all while it is saving battery, if you have not opened the app for several days, or if you have force-stopped it. In Settings you can turn on receiving while closed, which does better on most phones but uses more battery and shows a permanent notice while it is on. Nothing about any of this is guaranteed, so do not rely on it for anything urgent.",
-  "disclosureDeviceOnlyHistory": "Your messages are stored only on this phone. The server keeps no copy and no backup exists, so uninstalling the app destroys them permanently.",
+  "disclosureBestEffortDelivery": "While this app is open, messages arrive as they are sent. While it is closed, your phone looks for new ones on its own schedule \u2014 fifteen minutes apart at best, usually far less often, and not at all while it is saving battery, while Data Saver is on and you are using mobile data, if you have not opened the app for several days, or if you have force-stopped it. In Settings you can turn on receiving while closed, which does better on most phones but uses more battery and shows a permanent notice while it is on. Nothing about any of this is guaranteed, so do not rely on it for anything urgent.",
+  "disclosureMessagesExpireUnread": "A message waits on the server only until your phone collects it. After a time set by whoever runs the server, whatever is still waiting is deleted and never arrives, and you will not be told which messages those were. If you go a long time without opening the app, assume you have missed some.",
+  "@disclosureMessagesExpireUnread": {
+    "description": "Added at revision 5 (ADR-052). Every earlier revision described delivery only as slow, which an ordinary reader takes to mean eventual. The server prunes undelivered envelopes on a retention timer it does not publish to clients, so late and never are different outcomes and only one of them was disclosed."
+  },
+  "disclosureDeviceOnlyHistory": "Your messages are stored only on this phone. The server keeps no copy of your history and no backup exists, so uninstalling the app destroys it permanently.",
   "disclosureRecoveryExcludesHistory": "Your recovery secret restores your account identity on a new device. It never restores messages; those can only come from another device of yours that still works.",
   "disclosureExperimentalGroups": "Group chats use experimental encryption that is not finished or standardised. An update can reset a group and delete everything in it.",
-  "disclosureUnbuiltSurfaces": "Some things you can see are not built yet: voice rooms, search and file attachments do nothing, and the display name and photo you choose are not published — other people see the username you registered with.",
+  "disclosureUnbuiltSurfaces": "Some things you can see are not built yet: voice rooms and file attachments do nothing, and the display name and photo you choose are not published — other people see the username you registered with.",
+  "@disclosureUnbuiltSurfaces": {
+    "description": "Revision 5 (ADR-052) removed 'search' from this list. Search is built: the chat list filters by name and latest message, and a conversation's own search reads that conversation's whole local history. What was wrong was the claim, not the feature."
+  },
   "disclosureIntendedUse": "This build is for trying out among people who already trust each other. It is not suitable if your safety depends on your messages staying private.",
+  "disclosureChangedTitle": "What this app tells you has changed",
+  "@disclosureChangedTitle": {
+    "description": "Heading of the one-time re-presentation shown to somebody who accepted an earlier revision of the disclosure (ADR-052). It is a full screen rather than a banner or a notification: the application posts ordinary notifications and a permanent service notice, and habituation to those generalises to warnings that resemble them."
+  },
+  "disclosureChangedLead": "You accepted an earlier version of the statement below. Some of it was wrong or has changed, so it is being shown again. The parts that are new or different are marked.",
+  "disclosureChangedLabel": "New or changed",
   "contactsNewTitle": "New",
   "contactsNewGroup": "New Group",
   "contactsNewVoiceRoom": "New Voice Room",
@@ -241,7 +263,7 @@
   "safetyConfirmationRequired": "Out-of-band comparison is required before confirmation.",
   "chatsTitle": "Chats",
   "chatsSearchAction": "Search chats",
-  "chatsSearchHint": "Search chats and messages on this device",
+  "chatsSearchHint": "Search names and the latest message",
   "chatsClearSearchAction": "Clear search",
   "chatsLoadingTitle": "Loading chats",
   "chatsErrorTitle": "Chats are unavailable",
@@ -249,8 +271,12 @@
   "chatsEmptyTitle": "No chats yet",
   "chatsEmptyMessage": "Start a verified direct message. Conversations will remain readable offline on this device.",
   "chatsStartAction": "Start a chat",
-  "chatsNoSearchResultsTitle": "No local results",
-  "chatsDeviceSearchScopeNotice": "Search covers only decrypted history stored on this device. The server never indexes messages.",
+  "chatsNoSearchResultsTitle": "Nothing found on this phone",
+  "chatsDeviceSearchScopeNotice": "This searches only the messages stored on this phone. The server never sees them, or what you search for.",
+  "chatsListSearchScopeNotice": "This list matches names and the latest message only. To search a conversation's history, open it and search inside.",
+  "@chatsListSearchScopeNotice": {
+    "description": "The chat list filters on title and last-message preview and nothing else. Before ADR-052 it borrowed the in-conversation notice, which promised a search of this device's history that the list has never performed."
+  },
   "chatsOfflineCachedNotice": "Offline — showing cached conversations. New messages will queue locally.",
   "chatsNoMessagesPreview": "No messages yet",
   "chatsConversationActionsLabel": "Conversation actions",
@@ -261,7 +287,6 @@
   "chatsDeleteAction": "Delete chat",
   "chatsDeleteTitle": "Delete this chat?",
   "chatsDeleteLocalOnlyMessage": "Clearing a chat removes this device's local view only. It does not delete content already received by other devices.",
-  "chatsPinViaMessageNotice": "Conversation pinning is unavailable in the current local schema. No state was changed.",
   "chatsItemSemantics": "{title}. {preview}. {unreadCount} unread messages.",
   "@chatsItemSemantics": {
     "placeholders": {

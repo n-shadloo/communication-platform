@@ -207,9 +207,13 @@ class _ChatsListPageState extends State<ChatsListPage> {
               actionLabel: strings.chatsStartAction,
               onAction: () => context.go('/chats/new'),
             ),
+            // This list filters on title and last-message preview and nothing
+            // else, so it says so. Borrowing the in-conversation notice here
+            // promised a search of this device's history that the list has
+            // never performed (ADR-052).
             (_, _, true, _) => AppStatePanel.empty(
               title: strings.chatsNoSearchResultsTitle,
-              message: strings.chatsDeviceSearchScopeNotice,
+              message: strings.chatsListSearchScopeNotice,
             ),
             _ => ListView.builder(
               key: const PageStorageKey('chats-list'),
@@ -219,7 +223,7 @@ class _ChatsListPageState extends State<ChatsListPage> {
                   return Padding(
                     padding: const EdgeInsets.all(AppSpacing.x4),
                     child: Text(
-                      strings.chatsDeviceSearchScopeNotice,
+                      strings.chatsListSearchScopeNotice,
                       textAlign: TextAlign.center,
                       style: context.tokens.typography.label.copyWith(
                         color: context.tokens.colors.textMuted,

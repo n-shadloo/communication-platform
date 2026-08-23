@@ -54,8 +54,11 @@ These recur across screens. They are stated here so the individual screens can s
 - **Presence, typing, and read/delivery receipts are private, encrypted signals.** They
   travel inside the encrypted channel. Accepted tradeoff: they may **lag slightly** vs. a
   normal chat app. Design for a small delay; don't treat them as instant.
-- **Search is client-side only.** The server never indexes or helps search. Search covers
-  only history stored and decrypted on **this device**.
+- **Search is client-side only.** The server never indexes or helps search, and never sees
+  the query. Search covers only history stored and decrypted on **this device** — and each
+  search surface states its own narrower scope, because the chat list matches names and one
+  preview line while in-conversation search reads that conversation's whole local history
+  (§6.5).
 - **Foreground delivery uses the app's own server; Android background delivery is
   best-effort — never Google/Apple push.** By default that is deferred polling; a user may
   additionally turn on keeping the app connected while it is closed (§15), which is faster
@@ -292,31 +295,38 @@ section must not be softened or omitted.
 
 **Layout (top → bottom).**
 1. Title, e.g. "What this app protects — and what it doesn't".
-2. **What it DOES protect** — the content of messages, files, and voice audio is
-   unreadable to the server, to anyone watching the network, and to anyone who seizes the
-   server.
-3. **What it does NOT protect** — stated plainly:
-   - the **fact and timing** that a device connected to the server (a network operator can
-     see *that* you connected, and when, even though not *what* you said);
-   - **traffic-analysis metadata** — timing, IP addresses, connection patterns;
-   - the **social graph from a live hostile server operator** — the operator can observe
-     which authenticated connection writes to which device queues and infer group fan-out;
-   - first contact before users compare SAS/QR master-key fingerprints out of band;
-   - a **compromised or seized device** — encryption can't protect messages already
-     decrypted on a phone in someone else's hands.
+2. **What it DOES protect** — what the user writes is encrypted on the device before it
+   leaves it, and is unreadable to the server, to anyone watching the network, and to
+   anyone who seizes the server. **It must name no feature.** This section is permanent
+   and outlives any feature list, so an enumeration goes stale by default: until
+   [ADR-052](decisions.md) it promised "messages, files, and voice audio" in an artifact
+   that could send no file and carry no audio, and a test now forbids feature words here.
+3. **What it does NOT protect** — stated plainly, and **in the reader's vocabulary rather
+   than the project's**:
+   - **when** the user connects, **from where**, **how much** they send, and **who they
+     talk to** — whoever runs the server sees all of it, even though not *what* was said;
+   - that a new contact is really who they say they are, until the two of them compare the
+     **safety number** — by the name the app's own screen uses for it (§10), not "SAS",
+     "fingerprint" or "out of band";
+   - messages **already open on a phone somebody else has taken or broken into**.
    Wording must not imply the app makes communication "safe from the government"; it makes
-   **content** unreadable — the rest is the user's informed risk.
+   **content** unreadable — the rest is the user's informed risk. A limitation the reader
+   cannot decode is a limitation that has not been disclosed (ADR-052).
 4. **What this build is** — the deployment disclosure required by
-   [ADR-045](decisions.md). Present **only** in a build that is distributed to
-   someone: seven short facts, ordered by consequence — no independent review; delivery
-   only while the app is open; history stored only on this device; recovery restores
-   identity and never messages; groups are experimental and can be reset; parts of the
-   interface are not built; who the build is and is not for. **[PRIVACY]** No
-   cryptographic identifiers, draft names, or registry state here — they are true and
-   unreadable, and they would bury the seven facts. Sections 2 and 3 are permanent and
-   stay true in a production release; this section must be absent from one.
+   [ADR-045](decisions.md), whose exact points and order are
+   `DeploymentDisclosure.privateExperimental`. Present **only** in a build that is
+   distributed to someone. At revision 5 that is eight short facts, ordered by
+   consequence — no independent review; how and when messages arrive while the app is
+   closed, including the opt-in tier and its cost; that messages left waiting on the
+   server are deleted unread and never arrive; history stored only on this device;
+   recovery restores identity and never messages; groups are experimental and can be
+   reset; parts of the interface are not built; who the build is and is not for.
+   **[PRIVACY]** No cryptographic identifiers, draft names, or registry state here — they
+   are true and unreadable, and they would bury the facts that matter. Sections 2 and 3
+   are permanent and stay true in a production release; this section must be absent from
+   one.
 5. In onboarding: an **"I understand"** button (required to proceed). From Settings: a
-   plain **Close/Back**.
+   plain **Close/Back**. In the re-presentation (below): the same **"I understand"**.
 
 **One notice, three entry points.** The onboarding step, the Settings entry (§15) and
 the pre-login links (§2, §3) render the same sections in the same order. A shorter or
@@ -328,6 +338,20 @@ never re-shown on a schedule or after an ordinary update; ADR-045 records the me
 evidence that repetition destroys a warning and degrades the app's other blocking
 security states. Re-acknowledgement is triggered only by the disclosure content
 changing.
+
+**Shown again, once, when the content does change.** The revision the user accepted is
+recorded on the device, so a build whose disclosure revision is higher re-presents the
+statement on the first launch after the update ([ADR-052](decisions.md)). It is a
+**full screen**, not a banner and not a notification: the app posts message alerts (§15)
+and can post a permanent service notice, and habituation to routine notifications
+transfers to warnings that resemble them. It renders **the same sections in the same
+order** as every other entry point, adds a heading saying the statement has changed, and
+marks the points that moved with a **labelled badge** — never colour alone, because the
+mark is the reason the screen exists and a screen reader must reach it. A reader with no
+recorded revision is shown the whole statement with **nothing** marked: marking every
+point marks none of them, and no record means the app does not know what they saw. It is
+never shown before enrollment completes, and never shown at all if the record cannot be
+read — an honesty mechanism must not lock somebody out of their messages.
 
 ---
 
@@ -370,15 +394,23 @@ rooms pinned at top. The primary hub.
   readable (content is stored and decrypted locally). New sends queue (§8 states).
 
 ### 6.5 Search (client-side only)
-**Purpose.** Search the user's own chats. **[PRIVACY] The server never indexes or assists —
-search covers only history stored and decrypted on this device.**
+**Purpose.** Find the user's own conversations and messages. **[PRIVACY] The server never
+indexes or assists — nothing searchable ever leaves the device, and neither does the query.**
 
-- **Layout.** Search input at top; results grouped into **Chats** (matching titles),
-  **Messages** (matching text in the local store), optionally **Contacts**.
-- **Interactions.** Tapping a message result opens that chat scrolled to the message;
-  tapping a chat/contact opens it.
-- **States.** Empty query, no results, and a note that search covers only this device's
-  stored history.
+Search is built, and it is **two separate surfaces with two different scopes**. Each must
+state its own scope; borrowing the other's is a false promise ([ADR-052](decisions.md)).
+
+- **The chat-list box (this screen).** Filters the conversation list on **name and latest
+  message only**. It does not read history. Its hint and its empty state say so, and point
+  the user at the in-conversation search for anything older.
+- **In-conversation search (§7).** Reads **that conversation's entire local history** —
+  the message stream carries no limit — and matching results scroll the timeline to the
+  message. Its notice says the search covers only messages stored on this phone, and that
+  the server never sees them or the query.
+- **States.** Empty query, no results, and the scope note belonging to that surface.
+
+A single merged results screen grouping **Chats** / **Messages** / **Contacts** is not
+built. Nothing in the app offers it, and the disclosure does not imply it.
 
 ---
 

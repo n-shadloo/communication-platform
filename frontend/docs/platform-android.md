@@ -441,6 +441,12 @@ sketch on evidence. What ships:
   alive. Layer 1 (ADR-049) wakes the process on the platform's own schedule and Layer 2
   (ADR-051) keeps it alive while the user has that capability on; neither makes an alert
   certain, and after a force-stop nothing arrives and nothing announces.
+  **"Process alive" is not "app running", and user-facing text may not conflate them**
+  ([ADR-052](decisions.md)): `_reconcileAlerts` in the deferred catch-up and
+  `_SustainedAlertReconciler` in the sustained run both post from isolates with no activity
+  in the process, so an alert does reach a user whose application is closed. The Settings
+  row said the opposite from ADR-048 until ADR-052 corrected it; the limit worth stating to
+  a user is that the phone decides when the application may look, not that it must be open.
 - Still true and still pending: **decrypted previews are not built**, and would need a
   reviewed bilingual lock-screen warning before they could be.
 - Layer 2's foreground-service notification is its own privacy surface — a durable, visible

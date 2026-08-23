@@ -290,10 +290,10 @@ abstract class AppLocalizations {
   /// **'Notifications'**
   String get settingsNotificationsTitle;
 
-  /// No description provided for @settingsNotificationsOn.
+  /// Revision 5 (ADR-052) corrected the second half. Until then this said an alert 'can only reach you while this app is running', which stopped being true when the deferred catch-up (ADR-049) and the sustained delivery run (ADR-051) began reconciling alerts from isolates with no activity at all.
   ///
   /// In en, this message translates to:
-  /// **'On. An alert says only that something arrived, never who sent it or what it says, and it can only reach you while this app is running.'**
+  /// **'On. An alert says only that something arrived, never who sent it or what it says. It can reach you while the app is closed, but only when your phone next lets the app look for messages.'**
   String get settingsNotificationsOn;
 
   /// No description provided for @settingsNotificationsOff.
@@ -890,10 +890,10 @@ abstract class AppLocalizations {
   /// **'What it DOES protect'**
   String get enrollmentProtectsHeading;
 
-  /// No description provided for @enrollmentProtectsBody.
+  /// The permanent half of the security notice, so it must stay true of every build. It deliberately names no feature: until ADR-052 it read 'messages, files, and voice audio', and the artifact that carried it could not send a file or carry a second of audio (ADR-052).
   ///
   /// In en, this message translates to:
-  /// **'The content of messages, files, and voice audio is unreadable to the server, network observers, and anyone who seizes the server.'**
+  /// **'Everything you write is encrypted on this phone before it leaves it. The server, anyone watching the network, and anyone who takes the server can see that you are using this app, but not what you wrote.'**
   String get enrollmentProtectsBody;
 
   /// No description provided for @enrollmentDoesNotProtectHeading.
@@ -902,10 +902,10 @@ abstract class AppLocalizations {
   /// **'What it does NOT protect'**
   String get enrollmentDoesNotProtectHeading;
 
-  /// No description provided for @enrollmentDoesNotProtectBody.
+  /// Rewritten at ADR-052 out of the project's own vocabulary and into the reader's. It previously said 'social graph', 'out of band' and 'compare fingerprints'; the screen it points at is titled Safety number, so a reader could not follow the instruction they were given.
   ///
   /// In en, this message translates to:
-  /// **'It does not hide connection timing, IP addresses, traffic patterns, or the social graph from a live hostile server operator. First contact is not protected until users compare fingerprints out of band. Encryption also cannot protect content already decrypted on a compromised or seized device.'**
+  /// **'It does not hide when you connect, from where, how much you send, or who you talk to. Whoever runs the server can see all of that. It cannot tell you that a new contact is really who they say they are until you and they compare the safety number this app shows, in person or over another channel you trust. And it cannot protect messages already open on a phone somebody else has taken or broken into.'**
   String get enrollmentDoesNotProtectBody;
 
   /// No description provided for @enrollmentUnderstandAction.
@@ -929,13 +929,19 @@ abstract class AppLocalizations {
   /// No description provided for @disclosureBestEffortDelivery.
   ///
   /// In en, this message translates to:
-  /// **'While this app is open, messages arrive as they are sent. While it is closed, your phone looks for new ones on its own schedule — fifteen minutes apart at best, usually far less often, and not at all while it is saving battery, if you have not opened the app for several days, or if you have force-stopped it. In Settings you can turn on receiving while closed, which does better on most phones but uses more battery and shows a permanent notice while it is on. Nothing about any of this is guaranteed, so do not rely on it for anything urgent.'**
+  /// **'While this app is open, messages arrive as they are sent. While it is closed, your phone looks for new ones on its own schedule — fifteen minutes apart at best, usually far less often, and not at all while it is saving battery, while Data Saver is on and you are using mobile data, if you have not opened the app for several days, or if you have force-stopped it. In Settings you can turn on receiving while closed, which does better on most phones but uses more battery and shows a permanent notice while it is on. Nothing about any of this is guaranteed, so do not rely on it for anything urgent.'**
   String get disclosureBestEffortDelivery;
+
+  /// Added at revision 5 (ADR-052). Every earlier revision described delivery only as slow, which an ordinary reader takes to mean eventual. The server prunes undelivered envelopes on a retention timer it does not publish to clients, so late and never are different outcomes and only one of them was disclosed.
+  ///
+  /// In en, this message translates to:
+  /// **'A message waits on the server only until your phone collects it. After a time set by whoever runs the server, whatever is still waiting is deleted and never arrives, and you will not be told which messages those were. If you go a long time without opening the app, assume you have missed some.'**
+  String get disclosureMessagesExpireUnread;
 
   /// No description provided for @disclosureDeviceOnlyHistory.
   ///
   /// In en, this message translates to:
-  /// **'Your messages are stored only on this phone. The server keeps no copy and no backup exists, so uninstalling the app destroys them permanently.'**
+  /// **'Your messages are stored only on this phone. The server keeps no copy of your history and no backup exists, so uninstalling the app destroys it permanently.'**
   String get disclosureDeviceOnlyHistory;
 
   /// No description provided for @disclosureRecoveryExcludesHistory.
@@ -950,10 +956,10 @@ abstract class AppLocalizations {
   /// **'Group chats use experimental encryption that is not finished or standardised. An update can reset a group and delete everything in it.'**
   String get disclosureExperimentalGroups;
 
-  /// No description provided for @disclosureUnbuiltSurfaces.
+  /// Revision 5 (ADR-052) removed 'search' from this list. Search is built: the chat list filters by name and latest message, and a conversation's own search reads that conversation's whole local history. What was wrong was the claim, not the feature.
   ///
   /// In en, this message translates to:
-  /// **'Some things you can see are not built yet: voice rooms, search and file attachments do nothing, and the display name and photo you choose are not published — other people see the username you registered with.'**
+  /// **'Some things you can see are not built yet: voice rooms and file attachments do nothing, and the display name and photo you choose are not published — other people see the username you registered with.'**
   String get disclosureUnbuiltSurfaces;
 
   /// No description provided for @disclosureIntendedUse.
@@ -961,6 +967,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'This build is for trying out among people who already trust each other. It is not suitable if your safety depends on your messages staying private.'**
   String get disclosureIntendedUse;
+
+  /// Heading of the one-time re-presentation shown to somebody who accepted an earlier revision of the disclosure (ADR-052). It is a full screen rather than a banner or a notification: the application posts ordinary notifications and a permanent service notice, and habituation to those generalises to warnings that resemble them.
+  ///
+  /// In en, this message translates to:
+  /// **'What this app tells you has changed'**
+  String get disclosureChangedTitle;
+
+  /// No description provided for @disclosureChangedLead.
+  ///
+  /// In en, this message translates to:
+  /// **'You accepted an earlier version of the statement below. Some of it was wrong or has changed, so it is being shown again. The parts that are new or different are marked.'**
+  String get disclosureChangedLead;
+
+  /// No description provided for @disclosureChangedLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'New or changed'**
+  String get disclosureChangedLabel;
 
   /// No description provided for @contactsNewTitle.
   ///
@@ -1253,7 +1277,7 @@ abstract class AppLocalizations {
   /// No description provided for @chatsSearchHint.
   ///
   /// In en, this message translates to:
-  /// **'Search chats and messages on this device'**
+  /// **'Search names and the latest message'**
   String get chatsSearchHint;
 
   /// No description provided for @chatsClearSearchAction.
@@ -1301,14 +1325,20 @@ abstract class AppLocalizations {
   /// No description provided for @chatsNoSearchResultsTitle.
   ///
   /// In en, this message translates to:
-  /// **'No local results'**
+  /// **'Nothing found on this phone'**
   String get chatsNoSearchResultsTitle;
 
   /// No description provided for @chatsDeviceSearchScopeNotice.
   ///
   /// In en, this message translates to:
-  /// **'Search covers only decrypted history stored on this device. The server never indexes messages.'**
+  /// **'This searches only the messages stored on this phone. The server never sees them, or what you search for.'**
   String get chatsDeviceSearchScopeNotice;
+
+  /// The chat list filters on title and last-message preview and nothing else. Before ADR-052 it borrowed the in-conversation notice, which promised a search of this device's history that the list has never performed.
+  ///
+  /// In en, this message translates to:
+  /// **'This list matches names and the latest message only. To search a conversation\'s history, open it and search inside.'**
+  String get chatsListSearchScopeNotice;
 
   /// No description provided for @chatsOfflineCachedNotice.
   ///
@@ -1369,12 +1399,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Clearing a chat removes this device\'s local view only. It does not delete content already received by other devices.'**
   String get chatsDeleteLocalOnlyMessage;
-
-  /// No description provided for @chatsPinViaMessageNotice.
-  ///
-  /// In en, this message translates to:
-  /// **'Conversation pinning is unavailable in the current local schema. No state was changed.'**
-  String get chatsPinViaMessageNotice;
 
   /// No description provided for @chatsItemSemantics.
   ///

@@ -121,10 +121,20 @@ void main() {
         find.textContaining('never who sent it or what it says'),
         findsOneWidget,
       );
+      // ADR-052: the row said an alert could reach the user only while the
+      // application was running, and both the deferred catch-up and the
+      // sustained run post alerts from isolates with no activity at all. It
+      // must now state the real limit — that the phone decides when the
+      // application may look — without reinstating the false one.
+      expect(
+        find.textContaining('while the app is closed'),
+        findsOneWidget,
+        reason: 'a closed application does post alerts, and says so',
+      );
       expect(
         find.textContaining('only reach you while this app is running'),
-        findsOneWidget,
-        reason: 'the row may not imply a delivery tier the build does not have',
+        findsNothing,
+        reason: 'the artifact posts alerts with no activity in the process',
       );
       expect(find.text('Turn on'), findsNothing);
     });

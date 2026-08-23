@@ -98,33 +98,58 @@ by contract tests and conservative client behavior, not runtime version guessing
    sufficient evidence on its own.
 7. Publish APK, hash, version notes, and minimum protocol compatibility through the
    self-hosted/local distribution channel.
-8. For the Private Experimental deployment, deliver the ADR-044 written disclosure with
-   the artifact. This is release-blocking, not a courtesy. It must state, in writing:
-   that no part of the cryptography has been independently reviewed; that messages arrive
-   immediately while the app is open but only when the phone gets round to checking while
-   it is closed — fifteen minutes apart at best, usually far less often, and not at all
-   after a force-stop, under Data Saver on a metered network, or once the app has gone
-   unopened for about a week; that group messaging is experimental and its history can be lost on an
-   update; that history exists only on the device and uninstalling destroys it
-   permanently; that a recovery secret plus a second enrolled device recovers identity
-   but never history; and that the build is for evaluation among people who already
-   trust each other, and is not appropriate for anyone whose safety depends on the
-   confidentiality of their messages.
+8. For the Private Experimental deployment, deliver the written disclosure with the
+   artifact. This is release-blocking, not a courtesy.
 
-   The same seven facts are also stated inside the application, as the deployment
-   disclosure inside the mandatory enrollment security notice ([ADR-045](decisions.md)).
-   The written delivery is not replaced by it and stays release-blocking: it reaches a
-   recipient before they install, and it is the only copy a person who declines to
-   install ever sees.
+   It carries **the same points, in the same order, as `DeploymentDisclosure.privateExperimental`**,
+   and it is written from that list rather than from this paragraph, so the two cannot
+   drift apart the way they had by revision 4 — this step previously claimed "the same
+   seven facts" and then listed six of them, omitted the unbuilt surfaces entirely, and
+   never mentioned the opt-in tier ADR-051 added ([ADR-052](decisions.md)). At revision 5
+   that is eight points:
+
+   1. no part of the cryptography has been independently reviewed, and one person wrote
+      and tested all of it;
+   2. messages arrive immediately while the app is open, and while it is closed only when
+      the phone gets round to checking — fifteen minutes apart at best, usually far less
+      often, and not at all while the phone is saving battery, while Data Saver is on over
+      mobile data, once the app has gone unopened for several days, or after a force-stop;
+      that Settings carries an opt-in that does better on most phones at the cost of
+      battery and a permanent notice; and that none of it is guaranteed;
+   3. a message waits on the server only until the phone collects it, after which the
+      operator's retention timer deletes it unread and it never arrives, with no
+      indication of which messages were lost;
+   4. history exists only on the device and uninstalling destroys it permanently;
+   5. a recovery secret restores identity on a new device and never restores messages;
+   6. group messaging is experimental and an update can reset a group and delete its
+      messages;
+   7. voice rooms and file attachments do nothing, and the display name and photo are not
+      published — contacts see the registered username;
+   8. the build is for evaluation among people who already trust each other, and is not
+      appropriate for anyone whose safety depends on the confidentiality of their
+      messages.
+
+   The written delivery is not replaced by the in-application disclosure and stays
+   release-blocking: it reaches a recipient before they install, and it is the only copy
+   a person who declines to install ever sees.
 
 9. If `DeploymentDisclosure.revision` in
    `lib/app/config/deployment_disclosure.dart` differs from the revision carried by the
    previously distributed artifact, re-deliver the written disclosure to **every**
    existing recipient, not only to new ones. The revision moves when and only when what
-   the build promises moves, so a changed revision is exactly the case where a person
-   who already enrolled has been told something that is no longer true. Their install
-   will not re-show the notice; that is the deliberate rejection of periodic
-   re-acknowledgement recorded in ADR-045, and this step is what pays for it.
+   the build promises moves, so a changed revision is exactly the case where a person who
+   already enrolled has been told something that is no longer true.
+
+   Since [ADR-052](decisions.md) their install also re-presents the statement once, on the
+   first launch after the update, marking the points that moved — the accepted revision is
+   recorded on the device, so the application can tell. That mechanism reaches only people
+   who install the update, which is why this step is still release-blocking: somebody who
+   stays on an older artifact, or who never installs again, is reached by the written
+   delivery or by nothing.
+
+   The revision cannot be raised by hand and cannot be skipped: it is the highest
+   `DisclosurePoint.since` among the points, and `test/architecture/deployment_disclosure_test.dart`
+   fails on any edit to a pinned string until that point's `since` is raised with it.
 
 Updates are explicit user/admin actions. The app may check only the self-hosted signed
 metadata endpoint. It never fetches executable code or dependencies dynamically.

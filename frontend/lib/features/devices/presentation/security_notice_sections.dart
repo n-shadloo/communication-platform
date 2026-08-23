@@ -7,8 +7,9 @@ import 'package:communication_platform/l10n/generated/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-/// The body of the one security notice, shared by the mandatory enrollment step
-/// and by every place the notice is re-opened.
+/// The body of the one security notice, shared by the mandatory enrollment
+/// step, by the one-time re-presentation, and by every place the notice is
+/// re-opened.
 ///
 /// There is exactly one copy of this content. Before ADR-045 the enrollment
 /// gate and the pre-login link rendered two different notices under two
@@ -16,12 +17,21 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 /// could go back and re-read were not the same statement.
 ///
 /// The first two sections are permanent: they describe the protocol's threat
-/// boundary and stay true in a production release. The third describes the
-/// build that is running and appears only in a build that is handed to someone
-/// else, so temporary wording cannot survive into a release that no longer
-/// deserves it.
+/// boundary and stay true in a production release. They therefore name no
+/// feature — ADR-052 removed "files" and "voice audio" from the first, because
+/// the artifact carrying that sentence can send neither, and a permanent
+/// section that enumerates capabilities goes stale every time the feature set
+/// does. The third describes the build that is running and appears only in a
+/// build that is handed to someone else, so temporary wording cannot survive
+/// into a release that no longer deserves it.
 final class SecurityNoticeSections extends ConsumerWidget {
-  const SecurityNoticeSections({super.key});
+  const SecurityNoticeSections({this.changedPoints = const {}, super.key});
+
+  /// Points to mark as new or different, when this is being shown to somebody
+  /// who accepted an earlier revision. Empty everywhere else, including the
+  /// first showing — marking every point on a statement nobody has seen before
+  /// marks nothing (ADR-052).
+  final Set<DisclosurePoint> changedPoints;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -43,7 +53,7 @@ final class SecurityNoticeSections extends ConsumerWidget {
         ),
         if (disclosure != null) ...[
           const SizedBox(height: AppSpacing.x6),
-          _BuildDisclosure(disclosure: disclosure),
+          _BuildDisclosure(disclosure: disclosure, changed: changedPoints),
         ],
       ],
     );
@@ -82,9 +92,10 @@ final class _Section extends StatelessWidget {
 /// one paragraph because a reader who stops early should still have read the
 /// most consequential ones.
 final class _BuildDisclosure extends StatelessWidget {
-  const _BuildDisclosure({required this.disclosure});
+  const _BuildDisclosure({required this.disclosure, required this.changed});
 
   final DeploymentDisclosure disclosure;
+  final Set<DisclosurePoint> changed;
 
   @override
   Widget build(BuildContext context) {
@@ -117,7 +128,10 @@ final class _BuildDisclosure extends StatelessWidget {
             ),
             for (final point in disclosure.points) ...[
               const SizedBox(height: AppSpacing.x3),
-              _DisclosureItem(text: point.text(l10n)),
+              _DisclosureItem(
+                text: point.text(l10n),
+                changed: changed.contains(point),
+              ),
             ],
           ],
         ),
@@ -127,22 +141,44 @@ final class _BuildDisclosure extends StatelessWidget {
 }
 
 final class _DisclosureItem extends StatelessWidget {
-  const _DisclosureItem({required this.text});
+  const _DisclosureItem({required this.text, required this.changed});
 
   final String text;
+  final bool changed;
 
   @override
-  Widget build(BuildContext context) => Row(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      AppIcon(
-        AppIcons.warning,
-        color: context.tokens.colors.warning,
-        size: 16,
-        decorative: true,
-      ),
-      const SizedBox(width: AppSpacing.x2),
-      Expanded(child: Text(text, style: context.tokens.typography.body)),
-    ],
-  );
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        AppIcon(
+          AppIcons.warning,
+          color: context.tokens.colors.warning,
+          size: 16,
+          decorative: true,
+        ),
+        const SizedBox(width: AppSpacing.x2),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // The mark is a labelled badge, not a colour or an icon. A
+              // reader using a screen reader, and a reader who cannot
+              // distinguish the accent, both have to be told which points
+              // moved, because that is the entire reason this screen exists.
+              if (changed) ...[
+                AppStatusBadge(
+                  kind: AppStatusKind.information,
+                  label: l10n.disclosureChangedLabel,
+                ),
+                const SizedBox(height: AppSpacing.x1),
+              ],
+              Text(text, style: context.tokens.typography.body),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
 }

@@ -97,7 +97,10 @@ is not called the production release.
   withdrawn when nothing does — including when the user reads on another device (ADR-048).
   Decrypted previews are not built, and an alert reaches the user only while the
   application's process is alive — which the deferred catch-up arranges periodically and
-  sustained delivery arranges continuously while it is on.
+  sustained delivery arranges continuously while it is on. That is a statement about the
+  *process*, and what the user is told must be a statement about their experience: alerts
+  do reach a closed application, and the limit worth disclosing is that the phone decides
+  when the application may next look (ADR-052).
 - A future closed browser cannot maintain the application WebSocket. Messages remain in
   the backend's durable device queue until the user returns.
 - A server able to replace a future web bundle can attack browser sessions. CSP and

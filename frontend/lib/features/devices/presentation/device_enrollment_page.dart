@@ -1,6 +1,9 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:communication_platform/app/config/deployment_disclosure.dart';
+import 'package:communication_platform/app/dependencies/core_providers.dart';
+import 'package:communication_platform/app/dependencies/deployment_disclosure_providers.dart';
 import 'package:communication_platform/app/design_system/app_components.dart';
 import 'package:communication_platform/app/design_system/app_tokens.dart';
 import 'package:communication_platform/features/authentication/presentation/authentication_controller.dart';
@@ -449,8 +452,34 @@ final class _DeviceEnrollmentPageState
     if (!mounted || !accepted) {
       return;
     }
+    // What was accepted, not merely that something was. Recorded before the
+    // session is opened, so a fresh install never meets the re-presentation
+    // gate for a statement it has just answered. A failed write costs one
+    // extra showing on the next launch and nothing else, which is why it does
+    // not block the step that has already succeeded (ADR-052).
+    await _recordDisclosureAcceptance();
+    if (!mounted) {
+      return;
+    }
     ref.read(authenticationControllerProvider.notifier).secureSetupCompleted();
     context.go('/chats');
+  }
+
+  Future<void> _recordDisclosureAcceptance() async {
+    final disclosure = ref.read(appEnvironmentProvider).deploymentDisclosure;
+    if (disclosure == null) {
+      return;
+    }
+    try {
+      final acknowledgement = await ref.read(
+        disclosureAcknowledgementProvider.future,
+      );
+      await acknowledgement.accept(revision: disclosure.revision);
+    } on Object {
+      // Protected storage is unavailable. Enrollment itself already proved it
+      // was not, so this is the rare case; the gate re-presents the statement
+      // next launch rather than losing the acceptance silently.
+    }
   }
 
   String _message(

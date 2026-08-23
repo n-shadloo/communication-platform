@@ -113,7 +113,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsNotificationsOn =>
-      'On. An alert says only that something arrived, never who sent it or what it says, and it can only reach you while this app is running.';
+      'On. An alert says only that something arrived, never who sent it or what it says. It can reach you while the app is closed, but only when your phone next lets the app look for messages.';
 
   @override
   String get settingsNotificationsOff =>
@@ -463,14 +463,14 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get enrollmentProtectsBody =>
-      'The content of messages, files, and voice audio is unreadable to the server, network observers, and anyone who seizes the server.';
+      'Everything you write is encrypted on this phone before it leaves it. The server, anyone watching the network, and anyone who takes the server can see that you are using this app, but not what you wrote.';
 
   @override
   String get enrollmentDoesNotProtectHeading => 'What it does NOT protect';
 
   @override
   String get enrollmentDoesNotProtectBody =>
-      'It does not hide connection timing, IP addresses, traffic patterns, or the social graph from a live hostile server operator. First contact is not protected until users compare fingerprints out of band. Encryption also cannot protect content already decrypted on a compromised or seized device.';
+      'It does not hide when you connect, from where, how much you send, or who you talk to. Whoever runs the server can see all of that. It cannot tell you that a new contact is really who they say they are until you and they compare the safety number this app shows, in person or over another channel you trust. And it cannot protect messages already open on a phone somebody else has taken or broken into.';
 
   @override
   String get enrollmentUnderstandAction => 'I understand';
@@ -484,11 +484,15 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get disclosureBestEffortDelivery =>
-      'While this app is open, messages arrive as they are sent. While it is closed, your phone looks for new ones on its own schedule — fifteen minutes apart at best, usually far less often, and not at all while it is saving battery, if you have not opened the app for several days, or if you have force-stopped it. In Settings you can turn on receiving while closed, which does better on most phones but uses more battery and shows a permanent notice while it is on. Nothing about any of this is guaranteed, so do not rely on it for anything urgent.';
+      'While this app is open, messages arrive as they are sent. While it is closed, your phone looks for new ones on its own schedule — fifteen minutes apart at best, usually far less often, and not at all while it is saving battery, while Data Saver is on and you are using mobile data, if you have not opened the app for several days, or if you have force-stopped it. In Settings you can turn on receiving while closed, which does better on most phones but uses more battery and shows a permanent notice while it is on. Nothing about any of this is guaranteed, so do not rely on it for anything urgent.';
+
+  @override
+  String get disclosureMessagesExpireUnread =>
+      'A message waits on the server only until your phone collects it. After a time set by whoever runs the server, whatever is still waiting is deleted and never arrives, and you will not be told which messages those were. If you go a long time without opening the app, assume you have missed some.';
 
   @override
   String get disclosureDeviceOnlyHistory =>
-      'Your messages are stored only on this phone. The server keeps no copy and no backup exists, so uninstalling the app destroys them permanently.';
+      'Your messages are stored only on this phone. The server keeps no copy of your history and no backup exists, so uninstalling the app destroys it permanently.';
 
   @override
   String get disclosureRecoveryExcludesHistory =>
@@ -500,11 +504,21 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get disclosureUnbuiltSurfaces =>
-      'Some things you can see are not built yet: voice rooms, search and file attachments do nothing, and the display name and photo you choose are not published — other people see the username you registered with.';
+      'Some things you can see are not built yet: voice rooms and file attachments do nothing, and the display name and photo you choose are not published — other people see the username you registered with.';
 
   @override
   String get disclosureIntendedUse =>
       'This build is for trying out among people who already trust each other. It is not suitable if your safety depends on your messages staying private.';
+
+  @override
+  String get disclosureChangedTitle => 'What this app tells you has changed';
+
+  @override
+  String get disclosureChangedLead =>
+      'You accepted an earlier version of the statement below. Some of it was wrong or has changed, so it is being shown again. The parts that are new or different are marked.';
+
+  @override
+  String get disclosureChangedLabel => 'New or changed';
 
   @override
   String get contactsNewTitle => 'New';
@@ -667,7 +681,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get chatsSearchAction => 'Search chats';
 
   @override
-  String get chatsSearchHint => 'Search chats and messages on this device';
+  String get chatsSearchHint => 'Search names and the latest message';
 
   @override
   String get chatsClearSearchAction => 'Clear search';
@@ -693,11 +707,15 @@ class AppLocalizationsEn extends AppLocalizations {
   String get chatsStartAction => 'Start a chat';
 
   @override
-  String get chatsNoSearchResultsTitle => 'No local results';
+  String get chatsNoSearchResultsTitle => 'Nothing found on this phone';
 
   @override
   String get chatsDeviceSearchScopeNotice =>
-      'Search covers only decrypted history stored on this device. The server never indexes messages.';
+      'This searches only the messages stored on this phone. The server never sees them, or what you search for.';
+
+  @override
+  String get chatsListSearchScopeNotice =>
+      'This list matches names and the latest message only. To search a conversation\'s history, open it and search inside.';
 
   @override
   String get chatsOfflineCachedNotice =>
@@ -730,10 +748,6 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get chatsDeleteLocalOnlyMessage =>
       'Clearing a chat removes this device\'s local view only. It does not delete content already received by other devices.';
-
-  @override
-  String get chatsPinViaMessageNotice =>
-      'Conversation pinning is unavailable in the current local schema. No state was changed.';
 
   @override
   String chatsItemSemantics(String title, String preview, int unreadCount) {

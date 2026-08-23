@@ -66,10 +66,12 @@ or malformed input never triggers an unbounded network loop.
 
 ## Queue-gap recovery
 
-The backend retains undelivered envelopes for seven days. `pruned_through` is the highest
-sequence pruned from this device mailbox. If the durable highest contiguous acked
-sequence is lower, at least one envelope is permanently missing and may have been an MLS
-commit. The client:
+The backend retains undelivered envelopes for `ENVELOPE_TTL_DAYS`, **seven by default and
+an operator setting the client is never told** (`backend/messaging/API.md`). A client may
+therefore state that waiting messages are eventually deleted, but may never state how long
+the window is. `pruned_through` is the highest sequence pruned from this device mailbox. If
+the durable highest contiguous acked sequence is lower, at least one envelope is
+permanently missing and may have been an MLS commit. The client:
 
 1. persists a blocking `queue_gap` security state and stops group sends/epoch mutation;
 2. keeps safely decryptable DM/local content but never guesses missing MLS state;
@@ -84,6 +86,16 @@ commit. The client:
 
 Device-to-device history transfer cannot repair ratchets or MLS epochs and is not used as
 a substitute for this flow.
+
+**What the user is actually told, today.** Steps 1–6 above are implemented and the
+blocking state is durable, but it reaches the user **only for groups**:
+`DriftGroupRepository._overlayQueueGap` turns it into `GroupLifecycle.queueGapRejoinRequired`
+and the `groupQueueGapState` string. For a one-to-one conversation the gap is recorded and
+shown nowhere — `SyncProjection.isSecurityBlocked` exists, is correct, and has **no
+consumer at all**. Direct messages lost to the retention prune are therefore silently
+absent. [ADR-052](decisions.md) discloses that silence in the deployment disclosure rather
+than papering over it, and surfacing the one-to-one gap is recorded there as follow-up
+work; until it is built, no user-facing text may imply the client will name what was lost.
 
 ## Outbox
 

@@ -13,6 +13,7 @@ import 'package:communication_platform/features/authentication/presentation/auth
 import 'package:communication_platform/features/authentication/presentation/authentication_route_state.dart';
 import 'package:communication_platform/features/bootstrap/application/bootstrap_flow.dart';
 import 'package:communication_platform/features/bootstrap/domain/bootstrap_model.dart';
+import 'package:communication_platform/features/devices/presentation/disclosure_change_gate.dart';
 import 'package:communication_platform/features/synchronization/domain/sustained_delivery_model.dart';
 import 'package:communication_platform/l10n/generated/app_localizations.dart';
 import 'package:flutter/material.dart';
@@ -159,7 +160,16 @@ class _CommunicationPlatformAppState
     themeAnimationDuration: AppMotion.state,
     restorationScopeId: 'communication-platform-app',
     routerConfig: _router,
-    builder: (context, child) =>
-        AppDesignSystem(child: child ?? const SizedBox.shrink()),
+    // The disclosure gate sits above the router rather than inside it, so no
+    // route, deep link or notification tap reaches the application without
+    // passing it, and so there is no guard ordering to get wrong. It renders
+    // its child untouched unless this build's statement has moved past what
+    // the person using it accepted (ADR-052).
+    builder: (context, child) => AppDesignSystem(
+      child: DisclosureChangeGate(
+        sessionComposed: widget.authenticationEnabled,
+        child: child ?? const SizedBox.shrink(),
+      ),
+    ),
   );
 }
