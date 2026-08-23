@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:communication_platform/core/application/ports/time_source.dart';
 import 'package:communication_platform/core/result/failure.dart';
@@ -163,11 +162,79 @@ void main() {
         await lifecycle.close();
       },
     );
+
+    test(
+      'another account’s enrollment row neither throws nor answers for this one',
+      () async {
+        final adapter = SecureSessionTokenAdapter(harness.runtime);
+        await adapter.replace(fullTokens());
+        final database =
+            (await harness.runtime.open() as Success<LocalDatabase>).value;
+        await database
+            .into(database.accountIdentities)
+            .insert(
+              AccountIdentitiesCompanion.insert(
+                singletonId: const Value(1),
+                verifiedPublicStateCiphertext: Uint8List.fromList([1, 2, 3]),
+                recoveryStatus: 4,
+              ),
+            );
+        // Two rows: `enrollment_intent` is keyed by user id, so any install
+        // where a second account ever reached enrollment holds more than one.
+        // Reading it unscoped threw `Bad state: Too many elements` out of
+        // `restore`, which the router rendered as a permanent restore spinner.
+        await database
+            .into(database.enrollmentIntents)
+            .insert(enrollmentIntent(otherUserId));
+        await database
+            .into(database.enrollmentIntents)
+            .insert(enrollmentIntent(thirdUserId));
+
+        expect(await adapter.hasCompletedSecureSetup(), isTrue);
+
+        await database
+            .into(database.enrollmentIntents)
+            .insert(enrollmentIntent(userId));
+
+        expect(await adapter.hasCompletedSecureSetup(), isFalse);
+      },
+    );
+
+    test('a throwing restore is reported, never left pending', () async {
+      final adapter = SecureSessionTokenAdapter(harness.runtime);
+      await adapter.replace(fullTokens());
+      final session = CoordinatedAuthenticationSession(
+        tokens: adapter,
+        coordinator: const ThrowingAccessTokenCoordinator(),
+        runtime: harness.runtime,
+      );
+
+      final result = await session.restore();
+
+      // The call site starts this with `unawaited`, so a throw would surface
+      // nowhere and strand the controller in `restoring` for good.
+      expect(result, isA<FailureResult<AccountSessionBoundary>>());
+      expect(
+        (result as FailureResult<AccountSessionBoundary>).failure,
+        isA<StorageFailure>(),
+      );
+    });
   });
 }
 
 const userId = '6f0c2f5e-8a41-4c9e-9a34-1f3d8f2b7c10';
 const deviceId = '9f1c6a2e-3b7d-4e0f-8c15-2a77d4b9e611';
+const otherUserId = '1b2c3d4e-5f60-4a7b-8c9d-0e1f2a3b4c5d';
+const thirdUserId = '2c3d4e5f-6071-4b8c-9dae-1f2a3b4c5d6e';
+
+EnrollmentIntentsCompanion enrollmentIntent(String owner) =>
+    EnrollmentIntentsCompanion.insert(
+      userId: owner,
+      flow: 0,
+      phase: 0,
+      fingerprint: Uint8List.fromList([4, 5, 6]),
+      deviceState: Uint8List.fromList([7, 8, 9]),
+    );
 
 SessionTokens fullTokens() => SessionTokens(
   accessToken: AccessToken(
@@ -248,4 +315,22 @@ final class FixedTimeSource implements TimeSource {
 
   @override
   DateTime now() => DateTime.utc(2026, 7, 28, 12);
+}
+
+final class ThrowingAccessTokenCoordinator implements AccessTokenCoordinator {
+  const ThrowingAccessTokenCoordinator();
+
+  @override
+  Future<Result<AccessToken>> accessToken({bool forceRefresh = false}) async =>
+      throw StateError('storage went away mid-restore');
+
+  @override
+  Future<Result<AccessToken>> recoverAfterUnauthorized(String rejectedToken) =>
+      accessToken();
+
+  @override
+  Future<void> logout() async {}
+
+  @override
+  Future<void> handleRevocation() async {}
 }

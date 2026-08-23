@@ -276,12 +276,23 @@ final class SecureSessionTokenAdapter implements SessionTokenStore {
     if (database == null) {
       return false;
     }
+    final userId = (await read())?.userId;
+    if (userId == null) {
+      return false;
+    }
     final identity = await database
         .select(database.accountIdentities)
         .getSingleOrNull();
-    final enrollment = await database
-        .select(database.enrollmentIntents)
-        .getSingleOrNull();
+    // Scoped to this session's user, like every other reader of this table.
+    // `enrollment_intent` is keyed by user id and holds one row per account
+    // that has enrolled on this install, so an unscoped `getSingleOrNull`
+    // throws `Bad state: Too many elements` the moment a second account has
+    // ever reached enrollment — and a leftover row belonging to a *different*
+    // account is not evidence about this one either way.
+    final enrollment =
+        await (database.select(database.enrollmentIntents)
+              ..where((entry) => entry.userId.equals(userId)))
+            .getSingleOrNull();
     return identity?.recoveryStatus == 4 && enrollment == null;
   }
 
