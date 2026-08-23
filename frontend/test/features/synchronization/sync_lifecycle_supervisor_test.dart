@@ -8,6 +8,7 @@ import 'package:communication_platform/features/local_storage/infrastructure/dat
 import 'package:communication_platform/features/networking/application/ports/realtime_gateway.dart';
 import 'package:communication_platform/features/networking/domain/realtime_event.dart';
 import 'package:communication_platform/features/synchronization/application/durable_sync_engine.dart';
+import 'package:communication_platform/features/synchronization/application/ports/sustained_delivery_ports.dart';
 import 'package:communication_platform/features/synchronization/application/ports/sync_ports.dart';
 import 'package:communication_platform/features/synchronization/application/sync_lifecycle_supervisor.dart';
 import 'package:communication_platform/features/synchronization/domain/sync_model.dart';
@@ -305,6 +306,94 @@ void main() {
       await gateway.dispose();
     },
   );
+
+  test('the connection outlives the foreground only while something holds the '
+      'process open', () async {
+    final database = LocalDatabase(NativeDatabase.memory());
+    final store = DriftSyncStore(database);
+    final remote = CountingRemote();
+    final realtime = FakeRealtimeSyncPort();
+    final network = FakeNetworkPort(NetworkAvailability.available);
+    final lifecycle = FakeLifecyclePort(ApplicationExecutionState.foreground);
+    final polling = FakePollingPort();
+    final holding = MutableBackgroundConnectionPolicy();
+    final clock = SupervisorClock();
+    final supervisor = SyncLifecycleSupervisor(
+      engine: DurableSyncEngine(
+        store: store,
+        remote: remote,
+        inspector: const RetainingInspector(),
+        staleDeviceRefresh: const NoopStaleRefresh(),
+        clock: clock,
+        jitter: const SupervisorJitter(),
+      ),
+      store: store,
+      realtime: realtime,
+      network: network,
+      lifecycle: lifecycle,
+      polling: polling,
+      backgroundConnection: holding,
+      clock: clock,
+      jitter: const SupervisorJitter(),
+      delay: const ImmediateDelay(),
+    );
+
+    await supervisor.start();
+    expect(realtime.connects, 1);
+
+    // The default, and the composition of every application nobody has
+    // turned sustained delivery on in: backgrounding gives up the socket,
+    // because a cached process is frozen and the platform terminates its
+    // TCP sockets.
+    lifecycle.set(ApplicationExecutionState.background);
+    await pumpEvents();
+    final closedOnBackground = realtime.closes;
+    expect(closedOnBackground, greaterThanOrEqualTo(1));
+    realtime.hint();
+    await pumpEvents();
+    expect(
+      realtime.connects,
+      1,
+      reason: 'a backgrounded session with no service does not reconnect',
+    );
+
+    // The user turns it on while the application is already backgrounded.
+    // The supervisor is woken by the policy itself rather than waiting for
+    // an unrelated lifecycle event that may never come.
+    holding.set(true);
+    await pumpEvents();
+    expect(realtime.connects, 2);
+    final drainsWhileHolding = remote.drains;
+    realtime.hint();
+    await pumpEvents();
+    expect(
+      remote.drains,
+      greaterThan(drainsWhileHolding),
+      reason: 'a hint on a held socket still triggers an authoritative drain',
+    );
+
+    // And the platform takes it away again - the exemption is withdrawn, or
+    // the service is killed. The socket goes with it rather than being
+    // retried against a process the system is about to freeze.
+    holding.set(false);
+    await pumpEvents();
+    expect(realtime.closes, greaterThan(closedOnBackground));
+    realtime.hint();
+    await pumpEvents();
+    expect(realtime.connects, 2);
+
+    // Detached is never held: the process is going away.
+    holding.set(true);
+    lifecycle.set(ApplicationExecutionState.detached);
+    await pumpEvents();
+    final connectsWhenDetached = realtime.connects;
+    realtime.hint();
+    await pumpEvents();
+    expect(realtime.connects, connectsWhenDetached);
+
+    await supervisor.dispose();
+    await database.close();
+  });
 }
 
 final class CountingRemote implements SyncRemotePort {
@@ -448,6 +537,25 @@ final class FakePollingPort implements BestEffortPollingPort {
 
   @override
   Future<void> awaitExclusiveOwnership() async {}
+}
+
+/// A [BackgroundConnectionPolicy] a test can flip, standing in for the user
+/// turning sustained delivery on and for the platform taking it away again.
+final class MutableBackgroundConnectionPolicy
+    implements BackgroundConnectionPolicy {
+  final StreamController<void> _changes = StreamController<void>.broadcast();
+  bool _holding = false;
+
+  @override
+  bool get mayHoldWhileBackgrounded => _holding;
+
+  @override
+  Stream<void> get changes => _changes.stream;
+
+  void set(bool holding) {
+    _holding = holding;
+    _changes.add(null);
+  }
 }
 
 final class FakeGateway implements RealtimeGateway {

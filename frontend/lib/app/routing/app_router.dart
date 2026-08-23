@@ -15,6 +15,7 @@ import 'package:communication_platform/features/devices/presentation/device_enro
 import 'package:communication_platform/features/devices/presentation/linked_devices_page.dart';
 import 'package:communication_platform/features/groups/presentation/group_pages.dart';
 import 'package:communication_platform/features/messaging/presentation/chat_pages.dart';
+import 'package:communication_platform/features/synchronization/presentation/sustained_delivery_page.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
@@ -300,6 +301,14 @@ GoRouter createAppRouter({
                   path: 'linked-devices',
                   pageBuilder: (context, state) =>
                       _page(context, state, const LinkedDevicesPage()),
+                ),
+                // Reached only from Settings, and deliberately not from
+                // anywhere the application can send a user on its own: this
+                // capability is never suggested, only found.
+                GoRoute(
+                  path: 'receiving-while-closed',
+                  pageBuilder: (context, state) =>
+                      _page(context, state, const SustainedDeliveryPage()),
                 ),
               ],
             ),

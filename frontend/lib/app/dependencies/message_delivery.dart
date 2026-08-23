@@ -5,6 +5,7 @@ import 'dart:async';
 import 'package:communication_platform/app/dependencies/core_providers.dart';
 import 'package:communication_platform/app/dependencies/messaging_providers.dart';
 import 'package:communication_platform/app/dependencies/networking_foundation.dart';
+import 'package:communication_platform/app/dependencies/sustained_delivery.dart';
 import 'package:communication_platform/app/dependencies/sync_providers.dart';
 import 'package:communication_platform/features/authentication/presentation/authentication_controller.dart';
 import 'package:communication_platform/features/synchronization/application/ports/sync_ports.dart';
@@ -120,6 +121,12 @@ final class MessageDeliverySession {
           realtime: realtime,
           network: platform.network,
           lifecycle: platform.lifecycle,
+          // Whether this socket may outlive the foreground. It answers *no*
+          // for every application that has not turned sustained delivery on,
+          // which is every application until somebody does, and it is read
+          // from above the session so that a session composed after the user
+          // made that choice sees it and one composed before is woken by it.
+          backgroundConnection: ref.read(sustainedConnectionPolicyProvider),
           polling: platform.polling,
           clock: ref.read(timeSourceProvider),
           jitter: FullJitterSource(),

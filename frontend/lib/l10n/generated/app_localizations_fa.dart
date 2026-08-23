@@ -481,7 +481,7 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get disclosureBestEffortDelivery =>
-      'تا وقتی این برنامه باز است، پیام‌ها به‌محض ارسال می‌رسند. وقتی بسته است، گوشی خودش هرازگاهی سراغ پیام‌های تازه می‌رود — در بهترین حالت هر پانزده دقیقه یک‌بار، معمولاً خیلی کمتر، و اصلاً نه وقتی گوشی در حال صرفه‌جویی در باتری است، اگر چند روز برنامه را باز نکرده باشید، یا اگر آن را به‌زور متوقف کرده باشید. هیچ‌کدام از این‌ها تضمین نیست، پس برای کار فوری به آن تکیه نکنید.';
+      'تا وقتی این برنامه باز است، پیام‌ها همان لحظه‌ای که فرستاده می‌شوند می‌رسند. وقتی بسته است، گوشی شما بر اساس زمان‌بندی خودش دنبال پیام تازه می‌گردد — دست‌بالا هر پانزده دقیقه، معمولاً خیلی کمتر، و اصلاً وقتی گوشی در حال ذخیرهٔ باتری است، یا چند روز برنامه را باز نکرده باشید، یا آن را به‌اجبار متوقف کرده باشید. در تنظیمات می‌توانید دریافت هنگام بسته بودن را روشن کنید؛ روی بیشتر گوشی‌ها بهتر کار می‌کند اما باتری بیشتری مصرف می‌کند و تا وقتی روشن است یک اعلان دائمی نشان می‌دهد. هیچ‌کدام از این‌ها تضمین نیست؛ پس برای چیزی که فوری است به آن تکیه نکنید.';
 
   @override
   String get disclosureDeviceOnlyHistory =>
@@ -1283,4 +1283,120 @@ class AppLocalizationsFa extends AppLocalizations {
   @override
   String get groupWithheldConflict =>
       'ارسال پیام متوقف است: تعارض کنترل گروه قرنطینه شده است.';
+
+  @override
+  String get sustainedNotificationTitle => 'در پس‌زمینه باز نگه داشته شده';
+
+  @override
+  String get sustainedChannelName => 'اجرا در پس‌زمینه';
+
+  @override
+  String get sustainedChannelDescription =>
+      'تا وقتی برنامه برای دریافت پیام باز نگه داشته می‌شود نمایش داده می‌شود.';
+
+  @override
+  String get settingsSustainedTitle => 'دریافت هنگام بسته بودن';
+
+  @override
+  String get settingsSustainedOff =>
+      'خاموش. گوشی شما بر اساس زمان‌بندی خودش دنبال پیام می‌گردد؛ کند است و بارها اصلاً انجام نمی‌شود.';
+
+  @override
+  String get settingsSustainedHolding =>
+      'روشن. برنامه در پس‌زمینه باز نگه داشته می‌شود و تا وقتی روشن است یک اعلان دائمی روی گوشی شما دیده می‌شود.';
+
+  @override
+  String get settingsSustainedAlertsWithheld =>
+      'روشن، اما اعلان‌ها خاموش‌اند؛ پس هیچ چیز رسیدن پیام را به شما نمی‌گوید.';
+
+  @override
+  String get settingsSustainedExemptionWithdrawn =>
+      'روشن، اما گوشی شما اجازهٔ کار در حالت ذخیرهٔ باتری را پس گرفته است.';
+
+  @override
+  String get settingsSustainedStopped =>
+      'روشن، اما همین حالا در حال اجرا نیست.';
+
+  @override
+  String get settingsSustainedUnavailable => 'در این نسخه در دسترس نیست.';
+
+  @override
+  String get sustainedTitle => 'دریافت هنگام بسته بودن';
+
+  @override
+  String get sustainedWhatItDoes =>
+      'به‌طور معمول وقتی از برنامه بیرون می‌روید گوشی آن را متوقف می‌کند و دست‌بالا هر پانزده دقیقه اجازه می‌دهد دنبال پیام تازه بگردد. با روشن کردن این گزینه، برنامه در پس‌زمینه باز نگه داشته می‌شود و پیام‌ها می‌توانند چند ثانیه پس از ارسال به شما برسند.';
+
+  @override
+  String get sustainedWhatItCosts =>
+      'باتری بیشتری مصرف می‌شود، چون برنامه متصل می‌ماند. یک اعلان دائمی روی گوشی شما می‌گذارد که می‌گوید برنامه در حال اجراست: هر کسی که قفل گوشی شما را باز کند و نگاه کند آن را می‌بیند و تا وقتی این گزینه را خاموش نکنید آنجا می‌ماند. روی صفحهٔ قفل پنهان است.';
+
+  @override
+  String get sustainedWhatItCannotPromise =>
+      'گوشی شما اجازه دارد هر لحظه آن را متوقف کند و چیزی هم نمی‌گوید. اگر برنامه را به‌اجبار متوقف کنید (force stop) یا مصرف باتری آن را محدود کنید، به‌کلی متوقف می‌شود. این برنامه نمی‌تواند قول بدهد که کار می‌کند؛ فقط قول می‌دهد هر وقت ببیند کار نمی‌کند، همین‌جا به شما بگوید.';
+
+  @override
+  String get sustainedNeedsTitle => 'آنچه گوشی از شما می‌خواهد';
+
+  @override
+  String get sustainedNeedsAlerts =>
+      'اجازهٔ نمایش اعلان. بدون آن ممکن است پیامی برسد و هیچ چیز به شما نگوید.';
+
+  @override
+  String get sustainedNeedsExemption =>
+      'اجازهٔ ادامهٔ کار در حالتی که گوشی باتری ذخیره می‌کند. گوشی خودش مستقیم از شما می‌پرسد.';
+
+  @override
+  String get sustainedNeedsVendor =>
+      'روی گوشی‌های سامسونگ و شیائومی یک کار دیگر هم لازم است: گوشی برنامه‌های کم‌استفاده را خودش به خواب می‌برد و این برنامه باید از آن مستثنا شود. فقط شما می‌توانید این کار را انجام دهید و این برنامه نمی‌تواند بررسی کند که انجامش داده‌اید یا نه.';
+
+  @override
+  String get sustainedVendorAction => 'باز کردن تنظیمات گوشی من';
+
+  @override
+  String get sustainedTurnOn => 'روشن کردن';
+
+  @override
+  String get sustainedTurnOff => 'خاموش کردن';
+
+  @override
+  String get sustainedStatusOff =>
+      'خاموش. چیزی در حال اجرا نیست و چیزی روی گوشی شما نمایش داده نمی‌شود.';
+
+  @override
+  String get sustainedStatusHolding => 'روشن. برنامه باز نگه داشته می‌شود.';
+
+  @override
+  String get sustainedStatusAlertsWithheld =>
+      'اعلان‌های این برنامه خاموش است، پس این گزینه متوقف شد. اعلان‌ها را روشن کنید تا دوباره شروع شود.';
+
+  @override
+  String get sustainedStatusExemptionWithdrawn =>
+      'گوشی شما اجازهٔ کار در حالت ذخیرهٔ باتری را پس گرفته است، پس این گزینه متوقف شد. این اتفاق می‌تواند پس از به‌روزرسانی گوشی خودبه‌خود بیفتد. دوباره روشن کنید تا اجازه یک بار دیگر خواسته شود.';
+
+  @override
+  String get sustainedStatusStopped =>
+      'در این لحظه در حال اجرا نیست. ممکن است گوشی شما آن را متوقف کرده باشد.';
+
+  @override
+  String get sustainedStatusUnavailable => 'در این نسخه در دسترس نیست.';
+
+  @override
+  String get sustainedRefusedAlerts =>
+      'روشن نشد: اعلان‌های این برنامه هنوز خاموش است.';
+
+  @override
+  String get sustainedRefusedExemption =>
+      'روشن نشد: گوشی اجازهٔ کار در حالت ذخیرهٔ باتری را نداد.';
+
+  @override
+  String get sustainedRefusedPlatform =>
+      'روشن نشد: گوشی اجازه نداد برنامه در حال اجرا بماند. برخی گوشی‌ها تا وقتی برنامه از فهرست «به خواب بردن برنامه‌ها» مستثنا نشود همین کار را می‌کنند.';
+
+  @override
+  String get sustainedRefusedNotRecorded =>
+      'روشن نشد: این انتخاب روی این گوشی ذخیره نشد و پس از راه‌اندازی مجدد باقی نمی‌ماند.';
+
+  @override
+  String get sustainedRefusedUnavailable => 'در این نسخه در دسترس نیست.';
 }

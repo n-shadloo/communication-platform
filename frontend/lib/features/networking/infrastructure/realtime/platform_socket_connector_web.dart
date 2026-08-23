@@ -13,6 +13,10 @@ final class PlatformSocketConnector implements SocketConnector {
     required Uri uri,
     required String accessToken,
     required Duration timeout,
+    // Ignored: a browser WebSocket has no ping API, and the browser performs
+    // its own keepalive. Accepting and discarding it is the honest shape,
+    // because pretending to honour it would be worse.
+    Duration? keepAlive,
   }) async {
     if (uri.scheme != 'wss' || uri.userInfo.isNotEmpty || uri.hasQuery) {
       throw StateError('Unsafe browser WebSocket origin.');

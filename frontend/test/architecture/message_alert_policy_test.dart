@@ -29,14 +29,43 @@ void main() {
     // behalf. Declaring it is the unambiguous reading and costs a normal
     // permission with no prompt and no exposure.
     expect(manifest, contains('android.permission.VIBRATE'));
-    // ADR-049 built the deferred catch-up and nothing above it. A foreground
-    // service, an exact alarm and an SMS receiver are all still ways to buy
-    // timeliness with something the user must grant or that binds an account
-    // to a carrier, and none of them may appear behind an alert.
-    expect(manifest, isNot(contains('FOREGROUND_SERVICE')));
+    // An exact alarm and an SMS receiver are still ways to buy timeliness
+    // with a permission the user can revoke, or by binding an account to a
+    // carrier, and neither may ever appear behind an alert.
     expect(manifest, isNot(contains('SCHEDULE_EXACT_ALARM')));
     expect(manifest, isNot(contains('USE_EXACT_ALARM')));
     expect(manifest, isNot(contains('RECEIVE_SMS')));
+    // ADR-051 changed one line of this list deliberately, and it is recorded
+    // here rather than deleted. The foreground-service permissions now exist,
+    // because the opt-in sustained-delivery capability needs them - and they
+    // are exactly three, none of which is granted by an alert or asked for by
+    // one. `FOREGROUND_SERVICE` and `FOREGROUND_SERVICE_SPECIAL_USE` are
+    // normal protection level and grant nothing until a service actually
+    // starts; `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` only permits *showing*
+    // the system's own dialog, whose answer is the user's.
+    expect(
+      RegExp(
+        'FOREGROUND_SERVICE[A-Z_]*',
+      ).allMatches(manifest).map((match) => match.group(0)),
+      {'FOREGROUND_SERVICE', 'FOREGROUND_SERVICE_SPECIAL_USE'},
+      reason: 'no other foreground service type may be declared',
+    );
+    expect(
+      manifest,
+      contains('android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS'),
+    );
+    // And the alert's own Kotlin still knows nothing about any of it.
+    for (final forbidden in const [
+      'startForeground',
+      'isIgnoringBatteryOptimizations',
+      'SustainedDelivery',
+    ]) {
+      expect(
+        activity,
+        isNot(contains(forbidden)),
+        reason: 'the alert is a projection of committed state, not a service',
+      );
+    }
     // The one permission ADR-049 adds, and the reason it is acceptable: normal
     // protection level, granted at install with no prompt, and required only
     // by `JobInfo.setPersisted(true)` so a restart does not silently end

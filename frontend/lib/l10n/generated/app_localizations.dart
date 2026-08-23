@@ -929,7 +929,7 @@ abstract class AppLocalizations {
   /// No description provided for @disclosureBestEffortDelivery.
   ///
   /// In en, this message translates to:
-  /// **'While this app is open, messages arrive as they are sent. While it is closed, your phone looks for new ones on its own schedule — fifteen minutes apart at best, usually far less often, and not at all while it is saving battery, if you have not opened the app for several days, or if you have force-stopped it. Nothing about that is guaranteed, so do not rely on it for anything urgent.'**
+  /// **'While this app is open, messages arrive as they are sent. While it is closed, your phone looks for new ones on its own schedule — fifteen minutes apart at best, usually far less often, and not at all while it is saving battery, if you have not opened the app for several days, or if you have force-stopped it. In Settings you can turn on receiving while closed, which does better on most phones but uses more battery and shows a permanent notice while it is on. Nothing about any of this is guaranteed, so do not rely on it for anything urgent.'**
   String get disclosureBestEffortDelivery;
 
   /// No description provided for @disclosureDeviceOnlyHistory.
@@ -2371,6 +2371,198 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Messaging withheld: a group control conflict is quarantined.'**
   String get groupWithheldConflict;
+
+  /// The whole content of the permanent entry the foreground service displays. It names nothing, counts nothing and promises nothing; the screen that turns the capability on is where its limits are stated.
+  ///
+  /// In en, this message translates to:
+  /// **'Kept open in the background'**
+  String get sustainedNotificationTitle;
+
+  /// Names the notification category in Android system settings for this app. The user adjusts it there, so the name has to be recognisable out of context.
+  ///
+  /// In en, this message translates to:
+  /// **'Running in the background'**
+  String get sustainedChannelName;
+
+  /// No description provided for @sustainedChannelDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Shown while the app is kept open so that messages can arrive.'**
+  String get sustainedChannelDescription;
+
+  /// No description provided for @settingsSustainedTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Receiving while closed'**
+  String get settingsSustainedTitle;
+
+  /// No description provided for @settingsSustainedOff.
+  ///
+  /// In en, this message translates to:
+  /// **'Off. Your phone looks for messages on its own schedule, which is slow and often not at all.'**
+  String get settingsSustainedOff;
+
+  /// No description provided for @settingsSustainedHolding.
+  ///
+  /// In en, this message translates to:
+  /// **'On. The app is kept open in the background, and there is a permanent notice on your phone while it is.'**
+  String get settingsSustainedHolding;
+
+  /// No description provided for @settingsSustainedAlertsWithheld.
+  ///
+  /// In en, this message translates to:
+  /// **'On, but notifications are switched off, so nothing would tell you a message arrived.'**
+  String get settingsSustainedAlertsWithheld;
+
+  /// No description provided for @settingsSustainedExemptionWithdrawn.
+  ///
+  /// In en, this message translates to:
+  /// **'On, but your phone has taken back permission to run while it saves battery.'**
+  String get settingsSustainedExemptionWithdrawn;
+
+  /// No description provided for @settingsSustainedStopped.
+  ///
+  /// In en, this message translates to:
+  /// **'On, but it is not running right now.'**
+  String get settingsSustainedStopped;
+
+  /// No description provided for @settingsSustainedUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Not available in this build.'**
+  String get settingsSustainedUnavailable;
+
+  /// No description provided for @sustainedTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Receiving while closed'**
+  String get sustainedTitle;
+
+  /// No description provided for @sustainedWhatItDoes.
+  ///
+  /// In en, this message translates to:
+  /// **'Normally your phone stops this app when you leave it, and only lets it look for new messages every fifteen minutes at best. Turned on, the app is kept open in the background instead and messages can reach you within seconds of being sent.'**
+  String get sustainedWhatItDoes;
+
+  /// No description provided for @sustainedWhatItCosts.
+  ///
+  /// In en, this message translates to:
+  /// **'It uses more battery, because the app stays connected. It puts a permanent notice on your phone saying the app is running: anyone who unlocks your phone and looks can see it, and it stays there until you turn this off. It is hidden on the lock screen.'**
+  String get sustainedWhatItCosts;
+
+  /// No description provided for @sustainedWhatItCannotPromise.
+  ///
+  /// In en, this message translates to:
+  /// **'Your phone is allowed to stop it at any time and will not say so. It stops completely if you force-stop the app, or set its battery use to restricted. This app cannot promise it will keep working, only that it will tell you here when it can see that it is not.'**
+  String get sustainedWhatItCannotPromise;
+
+  /// No description provided for @sustainedNeedsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'What your phone needs from you'**
+  String get sustainedNeedsTitle;
+
+  /// No description provided for @sustainedNeedsAlerts.
+  ///
+  /// In en, this message translates to:
+  /// **'Permission to show notifications. Without it a message could arrive and nothing would tell you.'**
+  String get sustainedNeedsAlerts;
+
+  /// No description provided for @sustainedNeedsExemption.
+  ///
+  /// In en, this message translates to:
+  /// **'Permission to keep working while your phone saves battery. Your phone will ask you directly.'**
+  String get sustainedNeedsExemption;
+
+  /// No description provided for @sustainedNeedsVendor.
+  ///
+  /// In en, this message translates to:
+  /// **'On Samsung and Xiaomi phones, one more thing: the phone puts unused apps to sleep on its own, and this app must be excluded. Only you can do this, and this app cannot check whether you have.'**
+  String get sustainedNeedsVendor;
+
+  /// No description provided for @sustainedVendorAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Open my phone\'s settings'**
+  String get sustainedVendorAction;
+
+  /// No description provided for @sustainedTurnOn.
+  ///
+  /// In en, this message translates to:
+  /// **'Turn on'**
+  String get sustainedTurnOn;
+
+  /// No description provided for @sustainedTurnOff.
+  ///
+  /// In en, this message translates to:
+  /// **'Turn off'**
+  String get sustainedTurnOff;
+
+  /// No description provided for @sustainedStatusOff.
+  ///
+  /// In en, this message translates to:
+  /// **'Off. Nothing is running and nothing is shown on your phone.'**
+  String get sustainedStatusOff;
+
+  /// No description provided for @sustainedStatusHolding.
+  ///
+  /// In en, this message translates to:
+  /// **'On. The app is being kept open.'**
+  String get sustainedStatusHolding;
+
+  /// No description provided for @sustainedStatusAlertsWithheld.
+  ///
+  /// In en, this message translates to:
+  /// **'Notifications are switched off for this app, so this has been stopped. Turn notifications on and it will start again.'**
+  String get sustainedStatusAlertsWithheld;
+
+  /// No description provided for @sustainedStatusExemptionWithdrawn.
+  ///
+  /// In en, this message translates to:
+  /// **'Your phone has taken back permission to work while it saves battery, so this has been stopped. This can happen on its own after a phone update. Turn it on again to ask for the permission once more.'**
+  String get sustainedStatusExemptionWithdrawn;
+
+  /// No description provided for @sustainedStatusStopped.
+  ///
+  /// In en, this message translates to:
+  /// **'Not running at the moment. Your phone may have stopped it.'**
+  String get sustainedStatusStopped;
+
+  /// No description provided for @sustainedStatusUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Not available in this build.'**
+  String get sustainedStatusUnavailable;
+
+  /// No description provided for @sustainedRefusedAlerts.
+  ///
+  /// In en, this message translates to:
+  /// **'Not turned on: notifications are still switched off for this app.'**
+  String get sustainedRefusedAlerts;
+
+  /// No description provided for @sustainedRefusedExemption.
+  ///
+  /// In en, this message translates to:
+  /// **'Not turned on: your phone did not give permission to work while it saves battery.'**
+  String get sustainedRefusedExemption;
+
+  /// No description provided for @sustainedRefusedPlatform.
+  ///
+  /// In en, this message translates to:
+  /// **'Not turned on: your phone refused to let the app keep running. Some phones do this until the app is excluded from putting apps to sleep.'**
+  String get sustainedRefusedPlatform;
+
+  /// No description provided for @sustainedRefusedNotRecorded.
+  ///
+  /// In en, this message translates to:
+  /// **'Not turned on: the choice could not be saved on this phone, and it would not survive a restart.'**
+  String get sustainedRefusedNotRecorded;
+
+  /// No description provided for @sustainedRefusedUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Not available in this build.'**
+  String get sustainedRefusedUnavailable;
 }
 
 class _AppLocalizationsDelegate

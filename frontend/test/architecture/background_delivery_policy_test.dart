@@ -20,11 +20,13 @@ void main() {
   final delivery = File('$kotlinRoot/BackgroundDelivery.kt').readAsStringSync();
 
   group('what the artifact declares to the platform', () {
-    test('the only service is a job service, bound and unexported', () {
-      // A foreground service would be the other way to get timeliness, and it
-      // needs an exemption the user has to grant and a permanent entry in the
-      // shade. This piece is defined by needing neither.
-      expect('<service'.allMatches(manifest), hasLength(1));
+    test('the catch-up service is a plain job service, bound and unexported', () {
+      // ADR-049's floor is defined by needing nothing from the user, and this
+      // is what keeps it that way. A second service now exists - ADR-051's
+      // opt-in sustained-delivery service - and the assertion that was
+      // "there is one service" is narrowed rather than deleted: *this* service
+      // is still a plain one, and it is still the only thing the job scheduler
+      // can start.
       expect(manifest, contains('android:name=".DeferredDeliveryJobService"'));
       expect(
         manifest,
@@ -33,13 +35,20 @@ void main() {
             'without it the system ignores the service, and with it nothing '
             'but the job scheduler can start it',
       );
-      expect(manifest, contains('android:exported="false"'));
-      expect(manifest, isNot(contains('foregroundServiceType')));
+      final declaration = manifest.substring(
+        manifest.indexOf('<service\n            android:name=".Deferred'),
+        manifest.indexOf('<!-- Sustained delivery (ADR-051)'),
+      );
+      expect(declaration, contains('android:exported="false"'));
       expect(
-        manifest,
-        isNot(
-          contains('android:permission="android.permission.FOREGROUND_SERVICE'),
-        ),
+        declaration,
+        isNot(contains('foregroundServiceType')),
+        reason: 'the mandatory floor never runs in the foreground',
+      );
+      expect(
+        '<service'.allMatches(manifest),
+        hasLength(2),
+        reason: 'the catch-up job service and the opt-in sustained service',
       );
     });
 
@@ -51,28 +60,42 @@ void main() {
       expect(manifest, isNot(contains('android:process')));
     });
 
-    test(
-      'no permission is asked for that a user could refuse or a vendor gate',
-      () {
-        expect(manifest, contains('android.permission.RECEIVE_BOOT_COMPLETED'));
-        for (final forbidden in const [
-          'REQUEST_IGNORE_BATTERY_OPTIMIZATIONS',
-          'SCHEDULE_EXACT_ALARM',
-          'USE_EXACT_ALARM',
-          'FOREGROUND_SERVICE',
-          'RECEIVE_SMS',
-          'WAKE_LOCK',
-        ]) {
-          expect(
-            manifest,
-            isNot(contains(forbidden)),
-            reason:
-                'this piece must work with nothing granted, configured or '
-                'changed by the user',
-          );
-        }
-      },
-    );
+    test('the floor still needs nothing granted, configured or changed', () {
+      // The list this test used to make of the manifest is now made of the
+      // floor's own source, because ADR-051 added permissions the manifest
+      // legitimately carries for a capability that is off until somebody turns
+      // it on. What must stay true is narrower and more precise: the *floor*
+      // asks for none of it, uses none of it, and would work on a device where
+      // every one of them was refused.
+      expect(manifest, contains('android.permission.RECEIVE_BOOT_COMPLETED'));
+      for (final forbidden in const [
+        'REQUEST_IGNORE_BATTERY_OPTIMIZATIONS',
+        'isIgnoringBatteryOptimizations',
+        'startForeground',
+        'FOREGROUND_SERVICE',
+        'AlarmManager',
+        'RECEIVE_SMS',
+        'WAKE_LOCK',
+      ]) {
+        expect(
+          delivery,
+          isNot(contains(forbidden)),
+          reason:
+              'the mandatory floor must work with nothing granted, configured '
+              'or changed by the user',
+        );
+      }
+      // And these may never appear anywhere at all: an exact alarm is a
+      // revocable permission that cancels every future alarm when withdrawn,
+      // and an SMS receiver hands a carrier a log of who is messaged and when.
+      for (final forbidden in const [
+        'SCHEDULE_EXACT_ALARM',
+        'USE_EXACT_ALARM',
+        'RECEIVE_SMS',
+      ]) {
+        expect(manifest, isNot(contains(forbidden)));
+      }
+    });
   });
 
   group('what the artifact asks the platform for', () {

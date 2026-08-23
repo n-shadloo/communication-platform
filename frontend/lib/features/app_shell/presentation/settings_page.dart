@@ -1,6 +1,7 @@
 import 'package:communication_platform/app/design_system/app_icons.dart';
 import 'package:communication_platform/app/design_system/app_tokens.dart';
 import 'package:communication_platform/features/notifications/presentation/notification_settings_entry.dart';
+import 'package:communication_platform/features/synchronization/presentation/sustained_delivery_page.dart';
 import 'package:communication_platform/l10n/generated/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
@@ -36,6 +37,10 @@ final class SettingsPage extends StatelessWidget {
           // message, read from the operating system rather than from what this
           // application would prefer to be true.
           const NotificationSettingsEntry(),
+          // And whether a message can arrive at all while the application is
+          // closed. Off until the user opens this and turns it on, which is why
+          // it is a row here rather than a prompt anywhere else.
+          const SustainedDeliverySettingsEntry(),
           _SettingsEntry(
             icon: AppIcons.settings,
             title: l10n.settingsAppearanceTitle,

@@ -6,6 +6,7 @@ import 'package:communication_platform/core/application/ports/time_source.dart';
 import 'package:communication_platform/core/result/failure.dart';
 import 'package:communication_platform/core/result/result.dart';
 import 'package:communication_platform/features/synchronization/application/durable_sync_engine.dart';
+import 'package:communication_platform/features/synchronization/application/ports/sustained_delivery_ports.dart';
 import 'package:communication_platform/features/synchronization/application/ports/sync_ports.dart';
 import 'package:communication_platform/features/synchronization/domain/sync_model.dart';
 
@@ -20,6 +21,8 @@ final class SyncLifecycleSupervisor {
     required TimeSource clock,
     required JitterSource jitter,
     required DelayPort delay,
+    BackgroundConnectionPolicy backgroundConnection =
+        const NeverHoldsInBackground(),
     this.reconnectPolicy = const SyncRetryPolicy(
       baseDelay: Duration(seconds: 1),
       maximumDelay: Duration(minutes: 5),
@@ -33,7 +36,8 @@ final class SyncLifecycleSupervisor {
        _polling = polling,
        _clock = clock,
        _jitter = jitter,
-       _delay = delay;
+       _delay = delay,
+       _backgroundConnection = backgroundConnection;
 
   final DurableSyncEngine _engine;
   final DurableSyncStore _store;
@@ -44,6 +48,15 @@ final class SyncLifecycleSupervisor {
   final TimeSource _clock;
   final JitterSource _jitter;
   final DelayPort _delay;
+
+  /// Whether the connection may outlive the foreground.
+  ///
+  /// It is a port and not a flag because the answer changes underneath a
+  /// running session: the user turns sustained delivery on or off, or the
+  /// platform withdraws what makes it possible, and either has to reach a
+  /// supervisor that is already backgrounded and would otherwise never
+  /// re-evaluate.
+  final BackgroundConnectionPolicy _backgroundConnection;
   final SyncRetryPolicy reconnectPolicy;
   final Duration stableConnectionThreshold;
 
@@ -72,6 +85,7 @@ final class SyncLifecycleSupervisor {
     _subscriptions
       ..add(_network.changes.listen(_onNetworkChanged))
       ..add(_lifecycle.changes.listen(_onLifecycleChanged))
+      ..add(_backgroundConnection.changes.listen((_) => _onHoldPolicyChanged()))
       ..add(_polling.triggers.listen(_onDeferredTick))
       ..add(
         _realtime.durableEnvelopeHints.listen((_) {
@@ -84,12 +98,27 @@ final class SyncLifecycleSupervisor {
         }),
       );
 
-    if (_lifecycle.current == ApplicationExecutionState.foreground) {
+    if (_mayConnectNow) {
       await _resumeForeground();
     } else {
       await _enterBackground();
     }
   }
+
+  /// Whether the application's current execution state permits a connection.
+  ///
+  /// Foreground always does. Backgrounded does only while something is keeping
+  /// this process out of the cached state — a running foreground service —
+  /// because a cached process is frozen and the platform terminates the TCP
+  /// sockets of a frozen app, so a socket held without one is not a slow
+  /// socket, it is a closed one. Detached never does: the process is going
+  /// away.
+  bool get _mayConnectNow => switch (_lifecycle.current) {
+    ApplicationExecutionState.foreground => true,
+    ApplicationExecutionState.background =>
+      _backgroundConnection.mayHoldWhileBackgrounded,
+    ApplicationExecutionState.detached => false,
+  };
 
   /// Runs one cycle for a deferred platform wake-up and then acknowledges it.
   ///
@@ -142,7 +171,7 @@ final class SyncLifecycleSupervisor {
       unawaited(_store.markConnectionPhase(SyncConnectionPhase.offline));
       return;
     }
-    if (_lifecycle.current == ApplicationExecutionState.foreground) {
+    if (_mayConnectNow) {
       unawaited(_resumeForeground());
     } else {
       unawaited(_requestCycle());
@@ -150,7 +179,25 @@ final class SyncLifecycleSupervisor {
   }
 
   void _onLifecycleChanged(ApplicationExecutionState state) {
-    if (state == ApplicationExecutionState.foreground) {
+    if (_mayConnectNow) {
+      unawaited(_resumeForeground());
+    } else {
+      unawaited(_enterBackground());
+    }
+  }
+
+  /// Reacts to sustained delivery being turned on or off, or to the platform
+  /// withdrawing what makes it possible, while this session is already running.
+  ///
+  /// Only the backgrounded case does anything: foregrounded, the connection is
+  /// held either way, and re-establishing it would drop a working socket for no
+  /// reason.
+  void _onHoldPolicyChanged() {
+    if (_disposed ||
+        _lifecycle.current != ApplicationExecutionState.background) {
+      return;
+    }
+    if (_backgroundConnection.mayHoldWhileBackgrounded) {
       unawaited(_resumeForeground());
     } else {
       unawaited(_enterBackground());
@@ -160,7 +207,7 @@ final class SyncLifecycleSupervisor {
   Future<void> _resumeForeground() async {
     if (_disposed ||
         _network.current == NetworkAvailability.unavailable ||
-        _lifecycle.current != ApplicationExecutionState.foreground) {
+        !_mayConnectNow) {
       return;
     }
     _generation += 1;
@@ -178,7 +225,12 @@ final class SyncLifecycleSupervisor {
     await _connectAndDrain(generation);
   }
 
-  /// Gives up the socket the moment the application stops being foregrounded.
+  /// Gives up the socket the moment this session may no longer hold one.
+  ///
+  /// Ordinarily that is the moment the application stops being foregrounded.
+  /// While sustained delivery is holding the process out of the cached state it
+  /// is not, and this is reached instead when that arrangement ends — the user
+  /// turns it off, or the platform withdraws what makes it work.
   ///
   /// It does not arm or disarm the deferred catch-up. That is armed once for
   /// the whole signed-in session by whoever owns the session, because a
@@ -246,7 +298,7 @@ final class SyncLifecycleSupervisor {
         _cycleRequested = false;
         final result = await _engine.synchronize();
         if (result case FailureResult(failure: final failure)) {
-          if (_lifecycle.current == ApplicationExecutionState.foreground) {
+          if (_mayConnectNow) {
             await _scheduleReconnect(failure, _generation);
           }
           break;
@@ -333,7 +385,7 @@ final class SyncLifecycleSupervisor {
       !_disposed &&
       generation == _generation &&
       _network.current == NetworkAvailability.available &&
-      _lifecycle.current == ApplicationExecutionState.foreground;
+      _mayConnectNow;
 
   Future<void> dispose() async {
     if (_disposed) {

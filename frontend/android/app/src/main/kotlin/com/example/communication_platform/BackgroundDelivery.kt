@@ -38,6 +38,13 @@ import io.flutter.plugin.common.MethodChannel
  * exists whenever there is one, and only starts a headless engine when there is
  * not.
  *
+ * There are three owners this process can produce, not two, since the opt-in
+ * sustained-delivery service arrived (ADR-051): the activity's isolate, the
+ * service's isolate, and a deferred catch-up's. They are ranked here rather
+ * than merely excluded - the activity wins over the service, and both win over
+ * a catch-up, because a catch-up exists only to substitute for an owner that is
+ * absent.
+ *
  * That arbitration needs no lock, and nothing about it is durable. `JobService`
  * callbacks and `FlutterActivity` engine callbacks are both delivered on this
  * process's main looper, so every transition below happens on one thread, in
@@ -91,6 +98,14 @@ internal object BackgroundDelivery {
     private var headless: HeadlessRun? = null
     private var abandonForeground: (() -> Unit)? = null
     private val ownershipWaiters = mutableListOf<MethodChannel.Result>()
+
+    /**
+     * Kept so that a sustained run can be started from a callback that has no
+     * context of its own - a foreground engine detaching, or a catch-up
+     * finishing. It is the application context and never an activity's, so it
+     * outlives every window and leaks nothing.
+     */
+    private var applicationContext: Context? = null
 
     // ---------------------------------------------------------------------
     // Scheduling
@@ -162,15 +177,58 @@ internal object BackgroundDelivery {
     fun attachForeground(channel: MethodChannel) {
         foreground = channel
         headless?.requestStandDown()
+        // The service keeps running: it is what stops this process being
+        // cached, and the isolate the user is now looking at is the one that
+        // holds the connection from here. Only its *isolate* gives way.
+        SustainedDelivery.requestStandDown()
     }
 
     fun detachForeground(channel: MethodChannel) {
         if (foreground === channel) {
             foreground = null
+            // The user closed the application while sustained delivery is
+            // armed. Nothing owns delivery now, and the service is still
+            // holding the process open for exactly this.
+            applicationContext?.let(::beginSustainedIfIdle)
         }
     }
 
-    private fun releaseOwnershipWaiters() {
+    /**
+     * Starts the sustained delivery isolate when nothing else owns delivery.
+     *
+     * Called from every transition that can make this process ownerless while
+     * the service is up: the service starting, a foreground engine detaching,
+     * and a deferred catch-up finishing. All three are on the main looper, so
+     * the check and the start cannot interleave with each other.
+     */
+    private fun beginSustainedIfIdle(context: Context) {
+        if (foreground != null || headless != null) {
+            return
+        }
+        SustainedDelivery.beginRun(context) { releaseOwnershipWaitersIfIdle() }
+    }
+
+    internal fun onSustainedServiceStarted(context: Context) {
+        applicationContext = context.applicationContext
+        beginSustainedIfIdle(context.applicationContext)
+    }
+
+    internal fun onSustainedServiceStopped() {
+        releaseOwnershipWaitersIfIdle()
+    }
+
+    /**
+     * Answers everyone waiting for exclusive ownership, once nothing holds it.
+     *
+     * Both the deferred catch-up and the sustained run have to be gone, because
+     * both are Dart root isolates with a token coordinator of their own, and the
+     * hazard the waiters exist for is two coordinators rotating one refresh
+     * token.
+     */
+    private fun releaseOwnershipWaitersIfIdle() {
+        if (headless != null || SustainedDelivery.isRunning()) {
+            return
+        }
         val waiting = ownershipWaiters.toList()
         ownershipWaiters.clear()
         waiting.forEach { it.success(null) }
@@ -180,12 +238,14 @@ internal object BackgroundDelivery {
     // The channel, registered on every engine this application starts
     // ---------------------------------------------------------------------
 
-    fun attach(context: Context, messenger: BinaryMessenger): MethodChannel =
-        MethodChannel(messenger, CHANNEL).also { channel ->
+    fun attach(context: Context, messenger: BinaryMessenger): MethodChannel {
+        applicationContext = context.applicationContext
+        return MethodChannel(messenger, CHANNEL).also { channel ->
             channel.setMethodCallHandler { call, result ->
                 handle(context.applicationContext, call, result)
             }
         }
+    }
 
     private fun handle(context: Context, call: MethodCall, result: MethodChannel.Result) {
         when (call.method) {
@@ -203,13 +263,16 @@ internal object BackgroundDelivery {
                 result.success(null)
             }
             "awaitExclusiveOwnership" -> {
-                if (headless == null) {
+                if (headless == null && !SustainedDelivery.isRunning()) {
                     result.success(null)
                 } else {
-                    // A headless run is in flight. The foreground waits for it
+                    // Another root isolate is in flight - a deferred catch-up,
+                    // or the sustained delivery run. The foreground waits for it
                     // rather than racing it, and rather than killing it: an
                     // abandoned call into the shared native cryptographic core
-                    // is a worse trade than a few seconds of waiting.
+                    // is a worse trade than a few seconds of waiting. Both have
+                    // already been asked to stand down by `attachForeground`,
+                    // which runs before this engine's Dart entry point does.
                     ownershipWaiters.add(result)
                 }
             }
@@ -236,7 +299,11 @@ internal object BackgroundDelivery {
         if (headless != null) {
             return false
         }
-        val live = foreground
+        // Ranked, not merely excluded. The activity's isolate is the best owner
+        // when it exists; the sustained run is the next best, because it is
+        // already draining continuously and a tick only asks it for one more
+        // cycle. A second engine beside either of them is precisely the hazard.
+        val live = foreground ?: SustainedDelivery.channelOfRun()
         if (live != null) {
             return deliverToForeground(live, onDone)
         }
@@ -259,14 +326,18 @@ internal object BackgroundDelivery {
             },
             onDone = {
                 headless = null
-                releaseOwnershipWaiters()
+                releaseOwnershipWaitersIfIdle()
+                // A catch-up that ran because the sustained service had not yet
+                // started its isolate must hand delivery back to it rather than
+                // leave this process ownerless until the next tick.
+                beginSustainedIfIdle(applicationContext)
                 onDone()
             },
         )
         headless = run
         if (!run.start()) {
             headless = null
-            releaseOwnershipWaiters()
+            releaseOwnershipWaitersIfIdle()
             return false
         }
         return true

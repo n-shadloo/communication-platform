@@ -41,8 +41,12 @@ enum DisclosurePoint {
   /// otherwise: a deferred platform job at the fifteen-minute floor, deferred
   /// further by Doze, and stopped outright by the *rare* and *restricted*
   /// standby buckets, by a force-stop, and by a battery-restricted app. Revised
-  /// at revision 2 when alerts arrived (ADR-048), and at revision 3 when
-  /// background catch-up did (ADR-049).
+  /// at revision 2 when alerts arrived (ADR-048), at revision 3 when background
+  /// catch-up did (ADR-049), and at revision 4 when the opt-in sustained
+  /// delivery capability did (ADR-051) — because a recipient deciding what this
+  /// build is good for is deciding it without a material fact if they are not
+  /// told that a better tier exists, what it costs them, and that it is still
+  /// not guaranteed.
   bestEffortDelivery,
 
   /// The server stores no history, `allowBackup` is false and the database key
@@ -91,7 +95,7 @@ final class DeploymentDisclosure {
 
   /// The statement carried by the Private Experimental artifact (ADR-044).
   static const privateExperimental = DeploymentDisclosure._(
-    revision: 3,
+    revision: 4,
     points: [
       DisclosurePoint.noIndependentReview,
       DisclosurePoint.bestEffortDelivery,

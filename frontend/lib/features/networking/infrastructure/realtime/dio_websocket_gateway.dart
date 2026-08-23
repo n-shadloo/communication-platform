@@ -20,6 +20,7 @@ final class DioWebSocketGateway implements RealtimeGateway {
     required RealtimeReconnectHook reconnectHook,
     NetworkDiagnostics diagnostics = const NoopNetworkDiagnostics(),
     this.connectTimeout = const Duration(seconds: 10),
+    this.keepAlive,
   }) : _socketUri = _socketUriFor(serverOrigin),
        // ignore: prefer_initializing_formals
        _connector = connector,
@@ -36,6 +37,15 @@ final class DioWebSocketGateway implements RealtimeGateway {
   final RealtimeReconnectHook _reconnectHook;
   final NetworkDiagnostics _diagnostics;
   final Duration connectTimeout;
+
+  /// How often this connection proves it is still alive, or null to send
+  /// nothing.
+  ///
+  /// Null for the foreground, where the user is present and a dead socket is
+  /// repaired by the next thing they do. Set only for a connection held while
+  /// nobody is looking, where a socket a carrier's NAT dropped would otherwise
+  /// stay open, silent and believed-good indefinitely.
+  final Duration? keepAlive;
   final StreamController<RealtimeEvent> _events =
       StreamController<RealtimeEvent>.broadcast();
 
@@ -66,6 +76,7 @@ final class DioWebSocketGateway implements RealtimeGateway {
     final started = DateTime.now();
     try {
       final channel = await _connector.connect(
+        keepAlive: keepAlive,
         uri: _socketUri,
         accessToken: token.value,
         timeout: connectTimeout,

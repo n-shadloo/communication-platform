@@ -4,6 +4,7 @@ import 'package:communication_platform/app/config/app_environment.dart';
 import 'package:communication_platform/app/dependencies/application_runtime.dart';
 import 'package:communication_platform/app/dependencies/local_storage_providers.dart';
 import 'package:communication_platform/app/dependencies/message_alerts.dart';
+import 'package:communication_platform/app/dependencies/sustained_delivery.dart';
 import 'package:communication_platform/app/dependencies/sync_providers.dart';
 import 'package:communication_platform/core/result/failure.dart';
 import 'package:communication_platform/core/result/result.dart';
@@ -13,7 +14,10 @@ import 'package:communication_platform/features/notifications/application/ports/
 import 'package:communication_platform/features/notifications/application/reconcile_message_alerts.dart';
 import 'package:communication_platform/features/notifications/infrastructure/drift_message_alert_store.dart';
 import 'package:communication_platform/features/synchronization/application/ports/sync_ports.dart';
+import 'package:communication_platform/features/synchronization/application/sustained_delivery.dart';
+import 'package:communication_platform/features/synchronization/infrastructure/drift_sustained_delivery_store.dart';
 import 'package:communication_platform/features/synchronization/infrastructure/platform_deferred_delivery_scheduler.dart';
+import 'package:communication_platform/features/synchronization/infrastructure/platform_sustained_delivery_port.dart';
 import 'package:communication_platform/shared/infrastructure/time/system_time_source.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -191,9 +195,34 @@ Future<DeferredCatchUpOutcome> _catchUp(
     return DeferredCatchUpOutcome.displaced;
   }
   await _reconcileAlerts(container);
+  // And, last, whether the opt-in sustained capability should be running.
+  //
+  // This is how it comes back after a restart and after an update, both of
+  // which end the service without ending the user's choice. It is here rather
+  // than in a boot receiver because the choice lives in the encrypted database:
+  // only a Dart isolate that has opened it knows whether there is anything to
+  // start, and starting first and asking afterwards would show a permanent
+  // entry to people who chose nothing.
+  await _reconcileSustainedDelivery(container);
   return cycle is Success
       ? DeferredCatchUpOutcome.delivered
       : DeferredCatchUpOutcome.cycleFailed;
+}
+
+Future<void> _reconcileSustainedDelivery(ProviderContainer container) async {
+  try {
+    final database = await container.read(localDatabaseProvider.future);
+    await ReconcileSustainedDelivery(
+      platform: const PlatformSustainedDeliveryPort(
+        strings: resolveSustainedDeliveryStrings,
+      ),
+      store: DriftSustainedDeliveryStore(database),
+    ).call();
+  } on Object {
+    // Nothing here is load-bearing for this run: the drain and the alert have
+    // already happened, and a capability that could not be restarted now is
+    // restarted by the next tick or by the user opening the application.
+  }
 }
 
 Future<void> _reconcileAlerts(ProviderContainer container) async {

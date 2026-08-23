@@ -86,12 +86,19 @@ final class NetworkingFoundation {
   /// own is the coordinator — close 4001 refreshes, and close 4003 revokes,
   /// through the one coordinator the whole application shares, so a socket
   /// revocation terminates the REST session too.
-  DioWebSocketGateway realtimeGateway(RealtimeReconnectHook reconnectHook) =>
-      DioWebSocketGateway(
-        serverOrigin: _serverOrigin,
-        connector: _socketConnector,
-        tokenCoordinator: tokenCoordinator,
-        reconnectHook: reconnectHook,
-        diagnostics: _diagnostics,
-      );
+  ///
+  /// [keepAlive] is supplied only by a session that holds this connection
+  /// while nobody is looking at the application, and is null for every other
+  /// caller. See [DioWebSocketGateway.keepAlive].
+  DioWebSocketGateway realtimeGateway(
+    RealtimeReconnectHook reconnectHook, {
+    Duration? keepAlive,
+  }) => DioWebSocketGateway(
+    serverOrigin: _serverOrigin,
+    connector: _socketConnector,
+    tokenCoordinator: tokenCoordinator,
+    reconnectHook: reconnectHook,
+    diagnostics: _diagnostics,
+    keepAlive: keepAlive,
+  );
 }

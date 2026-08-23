@@ -187,7 +187,7 @@
     "description": "Heading of the deployment disclosure section, rendered only by a build that is handed to someone else (ADR-045)."
   },
   "disclosureNoIndependentReview": "Nobody outside the project has reviewed this app's encryption. It is written and tested by one person, and a mistake in it would not have been caught.",
-  "disclosureBestEffortDelivery": "While this app is open, messages arrive as they are sent. While it is closed, your phone looks for new ones on its own schedule — fifteen minutes apart at best, usually far less often, and not at all while it is saving battery, if you have not opened the app for several days, or if you have force-stopped it. Nothing about that is guaranteed, so do not rely on it for anything urgent.",
+  "disclosureBestEffortDelivery": "While this app is open, messages arrive as they are sent. While it is closed, your phone looks for new ones on its own schedule \u2014 fifteen minutes apart at best, usually far less often, and not at all while it is saving battery, if you have not opened the app for several days, or if you have force-stopped it. In Settings you can turn on receiving while closed, which does better on most phones but uses more battery and shows a permanent notice while it is on. Nothing about any of this is guaranteed, so do not rely on it for anything urgent.",
   "disclosureDeviceOnlyHistory": "Your messages are stored only on this phone. The server keeps no copy and no backup exists, so uninstalling the app destroys them permanently.",
   "disclosureRecoveryExcludesHistory": "Your recovery secret restores your account identity on a new device. It never restores messages; those can only come from another device of yours that still works.",
   "disclosureExperimentalGroups": "Group chats use experimental encryption that is not finished or standardised. An update can reset a group and delete everything in it.",
@@ -470,5 +470,43 @@
   "groupWithheldUpdating": "Messaging withheld: membership is updating.",
   "groupWithheldRemoved": "Messaging withheld: this group is read-only on this device.",
   "groupWithheldQueueGap": "Messaging withheld: rejoin with a fresh Welcome after the mailbox gap.",
-  "groupWithheldConflict": "Messaging withheld: a group control conflict is quarantined."
+  "groupWithheldConflict": "Messaging withheld: a group control conflict is quarantined.",
+  "sustainedNotificationTitle": "Kept open in the background",
+  "@sustainedNotificationTitle": {
+    "description": "The whole content of the permanent entry the foreground service displays. It names nothing, counts nothing and promises nothing; the screen that turns the capability on is where its limits are stated."
+  },
+  "sustainedChannelName": "Running in the background",
+  "@sustainedChannelName": {
+    "description": "Names the notification category in Android system settings for this app. The user adjusts it there, so the name has to be recognisable out of context."
+  },
+  "sustainedChannelDescription": "Shown while the app is kept open so that messages can arrive.",
+  "settingsSustainedTitle": "Receiving while closed",
+  "settingsSustainedOff": "Off. Your phone looks for messages on its own schedule, which is slow and often not at all.",
+  "settingsSustainedHolding": "On. The app is kept open in the background, and there is a permanent notice on your phone while it is.",
+  "settingsSustainedAlertsWithheld": "On, but notifications are switched off, so nothing would tell you a message arrived.",
+  "settingsSustainedExemptionWithdrawn": "On, but your phone has taken back permission to run while it saves battery.",
+  "settingsSustainedStopped": "On, but it is not running right now.",
+  "settingsSustainedUnavailable": "Not available in this build.",
+  "sustainedTitle": "Receiving while closed",
+  "sustainedWhatItDoes": "Normally your phone stops this app when you leave it, and only lets it look for new messages every fifteen minutes at best. Turned on, the app is kept open in the background instead and messages can reach you within seconds of being sent.",
+  "sustainedWhatItCosts": "It uses more battery, because the app stays connected. It puts a permanent notice on your phone saying the app is running: anyone who unlocks your phone and looks can see it, and it stays there until you turn this off. It is hidden on the lock screen.",
+  "sustainedWhatItCannotPromise": "Your phone is allowed to stop it at any time and will not say so. It stops completely if you force-stop the app, or set its battery use to restricted. This app cannot promise it will keep working, only that it will tell you here when it can see that it is not.",
+  "sustainedNeedsTitle": "What your phone needs from you",
+  "sustainedNeedsAlerts": "Permission to show notifications. Without it a message could arrive and nothing would tell you.",
+  "sustainedNeedsExemption": "Permission to keep working while your phone saves battery. Your phone will ask you directly.",
+  "sustainedNeedsVendor": "On Samsung and Xiaomi phones, one more thing: the phone puts unused apps to sleep on its own, and this app must be excluded. Only you can do this, and this app cannot check whether you have.",
+  "sustainedVendorAction": "Open my phone's settings",
+  "sustainedTurnOn": "Turn on",
+  "sustainedTurnOff": "Turn off",
+  "sustainedStatusOff": "Off. Nothing is running and nothing is shown on your phone.",
+  "sustainedStatusHolding": "On. The app is being kept open.",
+  "sustainedStatusAlertsWithheld": "Notifications are switched off for this app, so this has been stopped. Turn notifications on and it will start again.",
+  "sustainedStatusExemptionWithdrawn": "Your phone has taken back permission to work while it saves battery, so this has been stopped. This can happen on its own after a phone update. Turn it on again to ask for the permission once more.",
+  "sustainedStatusStopped": "Not running at the moment. Your phone may have stopped it.",
+  "sustainedStatusUnavailable": "Not available in this build.",
+  "sustainedRefusedAlerts": "Not turned on: notifications are still switched off for this app.",
+  "sustainedRefusedExemption": "Not turned on: your phone did not give permission to work while it saves battery.",
+  "sustainedRefusedPlatform": "Not turned on: your phone refused to let the app keep running. Some phones do this until the app is excluded from putting apps to sleep.",
+  "sustainedRefusedNotRecorded": "Not turned on: the choice could not be saved on this phone, and it would not survive a restart.",
+  "sustainedRefusedUnavailable": "Not available in this build."
 }

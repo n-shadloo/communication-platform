@@ -484,7 +484,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get disclosureBestEffortDelivery =>
-      'While this app is open, messages arrive as they are sent. While it is closed, your phone looks for new ones on its own schedule — fifteen minutes apart at best, usually far less often, and not at all while it is saving battery, if you have not opened the app for several days, or if you have force-stopped it. Nothing about that is guaranteed, so do not rely on it for anything urgent.';
+      'While this app is open, messages arrive as they are sent. While it is closed, your phone looks for new ones on its own schedule — fifteen minutes apart at best, usually far less often, and not at all while it is saving battery, if you have not opened the app for several days, or if you have force-stopped it. In Settings you can turn on receiving while closed, which does better on most phones but uses more battery and shows a permanent notice while it is on. Nothing about any of this is guaranteed, so do not rely on it for anything urgent.';
 
   @override
   String get disclosureDeviceOnlyHistory =>
@@ -1286,4 +1286,119 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get groupWithheldConflict =>
       'Messaging withheld: a group control conflict is quarantined.';
+
+  @override
+  String get sustainedNotificationTitle => 'Kept open in the background';
+
+  @override
+  String get sustainedChannelName => 'Running in the background';
+
+  @override
+  String get sustainedChannelDescription =>
+      'Shown while the app is kept open so that messages can arrive.';
+
+  @override
+  String get settingsSustainedTitle => 'Receiving while closed';
+
+  @override
+  String get settingsSustainedOff =>
+      'Off. Your phone looks for messages on its own schedule, which is slow and often not at all.';
+
+  @override
+  String get settingsSustainedHolding =>
+      'On. The app is kept open in the background, and there is a permanent notice on your phone while it is.';
+
+  @override
+  String get settingsSustainedAlertsWithheld =>
+      'On, but notifications are switched off, so nothing would tell you a message arrived.';
+
+  @override
+  String get settingsSustainedExemptionWithdrawn =>
+      'On, but your phone has taken back permission to run while it saves battery.';
+
+  @override
+  String get settingsSustainedStopped => 'On, but it is not running right now.';
+
+  @override
+  String get settingsSustainedUnavailable => 'Not available in this build.';
+
+  @override
+  String get sustainedTitle => 'Receiving while closed';
+
+  @override
+  String get sustainedWhatItDoes =>
+      'Normally your phone stops this app when you leave it, and only lets it look for new messages every fifteen minutes at best. Turned on, the app is kept open in the background instead and messages can reach you within seconds of being sent.';
+
+  @override
+  String get sustainedWhatItCosts =>
+      'It uses more battery, because the app stays connected. It puts a permanent notice on your phone saying the app is running: anyone who unlocks your phone and looks can see it, and it stays there until you turn this off. It is hidden on the lock screen.';
+
+  @override
+  String get sustainedWhatItCannotPromise =>
+      'Your phone is allowed to stop it at any time and will not say so. It stops completely if you force-stop the app, or set its battery use to restricted. This app cannot promise it will keep working, only that it will tell you here when it can see that it is not.';
+
+  @override
+  String get sustainedNeedsTitle => 'What your phone needs from you';
+
+  @override
+  String get sustainedNeedsAlerts =>
+      'Permission to show notifications. Without it a message could arrive and nothing would tell you.';
+
+  @override
+  String get sustainedNeedsExemption =>
+      'Permission to keep working while your phone saves battery. Your phone will ask you directly.';
+
+  @override
+  String get sustainedNeedsVendor =>
+      'On Samsung and Xiaomi phones, one more thing: the phone puts unused apps to sleep on its own, and this app must be excluded. Only you can do this, and this app cannot check whether you have.';
+
+  @override
+  String get sustainedVendorAction => 'Open my phone\'s settings';
+
+  @override
+  String get sustainedTurnOn => 'Turn on';
+
+  @override
+  String get sustainedTurnOff => 'Turn off';
+
+  @override
+  String get sustainedStatusOff =>
+      'Off. Nothing is running and nothing is shown on your phone.';
+
+  @override
+  String get sustainedStatusHolding => 'On. The app is being kept open.';
+
+  @override
+  String get sustainedStatusAlertsWithheld =>
+      'Notifications are switched off for this app, so this has been stopped. Turn notifications on and it will start again.';
+
+  @override
+  String get sustainedStatusExemptionWithdrawn =>
+      'Your phone has taken back permission to work while it saves battery, so this has been stopped. This can happen on its own after a phone update. Turn it on again to ask for the permission once more.';
+
+  @override
+  String get sustainedStatusStopped =>
+      'Not running at the moment. Your phone may have stopped it.';
+
+  @override
+  String get sustainedStatusUnavailable => 'Not available in this build.';
+
+  @override
+  String get sustainedRefusedAlerts =>
+      'Not turned on: notifications are still switched off for this app.';
+
+  @override
+  String get sustainedRefusedExemption =>
+      'Not turned on: your phone did not give permission to work while it saves battery.';
+
+  @override
+  String get sustainedRefusedPlatform =>
+      'Not turned on: your phone refused to let the app keep running. Some phones do this until the app is excluded from putting apps to sleep.';
+
+  @override
+  String get sustainedRefusedNotRecorded =>
+      'Not turned on: the choice could not be saved on this phone, and it would not survive a restart.';
+
+  @override
+  String get sustainedRefusedUnavailable => 'Not available in this build.';
 }

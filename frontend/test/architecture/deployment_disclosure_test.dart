@@ -47,7 +47,7 @@ void main() {
     // fails this test until the revision is raised with it, and raising the
     // revision is what makes re-delivering the written handover disclosure
     // release-blocking.
-    expect(DeploymentDisclosure.privateExperimental.revision, 3);
+    expect(DeploymentDisclosure.privateExperimental.revision, 4);
 
     final english =
         jsonDecode(File('lib/l10n/app_en.arb').readAsStringSync())
@@ -64,8 +64,10 @@ void main() {
       'closed, your phone looks for new ones on its own schedule — fifteen '
       'minutes apart at best, usually far less often, and not at all while it '
       'is saving battery, if you have not opened the app for several days, or '
-      'if you have force-stopped it. Nothing about that is guaranteed, so do '
-      'not rely on it for anything urgent.',
+      'if you have force-stopped it. In Settings you can turn on receiving '
+      'while closed, which does better on most phones but uses more battery '
+      'and shows a permanent notice while it is on. Nothing about any of this '
+      'is guaranteed, so do not rely on it for anything urgent.',
     );
     expect(
       english['disclosureDeviceOnlyHistory'],
@@ -102,9 +104,12 @@ void main() {
     // Revision 2 exists because revision 1 said "There are no notifications",
     // and this build posts them. Revision 3 exists because revision 2 said
     // nothing runs in the background, and this build schedules a deferred
-    // catch-up. The text and the composition must move together in both
-    // directions: a build that composes a background path may not carry text
-    // denying it, and text promising catch-up may not ship without the path.
+    // catch-up. Revision 4 exists because revision 3 described the deferred
+    // catch-up as the whole of what happens while the app is closed, and this
+    // build carries an opt-in capability that does better. The text and the
+    // composition must move together in both directions: a build that composes
+    // a background path may not carry text denying it, and text promising
+    // catch-up may not ship without the path.
     final english =
         jsonDecode(File('lib/l10n/app_en.arb').readAsStringSync())
             as Map<String, dynamic>;
@@ -139,6 +144,22 @@ void main() {
     for (final promise in const [
       'fifteen minutes apart at best',
       'force-stopped',
+    ]) {
+      expect(delivery, contains(promise));
+    }
+    // Revision 4's addition, and the three things it may not omit: that the
+    // better tier exists, that it costs something the user can see, and that it
+    // is still not a guarantee. A build that ships the capability while the
+    // disclosure denies it, or that describes it without its cost, fails here.
+    final sustained = File(
+      'lib/features/synchronization/presentation/sustained_delivery_page.dart',
+    );
+    expect(sustained.existsSync(), isTrue);
+    for (final promise in const [
+      'In Settings you can turn on receiving while closed',
+      'uses more battery',
+      'permanent notice',
+      'Nothing about any of this is guaranteed',
     ]) {
       expect(delivery, contains(promise));
     }

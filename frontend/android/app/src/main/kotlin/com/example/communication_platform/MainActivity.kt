@@ -70,6 +70,11 @@ class MainActivity : FlutterActivity() {
                 }
             }
         messageAlerts.attach(messenger)
+        // Sustained delivery is attached with this activity, for one reason the
+        // headless engines cannot supply: the battery-optimization dialog is an
+        // activity, and only an activity can start it. Everything else on this
+        // channel is Context-bound and identical in every engine.
+        SustainedDelivery.attach(applicationContext, messenger, activity = this)
         // Registering this engine as the delivery owner is what makes a deferred
         // wake-up reuse the isolate the user already has instead of starting a
         // second one beside it. Two isolates would be two token coordinators

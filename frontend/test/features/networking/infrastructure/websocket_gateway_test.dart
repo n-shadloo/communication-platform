@@ -288,6 +288,7 @@ final class FakeSocketConnector implements SocketConnector {
     required Uri uri,
     required String accessToken,
     required Duration timeout,
+    Duration? keepAlive,
   }) async {
     this.uri = uri;
     this.accessToken = accessToken;
@@ -307,6 +308,7 @@ final class MultiSocketConnector implements SocketConnector {
     required Uri uri,
     required String accessToken,
     required Duration timeout,
+    Duration? keepAlive,
   }) async {
     final connection = FakeSocketConnection();
     connections.add(connection);

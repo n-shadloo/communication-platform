@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:communication_platform/app/config/app_environment.dart';
 import 'package:communication_platform/app/config/app_environment_banner.dart';
 import 'package:communication_platform/app/dependencies/message_alerts.dart';
 import 'package:communication_platform/app/dependencies/message_delivery.dart';
+import 'package:communication_platform/app/dependencies/sustained_delivery.dart';
 import 'package:communication_platform/app/design_system/app_theme.dart';
 import 'package:communication_platform/app/design_system/app_tokens.dart';
 import 'package:communication_platform/app/routing/app_router.dart';
@@ -10,6 +13,7 @@ import 'package:communication_platform/features/authentication/presentation/auth
 import 'package:communication_platform/features/authentication/presentation/authentication_route_state.dart';
 import 'package:communication_platform/features/bootstrap/application/bootstrap_flow.dart';
 import 'package:communication_platform/features/bootstrap/domain/bootstrap_model.dart';
+import 'package:communication_platform/features/synchronization/domain/sustained_delivery_model.dart';
 import 'package:communication_platform/l10n/generated/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -46,12 +50,14 @@ class CommunicationPlatformApp extends ConsumerStatefulWidget {
 }
 
 class _CommunicationPlatformAppState
-    extends ConsumerState<CommunicationPlatformApp> {
+    extends ConsumerState<CommunicationPlatformApp>
+    with WidgetsBindingObserver {
   late final GoRouter _router;
   AuthenticationRouteState? _authenticationRouteState;
   ProviderSubscription<AuthenticationViewState>? _authenticationSubscription;
   ProviderSubscription<MessageDeliveryStage>? _deliverySubscription;
   ProviderSubscription<MessageAlertStage>? _alertSubscription;
+  ProviderSubscription<SustainedDeliveryStatus>? _sustainedSubscription;
 
   @override
   void initState() {
@@ -85,6 +91,17 @@ class _CommunicationPlatformAppState
         (previous, next) {},
         fireImmediately: true,
       );
+      // Sustained delivery is owned here for the same reason and by the same
+      // mechanism. It is not part of the delivery session: the user's
+      // arrangement with the operating system outlives any one session, and a
+      // controller that stopped when a session did would answer *no* to the
+      // question the next session asks it.
+      _sustainedSubscription = ref.listenManual(
+        sustainedDeliveryControllerProvider,
+        (previous, next) {},
+        fireImmediately: true,
+      );
+      WidgetsBinding.instance.addObserver(this);
     }
     _router = createAppRouter(
       environment: widget.environment,
@@ -99,8 +116,26 @@ class _CommunicationPlatformAppState
     );
   }
 
+  /// The two things sustained delivery depends on are both changeable from
+  /// outside this application - the notification permission and the
+  /// battery-optimization exemption - and neither change is reported to it. The
+  /// user leaving for system settings and coming back is when to re-read them,
+  /// and it is also when a manufacturer's own battery screen has had its say.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && _sustainedSubscription != null) {
+      unawaited(
+        ref.read(sustainedDeliveryControllerProvider.notifier).refresh(),
+      );
+    }
+  }
+
   @override
   void dispose() {
+    if (_sustainedSubscription != null) {
+      WidgetsBinding.instance.removeObserver(this);
+    }
+    _sustainedSubscription?.close();
     _alertSubscription?.close();
     _deliverySubscription?.close();
     _authenticationSubscription?.close();

@@ -24,11 +24,17 @@ final class PlatformSocketConnector implements SocketConnector {
     required Uri uri,
     required String accessToken,
     required Duration timeout,
+    Duration? keepAlive,
   }) async {
     final channel = IOWebSocketChannel.connect(
       uri,
       headers: {'Authorization': 'Bearer $accessToken'},
       connectTimeout: timeout,
+      // `dart:io` sends a ping every interval and, when one is not answered
+      // within the same interval, closes the connection as `goingAway`. That
+      // close is what turns a socket that has silently died into a
+      // reconnect this application can act on.
+      pingInterval: keepAlive,
       customClient: _createHttpClient?.call(),
     );
     await channel.ready;

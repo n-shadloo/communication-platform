@@ -12,5 +12,6 @@ final class PlatformSocketConnector implements SocketConnector {
     required Uri uri,
     required String accessToken,
     required Duration timeout,
+    Duration? keepAlive,
   }) => throw UnsupportedError('WebSockets are unsupported on this platform.');
 }

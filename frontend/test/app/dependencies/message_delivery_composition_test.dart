@@ -722,6 +722,7 @@ final class FakeSocketConnector implements SocketConnector {
     required Uri uri,
     required String accessToken,
     required Duration timeout,
+    Duration? keepAlive,
   }) async {
     final connection = FakeSocketConnection(uri: uri, accessToken: accessToken);
     connections.add(connection);
