@@ -6,6 +6,12 @@ capability is therefore not offered in the artifact that reaches a user, and
 `lib/app/config/sustained_delivery_gate.dart` is what makes that true rather
 than intended.
 
+**Updated 2026-08-23:** one physical device — a Samsung Galaxy A56 on Android 16
+and One UI 8.5 — became available and was **probed**, not run. It establishes
+that the procedure works on retail Samsung hardware, corrects a timing this
+document had only from an emulator, and found two defects in the instrument
+itself. It opens no cell and moves the gate not at all: a probe is not a run.
+
 Decided by [ADR-053](decisions.md), which amends ADR-051's distribution clause.
 This document is authoritative for the success criteria, the matrix, the
 measurement procedure and the recorded results. The gate constant is
@@ -130,8 +136,10 @@ distribution. That single act would shrink this matrix, or expand it, on fact.
 ## 3. Success criteria
 
 **Fixed on 2026-08-23, before any measurement of any kind was attempted.**
-Nothing in this section was written or adjusted after seeing a result, because
-no result exists to have seen. Each criterion states the condition, what is
+Nothing here was written or adjusted after seeing a result. The device probes
+recorded later that day (§6.1) came after this section was written and measure
+no criterion in it: they establish what a device *is* and what it will
+*permit*, and every threshold below is still waiting on a run. Each criterion states the condition, what is
 observed, the threshold, the number of repetitions, and what separates a failure
 from noise.
 
@@ -265,7 +273,7 @@ Seven cells. Six are the fleet; the seventh is the control.
 |---|---|---:|---|
 | `samsungAndroid11To12` | Samsung, Android 11 or 12, One UI 3–4 | ~14.6% | **NOT RUN** |
 | `samsungAndroid13` | Samsung, Android 13, One UI 5.x | ~11.0% | **NOT RUN** |
-| `samsungAndroid14Plus` | Samsung, Android 14/15/16, One UI 6.0+ | ~21.6% | **NOT RUN** |
+| `samsungAndroid14Plus` | Samsung, Android 14/15/16, One UI 6.0+ | ~21.6% | **NOT RUN** — device available and probed (§6.1), nothing measured |
 | `xiaomiAndroid11To12` | Xiaomi, Android 11 or 12, MIUI 13/14 | ~9.8% | **NOT RUN** |
 | `xiaomiAndroid13` | Xiaomi, Android 13, MIUI 14 | ~7.4% | **NOT RUN** |
 | `xiaomiAndroid14Plus` | Xiaomi, Android 14+, HyperOS | ~14.4% | **NOT RUN** |
@@ -323,7 +331,7 @@ Everything is read from the **platform's own** debug surfaces over adb, by
 |---|---|
 | Is the service up and foreground? | `dumpsys activity services <pkg>` |
 | Is the connection open? | `/proc/net/tcp6`, filtered by app UID, origin port, state `01` |
-| Is the process frozen? | `dumpsys activity processes <pkg>` |
+| What state is the process in? | `dumpsys activity oom`, adj label and state triple |
 | Is the device in Doze? | `dumpsys deviceidle get deep` / `get light` |
 | Which standby bucket? | `am get-standby-bucket <pkg>` |
 | Is the exemption held? | `dumpsys deviceidle whitelist` |
@@ -435,13 +443,16 @@ criteria they can see.
 
 ### 6.1 What was actually run
 
-**Two probes, both on emulators, neither of which can open any cell.** That is
-the whole of it.
+**Three probes — one on a real phone, two on emulators — and no run of any
+kind.** That is the whole of it. A probe records what a device *is* and what it
+will *permit*; it measures nothing about the capability, which has never been
+started anywhere.
 
 | Run | Hardware | Platform | Date | What it establishes |
 |---|---|---|---|---|
 | `2026-08-23-emulator-api35` | `Google sdk_gphone16k_x86_64` (`user` build, x86_64) | Android 15, API 35 | 2026-08-23 | that the observation surfaces in §5.1 all work unrooted; this image's Doze constants and freezer setting |
 | `2026-08-23-emulator-api30` | `Google sdk_gphone_x86` (`user` build, x86) | Android 11, API 30 | 2026-08-23 | the same, and that both differ sharply from the API 35 image |
+| `2026-08-23-samsung-a56` | **Samsung SM-A566B (Galaxy A56 5G)**, retail `user` build, `release-keys` | **Android 16, API 36, One UI 8.5** (`ro.build.version.oneui=80500`), patch 2026-07-05 | 2026-08-23 | that the whole procedure runs on retail Samsung hardware; this phone's real Doze constants; that the vendor intent the app ships resolves |
 
 **Observed** (emulator, API 35, `AP31.240617.003`, 2026-08-23, one reading each):
 
@@ -498,13 +509,96 @@ and `verdict`, which printed each threshold beside its result. The instrument
 works. That is a fact about the instrument and is not a result about sustained
 delivery, which the instrument has never been pointed at.
 
+#### The first hardware data point (Samsung A56, One UI 8.5, 2026-08-23)
+
+Every item below is **observed**, once, on one phone, on one date. None of it is
+a measurement of the capability, which was never started.
+
+- **The procedure runs on retail Samsung hardware.** From an unrooted `adb
+  shell` on a `release-keys` `user` build: `dumpsys deviceidle force-idle`
+  answered *"Now forced in to deep idle mode"* and `get deep` then reported
+  **`IDLE`** — so the forced arm of §5.3 is available on the cell that carries
+  the most fleet weight. `am get-standby-bucket` returned a bucket,
+  `/proc/net/tcp6` was readable (122 rows), `dumpsys notification --noredact`
+  and `dumpsys deviceidle whitelist` both answered, and `dumpsys activity oom`
+  reported this phone's process states. The device was returned to `ACTIVE`
+  and charging immediately afterwards.
+- **The vendor intent this application ships actually resolves.** ADR-051 took
+  `com.samsung.android.sm.ACTION_OPEN_CHECKABLE_LISTACTIVITY` on
+  `com.samsung.android.lool` from Samsung's developer documentation, and nobody
+  had ever confirmed it exists on a phone. On this device
+  `cmd package resolve-activity` resolves it to
+  `com.samsung.android.lool/com.samsung.android.sm.battery.ui.usage.CheckableAppListActivity`
+  with `isDefault=true`. So the "Open my phone's settings" button goes
+  somewhere real on One UI 8.5. It was **not pressed**: whether that screen is
+  the right list, and whether excluding the app there changes anything, are
+  behavioural questions this probe does not touch.
+- **This phone's Doze schedule is nothing like the API 35 emulator's**, and the
+  emulator was the faster one:
+
+| Doze constant | A56 (One UI 8.5) | emulator API 35 | emulator API 30 |
+|---|---:|---:|---:|
+| `inactive_to` | **30 m** | 1 m | 30 m |
+| `idle_after_inactive_to` | **30 m** | 1 m | 30 m |
+| `idle_to` | **1 h** | 15 m | 1 h |
+| `sensing_to` | **4 m** | 30 s | 30 s |
+| `locating_to` | 30 s | 15 s | 15 s |
+| `light_after_inactive_to` | 1 m | 1 m | 3 m |
+| `max_idle_to` | 6 h | 6 h | 6 h |
+
+  The consequence is concrete and was not previously written down anywhere in
+  this repository: on this phone, natural deep Doze needs **30 minutes** of
+  screen-off and stationary before the idle countdown even starts, then sensing
+  and locating on top — so first deep `IDLE` is on the order of **35 minutes**,
+  not the ~2 minutes the API 35 emulator would have suggested. Any C1–C4
+  duration taken from that emulator would have been wrong by more than an order
+  of magnitude. The API 30 emulator happens to match this phone; that is not a
+  reason to trust either, it is a reason to keep reading the constants per
+  device, which §5.3 already requires and `probe` already captures.
+- **Whether the cached-apps freezer is active on One UI 8.5 could not be
+  determined.** `dumpsys activity settings` prints no `use_freezer` on this
+  device (the API 35 emulator prints `use_freezer=true` with
+  `freeze_debounce_timeout=10000`), `device_config get
+  activity_manager_native_boot use_freezer` returns `null`, and
+  `/sys/fs/cgroup/uid_0/cgroup.freeze` does not exist — Samsung's cgroup layout
+  differs. **This matters more than anything else here**: the freeze-then-
+  terminate-sockets behaviour is the entire justification for the foreground
+  service. It is not observable by configuration read on this phone, so it has
+  to be answered behaviourally — does a backgrounded socket actually die — which
+  is a run, not a probe, and has not been done.
+
+#### Two defects in the instrument, found by contact with hardware
+
+Both were fixed before anything was committed, and both are recorded because an
+instrument nobody has pointed at real hardware is an instrument whose faults are
+still ahead of it.
+
+1. **`probe` would have committed the phone owner's installed-app list.** On an
+   emulator `dumpsys deviceidle` is all system packages; on this phone its
+   allowlist sections were **446 lines** naming the owner's own applications,
+   including the seven they have battery-exempted. The harness now keeps only
+   the `Flags:` and `Settings:` blocks and the trailing state booleans, and
+   replaces every other section with its heading and a withheld-line count. The
+   two emulator records were regenerated in the same format.
+2. **`watch` was reading a field that does not exist.** It looked for `frozen=`
+   in `dumpsys activity processes`; that field appears on **none** of the three
+   devices — not One UI 8.5, and not either AOSP emulator — so it would have
+   written the string `"unknown"` at every sample of every run while looking
+   like data. That is this piece's own failure mode in miniature: a column that
+   is always green because it is never measured. It now reads the adj label and
+   state triple from `dumpsys activity oom` (verified on all three devices), and
+   records `absent` when the process is not listed at all — which is the
+   strongest failure the instrument can see.
+
 **Everything else in §3 and §4: NOT RUN.**
 
 ### 6.2 What prevented it, exactly
 
-1. **No physical Android device of any kind is available to this environment.**
-   Not a Samsung, not a Xiaomi, not a Pixel. Every cell in §4 requires one. This
-   alone closes six of the seven cells.
+1. **Five of the seven cells have no device.** No Xiaomi of any version, and no
+   Pixel or AOSP hardware for the control cell. A Samsung A56 on Android 16 is
+   available, which is the `samsungAndroid14Plus` cell; the two older Samsung
+   cells need Samsung hardware on Android 11–13, which this phone is not and
+   cannot be made into.
 2. **The `platformReference` cell was substituted with an emulator, and the
    substitution does not answer the cell's question.** An emulator answers
    *"does AOSP behave as documented"*; the cell asks *"does this application's
@@ -513,15 +607,21 @@ delivery, which the instrument has never been pointed at.
    no battery, and — the point of the control cell — no manufacturer to be
    distinguished from. It is recorded as a probe, marked `emulated`, and the
    admissibility rule in the gate refuses it automatically.
-3. **The capability cannot be exercised at all on this host, on any target,
-   including the emulator.** `runSustainedDelivery` refuses any session that is
+3. **The capability cannot be exercised at all — on the emulators or on the
+   A56.** This is what blocks the one cell that now has hardware, and no device
+   fixes it. `runSustainedDelivery` refuses any session that is
    not `AccountSessionScope.full` with `securitySetupComplete` and a `deviceId`,
    and the sustained-delivery screen sits behind the signed-in application shell.
    Reaching a signed-in state needs an activated account, and
    `backend/accounts/API.md` creates every account inactive, with activation a
    human action by the deployment's operator. So even *with* a device, the
    measurement additionally needs an operator-activated pair of test accounts,
-   which do not exist.
+   which do not exist. Nothing was installed on the A56: it is somebody's
+   personal phone, and a development build could not have been signed into
+   anyway. (A *beta* debug build must never be installed on a real phone at all
+   — it claims the frozen beta application ID with a debug key, after which the
+   genuine signed beta refuses to install over it and recovery is an uninstall
+   that destroys local state.)
 4. **The service cannot be started from outside the application either.**
    `SustainedDeliveryService` is `exported="false"`, so `adb shell am
    start-foreground-service` cannot reach it. That is a property the architecture
@@ -530,26 +630,33 @@ delivery, which the instrument has never been pointed at.
 
 ### 6.3 Measurement, inference, and neither
 
-- **Measurements** (this run): the six emulator observations in §6.1. They are
-  observations about an AOSP emulator image on one date.
+- **Measurements** (this run): the emulator observations and the Samsung A56
+  observations in §6.1 — what those devices are, what they permit, this phone's
+  Doze constants, and that the vendor intent resolves. Each is one reading on
+  one device on one date, about the *device*, never about the capability.
 - **Inferences**: that a foreground service prevents the freeze and the socket
   termination, and that the exemption preserves network through Doze and lifts
   the standby-bucket restrictions. Every one of those is drawn from Android's
   documentation (§9) and none has been observed here.
-- **Neither**: everything about Samsung and Xiaomi. Samsung's One UI 6.0
-  statement is a vendor's declaration of intent about a subset of its own
-  devices; Xiaomi has published nothing about foreground services at all;
+- **Neither**: whether Samsung or Xiaomi actually let this run. Samsung's One UI
+  6.0 statement is a vendor's declaration of intent about a subset of its own
+  devices, and having a One UI 8.5 phone in hand does not convert it into
+  evidence — nothing was run on it. Xiaomi has published nothing about
+  foreground services at all;
   `dontkillmyapp.com` is collected community evidence with no stated methodology,
   useful for knowing what to look for and load-bearing for nothing.
 
 ### 6.4 The strongest claim this evidence supports, in one sentence
 
-*On two AOSP emulator images on 2026-08-23, every observation surface this
-procedure depends on worked from an unrooted shell, and the two images'
-Doze constants differed by a factor of thirty with the cached-apps freezer off
-on one and on on the other — which establishes that the procedure in §5 is
-runnable and that its timings must be read per device, and establishes nothing
-whatsoever about whether sustained delivery works on any phone.*
+*On a retail Samsung Galaxy A56 running Android 16 and One UI 8.5, and on two
+AOSP emulator images, on 2026-08-23, every observation surface this procedure
+depends on worked from an unrooted shell, that phone reaches forced deep Doze,
+the Samsung settings intent this application ships resolves on it, and its real
+Doze schedule is thirty times slower than the emulator this document had been
+reasoning from — which establishes that the procedure is runnable on the
+manufacturer that is half this fleet, and establishes nothing whatsoever about
+whether sustained delivery works on that phone or any other, because it was
+never started on one.*
 
 ### 6.5 The weakest link
 

@@ -1,0 +1,17 @@
+{
+  "schema": "sustained-delivery-probe/1",
+  "recorded_at_host_ms": 1787506949951,
+  "manufacturer": "samsung",
+  "model": "SM-A566B",
+  "platform_release": "16",
+  "api_level": "36",
+  "build_type": "user",
+  "security_patch": "2026-07-05",
+  "vendor_skin": "80500",
+  "emulated": false,
+  "app_uid": "absent",
+  "can_force_doze": true,
+  "can_read_sockets": true,
+  "can_query_standby_bucket": true,
+  "doze_constants": "deviceidle.txt"
+}

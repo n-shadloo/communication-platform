@@ -127,6 +127,38 @@ app_uid() {
     awk -v pkg="package:$1" '$1 == pkg { sub(/^uid:/, "", $2); print $2; exit }'
 }
 
+# The Doze state machine's constants, with everything that belongs to the
+# device's owner removed.
+#
+# On an emulator `dumpsys deviceidle` is all system packages. On a real phone
+# its allowlist sections are a list of the applications that person has
+# installed and exempted — 161 lines of them on the first device this was run
+# against — which is exactly what a committed run record may not contain. Only
+# the `Flags:` and `Settings:` blocks and the trailing state booleans are kept;
+# every other section is replaced by its heading and a count, so a reader can
+# see that something was removed rather than that the dump was truncated.
+redacted_deviceidle() {
+  device shell dumpsys deviceidle 2>/dev/null | tr -d '\r' | awk '
+    /^  [A-Za-z]/ {
+      # A new top-level section. Flush the count of the one before it.
+      if (skipping && dropped > 0) {
+        printf "    [%d line(s) withheld: belongs to the device'"'"'s owner]\n", dropped
+      }
+      dropped = 0
+      skipping = ($0 !~ /^  (Flags|Settings):/)
+      print
+      next
+    }
+    skipping { dropped++; next }
+    { print }
+    END {
+      if (skipping && dropped > 0) {
+        printf "    [%d line(s) withheld: belongs to the device'"'"'s owner]\n", dropped
+      }
+    }
+  '
+}
+
 json_escape() {
   # Deliberately conservative: everything this writes is already ASCII, and a
   # value that is not is a value this instrument should not have collected.
@@ -187,7 +219,7 @@ probe() {
 
   # The Doze state machine's own constants, read from this device rather than
   # assumed from another one. The watch durations below are derived from these.
-  device shell dumpsys deviceidle > "$out_dir/deviceidle.txt" 2>&1 || true
+  redacted_deviceidle > "$out_dir/deviceidle.txt" || true
 
   cat > "$record" <<JSON
 {
@@ -275,7 +307,7 @@ watch_device() {
 
   echo "watching $package (uid $uid) for ${hours}h, sampling every ${interval}s"
   while [[ "$(host_ms)" -lt "$deadline" ]]; do
-    local device_ms deep light bucket service foreground sockets notification frozen exempt
+    local device_ms deep light bucket service foreground sockets notification proc_state exempt
     device_ms="$(device shell date -u +%s%3N | tr -d '\r\n')"
     deep="$(device shell dumpsys deviceidle get deep | tr -d '\r\n')"
     light="$(device shell dumpsys deviceidle get light | tr -d '\r\n')"
@@ -302,24 +334,42 @@ watch_device() {
     device shell "dumpsys notification --noredact 2>/dev/null | grep -q 'pkg=$package'" &&
       notification="true"
 
-    # Is the process frozen? A frozen process is the state this capability
-    # exists to avoid, and the platform reports it directly.
-    frozen="unknown"
-    local processes
-    processes="$(device shell dumpsys activity processes "$package" 2>/dev/null || true)"
-    case "$processes" in
-      *frozen=true*) frozen="true" ;;
-      *frozen=false*) frozen="false" ;;
-    esac
+    # What state has the platform put this process in? That is the condition
+    # this capability exists to control: a process in a *cached* state is frozen
+    # ten seconds later and has its sockets terminated, and a process running a
+    # foreground service is not cached.
+    #
+    # Read from `dumpsys activity oom`, whose adj label and state triple are
+    # present on every device this has been run against. An earlier version of
+    # this script looked for a `frozen=` field in `dumpsys activity processes`;
+    # that field appears on none of them — not on One UI 8.5 and not on the
+    # AOSP emulators either — so it recorded the string "unknown" at every
+    # sample while looking like data. The prefix is stripped rather than the
+    # columns counted, because `Proc #26:`, `Proc # 0:` and `PERS #31:` do not
+    # align.
+    #
+    # An empty answer means the process is not listed at all, which is the
+    # strongest failure this can observe: the application is gone.
+    proc_state="$(device shell "dumpsys activity oom 2>/dev/null" | tr -d '\r' |
+      awk -v pkg=":$package/" '
+        index($0, pkg) == 0 { next }
+        { line = $0 }
+        !sub(/^ *(Proc|PERS) #[ ]*[0-9]+: +/, "", line) { next }
+        match(line, /[A-Z]+\/[A-Z ]*\/[A-Z]+/) {
+          adj = substr(line, 1, RSTART - 1)
+          gsub(/ +$/, "", adj); gsub(/ +/, " ", adj)
+          print adj " " substr(line, RSTART, RLENGTH); exit
+        }')"
+    [[ -n "$proc_state" ]] || proc_state="absent"
 
     exempt="false"
     device shell "dumpsys deviceidle whitelist 2>/dev/null | grep -q ',$package,'" &&
       exempt="true"
 
-    printf '{"host_ms":%s,"device_ms":"%s","deep":"%s","light":"%s","bucket":"%s","service":%s,"foreground":%s,"origin_sockets":%s,"notification":%s,"frozen":"%s","doze_exempt":%s}\n' \
+    printf '{"host_ms":%s,"device_ms":"%s","deep":"%s","light":"%s","bucket":"%s","service":%s,"foreground":%s,"origin_sockets":%s,"notification":%s,"proc_state":"%s","doze_exempt":%s}\n' \
       "$(host_ms)" "$(json_escape "$device_ms")" "$(json_escape "$deep")" \
       "$(json_escape "$light")" "$(json_escape "$bucket")" "$service" \
-      "$foreground" "$sockets" "$notification" "$(json_escape "$frozen")" "$exempt" \
+      "$foreground" "$sockets" "$notification" "$(json_escape "$proc_state")" "$exempt" \
       >> "$samples"
 
     sleep "$interval"

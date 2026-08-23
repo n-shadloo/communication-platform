@@ -73,6 +73,35 @@ gate, a validation document and a measurement instrument. Changes nothing about 
 capability itself, no cryptography, no protocol, no backend. Corrects two fleet figures
 and one user-facing claim.
 
+**Addendum, 2026-08-23 — one physical device, probed, no cell opened.** A Samsung
+Galaxy A56 (SM-A566B, Android 16, API 36, One UI 8.5, retail `user` build)
+became available after this decision was written and was probed. Nothing was
+installed on it and the capability was never started, so **the gate is unmoved
+and every cell of the matrix is still unrun** — the `samsungAndroid14Plus` cell
+now has hardware and still has no measurement. Four things were established,
+and each is one reading on one phone on one date. *One:* the whole procedure
+runs on retail Samsung hardware from an unrooted shell, including
+`dumpsys deviceidle force-idle` genuinely reaching deep `IDLE`. *Two:* the
+Samsung settings intent this decision took from vendor documentation and shipped
+unverified — `ACTION_OPEN_CHECKABLE_LISTACTIVITY` on `com.samsung.android.lool`
+— resolves on One UI 8.5, so the button goes somewhere real. *Three:* this
+phone's Doze schedule is thirty times slower than the API 35 emulator this
+decision reasoned from (`inactive_to` 30 m against 1 m; first deep idle on the
+order of 35 minutes, not 2), which would have made every emulator-derived
+duration wrong by more than an order of magnitude. *Four:* whether the
+cached-apps freezer is even active on One UI 8.5 **could not be determined** by
+any configuration read available — and that behaviour is the entire
+justification for the foreground service, so it has to be answered by a run.
+
+The instrument also had two defects that only hardware could expose, both fixed:
+`probe` would have committed 446 lines of the phone owner's installed-app
+allowlist, and `watch` was reading a `frozen=` field that exists on none of the
+three devices — a column that would have been recorded at every sample while
+never being measured, which is this piece's own failure mode in miniature. It
+now reads the adj label and state triple from `dumpsys activity oom`.
+
+Full detail in `docs/sustained-delivery-validation.md` §6.1.
+
 ### The question
 
 > The capability under test depends on behaviour the platform permits but does not

@@ -30,44 +30,15 @@
     pre_idle_factor_long=1.67
     pre_idle_factor_short=0.33
   Idling history:
-      deep-idle: -257ms
-         normal: -179ms (exit-force)
+    [4 line(s) withheld: belongs to the device's owner]
   Whitelist (except idle) system apps:
-    com.android.providers.calendar
-    com.android.providers.downloads
-    com.android.vending
-    com.android.cellbroadcastreceiver
-    com.google.android.gms
-    com.google.android.ims
-    com.android.proxyhandler
-    com.android.shell
-    com.google.android.cellbroadcastreceiver
-    com.android.providers.contacts
+    [10 line(s) withheld: belongs to the device's owner]
   Whitelist system apps:
-    com.android.providers.downloads
-    com.android.cellbroadcastreceiver
-    com.google.android.gms
-    com.google.android.ims
-    com.android.shell
-    com.google.android.cellbroadcastreceiver
+    [6 line(s) withheld: belongs to the device's owner]
   Whitelist (except idle) all app ids:
-    2000
-    10061
-    10062
-    10071
-    10072
-    10073
-    10101
-    10102
-    10108
-    10153
+    [10 line(s) withheld: belongs to the device's owner]
   Whitelist all app ids:
-    2000
-    10071
-    10073
-    10101
-    10108
-    10153
+    [6 line(s) withheld: belongs to the device's owner]
   mLightEnabled=true  mDeepEnabled=true
   mForceIdle=false
   mUseMotionSensor=true mMotionSensor=null
@@ -79,7 +50,7 @@
   mNotMoving=false
   mMotionListener.activatedTimeElapsed=0
   mLastMotionEventElapsed=0
-  0 stationary listeners registered
+    [1 line(s) withheld: belongs to the device's owner]
   mLocating=false mHasGps=true mHasNetwork=false mLocated=false
   mState=ACTIVE mLightState=ACTIVE
   mInactiveTimeout=+30m0s0ms
