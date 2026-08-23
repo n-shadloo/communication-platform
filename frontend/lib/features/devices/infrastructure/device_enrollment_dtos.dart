@@ -29,6 +29,12 @@ final class RegisterDeviceRequestDto {
       for (final prekey in public.pqOtpks)
         {'key_id': prekey.keyId, 'pub': base64Encode(prekey.publicKey)},
     ],
+    // Present and empty, never omitted: `keypackages` is a required field of the
+    // registration serializer (empty is allowed, absent is
+    // `400 {"keypackages": ["This field is required."]}`), and a device has no
+    // key packages to offer at registration — they arrive later through
+    // `PUT /me/devices/{device_id}/keypackages`.
+    'keypackages': const <String>[],
   };
 }
 
