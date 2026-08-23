@@ -57,7 +57,9 @@ These recur across screens. They are stated here so the individual screens can s
 - **Search is client-side only.** The server never indexes or helps search. Search covers
   only history stored and decrypted on **this device**.
 - **Foreground delivery uses the app's own server; Android background delivery is
-  best-effort polling — never Google/Apple push.** Do not offer FCM/APNs-style options.
+  best-effort — never Google/Apple push.** By default that is deferred polling; a user may
+  additionally turn on keeping the app connected while it is closed (§15), which is faster
+  and still not a guarantee. Do not offer FCM/APNs-style options.
   Uncollected envelopes expire after seven days; a detected queue gap becomes a visible
   group-rejoin state.
 - **Honesty over false comfort.** Several actions are **best-effort, not guarantees**, and
@@ -693,10 +695,25 @@ appear pinned in the Chats list.
    longer prompt; and **not available in this build**, on any target with no alert
    implementation behind it.
    **[PRIVACY]** Active-app delivery uses the self-hosted connection and Android
-   background delivery is best-effort polling, **not** Google/Apple push. Do not offer
+   background delivery is best-effort, **not** Google/Apple push. Do not offer
    push-service or always-instant options, and do not offer a decrypted-preview switch
    without the reviewed bilingual lock-screen warning that has to accompany it. Per-
    conversation mute already lives on the conversation, not here.
+5b. **Receiving while closed** — the opt-in capability that keeps the app connected while
+   it is not in use (ADR-051). A row stating the current state, and one screen behind it.
+   The screen states, in this order and before any switch: what it does; what it costs —
+   more battery, and a permanent notice anyone who unlocks the phone can see, which stays
+   until it is turned off; what it cannot promise — the phone may stop it at any time
+   without saying so, and a force-stop or a "restricted" battery setting ends it entirely.
+   Then the three things the phone needs: notifications, the battery-optimization
+   exemption, and, on Samsung and Xiaomi, exclusion from the manufacturer's own
+   app-sleeping — the last stated plainly as something **only the user can do and this app
+   cannot check**, with one button that opens the phone's own screen and reports nothing
+   back. Every degraded state has a sentence of its own: notifications withheld, exemption
+   withdrawn (which can happen by itself after a phone update), not running, not available
+   in this build. **Off is the default and a complete state**: nothing runs, nothing is
+   requested, nothing appears anywhere, and the row says so. This surface is reached only
+   from Settings and is never suggested, prompted or advertised elsewhere.
 6. **Appearance** — client-only display preferences (the option *set* is your call; no
    styling prescribed here).
 7. **Security notice** — re-open the honest boundary screen (§5).

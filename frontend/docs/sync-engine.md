@@ -216,12 +216,20 @@ ADR-046 makes delivery layered, and every layer drives this same engine.
   application into *restricted* after eight days without user interaction. The job is
   armed once for the life of a signed-in session rather than on each background
   transition, because registering a periodic job restarts its window.
-- **Background near-real-time, opt-in and off by default.** A `specialUse` foreground
-  service keeps the process out of the cached state so the same socket survives — a frozen
-  app's TCP sockets are terminated by the system — and gives the process the one app state
-  Android documents as having unrestricted background network. It hosts the same isolate
-  and the same supervisor. Messaging still never starts a `dataSync` or `remoteMessaging`
-  service.
+- **Background near-real-time, opt-in and off by default** (ADR-051). A `specialUse`
+  foreground service keeps the process out of the cached state so a socket survives — a
+  frozen app's TCP sockets are terminated by the system — and gives the process the one app
+  state Android documents as having unrestricted background network. It hosts its own
+  isolate, composed from the same `ApplicationRuntime` and driving this same engine, because
+  `FlutterActivity` destroys its engine when the user swipes the application out of Recents,
+  which is exactly the case this layer exists for. The supervisor's rule that a backgrounded
+  session gives up its socket is expressed as a `BackgroundConnectionPolicy` port that
+  answers *no* for every composition until somebody turns this capability on, and *yes* only
+  while the whole arrangement — the durable choice, notifications, the battery-optimization
+  exemption and a running service — is genuinely in place. A held connection carries a
+  four-minute keepalive, because a connection a carrier's NAT dropped is never heard from
+  again and would otherwise sit open and believed-good behind a notice saying the application
+  is kept open. Messaging still never starts a `dataSync` or `remoteMessaging` service.
 - **Exactly one delivery owner at a time**, arbitrated in the process rather than in the
   database (ADR-049, replacing ADR-046's durable lease; placement corrected by ADR-050).
   Concurrent owners would race `TokenCoordinator` instances on a *rotating* refresh token
@@ -230,7 +238,10 @@ ADR-046 makes delivery layered, and every layer drives this same engine.
   `beginNextEnvelopeInspection` deliberately re-offers rows left `inspecting` by a crash.
   The job service runs in the default process and the Flutter engine documents one Dart VM
   per process, so every owner is on one main looper: a wake-up goes to the isolate that
-  already exists, and a headless engine starts only when none does.
+  already exists, and a headless engine starts only when none does. Since ADR-051 there are
+  **three** owners rather than two — the activity's isolate, the sustained service's, and a
+  deferred catch-up's — ranked in that order, with the lower two asked to stand down through
+  the same latched handshake and `awaitExclusiveOwnership` waiting for both.
 - **The foreground asks for ownership at the entry point, not at the delivery session.**
   ADR-049 placed that question in `MessageDeliverySession.compose`, which is reached only
   after `AuthenticationController.restore()` — and that restore is itself a rotation of the
@@ -310,12 +321,21 @@ mailbox nor transmitted its outbox. What runs now:
   background would make a session started at launch stand itself down. Every foreground
   transition re-reads connectivity, because Android 8.0 and above does not deliver
   connectivity changes to a backgrounded app.
-- **Layer 1 is built; Layer 2 is not.** The Android build composes
+- **Layers 1 and 2 are both built.** The Android build composes
   `PlatformDeferredDeliveryScheduler` behind `AndroidBestEffortPollingPort`, so a
   backgrounded application performs an *eventual* catch-up. Every other target composes
-  `UnscheduledBestEffortPolling`, which schedules nothing and says so. Near-real-time
-  background delivery would need ADR-046's opt-in `specialUse` foreground service, which
-  remains unbuilt, and the enrollment disclosure states the difference at revision 3.
+  `UnscheduledBestEffortPolling`, which schedules nothing and says so. Above that floor,
+  ADR-051's opt-in sustained delivery is present and **off by default**: nothing about it
+  runs, is requested or appears anywhere until a user turns it on from Settings, and it stops
+  itself whenever the platform withdraws what it needs. The enrollment disclosure states the
+  difference between the two tiers at revision 4.
+- **A sustained run is the same engine with one thing different.** It reports the
+  application lifecycle as *backgrounded*, which is true, and its connection policy as *may
+  hold*, which is true because the foreground service that started it is what keeps this
+  process out of the cached state. It arms and cancels nothing: the periodic job belongs to
+  whoever owns the signed-in session, and its ticks are delivered to the sustained isolate
+  while it exists, so the floor keeps working underneath as a recovery path for a socket that
+  has died silently.
 - **A headless catch-up composes from the same root.** `ApplicationRuntime` builds the
   provisioned trust context, the single `TokenCoordinator` and the environment-gated
   crypto core for both entry points, so the background path cannot quietly establish a

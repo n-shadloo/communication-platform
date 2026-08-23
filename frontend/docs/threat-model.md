@@ -19,11 +19,25 @@ that a device contacted the service or eliminate traffic-analysis metadata.
   the platform's own job store holding an id, an interval and a component name — but it
   does make this device's *online periods* visible to the server on a roughly
   fifteen-minute cadence whether or not its owner is present, so an idle device now looks
-  like an active one to a relay that already saw every drain. The unbuilt opt-in
-  `specialUse` foreground service (ADR-046 Layer 2) is the heavier one: it posts a
-  persistent, visible notification, which is a durable on-device indication that this
-  application is running, and that is why that layer is opt-in rather than default; its
-  channel must be low importance, silent, and neutrally worded.
+  like an active one to a relay that already saw every drain. The opt-in `specialUse`
+  foreground service (ADR-051) is the heavier one, in two ways.
+
+  On the device: while it is armed it posts a persistent notification, which is a durable
+  on-device indication that this application is running, and on Android 13 and above the
+  *existence* of any foreground service is additionally listed in the platform's own Task
+  Manager whatever the application does. Both are visible only on an **unlocked** phone —
+  the channel is low importance, silent and `VISIBILITY_SECRET`, so no part of it appears
+  on a secure lock screen or during screen sharing — and its entire content names nothing,
+  counts nothing and promises nothing. It persists beyond the moment the user chose it,
+  which is why the layer is opt-in, why the cost is stated on the screen that turns it on
+  *before* the switch, and why turning it off removes both the service and its durable
+  record. The user may also dismiss the shade entry (Android 13+) or stop the service from
+  the Task Manager.
+
+  On the wire: a held connection makes this device's online periods continuous rather than
+  sampled, so a relay that already saw every drain now sees presence. That is a change in
+  degree against a party the model already treats as untrusted, it creates no new party and
+  no new content exposure, and it is disclosed to the user as "the app stays connected".
 - Who is talking to whom, as it would appear in a message alert. The shipped alert
   (ADR-048) is a single sender-neutral notification whose entire content is "New message"
   or "New messages": no sender, no conversation, no text, no count, no timestamp, one
@@ -56,8 +70,9 @@ that a device contacted the service or eliminate traffic-analysis metadata.
 - Availability against a server or network that refuses service.
 - Guaranteed remote deletion after another device decrypted content.
 - Reliable delivery to a force-stopped Android process or closed browser without a push
-  service. Background delivery remains best-effort at every tier (ADR-046), and no tier
-  is a guarantee.
+  service. Background delivery remains best-effort at every tier (ADR-046, ADR-051), and no
+  tier is a guarantee — including the opt-in one, which the platform or a manufacturer may
+  end at any moment without telling the application or its owner.
 - Hiding the social graph, group fan-out, or communication timing from live server root.
 
 ## Trust boundaries

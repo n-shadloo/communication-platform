@@ -75,24 +75,29 @@ is not called the production release.
 
 ## Known platform limits
 
-- Android background messaging is layered and honestly tiered (ADR-046, ADR-049). There is
-  no foreign push and never will be. The mandatory floor — built, and requiring nothing
-  from the user — is one persisted periodic `JobScheduler` job at the platform's
-  fifteen-minute minimum with a network constraint; it gives *eventual* delivery, and it
-  gives **nothing** in the *rare* and *restricted* standby buckets, which is where Android
-  13+ places an application after eight days without user interaction. An opt-in
-  `specialUse` foreground service, off by default and **not yet built**, would hold the
-  same connection and give *near-real-time, best-effort* delivery when the user grants the
-  battery-optimization exemption and their vendor cooperates. Delayed delivery is expected
-  under Doze, standby, Data Saver, or OEM restrictions, and a force-stopped application is
-  silent until it is opened again.
+- Android background messaging is layered and honestly tiered (ADR-046, ADR-049, ADR-051).
+  There is no foreign push and never will be. The mandatory floor — requiring nothing from
+  the user — is one persisted periodic `JobScheduler` job at the platform's fifteen-minute
+  minimum with a network constraint; it gives *eventual* delivery, and it gives **nothing**
+  in the *rare* and *restricted* standby buckets, which is where Android 13+ places an
+  application after eight days without user interaction. Above it, an opt-in `specialUse`
+  foreground service — built, and **off by default** — holds the connection and gives
+  *near-real-time, best-effort* delivery once the user grants notifications and the
+  battery-optimization exemption; that exemption also lifts the standby-bucket ceiling
+  underneath, so the floor improves for the same user. It is not a guarantee: the platform
+  may end it at any time, and on Samsung and Xiaomi the user must additionally exclude the
+  application from the manufacturer's own app-sleeping — which this application cannot
+  check and never claims to have checked. Delayed delivery is expected under Doze, standby,
+  Data Saver, or OEM restrictions, and a force-stopped application is silent until it is
+  opened again.
   A microphone foreground service is used only while voice audio is actively connected.
 - Notifications are a projection of committed local state, never of a transport event, and
   reveal nothing but that something arrived. One alert, sender-neutral, announced when
   something unread and unannounced survives mute and the conversation on screen, and
   withdrawn when nothing does — including when the user reads on another device (ADR-048).
   Decrypted previews are not built, and an alert reaches the user only while the
-  application's process is alive.
+  application's process is alive — which the deferred catch-up arranges periodically and
+  sustained delivery arranges continuously while it is on.
 - A future closed browser cannot maintain the application WebSocket. Messages remain in
   the backend's durable device queue until the user returns.
 - A server able to replace a future web bundle can attack browser sessions. CSP and
