@@ -118,8 +118,9 @@ by contract tests and conservative client behavior, not runtime version guessing
    and it is written from that list rather than from this paragraph, so the two cannot
    drift apart the way they had by revision 4 — this step previously claimed "the same
    seven facts" and then listed six of them, omitted the unbuilt surfaces entirely, and
-   never mentioned the opt-in tier ADR-051 added ([ADR-052](decisions.md)). At revision 5
-   that is eight points:
+   never mentioned the opt-in tier ADR-051 added ([ADR-052](decisions.md)). At revision 6
+   ([ADR-055](decisions.md), which switched the group point from a caution about
+   experimental groups to a statement that they are off) that is eight points:
 
    1. no part of the cryptography has been independently reviewed, and one person wrote
       and tested all of it;
@@ -134,8 +135,10 @@ by contract tests and conservative client behavior, not runtime version guessing
       indication of which messages were lost;
    4. history exists only on the device and uninstalling destroys it permanently;
    5. a recovery secret restores identity on a new device and never restores messages;
-   6. group messaging is experimental and an update can reset a group and delete its
-      messages;
+   6. group messaging is switched off in this build, because its experimental
+      encryption has never been tested on a phone — no keys are published for the
+      device and no group message can reach it, and direct messages are unaffected
+      (ADR-055);
    7. voice rooms and file attachments do nothing, and the display name and photo are not
       published — contacts see the registered username;
    8. the build is for evaluation among people who already trust each other, and is not

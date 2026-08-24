@@ -289,10 +289,9 @@ final class SecureSessionTokenAdapter implements SessionTokenStore {
     // throws `Bad state: Too many elements` the moment a second account has
     // ever reached enrollment — and a leftover row belonging to a *different*
     // account is not evidence about this one either way.
-    final enrollment =
-        await (database.select(database.enrollmentIntents)
-              ..where((entry) => entry.userId.equals(userId)))
-            .getSingleOrNull();
+    final enrollment = await (database.select(
+      database.enrollmentIntents,
+    )..where((entry) => entry.userId.equals(userId))).getSingleOrNull();
     return identity?.recoveryStatus == 4 && enrollment == null;
   }
 

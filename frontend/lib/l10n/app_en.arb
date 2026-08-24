@@ -203,7 +203,7 @@
   },
   "disclosureDeviceOnlyHistory": "Your messages are stored only on this phone. The server keeps no copy of your history and no backup exists, so uninstalling the app destroys it permanently.",
   "disclosureRecoveryExcludesHistory": "Your recovery secret restores your account identity on a new device. It never restores messages; those can only come from another device of yours that still works.",
-  "disclosureExperimentalGroups": "Group chats use experimental encryption that is not finished or standardised. An update can reset a group and delete everything in it.",
+  "disclosureExperimentalGroups": "Group chats are switched off in this build. The experimental group encryption has never been tested on a phone, so it is off rather than offered untested: no keys are published for you and no group message can reach this device. Direct messages are not affected.",
   "disclosureUnbuiltSurfaces": "Some things you can see are not built yet: voice rooms and file attachments do nothing, and the display name and photo you choose are not published — other people see the username you registered with.",
   "@disclosureUnbuiltSurfaces": {
     "description": "Revision 5 (ADR-052) removed 'search' from this list. Search is built: the chat list filters by name and latest message, and a conversation's own search reads that conversation's whole local history. What was wrong was the claim, not the feature."
@@ -217,6 +217,10 @@
   "disclosureChangedLabel": "New or changed",
   "contactsNewTitle": "New",
   "contactsNewGroup": "New Group",
+  "contactsNewGroupClosed": "Not available in this build",
+  "@contactsNewGroupClosed": {
+    "description": "Subtitle on the disabled New Group row when this build has no reachable group stack (ADR-055)."
+  },
   "contactsNewVoiceRoom": "New Voice Room",
   "contactsSearchLabel": "Search contacts",
   "contactsLoadingTitle": "Loading contacts",
@@ -422,6 +426,14 @@
   "chatStateReceived": "received",
   "groupProductionUnavailableTitle": "Production groups are not available",
   "groupProductionUnavailableMessage": "The post-quantum MLS profile is still gated. This build cannot create groups, generate KeyPackages, or send group ciphertext.",
+  "groupExperimentalWithheldTitle": "Group messaging is not available yet",
+  "@groupExperimentalWithheldTitle": {
+    "description": "Title of the closed gate in the private experimental build, where the group stack exists but is withheld for want of on-device evidence (ADR-055)."
+  },
+  "groupExperimentalWithheldMessage": "The experimental group encryption in this build has never been run on a phone, so it is switched off rather than offered untested. Nothing about groups is active: no keys are published for you, and no group message can reach this device. Direct messages are unaffected. This will be enabled in a later build once it has been tested on real hardware.",
+  "@groupExperimentalWithheldMessage": {
+    "description": "Explains that the group surface is withheld pending measurement, that it is off in substance rather than hidden, and that direct messages still work."
+  },
   "groupDevelopmentPreviewBanner": "Development preview only — no production group ciphertext is sent",
   "@groupDevelopmentPreviewBanner": {
     "description": "Shown on group screens in a development build, where the in-memory fake never transmits anything."

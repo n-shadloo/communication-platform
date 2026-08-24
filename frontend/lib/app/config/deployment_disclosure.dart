@@ -82,9 +82,19 @@ enum DisclosurePoint {
   /// (ADR-030); history transfers device-to-device or not at all (ADR-028).
   recoveryExcludesHistory(since: 1),
 
-  /// Closed-beta PQ MLS group state is disposable by decision and is
-  /// reinitialised rather than migrated (ADR-036).
-  experimentalGroups(since: 1),
+  /// Revised at revision 6, when the group surface was withheld (ADR-055).
+  ///
+  /// Through revision 5 this point told the reader that group chats use
+  /// experimental encryption and that an update can reset a group. In an
+  /// artifact with no reachable group stack that is not a caution, it is a
+  /// false description of a feature: there are no group chats to reset, no
+  /// KeyPackages published for this device, and no group message that can
+  /// reach it. The point stays in the statement rather than being dropped,
+  /// because a reader who is not told will look for the feature and conclude
+  /// the application is broken; what it says is that the feature is off, and
+  /// why. ADR-036's disposable-state rule is unchanged and returns to the
+  /// wording when the surface does.
+  experimentalGroups(since: 6),
 
   /// Surfaces that are routed and visible but not implemented. Revised at
   /// revision 5: it named search among them, and search is built — the chat
@@ -137,7 +147,7 @@ final class DeploymentDisclosure {
 
   /// The statement carried by the Private Experimental artifact (ADR-044).
   static const privateExperimental = DeploymentDisclosure._(
-    revision: 5,
+    revision: 6,
     points: [
       DisclosurePoint.noIndependentReview,
       DisclosurePoint.bestEffortDelivery,

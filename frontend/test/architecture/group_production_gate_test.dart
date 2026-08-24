@@ -32,7 +32,7 @@ void main() {
     );
   });
 
-  test('only the private experimental artifact holds a beta MLS permit', () {
+  test('no environment holds a beta MLS permit without evidence', () {
     // Production must never hold one: it resolves the unsupported adapter and
     // its packaged native core does not even export the beta MLS symbol.
     expect(
@@ -43,9 +43,13 @@ void main() {
       GroupProductionGate.privateExperimentalPermit(AppEnvironment.development),
       isNull,
     );
+    // ADR-055 made the beta environment necessary and no longer sufficient:
+    // the artifact must also carry field evidence that the packaged core it
+    // would call has been observed running on hardware, and the ledger is
+    // empty. `group_experimental_gate_test.dart` covers that half.
     expect(
       GroupProductionGate.privateExperimentalPermit(AppEnvironment.beta),
-      isNotNull,
+      isNull,
     );
 
     final source = File(
@@ -53,8 +57,9 @@ void main() {
     ).readAsStringSync();
     // The beta flavor is a release build, so the permit deliberately tests the
     // compiled environment and not kReleaseMode. Reintroducing a kReleaseMode
-    // test here would close the private deployment's groups again, which is
-    // exactly the defect ADR-044 records.
+    // test here would close the private deployment's groups for the wrong
+    // reason, which is the defect ADR-044 records; the evidence ledger closes
+    // them for a stated one.
     expect(source, contains('environment == AppEnvironment.beta'));
     expect(source, contains('const GroupPrivateExperimentalPermit._()'));
     expect(
@@ -65,38 +70,39 @@ void main() {
     expect(source, isNot(contains('String.fromEnvironment')));
   });
 
-  test(
-    'group availability follows the permits, and only production closes',
-    () {
-      GroupFeatureAvailability availabilityIn(AppEnvironment environment) {
-        final container = ProviderContainer(
-          overrides: [appEnvironmentProvider.overrideWithValue(environment)],
-        );
-        addTearDown(container.dispose);
-        return container.read(groupFeatureAvailabilityProvider);
-      }
+  test('group availability follows the permits, and two states close', () {
+    GroupFeatureAvailability availabilityIn(AppEnvironment environment) {
+      final container = ProviderContainer(
+        overrides: [appEnvironmentProvider.overrideWithValue(environment)],
+      );
+      addTearDown(container.dispose);
+      return container.read(groupFeatureAvailabilityProvider);
+    }
 
-      expect(
-        availabilityIn(AppEnvironment.development),
-        GroupFeatureAvailability.developmentPreview,
-      );
-      expect(
-        availabilityIn(AppEnvironment.beta),
-        GroupFeatureAvailability.privateExperimental,
-      );
-      expect(
-        availabilityIn(AppEnvironment.production),
-        GroupFeatureAvailability.productionUnavailable,
-      );
+    expect(
+      availabilityIn(AppEnvironment.development),
+      GroupFeatureAvailability.developmentPreview,
+    );
+    // ADR-055. The beta artifact is the one the surface belongs to, and it is
+    // held closed for want of evidence rather than absent by design - a
+    // different statement from production's, and a different string.
+    expect(
+      availabilityIn(AppEnvironment.beta),
+      GroupFeatureAvailability.privateExperimentalWithheld,
+    );
+    expect(
+      availabilityIn(AppEnvironment.production),
+      GroupFeatureAvailability.productionUnavailable,
+    );
 
-      expect(GroupFeatureAvailability.developmentPreview.isAvailable, isTrue);
-      expect(GroupFeatureAvailability.privateExperimental.isAvailable, isTrue);
-      expect(
-        GroupFeatureAvailability.productionUnavailable.isAvailable,
-        isFalse,
-      );
-    },
-  );
+    expect(GroupFeatureAvailability.developmentPreview.isAvailable, isTrue);
+    expect(GroupFeatureAvailability.privateExperimental.isAvailable, isTrue);
+    expect(
+      GroupFeatureAvailability.privateExperimentalWithheld.isAvailable,
+      isFalse,
+    );
+    expect(GroupFeatureAvailability.productionUnavailable.isAvailable, isFalse);
+  });
 
   test('one permit decides both the beta stack and its screens', () {
     // Before ADR-044 the screens gated on the development permit while the

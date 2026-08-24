@@ -22,9 +22,10 @@ void main() {
     expect(find.byKey(const ValueKey('deployment-disclosure')), findsOne);
     expect(find.text('What this build is'), findsOne);
 
-    // Four points moved at revision 5, and four badges say so. The mark is a
-    // labelled badge rather than a colour, so a screen reader reaches it too.
-    expect(find.text('New or changed'), findsNWidgets(4));
+    // Five points have moved since revision 4 - the four of revision 5 and the
+    // group point at revision 6 (ADR-055) - and five badges say so. The mark is
+    // a labelled badge rather than a colour, so a screen reader reaches it too.
+    expect(find.text('New or changed'), findsNWidgets(5));
     expect(
       find.textContaining('A message waits on the server only until'),
       findsOne,
@@ -68,7 +69,7 @@ void main() {
       find.text('آنچه این برنامه دربارهٔ خودش می‌گوید تغییر کرده است'),
       findsOne,
     );
-    expect(find.text('تازه یا تغییرکرده'), findsNWidgets(4));
+    expect(find.text('تازه یا تغییرکرده'), findsNWidgets(5));
     expect(find.textContaining('What this app tells you'), findsNothing);
   });
 

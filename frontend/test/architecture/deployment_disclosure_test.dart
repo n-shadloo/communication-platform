@@ -79,7 +79,7 @@ void main() {
   test('the disclosure revision moves whenever the disclosure moves', () {
     // ADR-045 rejects periodic re-consent - repetition of an unchanged warning
     // measurably destroys it - and makes re-consent content-triggered instead.
-    expect(DeploymentDisclosure.privateExperimental.revision, 5);
+    expect(DeploymentDisclosure.privateExperimental.revision, 6);
 
     final english = _catalogue('lib/l10n/app_en.arb');
 
@@ -122,8 +122,10 @@ void main() {
     );
     expect(
       english['disclosureExperimentalGroups'],
-      'Group chats use experimental encryption that is not finished or '
-      'standardised. An update can reset a group and delete everything in it.',
+      'Group chats are switched off in this build. The experimental group '
+      'encryption has never been tested on a phone, so it is off rather than '
+      'offered untested: no keys are published for you and no group message '
+      'can reach this device. Direct messages are not affected.',
     );
     expect(
       english['disclosureUnbuiltSurfaces'],
@@ -323,8 +325,17 @@ void main() {
     const disclosure = DeploymentDisclosure.privateExperimental;
 
     test('a current reader is asked nothing', () {
-      expect(disclosure.requiresReacknowledgement(5), isFalse);
-      expect(disclosure.changedSince(5), isEmpty);
+      expect(disclosure.requiresReacknowledgement(6), isFalse);
+      expect(disclosure.changedSince(6), isEmpty);
+    });
+
+    test('a reader from revision 5 sees only the group point', () {
+      // ADR-055 withheld the group surface, so the one point whose wording
+      // moved is the one that used to describe a feature this build no longer
+      // has. Everything else a revision-5 reader accepted still stands, and
+      // re-showing it would be the repetition ADR-045 rejects.
+      expect(disclosure.requiresReacknowledgement(5), isTrue);
+      expect(disclosure.changedSince(5), {DisclosurePoint.experimentalGroups});
     });
 
     test('a reader from revision 4 sees exactly what moved', () {
@@ -333,6 +344,7 @@ void main() {
         DisclosurePoint.bestEffortDelivery,
         DisclosurePoint.messagesExpireUnread,
         DisclosurePoint.deviceOnlyHistory,
+        DisclosurePoint.experimentalGroups,
         DisclosurePoint.unbuiltSurfaces,
       });
     });

@@ -953,7 +953,7 @@ abstract class AppLocalizations {
   /// No description provided for @disclosureExperimentalGroups.
   ///
   /// In en, this message translates to:
-  /// **'Group chats use experimental encryption that is not finished or standardised. An update can reset a group and delete everything in it.'**
+  /// **'Group chats are switched off in this build. The experimental group encryption has never been tested on a phone, so it is off rather than offered untested: no keys are published for you and no group message can reach this device. Direct messages are not affected.'**
   String get disclosureExperimentalGroups;
 
   /// Revision 5 (ADR-052) removed 'search' from this list. Search is built: the chat list filters by name and latest message, and a conversation's own search reads that conversation's whole local history. What was wrong was the claim, not the feature.
@@ -997,6 +997,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'New Group'**
   String get contactsNewGroup;
+
+  /// Subtitle on the disabled New Group row when this build has no reachable group stack (ADR-055).
+  ///
+  /// In en, this message translates to:
+  /// **'Not available in this build'**
+  String get contactsNewGroupClosed;
 
   /// No description provided for @contactsNewVoiceRoom.
   ///
@@ -1999,6 +2005,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'The post-quantum MLS profile is still gated. This build cannot create groups, generate KeyPackages, or send group ciphertext.'**
   String get groupProductionUnavailableMessage;
+
+  /// Title of the closed gate in the private experimental build, where the group stack exists but is withheld for want of on-device evidence (ADR-055).
+  ///
+  /// In en, this message translates to:
+  /// **'Group messaging is not available yet'**
+  String get groupExperimentalWithheldTitle;
+
+  /// Explains that the group surface is withheld pending measurement, that it is off in substance rather than hidden, and that direct messages still work.
+  ///
+  /// In en, this message translates to:
+  /// **'The experimental group encryption in this build has never been run on a phone, so it is switched off rather than offered untested. Nothing about groups is active: no keys are published for you, and no group message can reach this device. Direct messages are unaffected. This will be enabled in a later build once it has been tested on real hardware.'**
+  String get groupExperimentalWithheldMessage;
 
   /// Shown on group screens in a development build, where the in-memory fake never transmits anything.
   ///

@@ -19,6 +19,62 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
 void main() {
+  testWidgets('the New Group entry states the build it is in', (tester) async {
+    // ADR-055. The row used to be unconditional, so a build with no reachable
+    // group stack still advertised group creation and answered the tap with a
+    // refusal page. A withheld surface that keeps its own entry point is
+    // hidden, not withheld.
+    final service = DirectoryService(
+      remote: const _OfflineDirectory(),
+      local: const _UnusedLocal(),
+    );
+    Future<void> pumpContacts(AppEnvironment environment) => _pump(
+      tester,
+      ContactsNewPage(
+        ownUserId: 'self',
+        contacts: Stream.value(const <ContactProjection>[]),
+        directoryService: service,
+      ),
+      environment: environment,
+    );
+
+    // The development preview has a reachable stack, so the row works.
+    await pumpContacts(AppEnvironment.development);
+    expect(find.text('New Group'), findsOneWidget);
+    expect(find.text('Not available in this build'), findsNothing);
+    expect(
+      tester
+          .widget<ListTile>(
+            find.ancestor(
+              of: find.text('New Group'),
+              matching: find.byType(ListTile),
+            ),
+          )
+          .enabled,
+      isTrue,
+    );
+
+    // The distributed artifact does not, so the row is disabled and says so.
+    await pumpContacts(AppEnvironment.beta);
+    expect(find.text('New Group'), findsOneWidget);
+    expect(find.text('Not available in this build'), findsOneWidget);
+    expect(
+      tester
+          .widget<ListTile>(
+            find.ancestor(
+              of: find.text('New Group'),
+              matching: find.byType(ListTile),
+            ),
+          )
+          .enabled,
+      isFalse,
+    );
+
+    // So does production, which never had one.
+    await pumpContacts(AppEnvironment.production);
+    expect(find.text('Not available in this build'), findsOneWidget);
+  });
+
   testWidgets('Contacts/New pages cached rows, searches, and loads more', (
     tester,
   ) async {

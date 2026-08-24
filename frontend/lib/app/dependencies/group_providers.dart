@@ -33,12 +33,22 @@ enum GroupFeatureAvailability {
   /// they produce is disposable by decision (ADR-036, ADR-044).
   privateExperimental,
 
+  /// The artifact the group stack belongs to, with the stack withheld because
+  /// the packaged native core it would call has not been observed running on
+  /// hardware (ADR-055).
+  ///
+  /// Distinct from [productionUnavailable] so the interface can say which of
+  /// the two it is. Nothing is composed, nothing is uploaded and no screen is
+  /// reachable in either, but only one of them is waiting on evidence.
+  privateExperimentalWithheld,
+
   /// No group stack. Production always lands here; so does any build without a
   /// permit. Every group screen renders the closed gate instead.
   productionUnavailable;
 
   bool get isAvailable =>
-      this != GroupFeatureAvailability.productionUnavailable;
+      this == GroupFeatureAvailability.developmentPreview ||
+      this == GroupFeatureAvailability.privateExperimental;
 }
 
 final groupFeatureAvailabilityProvider = Provider<GroupFeatureAvailability>((
@@ -50,6 +60,9 @@ final groupFeatureAvailabilityProvider = Provider<GroupFeatureAvailability>((
   }
   if (GroupProductionGate.privateExperimentalPermit(environment) != null) {
     return GroupFeatureAvailability.privateExperimental;
+  }
+  if (GroupProductionGate.privateExperimentalWithheld(environment)) {
+    return GroupFeatureAvailability.privateExperimentalWithheld;
   }
   return GroupFeatureAvailability.productionUnavailable;
 });

@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:communication_platform/app/config/deployment_disclosure.dart';
 import 'package:communication_platform/app/dependencies/contact_providers.dart';
+import 'package:communication_platform/app/dependencies/group_providers.dart';
 import 'package:communication_platform/app/design_system/app_components.dart';
 import 'package:communication_platform/app/design_system/app_icons.dart';
 import 'package:communication_platform/app/design_system/app_tokens.dart';
@@ -102,6 +103,9 @@ class _ContactsNewPageState extends ConsumerState<ContactsNewPage> {
     required bool waiting,
   }) {
     final strings = AppLocalizations.of(context);
+    final groupsAvailable = ref
+        .watch(groupFeatureAvailabilityProvider)
+        .isAvailable;
     final normalized = _search.text.trim().toLowerCase();
     final filtered = (contacts ?? const <ContactProjection>[])
         .where(
@@ -136,10 +140,16 @@ class _ContactsNewPageState extends ConsumerState<ContactsNewPage> {
                 kind: AppStatusKind.warning,
                 message: strings.contactsOfflineMessage,
               ),
+            // The entry point tells the truth about the build behind it rather
+            // than offering a route to a closed gate. Before ADR-055 this row
+            // was unconditional, so production advertised group creation and
+            // answered it with a refusal page; a withheld surface that still
+            // presents its own entry point is hidden, not withheld.
             _ActionRow(
               label: strings.contactsNewGroup,
               icon: AppIcons.add,
-              onTap: () => context.push('/groups/new'),
+              subtitle: groupsAvailable ? null : strings.contactsNewGroupClosed,
+              onTap: groupsAvailable ? () => context.push('/groups/new') : null,
             ),
             _ActionRow(
               label: strings.contactsNewVoiceRoom,
@@ -711,11 +721,13 @@ class _ActionRow extends StatelessWidget {
     required this.label,
     required this.icon,
     required this.onTap,
+    this.subtitle,
     super.key,
   });
 
   final String label;
   final AppIconData icon;
+  final String? subtitle;
   final VoidCallback? onTap;
 
   @override
@@ -723,6 +735,7 @@ class _ActionRow extends StatelessWidget {
     minTileHeight: 56,
     leading: AppIcon(icon),
     title: Text(label),
+    subtitle: subtitle == null ? null : Text(subtitle!),
     enabled: onTap != null,
     onTap: onTap,
   );

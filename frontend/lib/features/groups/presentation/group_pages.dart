@@ -66,11 +66,15 @@ class CreateGroupPage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    if (injectedContacts != null && onCreate != null) {
-      return _CreateGroupFlow(contacts: injectedContacts!, onCreate: onCreate!);
-    }
+    // The availability gate comes first, before the injected-collaborator path
+    // and before anything else. It used to come second, so a caller supplying
+    // its own collaborators stepped around it; nothing in the router does that,
+    // but a gate a constructor argument can bypass is not a gate (ADR-055).
     if (!ref.watch(groupFeatureAvailabilityProvider).isAvailable) {
       return const GroupProductionGatePage();
+    }
+    if (injectedContacts != null && onCreate != null) {
+      return _CreateGroupFlow(contacts: injectedContacts!, onCreate: onCreate!);
     }
     final auth = ref.watch(authenticationControllerProvider);
     final userId = currentUserId ?? auth.userId;
@@ -403,6 +407,10 @@ class GroupChatPage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // Gate first; see `CreateGroupPage`.
+    if (!ref.watch(groupFeatureAvailabilityProvider).isAvailable) {
+      return const GroupProductionGatePage();
+    }
     if (injectedState != null && injectedMessages != null && onSend != null) {
       return GroupChatView(
         state: injectedState!,
@@ -410,9 +418,6 @@ class GroupChatPage extends ConsumerWidget {
         currentUserId: currentUserId ?? injectedState!.members.first.userId,
         onSend: onSend!,
       );
-    }
-    if (!ref.watch(groupFeatureAvailabilityProvider).isAvailable) {
-      return const GroupProductionGatePage();
     }
     final auth = ref.watch(authenticationControllerProvider);
     final userId = currentUserId ?? auth.userId;
@@ -651,15 +656,16 @@ class GroupInfoPage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // Gate first; see `CreateGroupPage`.
+    if (!ref.watch(groupFeatureAvailabilityProvider).isAvailable) {
+      return const GroupProductionGatePage();
+    }
     if (injectedState != null && onMutate != null) {
       return GroupInfoView(
         state: injectedState!,
         currentUserId: currentUserId ?? injectedState!.members.first.userId,
         onMutate: onMutate!,
       );
-    }
-    if (!ref.watch(groupFeatureAvailabilityProvider).isAvailable) {
-      return const GroupProductionGatePage();
     }
     final auth = ref.watch(authenticationControllerProvider);
     final userId = currentUserId ?? auth.userId;
@@ -1297,14 +1303,25 @@ class _AddGroupMembersPageState extends ConsumerState<AddGroupMembersPage> {
   }
 }
 
-class GroupProductionGatePage extends StatelessWidget {
+class GroupProductionGatePage extends ConsumerWidget {
   const GroupProductionGatePage({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final strings = AppLocalizations.of(context);
+    // Two builds reach this page for two different reasons and it says which.
+    // Production has no group stack at all; the private experimental build has
+    // one and is holding it closed until the packaged core has been observed
+    // running on hardware (ADR-055). Telling a recipient of the second that
+    // "production groups are not available" would be answering a question they
+    // did not ask.
+    final withheld =
+        ref.watch(groupFeatureAvailabilityProvider) ==
+        GroupFeatureAvailability.privateExperimentalWithheld;
     return Scaffold(
-      key: const ValueKey('group-production-gate'),
+      key: withheld
+          ? const ValueKey('group-experimental-withheld-gate')
+          : const ValueKey('group-production-gate'),
       appBar: AppBar(title: Text(strings.groupInfoTitle)),
       body: Center(
         child: Padding(
@@ -1312,8 +1329,12 @@ class GroupProductionGatePage extends StatelessWidget {
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 560),
             child: AppStatePanel.error(
-              title: strings.groupProductionUnavailableTitle,
-              message: strings.groupProductionUnavailableMessage,
+              title: withheld
+                  ? strings.groupExperimentalWithheldTitle
+                  : strings.groupProductionUnavailableTitle,
+              message: withheld
+                  ? strings.groupExperimentalWithheldMessage
+                  : strings.groupProductionUnavailableMessage,
             ),
           ),
         ),
@@ -1423,6 +1444,7 @@ class _GroupMaturityBanner extends ConsumerWidget {
       GroupFeatureAvailability.privateExperimental =>
         l10n.groupExperimentalBanner,
       // Unreachable: every screen renders the closed gate before this point.
+      GroupFeatureAvailability.privateExperimentalWithheld ||
       GroupFeatureAvailability.productionUnavailable => null,
     };
     if (label == null) return const SizedBox.shrink();

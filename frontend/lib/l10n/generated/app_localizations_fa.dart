@@ -497,7 +497,7 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get disclosureExperimentalGroups =>
-      'گفت‌وگوهای گروهی از رمزنگاری آزمایشی استفاده می‌کنند که نه کامل است و نه استاندارد. یک به‌روزرسانی می‌تواند گروه را بازنشانی کند و هر چه در آن است حذف شود.';
+      'گفت‌وگوهای گروهی در این نسخه خاموش‌اند. رمزنگاری گروهی آزمایشی هرگز روی یک گوشی آزمایش نشده است، بنابراین به‌جای ارائهٔ آزمایش‌نشده خاموش است: هیچ کلیدی برای شما منتشر نمی‌شود و هیچ پیام گروهی به این دستگاه نمی‌رسد. پیام‌های مستقیم تحت تأثیر قرار نمی‌گیرند.';
 
   @override
   String get disclosureUnbuiltSurfaces =>
@@ -523,6 +523,9 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get contactsNewGroup => 'گروه جدید';
+
+  @override
+  String get contactsNewGroupClosed => 'در این نسخه در دسترس نیست';
 
   @override
   String get contactsNewVoiceRoom => 'اتاق صوتی جدید';
@@ -1078,6 +1081,14 @@ class AppLocalizationsFa extends AppLocalizations {
   @override
   String get groupProductionUnavailableMessage =>
       'پروفایل MLS پساکوانتومی هنوز پشت دروازهٔ امنیتی است. این ساخت نمی‌تواند گروه بسازد، KeyPackage تولید کند یا متن رمز گروهی بفرستد.';
+
+  @override
+  String get groupExperimentalWithheldTitle =>
+      'پیام‌رسانی گروهی هنوز در دسترس نیست';
+
+  @override
+  String get groupExperimentalWithheldMessage =>
+      'رمزنگاری گروهی آزمایشی این نسخه هرگز روی یک گوشی اجرا نشده است، بنابراین به‌جای ارائهٔ آزمایش‌نشده، خاموش شده است. هیچ بخشی از گروه‌ها فعال نیست: هیچ کلیدی برای شما منتشر نمی‌شود و هیچ پیام گروهی به این دستگاه نمی‌رسد. پیام‌های مستقیم بی‌تأثیر می‌مانند. این قابلیت در نسخه‌ای بعدی، پس از آزمایش روی سخت‌افزار واقعی، فعال خواهد شد.';
 
   @override
   String get groupDevelopmentPreviewBanner =>

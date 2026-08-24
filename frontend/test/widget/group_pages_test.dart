@@ -1,5 +1,6 @@
 import 'package:communication_platform/app/config/app_environment.dart';
 import 'package:communication_platform/app/dependencies/core_providers.dart';
+import 'package:communication_platform/app/dependencies/group_providers.dart';
 import 'package:communication_platform/app/design_system/app_theme.dart';
 import 'package:communication_platform/core/result/result.dart';
 import 'package:communication_platform/features/groups/domain/group_model.dart';
@@ -33,7 +34,10 @@ void main() {
   testWidgets('each build states what its own group stack really is', (
     tester,
   ) async {
-    Future<void> pumpCreate(AppEnvironment environment) => _pump(
+    Future<void> pumpCreate(
+      AppEnvironment environment, {
+      GroupFeatureAvailability? availability,
+    }) => _pump(
       tester,
       CreateGroupPage(
         injectedContacts: const [
@@ -42,6 +46,7 @@ void main() {
         onCreate: (_, _) async => Result.success(_state()),
       ),
       environment: environment,
+      availability: availability,
     );
 
     // The development preview transmits nothing, so it may say so.
@@ -49,9 +54,32 @@ void main() {
     expect(find.textContaining('Development preview only'), findsOneWidget);
     expect(find.textContaining('Experimental group encryption'), findsNothing);
 
-    // The private experimental build really does send group objects and really
-    // can lose the state they produce, so it must not reuse that promise.
+    // ADR-055. The distributed artifact reaches the withheld gate instead of
+    // the create flow, and it says which of the two closed states it is in.
+    // Answering a recipient of this build with production's wording would be
+    // answering a question they did not ask.
     await pumpCreate(AppEnvironment.beta);
+    expect(
+      find.byKey(const ValueKey('group-experimental-withheld-gate')),
+      findsOneWidget,
+    );
+    expect(find.text('Group messaging is not available yet'), findsOneWidget);
+    expect(find.textContaining('never been run on a phone'), findsOneWidget);
+    expect(
+      find.textContaining('Direct messages are unaffected'),
+      findsOneWidget,
+    );
+    expect(find.byKey(const ValueKey('group-production-gate')), findsNothing);
+    expect(find.textContaining('Experimental group encryption'), findsNothing);
+    expect(find.byKey(const ValueKey('group-name-field')), findsNothing);
+
+    // When the ledger does open, the experimental tier must still not reuse the
+    // development preview's promise: it really does send group objects and
+    // really can lose the state they produce.
+    await pumpCreate(
+      AppEnvironment.beta,
+      availability: GroupFeatureAvailability.privateExperimental,
+    );
     expect(
       find.textContaining('Experimental group encryption'),
       findsOneWidget,
@@ -229,10 +257,26 @@ Future<void> _pump(
   Locale locale = const Locale('en'),
   TextScaler textScaler = TextScaler.noScaling,
   AppEnvironment environment = AppEnvironment.development,
+  GroupFeatureAvailability? availability,
 }) async {
   await tester.pumpWidget(
     ProviderScope(
-      overrides: [appEnvironmentProvider.overrideWithValue(environment)],
+      overrides: [
+        appEnvironmentProvider.overrideWithValue(environment),
+        // ADR-055 holds the real ledger empty, so the experimental tier is not
+        // reachable from any environment. Overriding availability is how a
+        // widget test still covers the wording that tier will show when the
+        // gate opens; the gate's own behaviour is asserted, unoverridden, in
+        // `test/architecture/group_experimental_gate_test.dart`.
+        //
+        // The override is always present, and defaults to whatever the real
+        // gate resolves for this environment: Riverpod refuses a change in the
+        // *number* of overrides when a scope is re-pumped, and this test pumps
+        // three times into one scope.
+        groupFeatureAvailabilityProvider.overrideWithValue(
+          availability ?? _resolvedAvailability(environment),
+        ),
+      ],
       child: MaterialApp(
         locale: locale,
         theme: AppTheme.light(),
@@ -249,4 +293,14 @@ Future<void> _pump(
     ),
   );
   await tester.pumpAndSettle();
+}
+
+/// What the real gate resolves for [environment], with nothing overridden.
+GroupFeatureAvailability _resolvedAvailability(AppEnvironment environment) {
+  final container = ProviderContainer(
+    overrides: [appEnvironmentProvider.overrideWithValue(environment)],
+  );
+  final value = container.read(groupFeatureAvailabilityProvider);
+  container.dispose();
+  return value;
 }
