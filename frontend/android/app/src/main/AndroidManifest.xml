@@ -1,4 +1,5 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
     <uses-permission android:name="android.permission.INTERNET" />
     <!-- Android 13 (API 33) and above gate every non-exempt notification behind
          this runtime permission, and notifications are off by default on a
@@ -6,6 +7,16 @@
          message is waiting that cannot be announced - and a refusal is a stated
          outcome, not a retry loop. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Read by the delivery supervisor to know when the operating system says
+         there is no network at all, so a cycle is not started against one and a
+         held socket is given up rather than believed. It arrives in the merged
+         manifest from connectivity_plus either way (ADR-054); it is declared
+         here so that every permission in the artifact is stated and justified in
+         the file a reviewer reads, rather than only in a package's. Normal
+         protection level: granted at install with no prompt, and it reports the
+         transport and its capabilities, never an address, an operator or a
+         payload. -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <!-- The message alert channel enables vibration, which is what reaches a
          phone in a pocket or on silent. Normal protection level: it is granted
          at install with no prompt and exposes nothing about the device or its
@@ -95,6 +106,19 @@
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="Keeps this application's process out of the cached state so that its authenticated connection to the user's own self-hosted messaging server survives, and end-to-end encrypted messages can be received while the application is not in use. No push transport is reachable in this deployment, so there is no messaging service to be woken by instead. Started only after the user explicitly turns the capability on, and stopped as soon as they turn it off." />
         </service>
+        <!-- Refused, not inherited (ADR-054). androidx.profileinstaller
+             arrives transitively behind androidx.core and the Flutter
+             embedding, and its manifest contributes an *exported* receiver with
+             four intent filters that this application never asks for. Nothing
+             here starts it, nothing here would have declared it, and the
+             baseline profile is still written on first run by
+             ProfileInstallerInitializer, which calls ProfileInstaller.writeProfile
+             directly and never references this receiver. What is lost is the
+             shell- and store-triggered profile operations, neither of which
+             exists in a privately handed-over artifact. -->
+        <receiver
+            android:name="androidx.profileinstaller.ProfileInstallReceiver"
+            tools:node="remove" />
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.attachments"

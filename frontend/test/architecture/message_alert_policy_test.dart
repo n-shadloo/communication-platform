@@ -72,8 +72,8 @@ void main() {
     // background delivery.
     expect(manifest, contains('android.permission.RECEIVE_BOOT_COMPLETED'));
     expect(
-      manifest,
-      isNot(contains('<receiver')),
+      _declaredReceivers(manifest),
+      isEmpty,
       reason:
           'setPersisted is what survives a reboot; this application declares '
           'no boot receiver of its own',
@@ -197,3 +197,17 @@ void main() {
     }
   });
 }
+
+/// Every `<receiver>` element in the manifest that actually declares a
+/// component, as opposed to refusing one contributed from outside.
+///
+/// ADR-054 added the only `<receiver>` element this manifest has ever carried:
+/// a `tools:node="remove"` directive that deletes the exported receiver
+/// `androidx.profileinstaller` merges in. That is the opposite of declaring an
+/// entry point, so the invariant is stated over declarations rather than over
+/// the literal text.
+Iterable<String> _declaredReceivers(String manifest) =>
+    RegExp(r'<receiver[^>]*>', dotAll: true)
+        .allMatches(manifest)
+        .map((match) => match.group(0)!)
+        .where((element) => !element.contains('tools:node="remove"'));

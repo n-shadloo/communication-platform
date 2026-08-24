@@ -10,8 +10,8 @@ tokens and component grammar live in [Visual design system](visual-design-system
 
 The visual language is minimal and product-specific, with Telegram as an interaction
 reference rather than a visual clone. Forui provides primitives/tokens behind app-owned
-components. Flyer Chat builders render the timeline. No package-default screen is
-accepted as the final product design.
+components. App-owned builders render the timeline behind the timeline adapter. No
+package-default screen is accepted as the final product design.
 
 ## Adaptive shell
 
@@ -75,8 +75,10 @@ Piece 15 tested the pinned `flutter_chat_ui` 2.11.1 surface on 2026-07-30. Its
 duplicate application state, and did not provide an app-owned proof for anchor
 restoration after arbitrary row-size and accessibility changes. Under the documented
 replacement rule, only `ChatTimelineAdapter` uses the custom reversed sliver
-implementation. Flyer remains isolated behind that replaceable boundary; no Flyer model
-or controller owns domain state. App builders consume immutable
+implementation. ADR-054 then removed both Flyer packages from `pubspec.yaml`, where
+they were still declared and imported by nothing; what remains is the replaceable
+boundary, and no package model or controller owns domain state. App builders consume
+immutable
 `ChatTimelineViewModel`/`ChatMessageViewModel` values and dispatch typed `ChatIntent`
 values.
 

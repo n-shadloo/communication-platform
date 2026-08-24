@@ -115,8 +115,8 @@ Contract fixtures MUST fail when backend documentation and behavior diverge.
 - Semantics, keyboard order, focus restoration, shortcuts, context menus, and reduced
   motion.
 - Timeline-adapter pagination, anchoring, dynamic media/row sizing,
-  jump-to-message, and app-owned builder output. Re-run the same suite against Flyer
-  before any future adapter swap.
+  jump-to-message, and app-owned builder output. Re-run the same suite against any
+  package adapter before a future swap; none is declared as of ADR-054.
 
 ### End-to-end tests
 

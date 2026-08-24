@@ -7,8 +7,8 @@ reference, not a visual template. The identity comes from restrained density, st
 typographic hierarchy, selective indigo, carefully shaped message surfaces, and motion
 that explains state without decoration.
 
-These tokens are the production baseline for app-owned Forui wrappers and Flyer Chat
-builders. Widgets MUST consume semantic tokens rather than literal colors or dimensions.
+These tokens are the production baseline for app-owned Forui wrappers and the app-owned
+timeline builders. Widgets MUST consume semantic tokens rather than literal colors or dimensions.
 The future product name, logo, and reviewed brand artwork may replace brand assets and
 the accent family through an ADR; they do not silently change accessibility or component
 behavior.
@@ -104,7 +104,8 @@ privacy mode requires obscuring it.
   medium/wide layouts. The readable message column remains bounded by
   `responsive-ui.md`.
 - Composer, reply strip, attachment progress, reactions, receipts, and failure actions
-  are built through Flyer builders using the same tokens. Package-default bubbles and
+  are built through the app-owned timeline builders using the same tokens.
+  Package-default bubbles and
   composers are prohibited in release builds.
 - Empty states use one concise title, one explanatory sentence, and at most one primary
   action. Security and connectivity states use honest text rather than decorative art.

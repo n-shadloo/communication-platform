@@ -71,12 +71,25 @@ by contract tests and conservative client behavior, not runtime version guessing
 ## Dependency and toolchain control
 
 - Pin Flutter and Dart SDKs for the team/CI.
-- Commit Flutter/Dart/Rust lockfiles and checksum external artifacts.
+- Commit Flutter/Dart/Rust/Gradle lockfiles and checksum external artifacts. All four
+  exist as of [ADR-054](decisions.md): `pubspec.lock` enforced by
+  `flutter pub get --enforce-lockfile`, `native/crypto_core/Cargo.lock`, and
+  `android/app/gradle.lockfile` in `LockMode.STRICT` over the six configurations a built
+  artifact resolves. Every direct Dart dependency is one exact version, never a range.
 - Mirror/cache all build dependencies so a clean release can build without international
   internet.
 - Produce a version-1 SBOM covering Dart, Android/Gradle, Rust, fonts, and native
-  libraries. Add Rust/Wasm and browser-worker artifacts only when Web is reopened.
-- Review licenses, especially crypto libraries, before acceptance.
+  libraries. Add Rust/Wasm and browser-worker artifacts only when Web is reopened. The
+  Dart and Android/Gradle halves are the two lockfiles above plus
+  [third-party-notices.md](third-party-notices.md); the Rust, font and native halves are
+  not yet aggregated anywhere (ADR-054 follow-up F3).
+- Review licenses, especially crypto libraries, before acceptance. What a distributed
+  artifact carries, and the notices each licence requires, are recorded in
+  [third-party-notices.md](third-party-notices.md).
+- Never let a plugin upgrade move an Android pin as a side effect. `connectivity_plus`
+  7.1.0 and later would carry `androidx.core` from 1.16.0 to 1.18.0, and with it the
+  required `compileSdk`; the Gradle lock is what turns that into a failed build instead of
+  a changed artifact.
 - Disable crypto debug/log features and remove unused architectures/resources only after
   verifying packaging rules.
 
@@ -150,6 +163,16 @@ by contract tests and conservative client behavior, not runtime version guessing
    The revision cannot be raised by hand and cannot be skipped: it is the highest
    `DisclosurePoint.since` among the points, and `test/architecture/deployment_disclosure_test.dart`
    fails on any edit to a pinned string until that point's `since` is raised with it.
+
+10. Deliver [third-party-notices.md](third-party-notices.md) with the artifact, in the
+    same handover as the written disclosure. Apache-2.0 §4 and the BSD 3-Clause licence
+    both require that whoever receives the binary receives the licence text and the
+    attribution notices, and a private handover is still distribution
+    ([ADR-054](decisions.md)). The machine-generated half for the Dart packages and the
+    engine is inside the APK at `assets/flutter_assets/NOTICES.Z`; nothing in the
+    application displays it, so this document is currently the only copy a recipient can
+    read. Unlike the step above this one is not release-blocking on a disclosure
+    revision: it changes when the dependency set does.
 
 Updates are explicit user/admin actions. The app may check only the self-hosted signed
 metadata endpoint. It never fetches executable code or dependencies dynamically.

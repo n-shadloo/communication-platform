@@ -64,6 +64,550 @@ is not silently edited out of history.
 | ADR-051 | Accepted, distribution clause and delivery claim amended by ADR-053 | Receiving while the application is not in use is an opt-in capability, off by default: a `specialUse` foreground service that keeps the process out of the cached state so the composed delivery path can keep its connection, armed only after the user grants notifications and the battery-optimization exemption, and stopped by the application itself the moment either is withdrawn; builds ADR-046's Layer 2, amends its distribution clause, extends ADR-050 to a third owner, and takes ADR-045's delivery disclosure to revision 4 (2026-08-22) | ADR-046 sketched this layer and left it unbuilt, and ADR-049 recorded the ceiling it was meant to lift: fifteen minutes at best, Doze deferral, and **no background network at all** in the *rare* and *restricted* standby buckets, where Android 13+ puts an app after eight unopened days. Every mechanism was re-derived from primary sources read 2026-08-22, including Android 17, and two facts neither earlier decision recorded changed the arithmetic: apps on the Doze exemption list are exempt from **App Standby Bucket restrictions entirely**, so enabling this repairs the mandatory floor as well as adding a layer above it; and a long-running foreground service by itself keeps the app in the *active* bucket. The manufacturer half is no longer community reporting: Samsung publishes that sleeping apps (3 days unused and poor system health) have "Job, Alarm, and Foreground-service … restricted", publishes the user's exception path and a deep-link intent to it, and states that since One UI 6.0 foreground services of apps targeting Android 14 "will be guaranteed to work as intended"; Xiaomi publishes only a per-app Background autostart permission. That is better evidence than ADR-046 had and still not measurement, so the vendor half stays **unresolved** and the device matrix stays open. `specialUse` is selected because it is accurate: `dataSync` is capped at six hours per twenty-four and forbidden from a boot receiver at `targetSdk` 35+, `remoteMessaging` documents device-to-device message continuity, `systemExempted` is gated on roles this application does not have — and `specialUse` still carries no timeout, no runtime prerequisite and no boot restriction at API 37. The alternative of **building nothing** was evaluated on the same footing and rejected on three findings, the decisive one being that the brief's own failure mode is avoidable by construction: the platform displays the permanent entry only while the service is genuinely running, and the application re-reads every precondition on every resume and stops the service, and says so, whenever the arrangement is incomplete. No dependency is added, no boot receiver is declared, the choice lives in the encrypted preference table and is deleted rather than falsified when turned off, and the socket gains a four-minute keepalive because a connection a carrier's NAT dropped is never heard from again and must not sit behind a notice saying the application is kept open. Full reasoning, the alternatives, the three separated classes of claim and the enumerated outstanding validation are in "ADR-051 in full" below. This decision opens no production gate. |
 | ADR-052 | Accepted | Four user-facing claims were false or read as promising more than the artifact delivers and are corrected; the permanent half of the security notice may no longer name a feature; the disclosure revision becomes a derived value that an edit cannot skip; and the revision a user accepted becomes a durable device-side record that re-presents a corrected statement once — completing the half of ADR-045 that was never built (2026-08-23) | ADR-045 established the disclosure and rejected periodic re-consent correctly, on evidence that still holds. What it did not build was the device side: nothing recorded which revision a user had accepted, so when the revision moved at ADR-048, ADR-049 and ADR-051 the only thing reaching an existing recipient was a release-checklist step a human had to remember, and their install could not distinguish "accepted the current statement" from "accepted one that is no longer true". Auditing the composed artifact rather than its documentation found **four wrong claims, two of them outside the disclosure**. `settingsNotificationsOn` said an alert "can only reach you while this app is running" — false since ADR-049: `deferred_delivery_catch_up.dart` and `sustained_delivery_run.dart` both call `ReconcileMessageAlerts` from isolates with no activity in the process, and the string had never been edited since ADR-048 wrote it. `disclosureUnbuiltSurfaces` said search "do[es] nothing" — false: the chat list filters on title and last-message preview, and a conversation's own search reads that conversation's entire local history, because `watchMessages` applies no limit. `enrollmentProtectsBody` promised that "messages, files, and voice audio" were unreadable to the server, in an artifact that can send no file and carry no audio; it is a **permanent** section, so the fix is structural — it now describes the boundary and names no feature at all, and a test forbids feature words in it, because an enumeration goes stale every time the feature set moves. `chatsSearchHint` promised "chats and messages on this device" for a box that matches names and one preview line. Two further statements were true but read as promising more: `disclosureBestEffortDelivery` described delivery as slow, which a reader takes to mean *eventual*, while the server prunes undelivered envelopes on a retention timer clients are never told (`ENVELOPE_TTL_DAYS`, default 7) — late and never are different outcomes and only one was disclosed, so a new point states it, and states that the client will not name what was lost, because `SyncProjection.isSecurityBlocked` is dead code and a one-to-one queue gap surfaces nowhere; and the same point omitted Data Saver, which blocks the catch-up's `NETWORK_TYPE_ANY` request on exactly the metered connection this audience pays for, and which the written handover had been stating while the application did not. `enrollmentDoesNotProtectBody` stated a real limitation in vocabulary the reader cannot decode — "social graph", "out of band", "compare fingerprints" — while the screen it instructs them to use is titled *Safety number*; a limitation a reader cannot act on is a limitation that was not disclosed. **The mechanism is corrected rather than the strings.** Each `DisclosurePoint` now carries the revision at which its wording last moved, `DeploymentDisclosure.revision` must equal the highest of them, and the pinned-text test fails on any edit — so an edit forces a `since` bump and a `since` bump forces the revision, and the bump can no longer be forgotten by a person, which is how three revisions shipped with nothing checking them. The accepted revision is recorded in the encrypted preference table as one integer and nothing else — no timestamp, no identifier — never lowered, written by enrollment before the session opens, and read by a gate that wraps the routed child above the router, so no route, deep link or notification tap reaches the application without passing it. A reader from revision 4 sees the statement again with the four moved points badged; a reader with no record at all — every recipient who enrolled before this — sees the whole statement with nothing badged, because 0 means the application does not know what they saw and may assume nothing read. Periodic re-consent stays rejected on the evidence ADR-045 cited and on newer evidence that strengthens it: Vance et al. (MIS Quarterly 2018) show attention to a repeated warning collapsing within days and polymorphic variation restoring adherence at three weeks, and Vance et al. (MIS Quarterly 2025, "The Fog of Warnings") show habituation *generalising* from ordinary notifications to security warnings never seen before, which is decisive here because this artifact now posts message alerts and a permanent foreground-service notice — so the correction is a full screen the application shows nowhere else, and the "changed" mark is a labelled badge rather than a colour. It **fails open** in exactly one direction: an unreadable preference row withholds the gate rather than the application, because an honesty mechanism must not become a denial of service, and a failed write costs one extra showing. The written re-delivery stays release-blocking and is corrected too — `deployment-and-release.md` claimed "the same seven facts" while listing six, omitted the unbuilt surfaces and the ADR-051 opt-in, and is now generated from the same point list. Language parity is enforced catalogue-wide instead of by three hand-maintained key lists that a new English-only key passed. Adds no dependency, changes no feature behaviour, touches no backend file, opens no production gate, and leaves the Beta/Production boundary untouched: production and development still carry no disclosure and cannot render Private Experimental wording. Disclosure revision moves 4 → 5. Full audit, evidence, alternatives and sources in "ADR-052 in full" below. |
 | ADR-053 | Accepted | Sustained delivery is withheld from every build that reaches a user until it has been measured on real phones: a source-only evidence ledger with seven mandatory matrix cells, admissibility rules that refuse an emulator, a short run or a single observation, and ten falsifiable criteria fixed before anything was measured; amends ADR-051 and restores ADR-046's distribution clause in an enforced form (2026-08-23) | ADR-046 required the physical-device matrix before this layer could be enabled in a distributed artifact; ADR-051 removed that clause because the matrix could not be run in the available environment. It still cannot: there is no physical Android device of any kind here, and behind that the capability cannot start on any target without an operator-activated account, because `runSustainedDelivery` refuses anything short of a full device-bound session. So **no cell of the matrix has been run**, and "we cannot measure this" is a reason to withhold a capability, never a reason to ship it — the failure it risks is a person who was told messages would arrive and was not told about one for hours, a failure whose entire signature is absence. The gate is a compile-time constant with an empty ledger: beta and production resolve `withheld`, development resolves `measurementOnly` so the matrix can be run at all. A withheld build never asks the platform for anything, never writes the durable choice, never starts the service, and **stops** one an earlier build left running. Opening it needs seven records that each pass `isAdmissible` — not emulated, a strict ISO date, a committed run record, ≥ 24 holding hours, ≥ 20 timed deliveries, ≥ 3 repetitions — and an inadmissible record simply does not count rather than being refused. Two fleet figures ADR-051 recorded are corrected on a re-read of Statcounter (2026-08-23): Samsung and Xiaomi are **90%** of the *Android* fleet rather than 77% of all mobile, and Android 13-or-earlier is **60%** rather than "roughly half", so the fraction covered by no vendor statement is about 78%. One user-facing claim is withdrawn: `sustainedWhatItDoes` promised delivery "within seconds" in a build where nothing had ever been timed. Measured, on two AOSP emulator images only: every observation surface works unrooted, and their Doze constants differ by a factor of thirty with the freezer off at API 30 and on at API 35 — so the procedure reads constants per device, and whether the freezer even exists on Android 11–12 is now an explicit question for two cells. `docs/sustained-delivery-validation.md` holds the criteria, the matrix and the results; `tool/measure_sustained_delivery.sh` is the instrument |
+| ADR-054 | Accepted | The delivery and notification path's platform integration was enumerated from the code and decided point by point: nine of twelve points are written on the framework and three adopt `androidx.core`, which was already in the artifact and is now pinned at 1.16.0 for a stated reason; `connectivity_plus` stays at 6.0.5 because 7.1.0 and later force `androidx.core` 1.18.0 and with it `compileSdk` 36.1; the Android dependency set is locked for the first time, four declared-and-unused packages and a retracted `jni` 1.0.1 are removed, `ACCESS_NETWORK_STATE` is declared where it can be justified, and an exported receiver `androidx.profileinstaller` merged into every artifact is refused (2026-08-24) | A dependency that nobody decided is still a dependency the artifact carries. Every integration point was traced from the code rather than from a package list; what is adopted is pinned exactly and recorded in `android/app/gradle.lockfile` and `pubspec.lock`; what is written is bounded by a port this project owns; and the shipped `classes.dex` is proved to contain no code capable of opening a network connection at all. Supersedes ADR-007's adoption of Flyer Chat, which piece 15 contradicted without a record. |
+
+## ADR-054 in full — what the delivery and notification path takes from outside, and what it writes (2026-08-24)
+
+**Status:** Accepted. Ratifies, on evidence, the dependency choices ADR-046, ADR-048,
+ADR-049 and ADR-051 each made in passing while deciding something else, and reverses two
+of them. Supersedes ADR-007's adoption of Flyer Chat, which piece 15 contradicted in
+implementation and no decision ever recorded. Adds the Android half of dependency pinning,
+which did not exist. Changes no feature behaviour, no cryptography, no protocol, no wire
+format, no transport trust, and no backend file.
+
+### The question
+
+> This work touches the platform in several distinct places. For each of them: what is
+> genuinely required, what are the realistic ways of obtaining it, what does each way cost
+> this project over years rather than this week — and what exactly is pinned?
+
+Nothing was assumed. Not that any of it needs a package, not that any of it does not, not
+that what is already installed was ever chosen, and not that one answer fits every point.
+Both directions have a real failure mode: an adopted package brings code nobody here has
+read into a product whose premise is that its code can be reasoned about; code written
+here brings a surface nobody outside this project has ever exercised, in an area where the
+platform is unforgiving and the mistakes are subtle. "We own it" is not a security
+argument and "everyone uses it" is not a review.
+
+### Exact environment, fixed
+
+Unchanged from ADR-044, ADR-051 and ADR-053. 20–30 known users, all in Iran, private
+handover; international connectivity possibly absent while domestic connectivity reaches
+the backend; **no foreign runtime dependency of any kind at any layer**; an Android/Flutter
+client installed as a directly signed artifact, never through a store; a server that is an
+untrusted relay for end-to-end encrypted content. `minSdk` 24, `compileSdk` 36,
+`targetSdk` 36, Flutter 3.44.7 / Dart 3.12.2, AGP 9.0.1, Kotlin 2.3.20.
+
+### How the integration points were derived
+
+Not from a list of candidate packages. From four traces over the repository, unioned:
+
+1. every method channel the delivery and notification code opens, in both directions —
+   `communication_platform/background_delivery`, `.../sustained_delivery`,
+   `.../message_alerts`, `.../protected_storage`;
+2. every Android framework or AndroidX symbol the Kotlin under
+   `android/app/src/main/kotlin` actually calls, read file by file rather than from its
+   imports alone;
+3. every non-Flutter Dart package the delivery and notification code imports;
+4. every element the *merged* manifest of a built artifact carries for this path,
+   including what arrived from outside — read out of
+   `build/app/intermediates/packaged_manifests/productionRelease/...`, not out of the
+   source manifest.
+
+Two things were considered and deliberately left out of the enumeration. The held socket
+is `web_socket_channel` over `dart:io`: it contributes no Android component, no
+permission and no plugin registration, so it is transport rather than platform
+integration, and transport trust is out of scope for this piece. The shared Rust
+cryptographic core has its own pinned dependency stack and provenance record under
+ADR-032, ADR-036 and ADR-040; it is not reached by delivery or notification and is not
+re-decided here.
+
+### Point by point
+
+**1. A deferred wake-up while the application is not in use.** Required: something the
+platform will run periodically after the process is gone, that survives a restart, and
+that does not fire against a dead network. *Written*, on `android.app.job.JobScheduler`
+(`DeferredDeliveryJobService`, ADR-049). Rejected: `androidx.work`, which would add a Room
+database, its own service and its own boot receiver to a curated manifest in order to
+schedule one job it cannot schedule any better than the framework can at `minSdk` 24;
+`AlarmManager` exact alarms, which buy timeliness with a permission the user can revoke;
+foreign push, forbidden by ADR-013 and unreachable in this deployment anyway. Strongest
+argument against: `JobScheduler`'s quota and Doze behaviour change between platform
+versions and this project now tracks that itself, where `androidx.work` would have
+absorbed some of it. Accepted, because what it would absorb is scheduling policy this
+project has to understand and disclose to users regardless.
+
+**2. A second Dart entry point in a headless process.** Required: start an engine, run a
+named entry point, tear it down. *Written*, on `FlutterEngine` and `DartExecutor` from the
+embedding that is already in the artifact. Nothing adopted; there is nothing to adopt.
+
+**3. Dart ↔ platform messaging.** Required: a typed request/reply channel in both
+directions. Flutter's own `MethodChannel`. Nothing adopted. Strongest argument against
+using raw channels — that a plugin would give type generation — is answered by the fact
+that four channels carrying booleans, strings and one integer do not need a code
+generator, and that every payload is reviewed precisely because it is written out.
+
+**4. Keeping the process out of the cached state.** Required: a foreground service of an
+accurate type, started and stopped by this application only, displaying only reviewed
+text. *Written* (`SustainedDeliveryService`, ADR-051), using `ServiceCompat.startForeground`
+and `ContextCompat.startForegroundService` from **androidx.core** to carry the
+foreground-service type across the API 26/29/34 signature changes. Rejected:
+`flutter_foreground_task` and its equivalents, which own the service, the notification and
+the isolate — exactly the shape where an adopted package's model becomes the product's,
+and this project's arbitration between three delivery owners (ADR-050, ADR-051) is not
+expressible inside one. Strongest argument against writing it: foreground-service start
+rules are among the most frequently changed parts of Android and this project now owns
+every one of them. Accepted, because the rules it must honour are stated in the platform
+documentation and are already written down and tested here, and because a package that
+owned the service would also own the notification text, which must stay reviewed and
+localized in this project's own catalogue.
+
+**5. A user-visible message alert.** Required: create a channel with a stable id, post one
+notification with a stable tag, withdraw it, set a public version, a visibility, a
+category and a small icon — across API 24 to 36. **Adopted: `androidx.core`**
+(`NotificationCompat`, `NotificationManagerCompat`, `NotificationChannelCompat`).
+Rejected: `flutter_local_notifications` and `awesome_notifications`, which carry
+scheduling, timezones, boot receivers, actions, full-screen intents, media styles and
+platform code for four platforms — a large surface for one sender-neutral sentence, and
+each of them adds receivers and permissions to the merged manifest that this project would
+not declare. Rejected: writing it against framework `Notification.Builder` directly, which
+would mean re-implementing the version branching `NotificationCompat` already gets right,
+in a file no device here can exercise. Strongest argument against adopting: `androidx.core`
+is 700-odd classes of which this application uses a handful. Accepted, because it is
+**not an addition** — `androidx.core` is already on the classpath behind
+`androidx.activity` and `androidx.fragment`, which the Flutter embedding requires — so the
+decision is only about the *version*, and the alternative to declaring it is inheriting
+whatever transitive resolution picks.
+
+**6. The `POST_NOTIFICATIONS` runtime permission.** Required: request it, know whether a
+rationale is owed, and know whether notifications are enabled for the application at all —
+which is a different question from whether the permission was granted. **Adopted:
+`androidx.core`** (`ActivityCompat.requestPermissions`,
+`ActivityCompat.shouldShowRequestPermissionRationale`,
+`NotificationManagerCompat.areNotificationsEnabled`). Rejected: `permission_handler`,
+which would add a permission model for every Android permission to an application that
+asks for exactly one at runtime. Same reasoning as point 5: nothing new arrives.
+
+**7. The battery-optimization exemption.** Required: read whether it is held, and show the
+system's own dialog. *Written*, on framework `PowerManager.isIgnoringBatteryOptimizations`
+and `Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS`. Nothing to adopt that is
+smaller than the framework call.
+
+**8. The two settings screens.** Required: open this application's notification settings,
+and open a manufacturer's background-restriction screen where one is documented. *Written*,
+on framework intents. The one vendor deep link comes from Samsung's published
+documentation and is tried rather than detected; ADR-053's hardware probe confirmed it
+resolves on One UI 8.5.
+
+**9. Network availability.** Required, and load-bearing in two directions: suppress a
+delivery cycle and give up a held socket when the operating system says there is no
+network, and resume within seconds of one appearing rather than waiting out a backoff.
+**Adopted: `connectivity_plus` 6.0.5.** Rejected: writing it on
+`ConnectivityManager.registerDefaultNetworkCallback`, which is about eighty lines of
+Kotlin and eighty of Dart, and which this project cannot exercise on any device it has —
+and whose failure mode is severe and silent, because `SyncLifecycleSupervisor` refuses to
+start a cycle at all while the port says *unavailable*, so a written adapter that got one
+callback wrong would stop delivery rather than degrade it. Rejected: doing without, which
+would keep delivery correct but would spin cycles against a dead radio and would delay
+recovery after an outage to the next backoff or lifecycle transition — in a deployment
+where intermittent connectivity is the normal case. Strongest argument against adopting:
+see *the frozen dependency* below; this pin cannot move.
+
+**10. Application lifecycle.** Required: foreground, background, detached. Flutter's own
+`WidgetsBindingObserver`. Nothing adopted.
+
+**11. The durable store a headless engine opens.** Required: the database key, and the
+database file's location. The key is *written* (`ProtectedStorageChannel`, AndroidKeystore
+AES-GCM). The **location is inherited**: `drift_flutter` calls `path_provider`, which on
+Android is `path_provider_android`, which since 2.3.0 is implemented over `jni` and
+`jni_flutter` and therefore over `com.getkeepsafe.relinker`. This is the only place on the
+delivery path where a native library and a plugin registration arrive through a chain
+nobody chose, and it is where this piece found a **retracted** package version. Not
+re-decided here beyond the version correction below: replacing it means replacing how the
+database file is located, which is storage, not delivery.
+
+**12. The alert's small icon.** *Written* — `res/drawable/ic_message_alert.xml`, a vector
+drawable in this repository. ADR-031 already forbids a general-purpose icon package.
+
+### What was found in the repository, by trace rather than by documentation
+
+- **`androidx.core:core:1.16.0` was declared for one reason and used for four.** The
+  comment in `android/app/build.gradle.kts` justified it as `FileProvider` for attachment
+  sharing. It also supplies every notification API, both foreground-service compatibility
+  calls, and the runtime-permission calls. Corrected in place.
+- **`ACCESS_NETWORK_STATE` was in the artifact and justified nowhere.** It arrives from
+  `connectivity_plus`'s own manifest. The application's manifest is a curated document
+  where every permission carries the reason it is there; a reviewer reading it would have
+  had a complete-looking list that was not complete. Now declared locally, with its
+  justification, next to the others.
+- **An exported receiver this project never chose was in every artifact.**
+  `androidx.profileinstaller:1.3.1`, which arrives behind `androidx.core` and
+  `androidx.activity`, merges in `androidx.profileinstaller.ProfileInstallReceiver` —
+  `android:exported="true"`, four intent filters, guarded by `android.permission.DUMP`.
+  Nothing in this application starts it or benefits from it. It is now refused with
+  `tools:node="remove"`. The baseline profile is still written on first run:
+  `ProfileInstallerInitializer.create()` calls `ProfileInstaller.writeProfile(Context)`
+  directly and never names the receiver — read out of `classes.jar` with `javap`, not
+  assumed. What is lost is the shell- and store-triggered profile operations, and this
+  artifact is never submitted to a store.
+- **The Android half of the dependency set was not pinned at all.** `pubspec.lock` plus
+  `flutter pub get --enforce-lockfile` pinned Dart exactly. Gradle had static versions —
+  so resolution was deterministic — but nothing recorded the resolved set and nothing
+  would have failed if it changed. That is not hypothetical: see *the frozen dependency*.
+- **`jni` 1.0.1 was in the shipped artifact and had been retracted by its publisher**, one
+  day after publication, for the breaking Kotlin-plugin change this repository was
+  carrying a hand-written workaround for in `android/build.gradle.kts`. `--enforce-lockfile`
+  guaranteed it would be reinstalled forever. Upgraded to `jni` 1.0.3 and `jni_flutter`
+  1.0.2, and the workaround is deleted — `jni` 1.0.2's changelog is "Revert an unnecessary
+  (and breaking) KGP migration", which is exactly what the workaround existed for. The
+  Gradle-resolved set is byte-identical before and after, verified.
+- **Four direct Dart dependencies were declared and unused.** `flutter_chat_core` 2.9.0
+  and `flutter_chat_ui` 2.11.1 are imported by no file in `lib/`: piece 15 chose a custom
+  reversed-sliver timeline adapter because Flyer 2.11.1 requires mutable controller-owned
+  message state, and the checklist records that, but ADR-007 was never superseded and the
+  packages stayed declared. `riverpod_annotation` 4.0.3 and `riverpod_generator` 4.0.4 are
+  referenced by nothing at all — there is no `@riverpod` annotation and no generated
+  Riverpod file anywhere; the generator's only trace is the `build_runner` entry point it
+  installs. Removing the four takes **eighteen packages** out of the resolved set,
+  including `riverpod_analyzer_utils` at a `1.0.0-dev.10` pre-release and a transitive
+  `mockito` in the build toolchain.
+- **Eight direct dependencies were declared as caret ranges, not pins.** The lockfile held
+  them, so nothing drifted, but the *declared* intent was "whatever is compatible", and
+  the repository's own instruction is to use pinned dependencies. Two of the eight were
+  the unused Flyer packages and are gone; the other six — `dio`, `drift`, `drift_flutter`,
+  `forui`, `go_router` and `flutter_lints` — are exact now, which is what the majority of
+  the file already did.
+
+### The frozen dependency, and why `connectivity_plus` stays at 6.0.5
+
+6.0.5 was published on 2024-08-09; 7.3.1 on 2026-07-23. Two years and one major version
+behind is exactly the kind of inherited pin this piece exists to interrogate, so it was
+interrogated, and the upgrade was attempted rather than argued about.
+
+The whole of `connectivity_plus` 6.0.5's Android implementation was read: four Java files,
+about 250 lines, reaching `android.net.ConnectivityManager` and nothing else. Its manifest
+contributes exactly one permission. Its `SDK_INT < N` branch is dead at `minSdk` 24. Only
+one change since then is relevant to this application — 7.3.0's `safelyUnregisterNetworkCallback`,
+which wraps `unregisterNetworkCallback` in a `try`/`catch`, and which matters because
+`ConnectivityPlugin.teardownChannels()` calls `onCancel` directly from
+`onDetachedFromEngine`, outside the `EventChannel`'s own error handling, and this
+application destroys headless engines routinely.
+
+The upgrade was applied and resolved cleanly on the Dart side: `pubspec.lock` changed by
+exactly one line, with no transitive difference at all. It then **failed on the Android
+side**, and the failure is the finding:
+
+```
++--- androidx.core:core:1.16.0 -> 1.18.0 FAILED
+```
+
+`connectivity_plus` 7.1.0 and every later version declare `implementation
+"androidx.core:core:1.18.0"` in their own `android/build.gradle`. 7.0.0 declares no
+androidx dependency and contains none of the fixes. So taking any `connectivity_plus`
+that improves anything carries this project's explicitly pinned, reviewed `androidx.core`
+upward by two minor versions — and `androidx.core` 1.18.0 raises its required `compileSdk`
+to **36.1**, while this toolchain compiles at `flutter.compileSdkVersion`, which is 36.
+That is an Android SDK migration and a fresh review of a new AndroidX set, arriving
+through a plugin upgrade, with no line of this repository's build files changing.
+
+So: **`connectivity_plus` 6.0.5, deliberately, and frozen.** The honest statement of the
+cost is that this project cannot take a `connectivity_plus` fix without first moving
+`compileSdk` to 36.1 — recorded below as a revisit condition, not as a resolved problem.
+The reason this is tolerable rather than alarming is that the package is 250 lines of
+read code against one system service, and the fix being forgone is a defensive `catch`
+around a call this application's own usage keeps balanced.
+
+The second finding is more general, and is why the Android set is now locked: **a Dart
+lockfile does not describe the Android dependency consequence of a Flutter plugin.** The
+`pubspec.lock` diff for this upgrade was one line and looked entirely safe.
+
+### The exact pins, and why those versions
+
+| Adopted | Version | Why this version |
+|---|---|---|
+| `androidx.core:core` | **1.16.0** | 1.17.0 adds only `NotificationCompat.ProgressStyle`, `setRequestPromotedOngoing` and a `Parcel` extension, none of which this application uses. 1.18.0 raises the required `compileSdk` from 36 to **36.1**; 1.19.0 keeps that. 1.16.0 is also already in the local Gradle cache, so the build stays offline. |
+| `connectivity_plus` | **6.0.5** | The last version that declares no `androidx.core` dependency of its own, and therefore the last one that cannot move the pin above. See *the frozen dependency*. |
+| `jni` / `jni_flutter` | **1.0.3 / 1.0.2** | 1.0.1 is retracted. 1.0.2 reverts the breaking KGP migration this repository carried a workaround for; 1.0.3 adds a Linux arm64 build fix and changes nothing here. The Gradle-resolved set is identical to what 1.0.1 produced. |
+
+Everything else in the artifact is transitive and is recorded, module by module, in
+`android/app/gradle.lockfile`.
+
+### What a released artifact now contains that this project did not write
+
+Fifty-one external Android modules on `betaReleaseRuntimeClasspath`, identical to
+`productionReleaseRuntimeClasspath`: thirty-five `androidx.*`, nine `org.jetbrains.*`
+(the Kotlin standard library, the coroutines runtime and the annotations jar), four
+`io.flutter:*` (the embedding and three engine ABIs), `org.jspecify:jspecify`,
+`com.google.guava:listenablefuture` and `com.getkeepsafe.relinker`. Alongside them are
+this project's three plugin subprojects — `:connectivity_plus`, `:jni`, `:jni_flutter` —
+which are Dart packages compiled as Gradle modules and so are pinned by `pubspec.lock`
+rather than by the Gradle lock. The complete module list is in
+`android/app/gradle.lockfile`, is asserted literally in
+`test/architecture/dependency_policy_test.dart`, and is reproduced with its licences in
+`docs/third-party-notices.md`.
+
+Arriving in the merged manifest from outside, in full:
+
+- `<uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />` — from
+  `connectivity_plus`. Now also declared and justified locally.
+- `<permission android:name="${applicationId}.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"
+  android:protectionLevel="signature" />` and its matching `<uses-permission>` — from
+  `androidx.core`, read out of the AAR's own manifest. It is a signature-level permission
+  scoped to this application's own id, used by `ContextCompat.registerReceiver` for
+  runtime-registered receivers; nothing outside a build signed with this project's key can
+  hold it.
+- `android:appComponentFactory="androidx.core.app.CoreComponentFactory"` on
+  `<application>` — from `androidx.core`.
+- `<uses-library android:name="androidx.window.extensions" android:required="false" />`
+  and the same for `androidx.window.sidecar` — from the Flutter embedding.
+- `<provider android:name="androidx.startup.InitializationProvider"
+  android:exported="false" />` carrying `ProcessLifecycleInitializer` and
+  `ProfileInstallerInitializer`.
+- `<receiver android:name="androidx.profileinstaller.ProfileInstallReceiver"
+  android:exported="true" ... />` — **refused**, see above.
+
+Native libraries in the artifact that this project did not write: `libflutter.so` (the
+engine) and `libdartjni.so` (from `jni`). `libcommunication_crypto_core.so` is this
+project's own, decided elsewhere.
+
+### Evidence that nothing in the resolved set reaches anywhere it must not
+
+Asserted nowhere; measured. Every artifact for the fifty-one modules on
+`betaReleaseRuntimeClasspath` was taken out of the local Gradle cache and **4,559 class
+files** were scanned for references to `java/net/`, `javax/net/ssl`, `android/net/http`,
+`android/webkit`, `okhttp3`, `retrofit2`, `org/apache/http`, `android/app/DownloadManager`,
+`java/nio/channels/SocketChannel`, `java/nio/channels/DatagramChannel` and
+`com/google/android/gms`. Three modules matched, and every match was read:
+
+- `androidx.core` — `ContextCompat$LegacyServiceMapHolder` names
+  `android.app.DownloadManager` as one entry in the `getSystemService` name-to-class map;
+  `FileProvider` and `LinkifyCompat` use `android.webkit.MimeTypeMap` and
+  `android.webkit.URLUtil` for MIME and URL *parsing*; `TrafficStatsCompat` and
+  `DatagramSocketWrapper` tag a socket the caller already owns. None opens a connection.
+- `org.jetbrains.kotlin:kotlin-stdlib` — `TextStreamsKt` and `PathsKt__PathUtilsKt`, the
+  `java.net.URL`/`URI` extension functions of the standard library. Nothing calls them
+  here.
+- `org.jetbrains.kotlinx:kotlinx-coroutines-core-jvm` — `FastServiceLoader`, which uses
+  `java.net.URL` to enumerate `META-INF/services` resources on the local classpath.
+
+No match anywhere in `io.flutter:flutter_embedding_release`,
+`androidx.profileinstaller`, `com.getkeepsafe.relinker` or any other module. Five
+coordinates have no artifact of their own (`androidx.annotation:annotation`,
+`androidx.collection:collection`, `kotlin-stdlib-common`, `kotlinx-coroutines-core`, and
+the `kotlinx-coroutines-bom` platform); the first four are relocation pointers whose code
+was scanned through their `-jvm` siblings, and a BOM has no code at all.
+
+`connectivity_plus` 6.0.5's Android source was read in full rather than scanned: it
+resolves `ConnectivityManager` from the context, calls `getActiveNetwork`,
+`getNetworkCapabilities` and `registerDefaultNetworkCallback`, and reports transport
+names. It reaches no host.
+
+And then the shipped artifact itself was read, which is the answer that actually matters,
+because R8 removes what is never called. The `classes.dex` of
+`app-production-release.apk` — every line of Java and Kotlin in the artifact, 574 KB after
+shrinking — contains **no reference at all** to `java/net/*`, `javax/net/ssl/*`,
+`android/net/http/*`, `okhttp3`, `retrofit2`, `org/apache/http`,
+`android.app.DownloadManager`, `java.nio.channels.SocketChannel` or
+`com/google/android/gms/*`. The only three network-adjacent types it references are
+`android.net.Uri`, `android.webkit.MimeTypeMap` (MIME lookup inside `FileProvider`) and
+`android.net.ConnectivityManager`. **No Java or Kotlin code in this artifact is capable of
+opening a connection.** Every byte this application sends leaves through `dart:io` inside
+`libflutter.so`, on the one reviewed transport with the provisioned trust store.
+
+The artifact carries five native libraries. `libapp.so` is this application's own Dart
+AOT image; `libcommunication_crypto_core.so` is this project's Rust core;
+`libflutter.so` is the engine; `libsqlcipher.so` arrives with `sqlite3`'s `sqlcipher`
+source under the encrypted-storage decision; `libdartjni.so` arrives with `jni`, from
+point 11's inherited chain.
+
+Existing architecture assertions already forbid `http://`, `https://` and `InetAddress`
+in the delivery Kotlin, and forbid Firebase, WorkManager, UnifiedPush and every
+notification package by name; those are unchanged and still pass.
+
+### Licence obligations, and the honest state of them
+
+Every distributed component is permissively licensed and none is copyleft:
+
+- **Apache License 2.0** — all thirty-five `androidx.*` modules (Copyright The Android
+  Open Source Project; `androidx.core`'s AAR carries the full text at
+  `META-INF/androidx/core/core/LICENSE.txt`), all nine `org.jetbrains.*` modules
+  (JetBrains s.r.o.), `org.jspecify:jspecify` (The JSpecify Authors),
+  `com.google.guava:listenablefuture` (The Guava Authors),
+  `com.getkeepsafe.relinker` (Copyright 2015 KeepSafe Software Inc.).
+- **BSD 3-Clause** — `io.flutter:*` (The Flutter Authors) and `connectivity_plus`
+  (Copyright 2017 The Chromium Authors), together with the Dart packages that carry the
+  same Chromium-derived notice.
+
+Both licences require that a recipient of a binary be given the licence text and the
+attribution notices. **This was not being done.** The Flutter build writes
+`flutter_assets/NOTICES` into the artifact for the Dart and engine side, but nothing in
+the application ever shows it, and the Android libraries are not in it — of the fifty-one
+modules, only `androidx.core` ships a licence file inside its own artifact at all.
+
+Discharged here by `docs/third-party-notices.md`, which lists every distributed component
+with its licence and copyright and reproduces both licence texts, and by
+`deployment-and-release.md`, which now names it as part of the written handover ADR-044
+already requires. That is a real discharge for a private handover of 20–30 artifacts and
+is not a substitute for an in-app notices screen, which is recorded as follow-up F2. The
+document deliberately does **not** claim to cover the native cryptographic core's Rust
+and vendored C dependencies; those are pinned and provenance-tracked under ADR-032,
+ADR-036 and ADR-040 and are follow-up F3.
+
+### Supply-chain exposure, and what would detect a change in it
+
+Three surfaces, and each now has something that fails:
+
+1. **The Dart set.** `pubspec.yaml` declares fourteen runtime and five development
+   dependencies, every one an exact version. `pubspec.lock` records 129 packages.
+   `flutter pub get --enforce-lockfile` in `tool/ci.sh` fails on any drift.
+   `dependency_policy_test.dart` additionally asserts the literal direct set, that no
+   declaration is a range, that the lock and the pubspec agree about what is direct, and
+   that nothing in the resolved set is a pre-release — the last because a `-dev` package
+   sat in this project's build toolchain unnoticed.
+2. **The Android set.** New. `android/app/gradle.lockfile` records 78 modules across the
+   six configurations that decide what a built artifact contains, in `LockMode.STRICT`.
+   A new transitive arrival fails artifact resolution with *"Resolved 'x' which is not
+   part of the dependency lock state"* — demonstrated deliberately by adding an unlocked
+   module and reading the failure, not assumed from the documentation. A *version* change
+   behaves differently: locking silently forces the recorded version instead of
+   reporting, so `dependency_policy_test.dart` also requires the declared pin and the
+   locked version to agree, which is what stops the build file and the lock drifting
+   apart.
+3. **The merged manifest.** `dependency_policy_test.dart` asserts the complete
+   `uses-permission` set of the source manifest, that the profileinstaller receiver is
+   refused, and that exactly one component is exported. `tool/verify_release_apk.sh` reads
+   the permissions and components back out of the *packaged* artifact, which is the only
+   place a declaration that arrived from a dependency can be seen.
+
+What an update could still introduce without anyone noticing: a change *inside* a module
+at a version that is already locked is impossible — Gradle and pub both verify content
+hashes — but a deliberate regeneration of either lockfile by a future change is only
+caught by review of the diff, which is why both lockfiles and the literal expected sets
+live in source control where a diff is visible.
+
+### Maintenance and abandonment, in both directions
+
+- **`androidx.core`.** Abandonment risk is negligible; the risk is the opposite, that it
+  moves faster than this project's `compileSdk`. It already has. The mitigation is the pin
+  and the lock, and the cost is that the pin has to be moved on purpose.
+- **`connectivity_plus`.** Actively maintained by the Flutter Community organisation, and
+  effectively abandoned *by this project*: it cannot move without a `compileSdk`
+  migration. If it had to be replaced, the replacement is the eighty-line adapter this
+  decision rejected, and the port it sits behind — `NetworkAvailabilityPort`, two members
+  — is unchanged by the swap. That is the whole reason the port exists.
+- **`jni` / `jni_flutter` / `path_provider`.** The least deliberate part of the set and
+  the most likely to move under this project. It arrives entirely because `drift_flutter`
+  wants a directory path. Follow-up F1 asks whether that path should be supplied by the
+  protected-storage channel this project already owns, which would remove the plugin, the
+  native library and the ReLinker dependency together.
+- **What this project now maintains itself**: the job scheduling policy, the foreground
+  service lifecycle and its type declaration, the exemption flow, two settings intents,
+  the notification content and channel policy, and the arbitration between three delivery
+  owners. All of it is Android platform behaviour that changes about once a year, and all
+  of it is already covered by architecture assertions that read the Kotlin source.
+
+### Removal paths, and what each leaves behind
+
+- **`androidx.core`**: cannot be removed — the embedding requires it. The *declaration*
+  can be removed, which would surrender the version to transitive resolution. Nothing is
+  left on a device.
+- **`connectivity_plus`**: delete the dependency, delete
+  `ConnectivityNetworkAvailabilityPort`, supply `NetworkAvailabilityPort` another way. It
+  registers no receiver in the manifest, schedules nothing, and stores nothing; a network
+  callback lives only as long as the process. **Nothing survives its removal on a user's
+  device.**
+- **`androidx.profileinstaller`** (already partly refused): the baseline profile it writes
+  lives at `/data/misc/profiles/cur/0/<package>/primary.prof`, inside this application's
+  own profile directory, and is removed with the application. It contains method
+  identifiers from this application's own dex, no user data.
+- **`jni`/`jni_flutter`**: removing them means removing `path_provider`, which means
+  telling `drift_flutter` where the database is. The database file itself is unaffected,
+  provided the replacement resolves the same directory — which is the one real hazard in
+  F1 and the reason it is a separate piece.
+
+### What is enforced automatically, and what rests on review
+
+Automatic: the Dart lock (`--enforce-lockfile`), the Android lock (`LockMode.STRICT`), the
+fourteen assertions in `dependency_policy_test.dart` — one of which requires
+`docs/third-party-notices.md` to list exactly the modules the lock says a release links,
+so the licence discharge cannot drift from the set it discharges — the receiver assertions
+in `message_alert_policy_test.dart` and `sustained_delivery_policy_test.dart`, narrowed in
+place from "the manifest contains no `<receiver`" to "the manifest declares no receiver",
+and the three packaged-artifact checks in `tool/verify_release_apk.sh`.
+
+Review-only: whether a *new* adopted package's source has actually been read; whether a
+regenerated lockfile was regenerated for a stated reason; whether the notices document was
+updated with the set; and whether the justification comments in the manifest and the build
+file still match what the code does — which is the exact thing that had silently stopped
+being true for `androidx.core`.
+
+### Beta and production
+
+The two distributed flavors resolve **identical** Android sets, asserted. The development
+debug flavor additionally resolves Espresso 3.3.0, JUnit 4.12, Guava 28.1-android,
+Hamcrest 1.3, `javax.inject`, `com.squareup:javawriter` and the debug engine ABIs — all of
+which arrive with `integration_test`, a development dependency. Nothing enforced that they
+stayed out of a distributed artifact; the lockfile now records the configuration each
+module reaches, and a test fails if any of them appears outside `developmentDebug*`.
+
+No choice here is acceptable-for-now-only in a way that wider distribution would change,
+with one exception: the licence discharge relies on a written handover to 20–30 known
+people. Any distribution that is not hand-delivered needs the in-app notices surface of
+follow-up F2 first.
+
+### Known limitations
+
+- Nothing about this decision was measured on a physical device, and nothing about it
+  needs to be: it changes no runtime behaviour. The one behavioural change is the removal
+  of an exported receiver nothing calls, and its replacement path was read out of the
+  library's own bytecode rather than exercised.
+- The dependency lock covers the six configurations a built artifact resolves. A future
+  AGP release that renames them would switch locking off for the renamed ones; that is why
+  the six names are also asserted in a Dart test, but the assertion can only catch a
+  rename, not a new configuration that matters.
+- `dependency_policy_test.dart` pins the Flutter engine as a placeholder rather than a
+  literal revision, so a Flutter SDK upgrade fails the Gradle lock rather than the test.
+  That is deliberate; the lock is the stricter of the two.
+- The network-reachability scan is over compiled classes, and it establishes what the
+  libraries *can* reference. R8 shrinking means the shipped dex contains less than that,
+  never more.
+
+### Follow-up
+
+- **F1.** `path_provider` and its `jni`/`jni_flutter`/ReLinker chain exist so that
+  `drift_flutter` can find a directory. Decide whether the protected-storage channel this
+  project already owns should supply it, which would remove a plugin registration and a
+  native library from the artifact. Storage piece, not delivery.
+- **F2.** An in-app third-party notices surface, so the licence texts travel with the
+  artifact rather than with the handover document.
+- **F3.** Extend `docs/third-party-notices.md` to the native cryptographic core's Rust and
+  vendored C dependencies, whose licences are recorded per-crate but not aggregated.
+- **F4.** `dart format` reports one pre-existing unformatted file at this commit's parent
+  (`lib/features/authentication/infrastructure/secure_session_token_adapter.dart`), and
+  `tool/ci.sh` still fails on the two `0x7fffffffffffffff` literals in the post-v1 web
+  build. Neither is this decision's, and neither is fixed here.
+
+### When each choice must be revisited
+
+- **`androidx.core:core:1.16.0`** — when `compileSdk` moves to 36.1 or later, or when a
+  notification, foreground-service or permission API this application needs lands in a
+  later version. Moving it requires re-reading what the new version merges into the
+  manifest and re-recording the lock.
+- **`connectivity_plus:6.0.5`** — the moment `compileSdk` reaches 36.1, because that is
+  what unblocks 7.x; or immediately, if a defect is found in the code that was read here.
+  If neither happens, revisit in any case before this project's Flutter SDK moves past
+  the last version 6.0.5 supports.
+- **`jni`/`jni_flutter`** — with F1, or when `path_provider_android` next changes its
+  implementation strategy.
+- **Everything written rather than adopted** — at every `targetSdk` increase, because that
+  is when the platform's job, foreground-service and notification rules start applying to
+  this artifact. The existing policy tests read the Kotlin source and will not notice a
+  rule that changed without the source changing.
+- **The whole decision** — if this project ever distributes through a store, which brings
+  review of the `specialUse` justification and a notices requirement, or if it stops being
+  possible to fetch a package from outside Iran at all, at which point every pin here
+  becomes permanent and the questions above have to be answered with what is already in
+  the local caches.
 
 ## ADR-053 in full — whether receiving while the application is not in use actually works (2026-08-23)
 

@@ -359,10 +359,17 @@ headless engine.
 
 ### Piece-12 synchronization baseline
 
-Piece 12 pins `connectivity_plus` 6.0.5 for OS-reported link transitions. A reported
-transport is only a scheduling hint: Android explicitly does not guarantee that an
-available network can reach a particular server, so the provisioned backend REST result
-remains authoritative and no public connectivity probe is added. The lifecycle
+Piece 12 pins `connectivity_plus` 6.0.5 for OS-reported link transitions, and ADR-054
+re-derived that pin rather than inheriting it: the whole of the package's Android
+implementation was read at 6.0.5, it reaches only `ConnectivityManager`, and it
+contributes exactly one permission, `ACCESS_NETWORK_STATE`, which this application's own
+manifest now declares and justifies alongside the rest. The version is **frozen** —
+`connectivity_plus` 7.1.0 and later declare `androidx.core:core:1.18.0` in their own
+`android/build.gradle`, which would carry this project's reviewed pin upwards and require
+`compileSdk` 36.1. A reported transport is only a scheduling hint: Android explicitly
+does not guarantee that an available network can reach a particular server, so the
+provisioned backend REST result remains authoritative and no public connectivity probe is
+added. The lifecycle
 supervisor pauses reconnect timers while no transport is reported and always performs a
 REST drain after foreground resume, network recovery, or a WebSocket envelope hint.
 
@@ -452,7 +459,9 @@ sketch on evidence. What ships:
   notification settings. Nothing identifying a conversation, a sender or a message crosses
   it. No notification dependency is declared: `NotificationCompat`,
   `NotificationManagerCompat`, `NotificationChannelCompat` and `ActivityCompat` all come
-  from `androidx.core:core`, already declared for `FileProvider`.
+  from `androidx.core:core`, which is pinned at 1.16.0 and is also what supplies
+  `FileProvider`, `ServiceCompat.startForeground` and
+  `ContextCompat.startForegroundService` (ADR-054).
 - **The honest tier**: an alert reaches the user only while the application's process is
   alive. Layer 1 (ADR-049) wakes the process on the platform's own schedule and Layer 2
   (ADR-051) keeps it alive while the user has that capability on; neither makes an alert
@@ -508,6 +517,14 @@ Request only at point of use:
 - camera for capture/optional safety QR;
 - media/files through system pickers without broad storage permission.
 
+`ACCESS_NETWORK_STATE` is declared, and is the one permission in this artifact that
+arrives from a package rather than from this application's own manifest —
+`connectivity_plus` merges it in whether it is written here or not. It is declared here
+anyway, with its justification, so that the manifest a reviewer reads is a complete
+statement of what the application asks for (ADR-054). It is normal protection level,
+granted at install with no prompt, and it reports the transport and its capabilities,
+never an address, an operator or a payload.
+
 `RECEIVE_BOOT_COMPLETED` is declared, and it is a normal permission: granted at install
 with no prompt, granting no data, no network and no location. It exists for exactly one
 reason — `JobInfo.Builder.setPersisted(true)` requires it — and **this application declares
@@ -555,6 +572,57 @@ Denial has a functional fallback and never blocks unrelated messaging.
 - Network switching, captive/no-internet local networks, Doze, standby, force-stop,
   reboot, permission revocation, clock skew, and low storage have explicit tests.
 - The client never contacts a public internet endpoint to classify connectivity.
+
+## What the artifact links from outside
+
+Decided point by point in ADR-054, from the integration points the code actually reaches
+rather than from a list of candidate packages. Nine of the twelve points are written
+against the Android framework — the `JobScheduler` catch-up, the foreground service, the
+headless engine, the exemption flow, both settings intents, the method channels, the
+lifecycle observer and the alert's vector icon. Three adopt `androidx.core`, and one
+adopts `connectivity_plus`.
+
+**`androidx.core:core:1.16.0`** is declared explicitly in `android/app/build.gradle.kts`.
+It is not an addition — `androidx.activity` and `androidx.fragment` put it on the
+classpath behind the Flutter embedding regardless — so the declaration exists to make the
+*version* a decision. It supplies `FileProvider`, the whole notification surface
+(`NotificationCompat`, `NotificationManagerCompat`, `NotificationChannelCompat`), both
+foreground-service compatibility calls, and the runtime-permission calls. 1.17.0 adds
+nothing this application uses and 1.18.0 requires `compileSdk` 36.1, which this toolchain
+does not set.
+
+**The resolved Android set is locked.** `android/app/gradle.lockfile` records 78 modules
+across the six configurations a built artifact resolves, in `LockMode.STRICT`. A new
+transitive arrival fails artifact resolution rather than shipping; a *version* change is
+forced back to the recorded one, so `test/architecture/dependency_policy_test.dart`
+additionally requires the declared pin and the locked version to agree. Fifty-one modules
+reach a distributed runtime classpath, and the Espresso/JUnit set that arrives with
+`integration_test` provably reaches only `developmentDebug`.
+
+**What arrives in the merged manifest from outside**, in full: `ACCESS_NETWORK_STATE`
+(from `connectivity_plus`, now also declared locally); a signature-level
+`${applicationId}.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION` and
+`android:appComponentFactory="androidx.core.app.CoreComponentFactory"` (from
+`androidx.core`); two optional `androidx.window` `<uses-library>` entries and an
+unexported `androidx.startup.InitializationProvider` carrying the process-lifecycle and
+profile-installer initializers (from the Flutter embedding). One thing is **refused**:
+`androidx.profileinstaller` merges in an exported `ProfileInstallReceiver` with four
+intent filters, which nothing here starts, so the manifest deletes it with
+`tools:node="remove"`. The baseline profile is still written on first run by
+`ProfileInstallerInitializer`.
+
+**Nothing in the artifact's Java or Kotlin can open a connection.** The shrunk
+`classes.dex` of a production release build references no `java.net`, no `javax.net.ssl`,
+no `android.net.http`, no OkHttp, no Retrofit, no `DownloadManager` and no Google Play
+Services type at all; the only network-adjacent types it names are `android.net.Uri`,
+`android.webkit.MimeTypeMap` and `android.net.ConnectivityManager`. Every byte this
+application sends leaves through `dart:io` inside `libflutter.so`, on the one reviewed
+transport with the provisioned trust store. `tool/verify_release_apk.sh` additionally
+reads the packaged manifest's permissions and components back out of the artifact and
+fails on anything ADR-054 did not record.
+
+Third-party licence obligations are listed in
+[third-party-notices.md](third-party-notices.md), which travels with the handover.
 
 ## Distribution
 
