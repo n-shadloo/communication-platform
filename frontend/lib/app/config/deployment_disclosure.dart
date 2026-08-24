@@ -82,19 +82,17 @@ enum DisclosurePoint {
   /// (ADR-030); history transfers device-to-device or not at all (ADR-028).
   recoveryExcludesHistory(since: 1),
 
-  /// Revised at revision 6, when the group surface was withheld (ADR-055).
+  /// Revised at revision 6, when the group surface was withheld (ADR-055), and
+  /// again at revision 7 when it reopened on one measured ABI (ADR-056).
   ///
-  /// Through revision 5 this point told the reader that group chats use
-  /// experimental encryption and that an update can reset a group. In an
-  /// artifact with no reachable group stack that is not a caution, it is a
-  /// false description of a feature: there are no group chats to reset, no
-  /// KeyPackages published for this device, and no group message that can
-  /// reach it. The point stays in the statement rather than being dropped,
-  /// because a reader who is not told will look for the feature and conclude
-  /// the application is broken; what it says is that the feature is off, and
-  /// why. ADR-036's disposable-state rule is unchanged and returns to the
-  /// wording when the surface does.
-  experimentalGroups(since: 6),
+  /// Revision 6 said group chats were switched off, which was true of every
+  /// device. It is now true of only some, so the point carries both halves:
+  /// ADR-036's disposable-state rule, which applies wherever the surface is
+  /// available, and the fact that a phone whose processor has not been measured
+  /// is withheld it instead. Neither half may be dropped — a reader whose
+  /// groups work needs the first, and a reader whose groups are missing needs
+  /// the second or will conclude the application is broken.
+  experimentalGroups(since: 7),
 
   /// Surfaces that are routed and visible but not implemented. Revised at
   /// revision 5: it named search among them, and search is built — the chat
@@ -147,7 +145,7 @@ final class DeploymentDisclosure {
 
   /// The statement carried by the Private Experimental artifact (ADR-044).
   static const privateExperimental = DeploymentDisclosure._(
-    revision: 6,
+    revision: 7,
     points: [
       DisclosurePoint.noIndependentReview,
       DisclosurePoint.bestEffortDelivery,

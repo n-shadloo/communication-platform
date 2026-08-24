@@ -67,6 +67,7 @@ final durableSyncEngineProvider =
       final groupKeyPackageMaintenance =
           GroupProductionGate.privateExperimentalPermit(
                 ref.watch(appEnvironmentProvider),
+                ref.watch(runtimeAbiProvider),
               ) !=
               null
           ? await ref.watch(

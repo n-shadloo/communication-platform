@@ -65,12 +65,269 @@ is not silently edited out of history.
 | ADR-052 | Accepted | Four user-facing claims were false or read as promising more than the artifact delivers and are corrected; the permanent half of the security notice may no longer name a feature; the disclosure revision becomes a derived value that an edit cannot skip; and the revision a user accepted becomes a durable device-side record that re-presents a corrected statement once — completing the half of ADR-045 that was never built (2026-08-23) | ADR-045 established the disclosure and rejected periodic re-consent correctly, on evidence that still holds. What it did not build was the device side: nothing recorded which revision a user had accepted, so when the revision moved at ADR-048, ADR-049 and ADR-051 the only thing reaching an existing recipient was a release-checklist step a human had to remember, and their install could not distinguish "accepted the current statement" from "accepted one that is no longer true". Auditing the composed artifact rather than its documentation found **four wrong claims, two of them outside the disclosure**. `settingsNotificationsOn` said an alert "can only reach you while this app is running" — false since ADR-049: `deferred_delivery_catch_up.dart` and `sustained_delivery_run.dart` both call `ReconcileMessageAlerts` from isolates with no activity in the process, and the string had never been edited since ADR-048 wrote it. `disclosureUnbuiltSurfaces` said search "do[es] nothing" — false: the chat list filters on title and last-message preview, and a conversation's own search reads that conversation's entire local history, because `watchMessages` applies no limit. `enrollmentProtectsBody` promised that "messages, files, and voice audio" were unreadable to the server, in an artifact that can send no file and carry no audio; it is a **permanent** section, so the fix is structural — it now describes the boundary and names no feature at all, and a test forbids feature words in it, because an enumeration goes stale every time the feature set moves. `chatsSearchHint` promised "chats and messages on this device" for a box that matches names and one preview line. Two further statements were true but read as promising more: `disclosureBestEffortDelivery` described delivery as slow, which a reader takes to mean *eventual*, while the server prunes undelivered envelopes on a retention timer clients are never told (`ENVELOPE_TTL_DAYS`, default 7) — late and never are different outcomes and only one was disclosed, so a new point states it, and states that the client will not name what was lost, because `SyncProjection.isSecurityBlocked` is dead code and a one-to-one queue gap surfaces nowhere; and the same point omitted Data Saver, which blocks the catch-up's `NETWORK_TYPE_ANY` request on exactly the metered connection this audience pays for, and which the written handover had been stating while the application did not. `enrollmentDoesNotProtectBody` stated a real limitation in vocabulary the reader cannot decode — "social graph", "out of band", "compare fingerprints" — while the screen it instructs them to use is titled *Safety number*; a limitation a reader cannot act on is a limitation that was not disclosed. **The mechanism is corrected rather than the strings.** Each `DisclosurePoint` now carries the revision at which its wording last moved, `DeploymentDisclosure.revision` must equal the highest of them, and the pinned-text test fails on any edit — so an edit forces a `since` bump and a `since` bump forces the revision, and the bump can no longer be forgotten by a person, which is how three revisions shipped with nothing checking them. The accepted revision is recorded in the encrypted preference table as one integer and nothing else — no timestamp, no identifier — never lowered, written by enrollment before the session opens, and read by a gate that wraps the routed child above the router, so no route, deep link or notification tap reaches the application without passing it. A reader from revision 4 sees the statement again with the four moved points badged; a reader with no record at all — every recipient who enrolled before this — sees the whole statement with nothing badged, because 0 means the application does not know what they saw and may assume nothing read. Periodic re-consent stays rejected on the evidence ADR-045 cited and on newer evidence that strengthens it: Vance et al. (MIS Quarterly 2018) show attention to a repeated warning collapsing within days and polymorphic variation restoring adherence at three weeks, and Vance et al. (MIS Quarterly 2025, "The Fog of Warnings") show habituation *generalising* from ordinary notifications to security warnings never seen before, which is decisive here because this artifact now posts message alerts and a permanent foreground-service notice — so the correction is a full screen the application shows nowhere else, and the "changed" mark is a labelled badge rather than a colour. It **fails open** in exactly one direction: an unreadable preference row withholds the gate rather than the application, because an honesty mechanism must not become a denial of service, and a failed write costs one extra showing. The written re-delivery stays release-blocking and is corrected too — `deployment-and-release.md` claimed "the same seven facts" while listing six, omitted the unbuilt surfaces and the ADR-051 opt-in, and is now generated from the same point list. Language parity is enforced catalogue-wide instead of by three hand-maintained key lists that a new English-only key passed. Adds no dependency, changes no feature behaviour, touches no backend file, opens no production gate, and leaves the Beta/Production boundary untouched: production and development still carry no disclosure and cannot render Private Experimental wording. Disclosure revision moves 4 → 5. Full audit, evidence, alternatives and sources in "ADR-052 in full" below. |
 | ADR-053 | Accepted | Sustained delivery is withheld from every build that reaches a user until it has been measured on real phones: a source-only evidence ledger with seven mandatory matrix cells, admissibility rules that refuse an emulator, a short run or a single observation, and ten falsifiable criteria fixed before anything was measured; amends ADR-051 and restores ADR-046's distribution clause in an enforced form (2026-08-23) | ADR-046 required the physical-device matrix before this layer could be enabled in a distributed artifact; ADR-051 removed that clause because the matrix could not be run in the available environment. It still cannot: there is no physical Android device of any kind here, and behind that the capability cannot start on any target without an operator-activated account, because `runSustainedDelivery` refuses anything short of a full device-bound session. So **no cell of the matrix has been run**, and "we cannot measure this" is a reason to withhold a capability, never a reason to ship it — the failure it risks is a person who was told messages would arrive and was not told about one for hours, a failure whose entire signature is absence. The gate is a compile-time constant with an empty ledger: beta and production resolve `withheld`, development resolves `measurementOnly` so the matrix can be run at all. A withheld build never asks the platform for anything, never writes the durable choice, never starts the service, and **stops** one an earlier build left running. Opening it needs seven records that each pass `isAdmissible` — not emulated, a strict ISO date, a committed run record, ≥ 24 holding hours, ≥ 20 timed deliveries, ≥ 3 repetitions — and an inadmissible record simply does not count rather than being refused. Two fleet figures ADR-051 recorded are corrected on a re-read of Statcounter (2026-08-23): Samsung and Xiaomi are **90%** of the *Android* fleet rather than 77% of all mobile, and Android 13-or-earlier is **60%** rather than "roughly half", so the fraction covered by no vendor statement is about 78%. One user-facing claim is withdrawn: `sustainedWhatItDoes` promised delivery "within seconds" in a build where nothing had ever been timed. Measured, on two AOSP emulator images only: every observation surface works unrooted, and their Doze constants differ by a factor of thirty with the freezer off at API 30 and on at API 35 — so the procedure reads constants per device, and whether the freezer even exists on Android 11–12 is now an explicit question for two cells. `docs/sustained-delivery-validation.md` holds the criteria, the matrix and the results; `tool/measure_sustained_delivery.sh` is the instrument |
 | ADR-054 | Accepted | The delivery and notification path's platform integration was enumerated from the code and decided point by point: nine of twelve points are written on the framework and three adopt `androidx.core`, which was already in the artifact and is now pinned at 1.16.0 for a stated reason; `connectivity_plus` stays at 6.0.5 because 7.1.0 and later force `androidx.core` 1.18.0 and with it `compileSdk` 36.1; the Android dependency set is locked for the first time, four declared-and-unused packages and a retracted `jni` 1.0.1 are removed, `ACCESS_NETWORK_STATE` is declared where it can be justified, and an exported receiver `androidx.profileinstaller` merged into every artifact is refused (2026-08-24) | A dependency that nobody decided is still a dependency the artifact carries. Every integration point was traced from the code rather than from a package list; what is adopted is pinned exactly and recorded in `android/app/gradle.lockfile` and `pubspec.lock`; what is written is bounded by a port this project owns; and the shipped `classes.dex` is proved to contain no code capable of opening a network connection at all. Supersedes ADR-007's adoption of Flyer Chat, which piece 15 contradicted without a record. |
-| ADR-055 | Accepted | The first externally distributed artifact exposes **direct messaging only**; closed-beta PQ MLS group messaging is withheld in substance behind a source-only evidence ledger that opens when the packaged native core has been observed executing on real ARM hardware; amends ADR-044's tier 2 and takes the disclosure to revision 6 (2026-08-24) | ADR-044 put groups in the deployment as a declared experimental tier and rejected direct-message-only as its alternative E. Re-deciding on evidence: the group *logic* is well evidenced - 17 Dart test files, a 30-test queue-gap recovery matrix, fork convergence, crash injection, 128 Rust tests under `--all-features`, 12 fuzz targets - but `cp_crypto_v1_beta_mls_operation` has **never executed on any device or emulator**, which the repository's own records already said in five places. The `beta` Cargo profile is the only one linking `aws-lc-sys`, C and assembly cross-compiled per ABI, and `catch_unwind` at the C ABI contains a Rust panic but not a fault below Rust - which would take the direct-message tier down with it. Three asymmetries decide it: a pruned envelope costs a Double Ratchet session some messages and costs an MLS member the whole group, unrecoverable without an owner removing and re-adding them, in a deployment whose delivery timeliness is entirely unmeasured and whose server prunes at 7 days (`ENVELOPE_TTL_DAYS`, read from backend source); a device whose core is wrong on its ABI still uploads KeyPackages, so peers add it, consume them, and *they* carry a member who never converges - a failure whose signature is absence on somebody else's phone, the category ADR-053 refused to ship; and withholding is free to reverse while exposing is not, because ADR-036 has already *scheduled* experimental group history for destruction. ADR-044's alternative E was rejected partly on the ground that the outstanding evidence could only be produced by people using the feature; that is false in its own terms, because *does the packaged core compute correctly on this CPU* needs one person with one phone, no backend and no second device, and is separable from *does the group system work between people*. So the gate is an evidence ledger rather than a removal: nothing is unwired, ADR-036, ADR-037, ADR-039, ADR-040 and ADR-041 are untouched and every one of their tests still runs, and `tool/measure_beta_mls_core.sh` runs the crate's own beta test suite on-device with nothing added to the application. Withheld means withheld: the unsupported adapter on all nine port methods, **no KeyPackage generated or uploaded**, no post-inbox maintenance composed, inbound group objects refused, screens closed, and the Contacts entry disabled and labelled rather than routing to a refusal. Also fixes a real defect - three group screens checked their injected-collaborator path *before* the availability gate, so a caller could render the flow around it. External research on 2026-08-24 found nothing arguing against exposure and no deadline forcing it: `aws-lc-sys` 0.40.0 is patched against all five filed RustSec advisories, `mls-rs` 0.55.2 is unaffected by the one security fix in its update range (it lands in a crate this project does not use), Android aarch64 is a supported `aws-lc` platform, `TBD2` is still unassigned at draft-06, and developer-verification enforcement reaches only four countries' app stores on 2026-09-30 with global rollout in 2027 - discharging ADR-044's revisit condition 6, which required the primary source be read and dated before any of it became binding. The decision therefore rests on the repository's evidence rather than the ecosystem's: an officially supported platform is a statement of intent, not an observation of this build on this hardware. Production is untouched and provably so - a test asserts a fully satisfied ledger still leaves production holding no permit. Opens no production gate and supersedes nothing. |
+| ADR-055 | Accepted, exposure amended by ADR-056 | The first externally distributed artifact exposes **direct messaging only**; closed-beta PQ MLS group messaging is withheld in substance behind a source-only evidence ledger that opens when the packaged native core has been observed executing on real ARM hardware; amends ADR-044's tier 2 and takes the disclosure to revision 6 (2026-08-24) | ADR-044 put groups in the deployment as a declared experimental tier and rejected direct-message-only as its alternative E. Re-deciding on evidence: the group *logic* is well evidenced - 17 Dart test files, a 30-test queue-gap recovery matrix, fork convergence, crash injection, 128 Rust tests under `--all-features`, 12 fuzz targets - but `cp_crypto_v1_beta_mls_operation` has **never executed on any device or emulator**, which the repository's own records already said in five places. The `beta` Cargo profile is the only one linking `aws-lc-sys`, C and assembly cross-compiled per ABI, and `catch_unwind` at the C ABI contains a Rust panic but not a fault below Rust - which would take the direct-message tier down with it. Three asymmetries decide it: a pruned envelope costs a Double Ratchet session some messages and costs an MLS member the whole group, unrecoverable without an owner removing and re-adding them, in a deployment whose delivery timeliness is entirely unmeasured and whose server prunes at 7 days (`ENVELOPE_TTL_DAYS`, read from backend source); a device whose core is wrong on its ABI still uploads KeyPackages, so peers add it, consume them, and *they* carry a member who never converges - a failure whose signature is absence on somebody else's phone, the category ADR-053 refused to ship; and withholding is free to reverse while exposing is not, because ADR-036 has already *scheduled* experimental group history for destruction. ADR-044's alternative E was rejected partly on the ground that the outstanding evidence could only be produced by people using the feature; that is false in its own terms, because *does the packaged core compute correctly on this CPU* needs one person with one phone, no backend and no second device, and is separable from *does the group system work between people*. So the gate is an evidence ledger rather than a removal: nothing is unwired, ADR-036, ADR-037, ADR-039, ADR-040 and ADR-041 are untouched and every one of their tests still runs, and `tool/measure_beta_mls_core.sh` runs the crate's own beta test suite on-device with nothing added to the application. Withheld means withheld: the unsupported adapter on all nine port methods, **no KeyPackage generated or uploaded**, no post-inbox maintenance composed, inbound group objects refused, screens closed, and the Contacts entry disabled and labelled rather than routing to a refusal. Also fixes a real defect - three group screens checked their injected-collaborator path *before* the availability gate, so a caller could render the flow around it. External research on 2026-08-24 found nothing arguing against exposure and no deadline forcing it: `aws-lc-sys` 0.40.0 is patched against all five filed RustSec advisories, `mls-rs` 0.55.2 is unaffected by the one security fix in its update range (it lands in a crate this project does not use), Android aarch64 is a supported `aws-lc` platform, `TBD2` is still unassigned at draft-06, and developer-verification enforcement reaches only four countries' app stores on 2026-09-30 with global rollout in 2027 - discharging ADR-044's revisit condition 6, which required the primary source be read and dated before any of it became binding. The decision therefore rests on the repository's evidence rather than the ecosystem's: an officially supported platform is a statement of intent, not an observation of this build on this hardware. Production is untouched and provably so - a test asserts a fully satisfied ledger still leaves production holding no permit. Opens no production gate and supersedes nothing. |
+| ADR-056 | Accepted | The closed-beta PQ MLS core was measured on real hardware and the group surface opens on the ABI that was measured and no other: the evidence gate becomes per-ABI rather than per-artifact, `arm64-v8a` is open, `armeabi-v7a` and `x86_64` stay withheld, and the disclosure moves to revision 7; amends ADR-055 (2026-08-24) | A Samsung Galaxy A56 (SM-A566B, Android 16, API 36, retail `user` build, `release-keys`) became available, so ADR-055's one outstanding item was run rather than argued about. `tool/measure_beta_mls_core.sh arm64-v8a` cross-compiled the crate's own `--features beta-pq-mls` test binary with the pinned toolchain, pushed it to the phone and ran it there, installing nothing and needing no backend, account or root: **128 passed, 0 failed, 3 ignored in 172.07 s, exit 0** - the *same* counts `cargo test --locked --all-features` gives on the x86_64 host, so the device ran the whole suite to the same conclusion rather than a subset that happened to link. Forty `mls_beta::` tests ran, including the create/join/private-message/proposal/commit/remove round trip and `suite_signs_with_ed25519_and_round_trips_hybrid_hpke`, which is where `aws-lc`'s ML-KEM runs - the C-and-assembly dependency the `beta` profile adds and `foundation` does not. Contact with hardware also exposed two defects in the instrument, neither findable any other way: MSYS rewrote `adb push … /data/local/tmp/…` into `C:/Program Files/Git/data/…` so the first run failed with `remote secure_mkdirs() failed`, and the three setup lines sent stdout to `/dev/null` while `adb shell` folds remote stderr into stdout, so that failure printed nothing at all. Both fixed. The A56 reports an **empty `abilist32`** - its Exynos s5e8855 is 64-bit-only and cannot execute AArch32 - so `armeabi-v7a` is unmeasurable on the hardware that measured `arm64-v8a`. ADR-055's all-or-nothing framing then left only two moves, both bad: demote the cell for being unmeasurable, which is the reason ADR-053 exists and which ADR-055 explicitly pre-refused; or withhold from everyone over a 32-bit device nobody in this deployment is known to have, while ignoring a passing run for the ABI every recipient loads. So the *question* changed rather than the standard: one APK carries three libraries and the installer picks one, so `hasEvidenceFor(GroupMlsFieldCell?)` replaces the global `isOpen` and the permit takes the running ABI. **No cell was demoted** - `armeabi-v7a` stays in the ledger recorded as unmeasured, and opens on the same rule if 32-bit hardware ever appears. This is **stricter** than ADR-055 where it matters, not looser: under ADR-055 a satisfied ledger would have opened every ABI including one added later with no run behind it, while now an ABI without an admissible record is withheld whatever else the ledger holds, and an ABI this artifact packages no library for maps to no cell and fails closed. The ABI is **read, never chosen** - `Abi.current()` is fixed by the AOT snapshot the platform loaded, reaches the application through one `runtimeAbiProvider` seam that a test asserts is the only caller, can only narrow, and cannot reach production, which fails the environment test first and packages a core without the symbol. Rejected: opening globally on one ABI's record; demoting the cell; dropping `armeabi-v7a` from the APK, which would deny a 32-bit user the whole supported direct-message tier to protect them from an experimental group feature; and blanket risk acceptance, because once `arm64-v8a` was measured there was no blanket risk left to accept - only 32-bit ARM, which per-ABI resolution removes outright for about sixty lines. Closes none of the seven production gates, does not satisfy gate 6 (process kill, Doze, force-stop, torn writes and Keystore-after-reboot are still unrun), reviews nothing, and leaves multi-device and live-backend execution outstanding. Production re-verified: rebuilt and `verify_release_apk.sh --production` passed all seven checks, and a test asserts a fully satisfied ledger still leaves production holding no permit on any ABI. Disclosure moves 6 → 7. Opens no production gate and supersedes nothing. |
+
+## ADR-056 in full — the first measurement, and what it opens (2026-08-24)
+
+**Status:** Accepted. Deployment decision. Amends ADR-055. **Opens no production gate.**
+
+### The question
+
+ADR-055 withheld closed-beta PQ MLS group messaging from the Private Experimental
+artifact behind an evidence ledger, and named the one thing that would open it: an
+observation of the packaged native core executing on real ARM hardware. It also recorded
+the risk that the gate might never be opened, and set a follow-up to force that question.
+
+A Samsung Galaxy A56 became available. So the question is no longer whether to accept the
+risk ADR-055 declined to accept — it is what the measurement says, and what the answer
+opens.
+
+### Exact environment, fixed
+
+| | |
+|---|---|
+| Working tree | `frontend` branch at `80c1948`, clean at the start of this work |
+| Flutter / Dart | 3.38.0 / 3.10.0 |
+| Rust | 1.97.1 (`rust-toolchain.toml`), NDK 28.2.13676358, CMake 4.2.1, Ninja 1.13.2 |
+| Device | `samsung SM-A566B`, Android 16, API 36, `user` build, `release-keys`, `ro.kernel.qemu=0`, serial `R5CY716AG0L` |
+| Host | Windows 11 Pro 26200, Git Bash |
+
+### What was run
+
+`tool/measure_beta_mls_core.sh arm64-v8a` cross-compiled the crate's own
+`--features beta-pq-mls` test binary for `aarch64-linux-android` with the pinned toolchain,
+pushed it to the phone, and ran it there. Nothing was installed on the device, no backend
+was involved, no account existed, and no root was used.
+
+**Result: 128 passed, 0 failed, 3 ignored, in 172.07 s.** Exit code 0. The record is
+`docs/validation/beta-mls-core/2026-08-24-sm-a566b-arm64-v8a/`.
+
+Two things make this more than a green tick.
+
+**It is the same result the host gives.** `cargo test --locked --all-features` on the
+x86_64 workstation reports 128 passed, 0 failed, 3 ignored. The two ignored-plus-passed
+counts match exactly, so the device ran the same suite to the same conclusion rather than
+a subset that happened to link.
+
+**It covers the arithmetic, not just the linkage.** Forty `mls_beta::` tests ran, including
+`operation_round_trips_create_join_private_message_proposal_commit_and_remove`,
+`authenticated_suite_runs_key_package_welcome_proposal_commit_private_message_and_exporter`,
+and `suite_signs_with_ed25519_and_round_trips_hybrid_hpke`. The last is the one that
+mattered most: the hybrid HPKE round trip is where `aws-lc`'s ML-KEM runs, and `aws-lc` is
+the C-and-assembly dependency the `beta` Cargo profile adds and the `foundation` profile
+does not. That code has now executed on an ARM phone and produced the right bytes.
+
+### Two defects in the instrument, found by contact with hardware
+
+Neither could have been found any other way, which is the same thing ADR-053 recorded about
+`tool/measure_sustained_delivery.sh`.
+
+**The first run failed with no diagnostic at all.** On a Git Bash host, MSYS rewrites every
+argument that looks like an absolute POSIX path into a Windows one before the process sees
+it, so `adb push … /data/local/tmp/cp-beta-mls/beta_mls_tests` became
+`C:/Program Files/Git/data/local/tmp/…` and adb reported
+`remote secure_mkdirs() failed: No such file or directory`. The `adb` wrapper now sets
+`MSYS_NO_PATHCONV=1` and `MSYS2_ARG_CONV_EXCL='*'`, both inert on Linux and macOS.
+
+**And the reason it was silent was a second defect.** The three device-setup lines
+redirected stdout to `/dev/null`, and `adb shell` folds the remote command's stderr into
+its stdout — so the only diagnostic a device-side failure produces was being discarded, and
+the script exited 1 saying nothing. Setup steps now run through a helper that captures the
+output, prints it on failure, and additionally fails on the device-side error strings adb
+reports while still exiting 0.
+
+### The cell that cannot be measured
+
+The A56 reports an empty `ro.product.cpu.abilist32`. Its Exynos s5e8855 is 64-bit-only and
+cannot execute AArch32 at all, so the hardware that measured `arm64-v8a` can never measure
+`armeabi-v7a`. This is not a quirk of one handset: Google's own 64-bit requirements page,
+read 2026-08-24, tells developers that supporting 64-bit "sets you up for devices with
+64-bit-only hardware", and this phone is one.
+
+ADR-055 asked one question of the whole artifact — may it offer groups? — and required
+every mandatory cell at once. With one cell measured and one unmeasurable, that framing
+left exactly two moves, and both are bad:
+
+- **Demote `armeabi-v7a` because it cannot be measured.** This is the reason ADR-053 exists
+  to forbid. ADR-055 anticipated the temptation and wrote it down: dropping the cell "is a
+  decision to make with a stated reason, not by quietly editing the enum" — and *"I could
+  not measure it"* is not a stated reason, it is the absence of one. Worse, it would teach
+  the ledger that a cell in the way can be argued away, which is precisely what
+  `isAdmissible` exists to prevent.
+- **Withhold the surface from everybody**, on account of a 32-bit-only device nobody in this
+  deployment is known to have, while holding a passing measurement for the ABI every
+  plausible recipient actually loads.
+
+### Decision
+
+**D1. The question changes from per-artifact to per-ABI.** One APK carries three native
+libraries and the installer picks one, so "has the packaged core been observed running" has
+three genuinely different answers, and the honest gate asks the one that applies to the
+device in hand. `GroupExperimentalGate.hasEvidenceFor(GroupMlsFieldCell?)` replaces the global `isOpen`,
+and `GroupProductionGate.privateExperimentalPermit` now takes the running ABI alongside the
+environment.
+
+**D2. `arm64-v8a` is open. `armeabi-v7a` and `x86_64` are not.** A device that loads the
+measured library gets the closed-beta group surface, as ADR-044's experimental tier, with
+its banner and its disposable-state disclosure intact. A device that loads either other
+library is withheld it in substance — the unsupported adapter on all nine port methods, no
+KeyPackage generated or uploaded, no post-inbox maintenance composed, inbound group objects
+refused, every screen closed, and the Contacts entry disabled and labelled.
+
+**D3. No cell is demoted, and the standard does not move.** `armeabi-v7a` stays in the
+ledger, unmeasured, with its own comment saying why it cannot be measured here. If a 32-bit
+device ever becomes available, the instrument runs against it and that ABI opens on the same
+rule as the first. Nothing about `isAdmissible` changed: not emulated, a strict date that
+survives a round trip, a committed run record, and every operation of the round trip
+exercised.
+
+**D4. This is stricter than ADR-055 where it matters, not looser.** The superficial reading
+is that a partially satisfied matrix now opens something where before it opened nothing.
+The substantive reading is the opposite: under ADR-055 a satisfied ledger would have opened
+the surface on *every* ABI, including one added later with no run behind it. Under ADR-056
+an ABI with no admissible record is withheld whatever else the ledger contains, and an ABI
+this artifact packages no library for — a desktop host, an Android RISC-V device — maps to
+no cell and fails closed. **No unmeasured processor is offered the surface, at all.**
+
+**D5. Disclosure moves 6 → 7.** Revision 6 told every reader that group chats were switched
+off, which is now true of only some. The point carries both halves: ADR-036's
+disposable-state rule where the surface is available, and the fact that a phone whose
+processor has not been measured is withheld it instead. Neither half may be dropped — a
+reader whose groups work needs the first, and a reader whose groups are missing needs the
+second or will conclude the application is broken. Under ADR-052's mechanism the edit forced
+`since: 7`, which forced the revision, and `DisclosureChangeGate` re-presents to revision-5
+and revision-6 readers with that single point badged.
+
+### Is the ABI a runtime switch?
+
+It has to be answered, because ADR-044 and ADR-055 both forbid one. No, on three grounds.
+
+It is **read, never chosen**: `Abi.current()` is a property of the AOT snapshot the platform
+loaded, fixed before any application code runs, and there is nothing to select. It can
+**only narrow**: every path through the gate withholds on an unknown ABI and grants on
+nothing but a committed, admissible record. And it **cannot reach production**, which fails
+the environment test first, holds no permit on any ABI, packages a core that does not export
+the symbol, and is unsigned. A test asserts that a fully satisfied ledger still leaves
+production closed on all three ABIs.
+
+It reaches the application through one provider, `runtimeAbiProvider`, backed by a
+conditional import (`runtime_abi.dart` → `_native` / `_web` / `_stub`) that resolves
+`Abi.current()` to a `GroupMlsFieldCell`. The platform read therefore sits behind a single
+seam rather than being called from a config class or a screen — the rule
+`frontend/AGENTS.md` states for platform differences — the gate speaks this project's own
+vocabulary instead of `dart:ffi`'s, and a host test can pin an ABI it is not running on.
+Tests assert that no consumer calls `Abi.current()` or imports `dart:ffi` directly, and
+that the native resolver really runs: this suite executes on a host the artifact packages no
+library for, so `currentGroupMlsAbiCell()` returning null there exercises the conditional
+export, the read and the fail-closed default for real.
+
+Android is the only version-1 target and this decision does not change that. The seam is
+justified by the ports/adapters rule on its own; that it also keeps `dart:ffi` out of the
+composition root, where it would break the web scaffold `frontend/AGENTS.md` keeps for
+post-v1 work, is a second reason rather than the first.
+
+### Alternatives evaluated
+
+**A. Record the A56 run and open the gate globally.** Rejected. It would grant the surface
+on two ABIs nothing has ever executed on, which is the claim ADR-055 was written to stop, and
+it would do it while pointing at a run record that says `"abi": "arm64-v8a"`.
+
+**B. Demote `armeabi-v7a` to non-mandatory.** Rejected, at length, above.
+
+**C. Stop packaging `armeabi-v7a`.** Considered seriously, because it eliminates the risk
+rather than routing around it: a library that is not in the APK cannot be loaded unmeasured.
+Rejected because the cost lands in the wrong place — dropping the ABI denies a 32-bit user
+the entire supported direct-message tier in order to protect them from an experimental group
+feature, and `minSdk` is 24 precisely so those devices can install. Withholding one tier is
+proportionate; refusing installation is not.
+
+**D. Leave the gate closed until every ABI is measured.** Rejected. It makes the deployment
+wait on hardware that may never be obtainable, and — unlike ADR-055's position, which rested
+on *nothing* having been measured — there would now be a passing measurement for the ABI
+every recipient is expected to load, being ignored.
+
+**E. Accept the residual risk across all ABIs and open everything.** This is what the task
+that produced this decision asked for. Rejected on the evidence, and the reason is worth
+stating: once `arm64-v8a` was measured, there was no longer a blanket risk to accept. What
+remained was one narrow, precisely locatable risk — 32-bit ARM — which per-ABI resolution
+removes entirely at a cost of about sixty lines. Accepting a risk you can cheaply eliminate
+is not pragmatism.
+
+### What this does not close
+
+- **Gate 6 is not satisfied.** The packaged-core cell of the physical-device matrix now has
+  a run; process kill, Doze, force-stop, torn writes and Keystore-after-reboot do not.
+  `docs/mls-profile.md` is unchanged on all of them.
+- **No production gate moves.** The seven remain exactly where they were, and the five
+  external Phase-A prerequisites remain blocked.
+- **Nothing is reviewed.** ADR-017 is open for every layer, and this measurement says the
+  code computes what it computes on ARM — not that what it computes is right.
+- **Multi-device and live-backend execution is still outstanding.** One phone running a test
+  suite is not two people exchanging group messages, and the remaining piece-19 cells stay
+  open.
+- **The on-device *Dart* assertion was not run.**
+  `integration_test/crypto_core_android_smoke_test.dart` now asserts that the gate resolves
+  the ABI the VM says it is running, but it could not be executed here: a device-targeted
+  test build fetches only that device's engine ABI while ADR-054's `gradle.lockfile`
+  requires all three, so the build fails on `Did not resolve 'io.flutter:armeabi_v7a_debug'`.
+  The resolver itself is exercised on the host, where it correctly returns null; what stays
+  unverified on hardware is only that `Abi.current()` reports `androidArm64` on an
+  `arm64-v8a` install.
+
+### Research
+
+| Question | Source | Read | Finding |
+|---|---|---|---|
+| Does Android still expect 32-bit devices? | <https://developer.android.com/google/play/requirements/64-bit> | 2026-08-24 | Apps on Google Play must support 64-bit; supporting it "sets you up for devices with **64-bit-only hardware**". The direction is away from AArch32, and the measured device is already there |
+| What is `armeabi-v7a`? | <https://developer.android.com/ndk/guides/abis> | 2026-08-24 | "This ABI is for 32-bit ARM CPUs", Thumb-2 and Neon, `-mfloat-abi=softfp`. Still a supported NDK ABI, so packaging it remains correct |
+| Is Android ARM a supported `aws-lc` platform? | <https://github.com/aws/aws-lc> `README.md` | 2026-08-24 | Android **aarch64** is in the supported-platforms table — the ABI now measured. Android **arm32** is under *Other platforms*, a lower tier — the ABI now withheld. The support tiers and the evidence agree, which is a coincidence worth noting rather than relying on |
+
+**Where the external evidence and the repository disagreed.** They did not, this time. The
+external sources say 32-bit ARM is a shrinking, lower-tier configuration; the repository says
+it has never been executed; the device says it cannot be. All three point the same way, and
+the decision follows the repository's, because "lower support tier" is a statement about a
+library's intent and "never run" is a fact about this build.
+
+### Consequences
+
+- Group messaging is available at first install to every recipient on a 64-bit ARM phone,
+  which on current evidence is all of them.
+- The KeyPackages this artifact publishes now correspond to a stack that has been observed
+  working on the processor that will run it.
+- A recipient on a 32-bit-only device keeps the entire supported tier and sees one honest
+  sentence about why groups are missing.
+- The ledger keeps its integrity: no cell was demoted, and the one that cannot be measured
+  is still recorded as unmeasured rather than quietly reclassified.
+- ADR-055's follow-up 1 is discharged. Its follow-up 2 — re-scope or re-decide if no run has
+  happened by the second external build — is moot for `arm64-v8a` and now applies to
+  `armeabi-v7a` instead.
+
+### Review and revisit conditions
+
+1. **A 32-bit ARM device becomes available.** Run the instrument; that ABI opens on the same
+   rule, with no ADR needed.
+2. **A run fails on any ABI.** That is a finding about the packaged core and outranks this
+   decision.
+3. **The packaged ABI set changes.** A new ABI must arrive with a cell and no evidence, and
+   therefore withheld; a removed ABI takes its cell with it.
+4. **Multi-device or live-backend execution produces a defect**, which is the outstanding
+   piece-19 evidence this deployment exists to generate.
+5. **A production gate closes**, particularly 1 or 2, which begins the group layer's
+   replacement and makes this gate moot rather than satisfied.
+6. **An independent cryptographic review is retained or reports** — ADR-044's condition 3,
+   unchanged and still the largest deferred requirement.
+
 
 ## ADR-055 in full — what the first artifact hands a user (2026-08-24)
 
 **Status:** Accepted. Deployment decision. Amends ADR-044's tier 2. **Opens no production
 gate.**
+**Amended by ADR-056 (2026-08-24):** the measurement this decision demanded was run and
+passed on `arm64-v8a`, so the group surface is open on that ABI and withheld on the two with
+no admissible record. D1, D2 and the ledger's all-or-nothing framing read as written only
+for an ABI that has never been measured; the reasoning, the admissibility rules and the
+withheld-in-substance requirement stand unchanged.
 
 ### The question
 

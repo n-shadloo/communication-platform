@@ -118,11 +118,20 @@ if ! command -v "$adb_command" >/dev/null 2>&1; then
 fi
 readonly adb_command
 
+# `MSYS_NO_PATHCONV` and `MSYS2_ARG_CONV_EXCL` are not decoration. On a Git Bash
+# or MSYS2 host every argument that looks like an absolute POSIX path is
+# rewritten to a Windows one before the process sees it, so
+# `adb push … /data/local/tmp/x` silently becomes
+# `C:/Program Files/Git/data/local/tmp/x` and fails with
+# `remote secure_mkdirs() failed: No such file or directory`. Found by running
+# this script against a real phone, which is the only way it could have been
+# found. Both variables are inert on Linux and macOS.
 adb() {
   if [[ -n "$device_serial" ]]; then
-    "$adb_command" -s "$device_serial" "$@"
+    MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' \
+      "$adb_command" -s "$device_serial" "$@"
   else
-    "$adb_command" "$@"
+    MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' "$adb_command" "$@"
   fi
 }
 
@@ -255,9 +264,34 @@ if [[ "$qemu" == "1" ]] || [[ "$fingerprint" == *"generic"* ]] || [[ "$fingerpri
 fi
 
 echo "Running on $manufacturer $model (Android $platform_release, API $api_level, $device_abi) ..."
-adb shell "mkdir -p $DEVICE_DIR" >/dev/null
-adb push "$test_binary" "$DEVICE_DIR/beta_mls_tests" >/dev/null
-adb shell "chmod 700 $DEVICE_DIR/beta_mls_tests" >/dev/null
+# Never discard a setup step's output. `adb shell` folds the remote command's
+# stderr into its stdout, so `>/dev/null` on these three lines silences the only
+# diagnostic a device-side failure produces — which is how the path-conversion
+# bug above presented as a bare non-zero exit and nothing else.
+staged() {
+  local description="$1"
+  shift
+  local output
+  if ! output="$("$@" 2>&1)"; then
+    echo "$description failed:" >&2
+    printf '%s\n' "$output" >&2
+    exit 1
+  fi
+  # adb exits 0 on some device-side failures, so the text is checked too.
+  case "$output" in
+    *"secure_mkdirs() failed"* | *"Permission denied"* | *"No such file"*)
+      echo "$description reported a device-side failure:" >&2
+      printf '%s\n' "$output" >&2
+      exit 1
+      ;;
+  esac
+}
+
+staged "creating $DEVICE_DIR" adb shell "mkdir -p $DEVICE_DIR"
+staged "pushing the test binary" \
+  adb push "$test_binary" "$DEVICE_DIR/beta_mls_tests"
+staged "marking the test binary executable" \
+  adb shell "chmod 700 $DEVICE_DIR/beta_mls_tests"
 
 set +e
 run_output="$(adb shell "cd $DEVICE_DIR && ./beta_mls_tests --test-threads 1 2>&1; echo CP_EXIT=\$?")"

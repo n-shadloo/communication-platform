@@ -1,69 +1,133 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:communication_platform/app/config/app_environment.dart';
 import 'package:communication_platform/app/config/group_production_gate.dart';
+import 'package:communication_platform/app/config/runtime_abi.dart';
 import 'package:communication_platform/app/dependencies/core_providers.dart';
 import 'package:communication_platform/app/dependencies/group_providers.dart';
 import 'package:communication_platform/features/groups/infrastructure/unsupported_group_mls.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-/// ADR-055: the closed-beta group surface is withheld from the distributed
-/// artifact until the packaged native core it calls has been observed running
-/// on hardware.
+/// ADR-055 withheld the closed-beta group surface until the packaged native
+/// core had been observed running on hardware. ADR-056 measured `arm64-v8a` on
+/// a Samsung SM-A566B and opened that ABI — and only that ABI.
 ///
-/// These assertions cover the two halves that have to stay true together. The
-/// gate must be closed and must be the *kind* of thing that cannot be opened at
-/// runtime; and with it closed, nothing of the group stack may be reachable —
-/// not the screens, not the crypto, not the KeyPackage upload, and not the
-/// inbound path. A surface that is merely hidden from view is not withheld.
+/// These assertions cover the three things that have to stay true together: the
+/// ledger says exactly what was run and nothing more; an ABI without an
+/// admissible record is withheld in substance on the devices that load it; and
+/// production is unaffected under every ledger state.
 void main() {
-  ProviderContainer containerFor(AppEnvironment environment) {
+  ProviderContainer containerFor(
+    AppEnvironment environment, {
+    GroupMlsFieldCell? abi,
+  }) {
     final container = ProviderContainer(
-      overrides: [appEnvironmentProvider.overrideWithValue(environment)],
+      overrides: [
+        appEnvironmentProvider.overrideWithValue(environment),
+        if (abi != null) runtimeAbiProvider.overrideWithValue(abi),
+      ],
     );
     addTearDown(container.dispose);
     return container;
   }
 
-  group('the ledger is empty and says so', () {
-    test('no cell of the packaged-core matrix has evidence', () {
-      expect(GroupExperimentalGate.ledger.evidence, isEmpty);
-      expect(GroupExperimentalGate.ledger.isOpen, isFalse);
+  group('the ledger records exactly what was run', () {
+    test('arm64-v8a has one admissible record and nothing else does', () {
+      expect(GroupExperimentalGate.ledger.evidence, hasLength(1));
       expect(
-        GroupExperimentalGate.ledger.outstanding,
-        containsAll(<GroupMlsFieldCell>[
-          GroupMlsFieldCell.arm64V8a,
-          GroupMlsFieldCell.armeabiV7a,
-        ]),
+        GroupExperimentalGate.ledger.evidenceFor(GroupMlsFieldCell.arm64V8a),
+        isNotNull,
       );
+      expect(
+        GroupExperimentalGate.ledger.evidenceFor(GroupMlsFieldCell.armeabiV7a),
+        isNull,
+      );
+      expect(
+        GroupExperimentalGate.ledger.evidenceFor(GroupMlsFieldCell.x8664),
+        isNull,
+      );
+      expect(GroupExperimentalGate.ledger.outstanding, <GroupMlsFieldCell>[
+        GroupMlsFieldCell.armeabiV7a,
+        GroupMlsFieldCell.x8664,
+      ]);
     });
 
-    test('the mandatory cells are the ABIs a recipient can actually load', () {
-      // x86_64 is packaged but reached in practice only by an emulator, and an
-      // emulated record is inadmissible - so requiring it could only ever be
-      // satisfied by hardware nobody in this deployment has.
-      expect(GroupMlsFieldCell.arm64V8a.mandatory, isTrue);
-      expect(GroupMlsFieldCell.armeabiV7a.mandatory, isTrue);
-      expect(GroupMlsFieldCell.x8664.mandatory, isFalse);
-      expect(GroupMlsFieldCell.arm64V8a.abi, 'arm64-v8a');
-      expect(GroupMlsFieldCell.armeabiV7a.abi, 'armeabi-v7a');
+    test('the record is admissible on its own rules', () {
+      final record = GroupExperimentalGate.ledger.evidenceFor(
+        GroupMlsFieldCell.arm64V8a,
+      )!;
+      expect(record.isAdmissible, isTrue);
+      expect(record.emulated, isFalse);
+      expect(record.observedOn, '2026-08-24');
+      expect(record.operations, GroupMlsExercisedOperation.values);
     });
 
-    test('the run-record directory documents the closed state', () {
-      final readme = File(
-        'docs/validation/beta-mls-core/README.md',
+    test('the record points at a run that is actually committed', () {
+      // A ledger entry naming a file nobody can read is an assertion, not
+      // evidence. The record has to be here, and it has to say the run passed
+      // on hardware rather than on something that merely reported a device.
+      final record = GroupExperimentalGate.ledger.evidenceFor(
+        GroupMlsFieldCell.arm64V8a,
+      )!;
+      final file = File(record.runRecord);
+      expect(file.existsSync(), isTrue, reason: 'missing ${record.runRecord}');
+
+      final run = jsonDecode(file.readAsStringSync()) as Map<String, dynamic>;
+      expect(run['schema'], 'beta-mls-core-run/1');
+      expect(run['abi'], GroupMlsFieldCell.arm64V8a.abi);
+      expect(run['emulated'], isFalse);
+      expect(run['exit_code'], 0);
+      expect(run['tests_failed'], 0);
+      expect(run['tests_passed'], greaterThan(0));
+      expect(
+        run['model'],
+        contains('A566B'),
+        reason: 'the ledger and the run record must describe one device',
+      );
+      expect(run['recorded_at_utc'], startsWith(record.observedOn));
+
+      // The suite it ran is the one that exercises the operation, not a subset
+      // that happened to link. These two names are the round trip itself.
+      final output = File(
+        '${file.parent.path}/test-output.txt',
       ).readAsStringSync();
-      expect(readme, contains('Gate state: CLOSED'));
       expect(
-        Directory(
-          'docs/validation/beta-mls-core',
-        ).listSync().whereType<Directory>(),
-        isEmpty,
-        reason:
-            'A run directory here without a matching admissible ledger entry '
-            'means evidence was produced and never read.',
+        output,
+        contains(
+          'operation_round_trips_create_join_private_message_proposal_'
+          'commit_and_remove',
+        ),
       );
+      expect(
+        output,
+        contains(
+          'authenticated_suite_runs_key_package_welcome_proposal_commit_'
+          'private_message_and_exporter',
+        ),
+      );
+      expect(output, contains('0 failed'));
+    });
+
+    test('no run record exists for an ABI the ledger calls unmeasured', () {
+      // The inverse of the check above, and the one that catches a run being
+      // produced and then not read: a committed record for an outstanding cell
+      // means somebody measured it and forgot to open it.
+      final directories = Directory(
+        'docs/validation/beta-mls-core',
+      ).listSync().whereType<Directory>();
+      for (final directory in directories) {
+        for (final cell in GroupExperimentalGate.ledger.outstanding) {
+          expect(
+            directory.path.endsWith(cell.abi),
+            isFalse,
+            reason:
+                '${directory.path} measures ${cell.abi}, which the ledger '
+                'still calls outstanding',
+          );
+        }
+      }
     });
   });
 
@@ -77,9 +141,6 @@ void main() {
       expect(source, isNot(contains('String.fromEnvironment')));
       expect(source, isNot(contains('int.fromEnvironment')));
       expect(source, contains('static const ledger'));
-      // `forEvidence` exists so a test can prove the mechanism rather than only
-      // that the real ledger is empty. It must stay test-only, and the
-      // application must read the constant and nothing else.
       expect(source, contains('@visibleForTesting'));
       for (final consumer in const [
         'lib/app/dependencies/group_providers.dart',
@@ -95,15 +156,44 @@ void main() {
       }
     });
 
+    test('the ABI is read, never chosen', () {
+      // `Abi.current()` is a property of the AOT snapshot the platform loaded.
+      // It reaches the application through one provider so it can be pinned in
+      // a test, and that provider must be the only place it is read.
+      final core = File(
+        'lib/app/dependencies/core_providers.dart',
+      ).readAsStringSync();
+      expect(core, contains('Provider<GroupMlsFieldCell?>'));
+      expect(core, contains('currentGroupMlsAbiCell()'));
+      for (final consumer in const [
+        'lib/app/config/group_production_gate.dart',
+        'lib/app/dependencies/group_providers.dart',
+        'lib/app/dependencies/sync_providers.dart',
+        'lib/features/groups/presentation/group_pages.dart',
+        'lib/features/contacts/presentation/contact_pages.dart',
+      ]) {
+        final source = File(consumer).readAsStringSync();
+        expect(
+          source,
+          isNot(contains('Abi.current()')),
+          reason: '$consumer must read the ABI through runtimeAbiProvider',
+        );
+        expect(
+          source,
+          isNot(contains("import 'dart:ffi'")),
+          reason: '$consumer must compile on every target this repo builds',
+        );
+      }
+    });
+
     test('the permit still requires the beta environment as well', () {
-      // Evidence is necessary and not sufficient. If the ledger ever opens, the
-      // environment test is what keeps production out - production has no beta
-      // symbol to call and must never resolve a permit even so.
       expect(source, contains('environment == AppEnvironment.beta'));
       expect(
-        GroupExperimentalGate.forEvidence(_fullLedger).isOpen,
+        GroupExperimentalGate.forEvidence(
+          _fullLedger,
+        ).hasEvidenceFor(GroupMlsFieldCell.armeabiV7a),
         isTrue,
-        reason: 'the mechanism must work, or the empty ledger proves nothing',
+        reason: 'the mechanism must work, or the real ledger proves nothing',
       );
     });
   });
@@ -117,9 +207,8 @@ void main() {
       expect(_evidence(emulated: true).isAdmissible, isFalse);
       expect(
         GroupExperimentalGate.forEvidence([
-          _evidence(emulated: true),
           _evidence(cell: GroupMlsFieldCell.armeabiV7a, emulated: true),
-        ]).isOpen,
+        ]).hasEvidenceFor(GroupMlsFieldCell.armeabiV7a),
         isFalse,
       );
     });
@@ -159,33 +248,102 @@ void main() {
         );
       }
     });
-
-    test('a partially satisfied matrix opens nothing', () {
-      expect(
-        GroupExperimentalGate.forEvidence([_evidence()]).isOpen,
-        isFalse,
-        reason: 'one APK carries every ABI and the installer picks one',
-      );
-    });
   });
 
-  group('with the gate closed the surface is withheld in substance', () {
-    test('the beta artifact holds no permit', () {
+  group('evidence resolves per ABI, and fails closed off the map', () {
+    test('a measured ABI is available, an unmeasured one is withheld', () {
       expect(
-        GroupProductionGate.privateExperimentalPermit(AppEnvironment.beta),
-        isNull,
+        containerFor(
+          AppEnvironment.beta,
+          abi: GroupMlsFieldCell.arm64V8a,
+        ).read(groupFeatureAvailabilityProvider),
+        GroupFeatureAvailability.privateExperimental,
       );
-      expect(
-        GroupProductionGate.privateExperimentalWithheld(AppEnvironment.beta),
-        isTrue,
-      );
+      for (final abi in const [
+        GroupMlsFieldCell.armeabiV7a,
+        GroupMlsFieldCell.x8664,
+      ]) {
+        expect(
+          containerFor(
+            AppEnvironment.beta,
+            abi: abi,
+          ).read(groupFeatureAvailabilityProvider),
+          GroupFeatureAvailability.privateExperimentalWithheld,
+          reason: '$abi has no admissible record and must be withheld',
+        );
+      }
     });
 
-    test('availability is withheld, and withheld is not available', () {
+    test('a target this artifact packages no library for has no evidence', () {
+      // The artifact packages three ABIs. Anything else - a desktop host
+      // running this suite, the web target, an Android RISC-V device, an ABI
+      // added later without a run - resolves to no cell at all, and must fail
+      // closed rather than inherit another cell's record.
+      expect(GroupExperimentalGate.ledger.hasEvidenceFor(null), isFalse);
+      expect(
+        GroupExperimentalGate.forEvidence(_fullLedger).hasEvidenceFor(null),
+        isFalse,
+        reason: 'not even a complete ledger may answer for an unknown target',
+      );
       expect(
         containerFor(
           AppEnvironment.beta,
         ).read(groupFeatureAvailabilityProvider),
+        GroupFeatureAvailability.privateExperimentalWithheld,
+        reason: 'this suite runs on a host the artifact packages nothing for',
+      );
+    });
+
+    test('the native resolver really runs, and answers null off the map', () {
+      // Not a source assertion: this suite runs on the Dart VM, so
+      // `dart.library.io` is true and `runtime_abi_native.dart` is the variant
+      // that loads. Calling it here exercises the conditional export, the
+      // `Abi.current()` read and the default arm for real - on a host the
+      // artifact packages no library for, which must resolve to no cell.
+      expect(currentGroupMlsAbiCell(), isNull);
+      expect(
+        ProviderContainer().read(runtimeAbiProvider),
+        isNull,
+        reason: 'the provider must return what the resolver returns',
+      );
+    });
+
+    test('the platform seam maps every packaged ABI and nothing else', () {
+      // The mapping lives behind a conditional import, because `dart:ffi` does
+      // not exist on the web and importing it from the composition root breaks
+      // a target this repository still compiles. What is asserted here is the
+      // shape of that seam: every cell appears in the native resolver, the
+      // default is null, and the two non-native variants answer null outright.
+      final native = File(
+        'lib/app/config/runtime_abi_native.dart',
+      ).readAsStringSync();
+      for (final cell in GroupMlsFieldCell.values) {
+        expect(
+          native,
+          contains('GroupMlsFieldCell.${cell.name}'),
+          reason: '${cell.abi} is packaged but the resolver cannot report it',
+        );
+      }
+      expect(native, contains('_ => null'));
+      for (final variant in const [
+        'lib/app/config/runtime_abi_web.dart',
+        'lib/app/config/runtime_abi_stub.dart',
+      ]) {
+        final source = File(variant).readAsStringSync();
+        expect(source, contains('GroupMlsFieldCell? currentGroupMlsAbiCell()'));
+        expect(source, contains('=> null;'));
+        expect(source, isNot(contains("import 'dart:ffi'")));
+      }
+    });
+  });
+
+  group('a withheld ABI is withheld in substance', () {
+    ProviderContainer withheldBeta() =>
+        containerFor(AppEnvironment.beta, abi: GroupMlsFieldCell.armeabiV7a);
+
+    test('availability is withheld, and withheld is not available', () {
+      expect(
+        withheldBeta().read(groupFeatureAvailabilityProvider),
         GroupFeatureAvailability.privateExperimentalWithheld,
       );
       expect(
@@ -195,7 +353,7 @@ void main() {
     });
 
     test('no MLS stack is composed', () {
-      final container = containerFor(AppEnvironment.beta);
+      final container = withheldBeta();
       expect(
         container.read(groupMlsCryptoProvider),
         isA<UnsupportedGroupMlsCrypto>(),
@@ -203,19 +361,15 @@ void main() {
       expect(
         container.read(fullyComposedGroupMlsCryptoProvider.future),
         completion(isA<UnsupportedGroupMlsCrypto>()),
-        reason:
-            'the fully composed provider is what the inbound coordinator and '
-            'the use cases actually read',
       );
     });
 
     test('no KeyPackage is generated or uploaded', () {
-      // This is the half that makes the difference between withheld and hidden.
-      // A build that closes its screens while still publishing KeyPackages
-      // advertises to the backend and to every peer a capability it will not
-      // honour - the mirror image of the defect ADR-044 fixed.
+      // The half that separates withheld from hidden. A build that closes its
+      // screens while still publishing KeyPackages advertises a capability it
+      // will not honour, and its peers pay for that rather than it.
       expect(
-        containerFor(AppEnvironment.beta).read(
+        withheldBeta().read(
           groupKeyPackageMaintenanceServiceProvider((
             userId: '11111111-1111-4111-8111-111111111111',
             deviceId: '22222222-2222-4222-8222-222222222222',
@@ -226,19 +380,12 @@ void main() {
     });
 
     test('no screen can be reached around the gate', () {
-      // Every group page checks availability before it checks anything else,
-      // including its own injected-collaborator path. That ordering used to be
-      // the other way round on three of them, so a caller supplying its own
-      // collaborators rendered the flow in a build that has no group stack.
-      // Nothing in the router does that, and a gate a constructor argument can
-      // bypass is still not a gate.
       final screens = File(
         'lib/features/groups/presentation/group_pages.dart',
       ).readAsStringSync();
       const gate =
           'if (!ref.watch(groupFeatureAvailabilityProvider).isAvailable) {';
-      final gateCount = gate.allMatches(screens).length;
-      expect(gateCount, 5, reason: 'one gate per routed group screen');
+      expect(gate.allMatches(screens), hasLength(5));
       for (final injection in const [
         'if (injectedContacts != null && onCreate != null) {',
         'if (injectedState != null && injectedMessages != null && '
@@ -248,13 +395,7 @@ void main() {
         final injectionAt = screens.indexOf(injection);
         expect(injectionAt, greaterThan(-1), reason: 'missing: $injection');
         final gateBefore = screens.lastIndexOf(gate, injectionAt);
-        expect(
-          gateBefore,
-          greaterThan(-1),
-          reason: 'no availability gate precedes: $injection',
-        );
-        // The gate must be the immediately preceding statement, not one that
-        // happens to appear earlier in another widget's build method.
+        expect(gateBefore, greaterThan(-1));
         expect(
           screens.substring(gateBefore, injectionAt),
           isNot(contains('Widget build(')),
@@ -262,40 +403,109 @@ void main() {
         );
       }
     });
+  });
 
-    test('the durable sync engine composes no KeyPackage maintenance', () {
-      // `sync_providers.dart` reaches the maintenance service only through the
-      // permit, so a withheld build must leave that post-inbox work out
-      // entirely rather than construct it and decline to run it.
-      final source = File(
-        'lib/app/dependencies/sync_providers.dart',
-      ).readAsStringSync();
-      expect(source, contains('GroupProductionGate.privateExperimentalPermit'));
+  group('a measured ABI gets the stack it was measured for', () {
+    test('the permit is granted and the maintenance path opens', () {
       expect(
-        source,
-        contains('if (groupKeyPackageMaintenance != null)'),
-        reason: 'the null permit must remove the work, not disable it',
+        GroupProductionGate.privateExperimentalPermit(
+          AppEnvironment.beta,
+          GroupMlsFieldCell.arm64V8a,
+        ),
+        isNotNull,
       );
+      expect(
+        GroupProductionGate.privateExperimentalWithheld(
+          AppEnvironment.beta,
+          GroupMlsFieldCell.arm64V8a,
+        ),
+        isFalse,
+      );
+    });
+
+    test('the KeyPackage path is no longer what refuses', () async {
+      // On a withheld ABI this provider throws the gate's own `StateError`. On
+      // a measured one it must get past the gate and fail further down, on a
+      // platform binding this host test has no adapters for. Asserting the
+      // *absence* of the gate's refusal is what proves the surface opened;
+      // asserting a plain throw would pass either way.
+      Object? thrown;
+      try {
+        await containerFor(
+          AppEnvironment.beta,
+          abi: GroupMlsFieldCell.arm64V8a,
+        ).read(
+          groupKeyPackageMaintenanceServiceProvider((
+            userId: '11111111-1111-4111-8111-111111111111',
+            deviceId: '22222222-2222-4222-8222-222222222222',
+          )).future,
+        );
+      } catch (error) {
+        thrown = error;
+      }
+      expect(thrown, isNot(isA<StateError>()));
+      expect(
+        thrown.toString(),
+        isNot(contains('private experimental permit')),
+        reason: 'a measured ABI must not be refused by the gate',
+      );
+
+      Object? withheld;
+      try {
+        await containerFor(
+          AppEnvironment.beta,
+          abi: GroupMlsFieldCell.armeabiV7a,
+        ).read(
+          groupKeyPackageMaintenanceServiceProvider((
+            userId: '11111111-1111-4111-8111-111111111111',
+            deviceId: '22222222-2222-4222-8222-222222222222',
+          )).future,
+        );
+      } catch (error) {
+        withheld = error;
+      }
+      expect(withheld, isA<StateError>());
+      expect(withheld.toString(), contains('private experimental permit'));
     });
   });
 
   group('production is unchanged by any of this', () {
-    test('production is unavailable, and for its own reason', () {
-      expect(
-        GroupProductionGate.privateExperimentalWithheld(
-          AppEnvironment.production,
-        ),
-        isFalse,
-        reason:
-            'production has no group stack to withhold and says so in '
-            'different words',
-      );
-      expect(
-        containerFor(
-          AppEnvironment.production,
-        ).read(groupFeatureAvailabilityProvider),
-        GroupFeatureAvailability.productionUnavailable,
-      );
+    test('production is unavailable on every ABI, measured or not', () {
+      for (final abi in const [
+        GroupMlsFieldCell.arm64V8a,
+        GroupMlsFieldCell.armeabiV7a,
+        GroupMlsFieldCell.x8664,
+      ]) {
+        expect(
+          GroupProductionGate.privateExperimentalPermit(
+            AppEnvironment.production,
+            abi,
+          ),
+          isNull,
+        );
+        expect(
+          GroupProductionGate.privateExperimentalWithheld(
+            AppEnvironment.production,
+            abi,
+          ),
+          isFalse,
+          reason: 'production has no group stack to withhold',
+        );
+        expect(
+          containerFor(
+            AppEnvironment.production,
+            abi: abi,
+          ).read(groupFeatureAvailabilityProvider),
+          GroupFeatureAvailability.productionUnavailable,
+        );
+        expect(
+          containerFor(
+            AppEnvironment.production,
+            abi: abi,
+          ).read(groupMlsCryptoProvider),
+          isA<UnsupportedGroupMlsCrypto>(),
+        );
+      }
     });
 
     test('the production transport assertion is untouched', () {
@@ -309,17 +519,22 @@ void main() {
       );
     });
 
-    test('a full ledger would still leave production closed', () {
-      // The evidence gate is in front of the beta boundary, never in place of
-      // it. If every cell were satisfied tomorrow, production would still hold
-      // no permit and still resolve the unsupported adapter.
-      expect(GroupExperimentalGate.forEvidence(_fullLedger).isOpen, isTrue);
-      expect(
-        GroupProductionGate.privateExperimentalPermit(
-          AppEnvironment.production,
-        ),
-        isNull,
-      );
+    test('a fully satisfied ledger would still leave production closed', () {
+      final full = GroupExperimentalGate.forEvidence(_fullLedger);
+      for (final abi in const [
+        GroupMlsFieldCell.arm64V8a,
+        GroupMlsFieldCell.armeabiV7a,
+        GroupMlsFieldCell.x8664,
+      ]) {
+        expect(full.hasEvidenceFor(abi), isTrue);
+        expect(
+          GroupProductionGate.privateExperimentalPermit(
+            AppEnvironment.production,
+            abi,
+          ),
+          isNull,
+        );
+      }
     });
   });
 }
@@ -343,6 +558,5 @@ GroupMlsFieldEvidence _evidence({
 );
 
 final _fullLedger = <GroupMlsFieldEvidence>[
-  _evidence(),
-  _evidence(cell: GroupMlsFieldCell.armeabiV7a),
+  for (final cell in GroupMlsFieldCell.values) _evidence(cell: cell),
 ];

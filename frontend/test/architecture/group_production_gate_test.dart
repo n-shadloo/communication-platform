@@ -32,25 +32,53 @@ void main() {
     );
   });
 
-  test('no environment holds a beta MLS permit without evidence', () {
-    // Production must never hold one: it resolves the unsupported adapter and
-    // its packaged native core does not even export the beta MLS symbol.
+  test('only the beta artifact holds a beta MLS permit, and only where '
+      'the core has been measured', () {
+    // Production must never hold one on any ABI: it resolves the unsupported
+    // adapter and its packaged native core does not even export the beta MLS
+    // symbol. Development never holds one either - it composes the in-memory
+    // preview through its own permit.
+    for (final abi in const [
+      GroupMlsFieldCell.arm64V8a,
+      GroupMlsFieldCell.armeabiV7a,
+      GroupMlsFieldCell.x8664,
+    ]) {
+      expect(
+        GroupProductionGate.privateExperimentalPermit(
+          AppEnvironment.production,
+          abi,
+        ),
+        isNull,
+      );
+      expect(
+        GroupProductionGate.privateExperimentalPermit(
+          AppEnvironment.development,
+          abi,
+        ),
+        isNull,
+      );
+    }
+    // ADR-055 made the beta environment necessary and no longer sufficient;
+    // ADR-056 made the remaining condition per-ABI. `arm64-v8a` was measured on
+    // a Samsung SM-A566B on 2026-08-24 and holds a permit; the two ABIs with no
+    // admissible record do not. `group_experimental_gate_test.dart` covers that
+    // half in full.
     expect(
-      GroupProductionGate.privateExperimentalPermit(AppEnvironment.production),
-      isNull,
+      GroupProductionGate.privateExperimentalPermit(
+        AppEnvironment.beta,
+        GroupMlsFieldCell.arm64V8a,
+      ),
+      isNotNull,
     );
-    expect(
-      GroupProductionGate.privateExperimentalPermit(AppEnvironment.development),
-      isNull,
-    );
-    // ADR-055 made the beta environment necessary and no longer sufficient:
-    // the artifact must also carry field evidence that the packaged core it
-    // would call has been observed running on hardware, and the ledger is
-    // empty. `group_experimental_gate_test.dart` covers that half.
-    expect(
-      GroupProductionGate.privateExperimentalPermit(AppEnvironment.beta),
-      isNull,
-    );
+    for (final abi in const [
+      GroupMlsFieldCell.armeabiV7a,
+      GroupMlsFieldCell.x8664,
+    ]) {
+      expect(
+        GroupProductionGate.privateExperimentalPermit(AppEnvironment.beta, abi),
+        isNull,
+      );
+    }
 
     final source = File(
       'lib/app/config/group_production_gate.dart',
@@ -71,9 +99,15 @@ void main() {
   });
 
   test('group availability follows the permits, and two states close', () {
-    GroupFeatureAvailability availabilityIn(AppEnvironment environment) {
+    GroupFeatureAvailability availabilityIn(
+      AppEnvironment environment, {
+      GroupMlsFieldCell abi = GroupMlsFieldCell.arm64V8a,
+    }) {
       final container = ProviderContainer(
-        overrides: [appEnvironmentProvider.overrideWithValue(environment)],
+        overrides: [
+          appEnvironmentProvider.overrideWithValue(environment),
+          runtimeAbiProvider.overrideWithValue(abi),
+        ],
       );
       addTearDown(container.dispose);
       return container.read(groupFeatureAvailabilityProvider);
@@ -83,11 +117,15 @@ void main() {
       availabilityIn(AppEnvironment.development),
       GroupFeatureAvailability.developmentPreview,
     );
-    // ADR-055. The beta artifact is the one the surface belongs to, and it is
-    // held closed for want of evidence rather than absent by design - a
-    // different statement from production's, and a different string.
+    // ADR-056. The beta artifact gets the surface on the ABI that was measured
+    // and is withheld it on the ABIs that were not - a different statement from
+    // production's, and a different string.
     expect(
       availabilityIn(AppEnvironment.beta),
+      GroupFeatureAvailability.privateExperimental,
+    );
+    expect(
+      availabilityIn(AppEnvironment.beta, abi: GroupMlsFieldCell.armeabiV7a),
       GroupFeatureAvailability.privateExperimentalWithheld,
     );
     expect(

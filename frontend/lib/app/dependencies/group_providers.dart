@@ -33,9 +33,10 @@ enum GroupFeatureAvailability {
   /// they produce is disposable by decision (ADR-036, ADR-044).
   privateExperimental,
 
-  /// The artifact the group stack belongs to, with the stack withheld because
-  /// the packaged native core it would call has not been observed running on
-  /// hardware (ADR-055).
+  /// The artifact the group stack belongs to, with the stack withheld on *this
+  /// device* because the packaged native core it would load has not been
+  /// observed running on this processor (ADR-055, narrowed to per-ABI by
+  /// ADR-056).
   ///
   /// Distinct from [productionUnavailable] so the interface can say which of
   /// the two it is. Nothing is composed, nothing is uploaded and no screen is
@@ -55,13 +56,14 @@ final groupFeatureAvailabilityProvider = Provider<GroupFeatureAvailability>((
   ref,
 ) {
   final environment = ref.watch(appEnvironmentProvider);
+  final abi = ref.watch(runtimeAbiProvider);
   if (GroupProductionGate.developmentPreviewPermit(environment) != null) {
     return GroupFeatureAvailability.developmentPreview;
   }
-  if (GroupProductionGate.privateExperimentalPermit(environment) != null) {
+  if (GroupProductionGate.privateExperimentalPermit(environment, abi) != null) {
     return GroupFeatureAvailability.privateExperimental;
   }
-  if (GroupProductionGate.privateExperimentalWithheld(environment)) {
+  if (GroupProductionGate.privateExperimentalWithheld(environment, abi)) {
     return GroupFeatureAvailability.privateExperimentalWithheld;
   }
   return GroupFeatureAvailability.productionUnavailable;
@@ -73,7 +75,11 @@ final groupMlsCryptoProvider = Provider<GroupMlsCryptoPort>((ref) {
   if (permit != null) {
     return DevelopmentInMemoryGroupMls.forDevelopmentPreview(permit);
   }
-  if (GroupProductionGate.privateExperimentalPermit(environment) != null) {
+  if (GroupProductionGate.privateExperimentalPermit(
+        environment,
+        ref.watch(runtimeAbiProvider),
+      ) !=
+      null) {
     final crypto = ref.watch(cryptoCoreProvider);
     if (crypto is BetaMlsCryptoPort) {
       return NativeBetaGroupMls(crypto as BetaMlsCryptoPort);
@@ -96,6 +102,7 @@ final groupKeyPackageMaintenanceServiceProvider =
     >((ref, scope) async {
       if (GroupProductionGate.privateExperimentalPermit(
             ref.watch(appEnvironmentProvider),
+            ref.watch(runtimeAbiProvider),
           ) ==
           null) {
         throw StateError(
@@ -134,6 +141,7 @@ final fullyComposedGroupMlsCryptoProvider = FutureProvider<GroupMlsCryptoPort>((
   final fallback = ref.watch(groupMlsCryptoProvider);
   if (GroupProductionGate.privateExperimentalPermit(
         ref.watch(appEnvironmentProvider),
+        ref.watch(runtimeAbiProvider),
       ) ==
       null) {
     return fallback;

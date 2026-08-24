@@ -37,16 +37,26 @@ final class GroupProductionGate {
   /// Since ADR-055 the environment is necessary and no longer sufficient. The
   /// artifact must also carry field evidence that the packaged core it would
   /// call has been observed executing on real hardware — see
-  /// [GroupExperimentalGate]. With the ledger empty this returns null for every
-  /// environment, which is what withholds the surface at first install.
+  /// [GroupExperimentalGate].
+  ///
+  /// ADR-056 made that question per-ABI rather than per-artifact. One APK
+  /// carries three native libraries and the installer picks one, so "has the
+  /// packaged core been observed running" has three different answers on three
+  /// different phones and only [abi] says which one applies here. A device
+  /// whose ABI carries an admissible record gets the surface; a device whose
+  /// ABI does not is withheld, on the same evidence rule, without any cell
+  /// having to be argued away.
   static GroupPrivateExperimentalPermit? privateExperimentalPermit(
     AppEnvironment environment,
-  ) => environment == AppEnvironment.beta && GroupExperimentalGate.ledger.isOpen
+    GroupMlsFieldCell? abi,
+  ) =>
+      environment == AppEnvironment.beta &&
+          GroupExperimentalGate.ledger.hasEvidenceFor(abi)
       ? const GroupPrivateExperimentalPermit._()
       : null;
 
-  /// Whether this is the artifact the group surface belongs to, held closed
-  /// for want of evidence rather than absent by design.
+  /// Whether this is the artifact the group surface belongs to, held closed on
+  /// this device for want of evidence rather than absent by design.
   ///
   /// Production is never this: it has no group stack to withhold, its packaged
   /// core does not export the symbol, and it says so in different words. The
@@ -54,9 +64,12 @@ final class GroupProductionGate {
   /// a reader is looking at, and it lives here so that the environment
   /// comparison stays in one file (ADR-044) rather than being restated in a
   /// composition root or on a screen.
-  static bool privateExperimentalWithheld(AppEnvironment environment) =>
+  static bool privateExperimentalWithheld(
+    AppEnvironment environment,
+    GroupMlsFieldCell? abi,
+  ) =>
       environment == AppEnvironment.beta &&
-      !GroupExperimentalGate.ledger.isOpen;
+      !GroupExperimentalGate.ledger.hasEvidenceFor(abi);
 }
 
 /// Capability required to construct the non-production in-memory MLS preview.
@@ -103,26 +116,63 @@ final class GroupPrivateExperimentalPermit {
 /// The same kind as [SustainedDeliveryGate] in
 /// `lib/app/config/sustained_delivery_gate.dart`, deliberately: no environment
 /// define, no remote value, no runtime setter, no debug override. Opening it
-/// means editing this file to add [GroupMlsFieldEvidence] for every mandatory
+/// for an ABI means editing this file to add a [GroupMlsFieldEvidence] for that
 /// [GroupMlsFieldCell], and each record has to survive
 /// [GroupMlsFieldEvidence.isAdmissible] — which refuses an emulator, refuses a
 /// run that did not exercise the whole local round trip, and refuses a cell
 /// that was reasoned about rather than run. An inadmissible record does not
 /// open anything; it is simply not counted.
 ///
-/// The procedure and the current results are in `docs/mls-profile.md`.
-/// `test/architecture/group_production_gate_test.dart` fails if this gate opens
-/// without them.
+/// ## Why it resolves per ABI (ADR-056)
+///
+/// ADR-055 asked one question of the whole artifact — may it offer groups? —
+/// and answered it by requiring every mandatory cell at once. That framing has
+/// a defect which only became visible when the first cell was actually
+/// measured: `armeabi-v7a` cannot be measured on any hardware this project can
+/// obtain, because 64-bit-only ARM devices cannot execute AArch32 at all (the
+/// phone the `arm64-v8a` cell was run on reports an empty `abilist32`). Under
+/// the old framing the only ways forward were to argue a cell away for being
+/// unmeasurable — which is the reason ADR-053 exists to forbid — or to withhold
+/// the surface from everybody on account of a device nobody in this deployment
+/// is known to have.
+///
+/// So the question changed rather than the standard. One APK carries three
+/// native libraries and the installer picks one, so "has the packaged core been
+/// observed running" genuinely has three answers, and the honest gate asks the
+/// one that applies to the device in hand. Nothing is demoted, no cell is
+/// argued away, and no unmeasured ABI is ever offered the surface. A partially
+/// satisfied ledger now opens exactly the part that is satisfied — which is
+/// stricter than ADR-055 where it mattered, not looser: under ADR-055 a full
+/// ledger would have opened every ABI including any later one added without a
+/// run.
+///
+/// The procedure and the current results are in `docs/mls-profile.md`; the run
+/// records are under `docs/validation/beta-mls-core/`.
+/// `test/architecture/group_experimental_gate_test.dart` fails if this gate
+/// opens without them.
 final class GroupExperimentalGate {
   const GroupExperimentalGate._({required this.evidence});
 
   /// The one instance the application reads.
   ///
-  /// The list is empty. `cp_crypto_v1_beta_mls_operation` has never been called
-  /// on any physical device or emulator, on any ABI, on any date — see ADR-055
-  /// and `docs/mls-profile.md` for what was and was not run.
+  /// `arm64-v8a` was measured on 2026-08-24 and carries an admissible record.
+  /// `armeabi-v7a` and `x86_64` carry none and are therefore withheld on the
+  /// devices that load them — see ADR-056 and
+  /// `docs/validation/beta-mls-core/`.
   static const ledger = GroupExperimentalGate._(
-    evidence: <GroupMlsFieldEvidence>[],
+    evidence: <GroupMlsFieldEvidence>[
+      GroupMlsFieldEvidence(
+        cell: GroupMlsFieldCell.arm64V8a,
+        hardware: 'samsung SM-A566B',
+        platformVersion: 'Android 16 (API 36), user build',
+        observedOn: '2026-08-24',
+        emulated: false,
+        operations: GroupMlsExercisedOperation.values,
+        runRecord:
+            'docs/validation/beta-mls-core/2026-08-24-sm-a566b-arm64-v8a/'
+            'run.json',
+      ),
+    ],
   );
 
   /// Every field measurement recorded for the packaged core, in the order it
@@ -130,7 +180,8 @@ final class GroupExperimentalGate {
   final List<GroupMlsFieldEvidence> evidence;
 
   /// A gate over a hypothetical ledger, so that a test can prove the mechanism
-  /// works rather than only that the real ledger is empty.
+  /// on ABIs the real ledger has no record for — that a full set really would
+  /// open them, and that production stays closed even then.
   ///
   /// The application never calls this. It reads [ledger] and nothing else, so
   /// no build can be handed a ledger at runtime.
@@ -149,19 +200,19 @@ final class GroupExperimentalGate {
     return null;
   }
 
-  /// Whether every mandatory ABI of the packaged artifact has an admissible
-  /// record.
+  /// Whether the library this process actually loaded has an admissible record.
   ///
-  /// A partially satisfied set opens nothing. The artifact ships every ABI in
-  /// one APK and the installer picks one, so this deployment does not get to
-  /// know which library a given recipient will actually load.
-  bool get isOpen => GroupMlsFieldCell.values
-      .where((cell) => cell.mandatory)
-      .every((cell) => evidenceFor(cell) != null);
+  /// Fails closed twice over: a null [cell] — an ABI this artifact packages no
+  /// library for, a desktop host running the test suite, the web target, an
+  /// Android RISC-V device, anything added later — has no evidence by
+  /// construction, and a cell with only an inadmissible record is treated the
+  /// same as a cell with none.
+  bool hasEvidenceFor(GroupMlsFieldCell? cell) =>
+      cell != null && evidenceFor(cell) != null;
 
-  /// The ABIs that still have no admissible record.
+  /// The packaged ABIs that still have no admissible record.
   List<GroupMlsFieldCell> get outstanding => GroupMlsFieldCell.values
-      .where((cell) => cell.mandatory && evidenceFor(cell) == null)
+      .where((cell) => evidenceFor(cell) == null)
       .toList(growable: false);
 }
 
@@ -177,24 +228,30 @@ final class GroupExperimentalGate {
 /// than the more marginal.
 enum GroupMlsFieldCell {
   /// 64-bit ARM. Every current phone in this deployment's fleet, and the
-  /// library `aws-lc` supports directly.
-  arm64V8a(mandatory: true, abi: 'arm64-v8a'),
+  /// library `aws-lc` lists among its supported platforms.
+  arm64V8a(abi: 'arm64-v8a'),
 
-  /// 32-bit ARM. Packaged in the same APK, selected by the installer on an
-  /// older device, and built against the lower support tier.
-  armeabiV7a(mandatory: true, abi: 'armeabi-v7a'),
+  /// 32-bit ARM. Packaged in the same APK, selected by the installer on a
+  /// device with no 64-bit support, and built against `aws-lc`'s lower "other
+  /// platforms" tier.
+  ///
+  /// Unmeasured, and not for want of trying: a 64-bit-only ARM device cannot
+  /// execute AArch32 at all, so the hardware that measured [arm64V8a] can never
+  /// measure this. It stays in the ledger unmeasured rather than being demoted,
+  /// and the devices that load it are withheld the surface.
+  armeabiV7a(abi: 'armeabi-v7a'),
 
   /// 64-bit x86. Packaged, but reached in practice only by an emulator, and an
-  /// emulated record is never admissible — so requiring it could only ever be
-  /// satisfied by hardware nobody in this deployment has.
-  x8664(mandatory: false, abi: 'x86_64');
+  /// emulated record is never admissible.
+  x8664(abi: 'x86_64');
 
-  const GroupMlsFieldCell({required this.mandatory, required this.abi});
-
-  /// Whether the gate requires an admissible record for this ABI.
-  final bool mandatory;
+  const GroupMlsFieldCell({required this.abi});
 
   /// The Android ABI directory name, as the packaged library carries it.
+  ///
+  /// The mapping from a running process to one of these lives in
+  /// `runtime_abi_native.dart`, behind the platform seam, because `dart:ffi`
+  /// does not exist on every target this repository still compiles for.
   final String abi;
 }
 

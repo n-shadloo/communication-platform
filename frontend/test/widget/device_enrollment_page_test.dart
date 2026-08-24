@@ -201,7 +201,7 @@ void main() {
         'fifteen minutes apart at best',
         'stored only on this phone',
         'never restores messages',
-        'Group chats are switched off',
+        'experimental encryption that is not finished',
         'not built yet',
         'already trust each other',
       ]) {

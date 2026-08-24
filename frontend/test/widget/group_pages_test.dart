@@ -1,4 +1,5 @@
 import 'package:communication_platform/app/config/app_environment.dart';
+import 'package:communication_platform/app/config/group_production_gate.dart';
 import 'package:communication_platform/app/dependencies/core_providers.dart';
 import 'package:communication_platform/app/dependencies/group_providers.dart';
 import 'package:communication_platform/app/design_system/app_theme.dart';
@@ -54,17 +55,42 @@ void main() {
     expect(find.textContaining('Development preview only'), findsOneWidget);
     expect(find.textContaining('Experimental group encryption'), findsNothing);
 
-    // ADR-055. The distributed artifact reaches the withheld gate instead of
-    // the create flow, and it says which of the two closed states it is in.
+    // ADR-056. On the ABI whose core was measured the distributed artifact
+    // reaches the create flow, and the experimental tier must not reuse the
+    // development preview's promise: it really does send group objects and
+    // really can lose the state they produce.
+    await pumpCreate(AppEnvironment.beta);
+    expect(
+      find.textContaining('Experimental group encryption'),
+      findsOneWidget,
+    );
+    expect(find.textContaining('delete their messages'), findsOneWidget);
+    expect(find.textContaining('Development preview only'), findsNothing);
+    expect(
+      find.byKey(const ValueKey('group-experimental-withheld-gate')),
+      findsNothing,
+    );
+
+    // The same artifact on an ABI with no admissible record reaches the
+    // withheld gate instead, and says which of the two closed states it is in.
     // Answering a recipient of this build with production's wording would be
     // answering a question they did not ask.
-    await pumpCreate(AppEnvironment.beta);
+    await pumpCreate(
+      AppEnvironment.beta,
+      availability: GroupFeatureAvailability.privateExperimentalWithheld,
+    );
     expect(
       find.byKey(const ValueKey('group-experimental-withheld-gate')),
       findsOneWidget,
     );
-    expect(find.text('Group messaging is not available yet'), findsOneWidget);
-    expect(find.textContaining('never been run on a phone'), findsOneWidget);
+    expect(
+      find.text('Group messaging is not available on this device'),
+      findsOneWidget,
+    );
+    expect(
+      find.textContaining('this device uses a different processor'),
+      findsOneWidget,
+    );
     expect(
       find.textContaining('Direct messages are unaffected'),
       findsOneWidget,
@@ -72,20 +98,6 @@ void main() {
     expect(find.byKey(const ValueKey('group-production-gate')), findsNothing);
     expect(find.textContaining('Experimental group encryption'), findsNothing);
     expect(find.byKey(const ValueKey('group-name-field')), findsNothing);
-
-    // When the ledger does open, the experimental tier must still not reuse the
-    // development preview's promise: it really does send group objects and
-    // really can lose the state they produce.
-    await pumpCreate(
-      AppEnvironment.beta,
-      availability: GroupFeatureAvailability.privateExperimental,
-    );
-    expect(
-      find.textContaining('Experimental group encryption'),
-      findsOneWidget,
-    );
-    expect(find.textContaining('delete their messages'), findsOneWidget);
-    expect(find.textContaining('Development preview only'), findsNothing);
   });
 
   testWidgets('create flow remains usable at narrow RTL and large text', (
@@ -295,10 +307,18 @@ Future<void> _pump(
   await tester.pumpAndSettle();
 }
 
-/// What the real gate resolves for [environment], with nothing overridden.
+/// What the real gate resolves for [environment] on the ABI this deployment's
+/// phones actually load, with nothing else overridden.
+///
+/// The ABI has to be named. These tests run on a desktop host, whose ABI this
+/// artifact packages no library for, so leaving it to `Abi.current()` would
+/// answer a question about the host rather than about the build under test.
 GroupFeatureAvailability _resolvedAvailability(AppEnvironment environment) {
   final container = ProviderContainer(
-    overrides: [appEnvironmentProvider.overrideWithValue(environment)],
+    overrides: [
+      appEnvironmentProvider.overrideWithValue(environment),
+      runtimeAbiProvider.overrideWithValue(GroupMlsFieldCell.arm64V8a),
+    ],
   );
   final value = container.read(groupFeatureAvailabilityProvider);
   container.dispose();

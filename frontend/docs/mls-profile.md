@@ -378,9 +378,11 @@ released format version into a later reader, is a different exercise and remains
 The device-local half of the crash and transaction-failure matrix is also evidenced below.
 Its physical-device half — process kill, Doze and force-stop, torn writes, Keystore
 availability after reboot, and the packaged Rust core — has not been run and is the larger
-part of gate 6. The packaged-core cell of it is now also the condition ADR-055 puts in
-front of the closed-beta group surface reaching a user at all; satisfying that condition
-does not satisfy gate 6, which needs the rest of the matrix as well.
+part of gate 6. The packaged-core cell of it is also the condition ADR-055 put in front of
+the closed-beta group surface reaching a user at all, and ADR-056 satisfied that condition
+for `arm64-v8a` on 2026-08-24. **It does not satisfy gate 6**, which additionally needs
+process kill, Doze and force-stop, torn writes and Keystore availability after reboot —
+none of which has been run.
 
 ### Closed-beta MLS input fuzzing (2026-08-18)
 
@@ -588,16 +590,18 @@ experimental and that an update may reset the group and delete its messages. Unt
 ADR-044 the screens gated on the development-preview permit alone, so the shipped beta
 artifact uploaded KeyPackages for groups its own interface would never show.
 
-**ADR-055 (2026-08-24) holds that track closed in the distributed artifact.** The permit
-now requires the beta environment *and* an admissible record in `GroupExperimentalGate`
-for every mandatory ABI, and the ledger is empty, so the beta artifact resolves the
-unsupported port exactly as production does — no stack, no screens, and **no KeyPackage
-generated or uploaded**. The reason is narrower than any production gate below and is not
-one of them: `cp_crypto_v1_beta_mls_operation` has never executed on a physical device or
-an emulator, on any ABI, on any date, and the `beta` Cargo profile is the only one that
-links `aws-lc-sys`. The instrument is `tool/measure_beta_mls_core.sh` and the run records
-live in `docs/validation/beta-mls-core/`. Opening that ledger restores the experimental
-tier; it closes none of the seven gates below. Production
+**ADR-055 (2026-08-24) held that track closed in the distributed artifact, and ADR-056
+reopened it on one measured ABI the same day.** The permit requires the beta environment
+*and* an admissible record in `GroupExperimentalGate` for the ABI the running process
+loaded. `arm64-v8a` was measured on a Samsung SM-A566B on 2026-08-24 — the crate's own
+`--features beta-pq-mls` suite ran on the phone and passed, 128 passed and 0 failed,
+matching the host counts exactly — so devices loading that library get the experimental
+tier. `armeabi-v7a` and `x86_64` have no record, so devices loading those resolve the
+unsupported port exactly as production does: no stack, no screens, and **no KeyPackage
+generated or uploaded**. `armeabi-v7a` is unmeasurable on the hardware available, because a
+64-bit-only ARM phone cannot execute AArch32 at all; it stays recorded as unmeasured rather
+than demoted. The instrument is `tool/measure_beta_mls_core.sh` and the run records live in
+`docs/validation/beta-mls-core/`. None of this closes any of the seven gates below. Production
 still resolves only to the unsupported port; the release entry point references a
 source-constant closed gate whose constructor assertion prevents an accidental true
 value from compiling. OpenMLS remains the production preference, but its documented

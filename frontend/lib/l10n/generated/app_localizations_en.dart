@@ -500,7 +500,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get disclosureExperimentalGroups =>
-      'Group chats are switched off in this build. The experimental group encryption has never been tested on a phone, so it is off rather than offered untested: no keys are published for you and no group message can reach this device. Direct messages are not affected.';
+      'Group chats use experimental encryption that is not finished, not standardised, and has not been independently reviewed. An update can reset a group and delete everything in it. On a phone whose processor it has not been tested on, group chats are switched off instead.';
 
   @override
   String get disclosureUnbuiltSurfaces =>
@@ -527,7 +527,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get contactsNewGroup => 'New Group';
 
   @override
-  String get contactsNewGroupClosed => 'Not available in this build';
+  String get contactsNewGroupClosed => 'Not available on this device';
 
   @override
   String get contactsNewVoiceRoom => 'New Voice Room';
@@ -1084,11 +1084,11 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get groupExperimentalWithheldTitle =>
-      'Group messaging is not available yet';
+      'Group messaging is not available on this device';
 
   @override
   String get groupExperimentalWithheldMessage =>
-      'The experimental group encryption in this build has never been run on a phone, so it is switched off rather than offered untested. Nothing about groups is active: no keys are published for you, and no group message can reach this device. Direct messages are unaffected. This will be enabled in a later build once it has been tested on real hardware.';
+      'The experimental group encryption has been tested on 64-bit ARM phones, and this device uses a different processor. Rather than run it untested, group chats are switched off here: no keys are published for you and no group message can reach this device. Direct messages are unaffected.';
 
   @override
   String get groupDevelopmentPreviewBanner =>

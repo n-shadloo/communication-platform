@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:communication_platform/app/config/app_environment.dart';
+import 'package:communication_platform/app/config/group_production_gate.dart';
 import 'package:communication_platform/app/dependencies/contact_providers.dart';
 import 'package:communication_platform/app/dependencies/core_providers.dart';
 import 'package:communication_platform/app/design_system/app_components.dart';
@@ -19,16 +20,22 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
 void main() {
-  testWidgets('the New Group entry states the build it is in', (tester) async {
-    // ADR-055. The row used to be unconditional, so a build with no reachable
-    // group stack still advertised group creation and answered the tap with a
-    // refusal page. A withheld surface that keeps its own entry point is
-    // hidden, not withheld.
+  testWidgets('the New Group entry states what this device gets', (
+    tester,
+  ) async {
+    // ADR-055 made this row conditional: it used to be unconditional, so a
+    // build with no reachable group stack still advertised group creation and
+    // answered the tap with a refusal page. ADR-056 made the condition
+    // per-ABI, so the same artifact offers it on the processor the core was
+    // measured on and withholds it on the ones it was not.
     final service = DirectoryService(
       remote: const _OfflineDirectory(),
       local: const _UnusedLocal(),
     );
-    Future<void> pumpContacts(AppEnvironment environment) => _pump(
+    Future<void> pumpContacts(
+      AppEnvironment environment, {
+      GroupMlsFieldCell? abi,
+    }) => _pump(
       tester,
       ContactsNewPage(
         ownUserId: 'self',
@@ -36,43 +43,43 @@ void main() {
         directoryService: service,
       ),
       environment: environment,
+      abi: abi,
     );
+
+    bool rowEnabled() => tester
+        .widget<ListTile>(
+          find.ancestor(
+            of: find.text('New Group'),
+            matching: find.byType(ListTile),
+          ),
+        )
+        .enabled;
 
     // The development preview has a reachable stack, so the row works.
     await pumpContacts(AppEnvironment.development);
     expect(find.text('New Group'), findsOneWidget);
-    expect(find.text('Not available in this build'), findsNothing);
-    expect(
-      tester
-          .widget<ListTile>(
-            find.ancestor(
-              of: find.text('New Group'),
-              matching: find.byType(ListTile),
-            ),
-          )
-          .enabled,
-      isTrue,
-    );
+    expect(find.text('Not available on this device'), findsNothing);
+    expect(rowEnabled(), isTrue);
 
-    // The distributed artifact does not, so the row is disabled and says so.
-    await pumpContacts(AppEnvironment.beta);
+    // The distributed artifact on the measured ABI: the row works there too.
+    await pumpContacts(AppEnvironment.beta, abi: GroupMlsFieldCell.arm64V8a);
+    expect(find.text('Not available on this device'), findsNothing);
+    expect(rowEnabled(), isTrue);
+
+    // The same artifact on an ABI with no admissible record: disabled, and it
+    // says so rather than routing to a refusal.
+    await pumpContacts(AppEnvironment.beta, abi: GroupMlsFieldCell.armeabiV7a);
     expect(find.text('New Group'), findsOneWidget);
-    expect(find.text('Not available in this build'), findsOneWidget);
-    expect(
-      tester
-          .widget<ListTile>(
-            find.ancestor(
-              of: find.text('New Group'),
-              matching: find.byType(ListTile),
-            ),
-          )
-          .enabled,
-      isFalse,
-    );
+    expect(find.text('Not available on this device'), findsOneWidget);
+    expect(rowEnabled(), isFalse);
 
-    // So does production, which never had one.
-    await pumpContacts(AppEnvironment.production);
-    expect(find.text('Not available in this build'), findsOneWidget);
+    // So does production, which has no group stack on any processor.
+    await pumpContacts(
+      AppEnvironment.production,
+      abi: GroupMlsFieldCell.arm64V8a,
+    );
+    expect(find.text('Not available on this device'), findsOneWidget);
+    expect(rowEnabled(), isFalse);
   });
 
   testWidgets('Contacts/New pages cached rows, searches, and loads more', (
@@ -343,10 +350,17 @@ Future<void> _pump(
   Widget child, {
   Locale locale = const Locale('en'),
   AppEnvironment environment = AppEnvironment.development,
+  GroupMlsFieldCell? abi,
 }) async {
   await tester.pumpWidget(
     ProviderScope(
-      overrides: [appEnvironmentProvider.overrideWithValue(environment)],
+      overrides: [
+        appEnvironmentProvider.overrideWithValue(environment),
+        // Always present, never conditional: Riverpod refuses a change in the
+        // *number* of overrides when one scope is re-pumped, and this file
+        // pumps several times into one.
+        runtimeAbiProvider.overrideWithValue(abi),
+      ],
       child: MaterialApp(
         locale: locale,
         theme: AppTheme.light(),

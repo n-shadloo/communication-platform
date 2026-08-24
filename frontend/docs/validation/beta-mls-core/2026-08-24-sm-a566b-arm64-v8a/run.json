@@ -1,0 +1,19 @@
+{
+  "schema": "beta-mls-core-run/1",
+  "recorded_at_utc": "2026-08-24T16:52:24Z",
+  "abi": "arm64-v8a",
+  "rust_target": "aarch64-linux-android",
+  "rust_version": "1.97.1",
+  "ndk_version": "28.2.13676358",
+  "manufacturer": "samsung",
+  "model": "SM-A566B",
+  "platform_release": "16",
+  "api_level": "36",
+  "build_type": "user",
+  "device_primary_abi": "arm64-v8a",
+  "emulated": false,
+  "exit_code": 0,
+  "tests_passed": 128,
+  "tests_failed": 0,
+  "summary": "test result: ok. 128 passed; 0 failed; 3 ignored; 0 measured; 0 filtered out; finished in 172.07s"
+}

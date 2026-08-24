@@ -315,13 +315,15 @@ section must not be softened or omitted.
 4. **What this build is** — the deployment disclosure required by
    [ADR-045](decisions.md), whose exact points and order are
    `DeploymentDisclosure.privateExperimental`. Present **only** in a build that is
-   distributed to someone. At revision 6 that is eight short facts, ordered by
+   distributed to someone. At revision 7 that is eight short facts, ordered by
    consequence — no independent review; how and when messages arrive while the app is
    closed, including the opt-in tier and its cost; that messages left waiting on the
    server are deleted unread and never arrive; history stored only on this device;
-   recovery restores identity and never messages; group chats are switched off and why
-   (ADR-055, which moved this point from "experimental and can be reset" — in an artifact
-   with no reachable group stack that described a feature the reader does not have);
+   recovery restores identity and never messages; group chats use experimental encryption
+   that can be reset, and are switched off entirely on a processor it has not been tested
+   on (ADR-055 moved this point to "switched off" when no group stack was reachable at all;
+   ADR-056 restored the first half once one ABI was measured, and kept the second, because
+   the point now has to be true for a reader on either kind of phone);
    parts of the interface are not built; who the build is and is not for.
    **[PRIVACY]** No cryptographic identifiers, draft names, or registry state here — they
    are true and unreadable, and they would bury the facts that matter. Sections 2 and 3
