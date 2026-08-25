@@ -6,6 +6,7 @@ import 'package:communication_platform/core/result/failure.dart';
 import 'package:communication_platform/core/result/result.dart';
 import 'package:communication_platform/features/contacts/application/ports/contact_ports.dart';
 import 'package:communication_platform/features/contacts/domain/contact_model.dart';
+import 'package:communication_platform/features/devices/domain/linked_device_model.dart';
 import 'package:communication_platform/features/local_storage/infrastructure/database/local_database.dart';
 import 'package:drift/drift.dart';
 
@@ -155,7 +156,16 @@ ORDER BY u.directory_entry_ciphertext ASC
       final global = await database
           .select(database.securityPostures)
           .getSingleOrNull();
-      if (global != null && global.state != 0) {
+      // Only a fork blocks. `pendingDeviceChange` is the in-flight marker an
+      // own device-log mutation sets before it appends and clears once the
+      // append is confirmed, so a mutation that never confirmed - a dropped
+      // connection mid-enrolment is enough - used to latch it forever. Reading
+      // it as a fork here withheld every send to every peer, including fully
+      // verified ones, through a posture no screen displays and no user action
+      // clears. The equivocation alert is global by design; a device change
+      // that has not landed yet is not equivocation.
+      if (global != null &&
+          global.state == GlobalSecurityState.deviceLogFork.index) {
         return const Result.success(true);
       }
       final rows = await (database.select(

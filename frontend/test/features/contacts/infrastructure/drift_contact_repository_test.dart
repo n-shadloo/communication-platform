@@ -1,9 +1,12 @@
 import 'dart:typed_data';
 
 import 'package:communication_platform/core/protocol/identity_protocol_model.dart';
+import 'package:communication_platform/core/result/result.dart';
 import 'package:communication_platform/features/contacts/domain/contact_model.dart';
 import 'package:communication_platform/features/contacts/infrastructure/drift_contact_repository.dart';
+import 'package:communication_platform/features/devices/domain/linked_device_model.dart';
 import 'package:communication_platform/features/local_storage/infrastructure/database/local_database.dart';
+import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -89,7 +92,46 @@ void main() {
     final contacts = await repository.watchContacts(ownUserId: 'self').first;
     expect(contacts.map((contact) => contact.username), ['bob']);
   });
+
+  test('a device change that has not landed yet is not a fork', () async {
+    await _writePosture(database, GlobalSecurityState.pendingDeviceChange);
+
+    final forked = await repository.hasAnyDeviceLogFork();
+
+    // Every send resolves live devices, and that resolution refuses outright
+    // on a fork. Reading the in-flight marker as a fork withheld messaging
+    // with every peer - verified ones included - until the app was reinstalled.
+    expect((forked as Success<bool>).value, isFalse);
+  });
+
+  test('a recorded fork still blocks globally', () async {
+    await _writePosture(database, GlobalSecurityState.deviceLogFork);
+
+    final forked = await repository.hasAnyDeviceLogFork();
+
+    expect((forked as Success<bool>).value, isTrue);
+  });
+
+  test('a normal posture reports no fork', () async {
+    await _writePosture(database, GlobalSecurityState.normal);
+
+    final forked = await repository.hasAnyDeviceLogFork();
+
+    expect((forked as Success<bool>).value, isFalse);
+  });
 }
+
+Future<void> _writePosture(
+  LocalDatabase database,
+  GlobalSecurityState state,
+) => database
+    .into(database.securityPostures)
+    .insertOnConflictUpdate(
+      SecurityPosturesCompanion.insert(
+        singletonId: const Value(1),
+        state: state.index,
+      ),
+    );
 
 Uint8List _bytes(int length, int value) =>
     Uint8List.fromList(List<int>.filled(length, value));
