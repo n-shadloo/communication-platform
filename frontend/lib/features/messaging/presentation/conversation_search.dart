@@ -184,7 +184,7 @@ class _ConversationSearchSheetState extends State<_ConversationSearchSheet> {
                         ),
                         subtitle: Text(message.authorName),
                         onTap: () {
-                          Navigator.pop(context);
+                          popAppModal(context);
                           widget.onJumpToMessage(message.id);
                         },
                       );

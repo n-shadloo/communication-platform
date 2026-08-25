@@ -878,7 +878,7 @@ class _GroupInfoViewState extends State<GroupInfoView> {
         AppButton(
           label: AppLocalizations.of(context).contactMessageAction,
           onPressed: () {
-            Navigator.pop(context);
+            popAppModal(context);
             unawaited(context.push('/chats/direct/${member.userId}'));
           },
           kind: AppButtonKind.outline,
@@ -893,7 +893,7 @@ class _GroupInfoViewState extends State<GroupInfoView> {
             label: AppLocalizations.of(context).groupRemoveAction,
             kind: AppButtonKind.danger,
             onPressed: () {
-              Navigator.pop(context);
+              popAppModal(context);
               unawaited(_confirmRemove(member));
             },
           ),
@@ -912,7 +912,7 @@ class _GroupInfoViewState extends State<GroupInfoView> {
                 ? AppLocalizations.of(context).groupDemoteAction
                 : AppLocalizations.of(context).groupPromoteAction,
             onPressed: () {
-              Navigator.pop(context);
+              popAppModal(context);
               unawaited(
                 _mutate(
                   ChangeGroupRoleOperation(
@@ -929,7 +929,7 @@ class _GroupInfoViewState extends State<GroupInfoView> {
           AppButton(
             label: AppLocalizations.of(context).groupTransferOwnerAction,
             onPressed: () {
-              Navigator.pop(context);
+              popAppModal(context);
               unawaited(
                 _mutate(TransferGroupOwnershipOperation(member.userId)),
               );
@@ -951,13 +951,13 @@ class _GroupInfoViewState extends State<GroupInfoView> {
         AppButton(
           label: strings.groupCancelAction,
           kind: AppButtonKind.ghost,
-          onPressed: () => Navigator.pop(context),
+          onPressed: () => popAppModal(context),
         ),
         AppButton(
           label: strings.groupRemoveAction,
           kind: AppButtonKind.danger,
           onPressed: () {
-            Navigator.pop(context);
+            popAppModal(context);
             unawaited(_mutate(RemoveGroupMemberOperation(member.userId)));
           },
         ),
@@ -975,13 +975,13 @@ class _GroupInfoViewState extends State<GroupInfoView> {
         AppButton(
           label: strings.groupCancelAction,
           kind: AppButtonKind.ghost,
-          onPressed: () => Navigator.pop(context),
+          onPressed: () => popAppModal(context),
         ),
         AppButton(
           label: strings.groupLeaveAction,
           kind: AppButtonKind.danger,
           onPressed: () {
-            Navigator.pop(context);
+            popAppModal(context);
             unawaited(_mutate(const LeaveGroupOperation()));
           },
         ),

@@ -322,13 +322,13 @@ class _ChatsListPageState extends State<ChatsListPage> {
             AppButton(
               label: strings.chatCancelAction,
               kind: AppButtonKind.ghost,
-              onPressed: () => Navigator.pop(context),
+              onPressed: () => popAppModal(context),
             ),
             AppButton(
               label: strings.chatDeleteForMeAction,
               kind: AppButtonKind.danger,
               onPressed: () {
-                Navigator.pop(context);
+                popAppModal(context);
                 unawaited(manager.deleteConversationForMe(item.conversationId));
               },
             ),
@@ -1004,7 +1004,7 @@ class _ChatConversationViewState extends State<ChatConversationView> {
                       child: Text(strings.chatUnpinAction),
                     ),
                     onTap: () {
-                      Navigator.pop(context);
+                      popAppModal(context);
                       _handleIntent(JumpToMessageIntent(message.id));
                     },
                   );
@@ -1081,7 +1081,7 @@ class _ChatConversationViewState extends State<ChatConversationView> {
                               : target.conversationId;
                           return selected.contains(key);
                         });
-                        Navigator.pop(context);
+                        popAppModal(context);
                         widget.onIntent(
                           ForwardToConversationsIntent(
                             message: message,
@@ -1114,13 +1114,13 @@ class _ChatConversationViewState extends State<ChatConversationView> {
         AppButton(
           label: strings.chatCancelAction,
           kind: AppButtonKind.ghost,
-          onPressed: () => Navigator.pop(context, false),
+          onPressed: () => popAppModal<bool>(context, false),
         ),
         AppButton(
           key: const ValueKey('chat-clear-history-confirm'),
           label: strings.chatClearHistoryAction,
           kind: AppButtonKind.danger,
-          onPressed: () => Navigator.pop(context, true),
+          onPressed: () => popAppModal<bool>(context, true),
         ),
       ],
     );
@@ -1142,7 +1142,7 @@ class _ChatConversationViewState extends State<ChatConversationView> {
               label: strings.contactVerifyAction,
               icon: AppIcons.security,
               onTap: () {
-                Navigator.pop(context);
+                popAppModal(context);
                 if (widget.peerUserId != null) {
                   unawaited(
                     context.push('/contacts/${widget.peerUserId}/safety'),
@@ -1154,7 +1154,7 @@ class _ChatConversationViewState extends State<ChatConversationView> {
             label: strings.chatPinnedMessagesTitle,
             icon: AppIcons.pin,
             onTap: () {
-              Navigator.pop(context);
+              popAppModal(context);
               unawaited(_showPinnedMessages());
             },
           ),
@@ -1163,7 +1163,7 @@ class _ChatConversationViewState extends State<ChatConversationView> {
             icon: AppIcons.delete,
             danger: true,
             onTap: () {
-              Navigator.pop(context);
+              popAppModal(context);
               unawaited(_confirmClearHistory());
             },
           ),
@@ -1332,7 +1332,7 @@ class _ConversationRow extends StatelessWidget {
                 : strings.chatPinAction,
             icon: AppIcons.pin,
             onTap: () {
-              Navigator.pop(context);
+              popAppModal(context);
               onAction(_ConversationAction.pin);
             },
           ),
@@ -1342,7 +1342,7 @@ class _ConversationRow extends StatelessWidget {
                 : strings.chatsMuteAction,
             icon: AppIcons.muted,
             onTap: () {
-              Navigator.pop(context);
+              popAppModal(context);
               onAction(_ConversationAction.mute);
             },
           ),
@@ -1353,7 +1353,7 @@ class _ConversationRow extends StatelessWidget {
                   : strings.chatsMarkUnreadAction,
               icon: AppIcons.delivered,
               onTap: () {
-                Navigator.pop(context);
+                popAppModal(context);
                 onAction(
                   item.unreadCount > 0
                       ? _ConversationAction.markRead
@@ -1366,7 +1366,7 @@ class _ConversationRow extends StatelessWidget {
             icon: AppIcons.delete,
             danger: true,
             onTap: () {
-              Navigator.pop(context);
+              popAppModal(context);
               onAction(_ConversationAction.delete);
             },
           ),

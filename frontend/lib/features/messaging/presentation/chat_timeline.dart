@@ -480,36 +480,47 @@ class ChatMessageBuilder extends StatelessWidget {
             },
           ),
         },
-        child: GestureDetector(
-          onLongPress: () => unawaited(_showActions(context)),
-          onSecondaryTapUp: (_) => unawaited(_showActions(context)),
-          child: AnimatedContainer(
-            key: ValueKey('message-${message.id}'),
-            duration: AppMotion.effective(context, AppMotion.state),
-            curve: AppMotion.enter,
-            margin: EdgeInsetsDirectional.only(
-              start: message.outgoing ? AppSpacing.x12 : 0,
-              end: message.outgoing ? 0 : AppSpacing.x12,
-              top: message.firstInAuthorGroup ? AppSpacing.x3 : AppSpacing.x1,
-              bottom: message.lastInAuthorGroup ? AppSpacing.x2 : AppSpacing.x1,
-            ),
-            padding: const EdgeInsets.symmetric(
-              horizontal: AppSpacing.x3,
-              vertical: AppSpacing.x2,
-            ),
-            decoration: BoxDecoration(
-              color: message.outgoing ? colors.accentSoft : colors.surface,
-              border: Border.all(
-                color: highlighted
-                    ? colors.accent
-                    : message.delivery == ChatDeliveryViewState.failed
-                    ? colors.danger
-                    : colors.border,
-                width: highlighted ? 3 : 1,
+        // The gap around a bubble stays outside the gesture detector, so the
+        // press target is the bubble itself and not the blank column beside it.
+        child: AnimatedPadding(
+          duration: AppMotion.effective(context, AppMotion.state),
+          curve: AppMotion.enter,
+          padding: EdgeInsetsDirectional.only(
+            start: message.outgoing ? AppSpacing.x12 : 0,
+            end: message.outgoing ? 0 : AppSpacing.x12,
+            top: message.firstInAuthorGroup ? AppSpacing.x3 : AppSpacing.x1,
+            bottom: message.lastInAuthorGroup ? AppSpacing.x2 : AppSpacing.x1,
+          ),
+          child: GestureDetector(
+            // The whole bubble is the target, not the glyphs inside it. Under
+            // the default `deferToChild` a press only counts where a descendant
+            // answers the hit test, so the bubble's own padding and the gaps
+            // between its rows silently swallowed the long press.
+            behavior: HitTestBehavior.opaque,
+            onLongPress: () => unawaited(_showActions(context)),
+            onSecondaryTapUp: (_) => unawaited(_showActions(context)),
+            child: AnimatedContainer(
+              key: ValueKey('message-${message.id}'),
+              duration: AppMotion.effective(context, AppMotion.state),
+              curve: AppMotion.enter,
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.x3,
+                vertical: AppSpacing.x2,
               ),
-              borderRadius: _bubbleRadius(message),
+              decoration: BoxDecoration(
+                color: message.outgoing ? colors.accentSoft : colors.surface,
+                border: Border.all(
+                  color: highlighted
+                      ? colors.accent
+                      : message.delivery == ChatDeliveryViewState.failed
+                      ? colors.danger
+                      : colors.border,
+                  width: highlighted ? 3 : 1,
+                ),
+                borderRadius: _bubbleRadius(message),
+              ),
+              child: _content(context),
             ),
-            child: _content(context),
           ),
         ),
       ),
@@ -696,7 +707,7 @@ class ChatMessageBuilder extends StatelessWidget {
                 label: strings.chatReplyAction,
                 icon: AppIcons.reply,
                 onPressed: () {
-                  Navigator.pop(context);
+                  popAppModal(context);
                   onIntent(ReplyToMessageIntent(message));
                 },
               ),
@@ -704,7 +715,7 @@ class ChatMessageBuilder extends StatelessWidget {
                 label: strings.chatReactAction,
                 icon: AppIcons.emoji,
                 onPressed: () {
-                  Navigator.pop(context);
+                  popAppModal(context);
                   onIntent(
                     SetReactionIntent(messageId: message.id, emoji: '👍'),
                   );
@@ -715,7 +726,7 @@ class ChatMessageBuilder extends StatelessWidget {
                   label: strings.chatEditAction,
                   icon: AppIcons.edit,
                   onPressed: () {
-                    Navigator.pop(context);
+                    popAppModal(context);
                     onIntent(BeginEditMessageIntent(message));
                   },
                 ),
@@ -724,7 +735,7 @@ class ChatMessageBuilder extends StatelessWidget {
                   label: strings.chatForwardAction,
                   icon: AppIcons.forward,
                   onPressed: () {
-                    Navigator.pop(context);
+                    popAppModal(context);
                     onIntent(ForwardMessageIntent(message));
                   },
                 ),
@@ -733,7 +744,7 @@ class ChatMessageBuilder extends StatelessWidget {
                   label: strings.chatCopyAction,
                   icon: AppIcons.copy,
                   onPressed: () {
-                    Navigator.pop(context);
+                    popAppModal(context);
                     onIntent(CopyMessageIntent(message.text!));
                   },
                 ),
@@ -743,7 +754,7 @@ class ChatMessageBuilder extends StatelessWidget {
                     : strings.chatStarAction,
                 icon: AppIcons.star,
                 onPressed: () {
-                  Navigator.pop(context);
+                  popAppModal(context);
                   onIntent(
                     SetStarIntent(
                       messageId: message.id,
@@ -758,7 +769,7 @@ class ChatMessageBuilder extends StatelessWidget {
                     : strings.chatPinAction,
                 icon: AppIcons.pin,
                 onPressed: () {
-                  Navigator.pop(context);
+                  popAppModal(context);
                   onIntent(
                     SetPinIntent(
                       messageId: message.id,
@@ -772,7 +783,7 @@ class ChatMessageBuilder extends StatelessWidget {
                 icon: AppIcons.delete,
                 danger: true,
                 onPressed: () {
-                  Navigator.pop(context);
+                  popAppModal(context);
                   unawaited(_showDeleteDialog(context));
                 },
               ),
@@ -793,13 +804,13 @@ class ChatMessageBuilder extends StatelessWidget {
         AppButton(
           label: strings.chatCancelAction,
           kind: AppButtonKind.ghost,
-          onPressed: () => Navigator.pop(context),
+          onPressed: () => popAppModal(context),
         ),
         AppButton(
           label: strings.chatDeleteForMeAction,
           kind: AppButtonKind.outline,
           onPressed: () {
-            Navigator.pop(context);
+            popAppModal(context);
             onIntent(DeleteForMeIntent(message.id));
           },
         ),
@@ -808,7 +819,7 @@ class ChatMessageBuilder extends StatelessWidget {
             label: strings.chatDeleteForEveryoneAction,
             kind: AppButtonKind.danger,
             onPressed: () {
-              Navigator.pop(context);
+              popAppModal(context);
               onIntent(DeleteForEveryoneIntent(message.id));
             },
           ),

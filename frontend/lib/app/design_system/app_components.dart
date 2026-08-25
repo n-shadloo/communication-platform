@@ -249,6 +249,20 @@ class AppStatusBadge extends StatelessWidget {
   }
 }
 
+/// Dismisses the sheet or dialog that [showAppSheet] or [showAppDialog] pushed.
+///
+/// Both push onto the root navigator, so the dismissal has to leave by the same
+/// door. A bare `Navigator.pop(context)` resolves to the *nearest* navigator
+/// instead, and a call site that built the modal's contents is almost always
+/// sitting inside a shell branch — so the bare form pops the page underneath and
+/// leaves the modal standing over whatever it lands on, with every button in it
+/// now wired to a widget that is no longer mounted.
+///
+/// Safe to call from inside the modal as well: the root navigator is the
+/// nearest one from there too.
+void popAppModal<T extends Object?>(BuildContext context, [T? result]) =>
+    Navigator.of(context, rootNavigator: true).pop<T>(result);
+
 Future<T?> showAppDialog<T>({
   required BuildContext context,
   required String title,
