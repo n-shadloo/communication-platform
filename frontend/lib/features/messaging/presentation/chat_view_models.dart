@@ -305,3 +305,13 @@ final class OpenAttachmentIntent extends ChatIntent {
 
   final EncryptedAttachmentDescriptor? attachment;
 }
+
+/// Remove this device's copy of the whole conversation.
+///
+/// Dispatched only after the confirmation that states the consequence. It
+/// carries no identifier: the surface that handles it already knows which
+/// conversation it resolved, and a message identifier travelling through an
+/// intent is one more place a caller could clear the wrong one.
+final class ClearConversationHistoryIntent extends ChatIntent {
+  const ClearConversationHistoryIntent();
+}

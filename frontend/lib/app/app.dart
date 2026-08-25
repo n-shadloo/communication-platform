@@ -4,6 +4,7 @@ import 'package:communication_platform/app/config/app_environment.dart';
 import 'package:communication_platform/app/config/app_environment_banner.dart';
 import 'package:communication_platform/app/dependencies/message_alerts.dart';
 import 'package:communication_platform/app/dependencies/message_delivery.dart';
+import 'package:communication_platform/app/dependencies/settings.dart';
 import 'package:communication_platform/app/dependencies/sustained_delivery.dart';
 import 'package:communication_platform/app/design_system/app_theme.dart';
 import 'package:communication_platform/app/design_system/app_tokens.dart';
@@ -14,6 +15,7 @@ import 'package:communication_platform/features/authentication/presentation/auth
 import 'package:communication_platform/features/bootstrap/application/bootstrap_flow.dart';
 import 'package:communication_platform/features/bootstrap/domain/bootstrap_model.dart';
 import 'package:communication_platform/features/devices/presentation/disclosure_change_gate.dart';
+import 'package:communication_platform/features/settings/domain/appearance_model.dart';
 import 'package:communication_platform/features/synchronization/domain/sustained_delivery_model.dart';
 import 'package:communication_platform/l10n/generated/app_localizations.dart';
 import 'package:flutter/material.dart';
@@ -25,7 +27,7 @@ class CommunicationPlatformApp extends ConsumerStatefulWidget {
   const CommunicationPlatformApp({
     required this.environment,
     this.locale,
-    this.themeMode = ThemeMode.system,
+    this.themeMode,
     this.routeGuard,
     this.shellStatus = const AppShellStatus(),
     this.initialLocation,
@@ -36,8 +38,15 @@ class CommunicationPlatformApp extends ConsumerStatefulWidget {
   });
 
   final AppEnvironment environment;
+
+  /// An explicit override. Null means "whatever the user chose in
+  /// Appearance", which is what a running application passes; a golden or a
+  /// route harness passes a value so that its output does not depend on a
+  /// stored preference.
   final Locale? locale;
-  final ThemeMode themeMode;
+
+  /// An explicit override, on the same terms as [locale].
+  final ThemeMode? themeMode;
   final AppRouteGuard? routeGuard;
   final AppShellStatus shellStatus;
   final String? initialLocation;
@@ -149,10 +158,13 @@ class _CommunicationPlatformAppState
   Widget build(BuildContext context) => MaterialApp.router(
     onGenerateTitle: (context) =>
         widget.environment.userFacingTitle(AppLocalizations.of(context)),
-    locale: widget.locale,
+    // Watched here rather than passed down, so that changing either one in
+    // Appearance rebuilds the whole application at once instead of leaving an
+    // already-open route in the previous theme.
+    locale: widget.locale ?? _localeOf(_appearance.language),
     supportedLocales: AppLocalizations.supportedLocales,
     localizationsDelegates: AppLocalizations.localizationsDelegates,
-    themeMode: widget.themeMode,
+    themeMode: widget.themeMode ?? _themeModeOf(_appearance.theme),
     theme: AppTheme.light(),
     darkTheme: AppTheme.dark(),
     highContrastTheme: AppTheme.highContrastLight(),
@@ -172,4 +184,35 @@ class _CommunicationPlatformAppState
       ),
     ),
   );
+
+  /// What the user chose, or the phone's own settings when this composition
+  /// has nowhere to have stored a choice.
+  ///
+  /// Guarded because this widget is also the unit under test in route and
+  /// bootstrap harnesses that mount it without a `ProviderScope`. Those
+  /// harnesses are testing routing and boot state, not appearance, and a root
+  /// widget that will not render outside a production container would make
+  /// every one of them a composition test.
+  AppearancePreferences get _appearance {
+    try {
+      ProviderScope.containerOf(context, listen: false);
+    } on StateError {
+      return AppearancePreferences.followSystem;
+    }
+    return ref.watch(appearancePreferencesProvider);
+  }
+
+  /// Null keeps `MaterialApp`'s own resolution, which follows the phone and
+  /// falls back to the first supported locale when the phone is set to a
+  /// language this application does not ship.
+  static Locale? _localeOf(AppLanguagePreference language) {
+    final code = language.languageCode;
+    return code == null ? null : Locale(code);
+  }
+
+  static ThemeMode _themeModeOf(AppThemePreference theme) => switch (theme) {
+    AppThemePreference.system => ThemeMode.system,
+    AppThemePreference.light => ThemeMode.light,
+    AppThemePreference.dark => ThemeMode.dark,
+  };
 }

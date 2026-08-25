@@ -301,6 +301,28 @@ pub unsafe extern "C" fn cp_crypto_v1_sanitize_identity(
 }
 
 #[unsafe(no_mangle)]
+/// Re-wraps the same cross-signing identity under a new recovery secret.
+///
+/// # Safety
+///
+/// Pointer requirements are identical to [`cp_crypto_v1_sanitize_identity`].
+pub unsafe extern "C" fn cp_crypto_v1_rotate_recovery_secret(
+    identity_package: *const u8,
+    identity_package_len: usize,
+    output: *mut u8,
+    output_len: usize,
+    written: *mut usize,
+) -> i32 {
+    guard(|| {
+        // SAFETY: upheld by this function's caller contract.
+        let identity_package = unsafe { ffi_input(identity_package, identity_package_len)? };
+        let package = enrollment::rotate_recovery_secret(identity_package)?;
+        // SAFETY: upheld by this function's caller contract.
+        unsafe { ffi_output(&package, output, output_len, written) }
+    })
+}
+
+#[unsafe(no_mangle)]
 /// Signs the canonical piece-08 bundle for a backend-assigned device UUID.
 ///
 /// # Safety

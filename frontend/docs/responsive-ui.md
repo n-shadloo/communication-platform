@@ -112,8 +112,9 @@ boundary; the size-notification anchor path is shared by every row builder.
 
 - **Chats List:** pinned/active rooms, conversations ordered by local activity, unread,
   mute/pin/status, offline cached state, context menu.
-- **Search:** local chats/messages/contacts only, jump to message, device-history scope
-  notice.
+- **Search:** three in-place surfaces, never a merged results screen — the chat-list
+  filter, the shared in-conversation sheet (direct, saved and group), and the contact
+  filter. Jump to message, per-surface scope notice, and a stated result cap.
 - **Contacts/New:** New Group, New Voice Room, verified indicator, cached offline state.
 - **Profile bootstrap:** use backend username and deterministic local avatar until an
   authenticated profile key/payload arrives; never render unverified cached identity.
@@ -152,10 +153,15 @@ boundary; the size-notification anchor path is shared by every row builder.
 
 - **Saved Messages:** self-conversation without peer presence/receipts.
 - **Settings:** profile, Saved Messages, devices, security/recovery, notifications,
-  appearance, notice, logout, About.
+  receiving while closed, appearance, notice, About, logout.
+- **Appearance:** theme and language, both client-only; high contrast follows the
+  operating system and has no control here.
+- **About/Diagnostics:** local build facts, and a redacted report the user copies. What
+  the screen shows is what the clipboard receives.
 - **Edit Profile:** encrypted display name/avatar and visibility wording.
-- **Security Settings:** identity-recovery guidance, verified-contact/device-log review,
-  notice.
+- **Security Settings:** identity-recovery guidance and replacement, verified-contact
+  review, notice. The replacement screen blocks screen capture and copies through the
+  expiring clipboard path.
 - **Linked Devices:** this/other devices, last-active coarseness, relabel/revoke.
 - **Add Device/Restore:** two-phase registration, recovery-secret identity restore,
   wrong secret, finishing secure setup, waiting for an existing online history source,

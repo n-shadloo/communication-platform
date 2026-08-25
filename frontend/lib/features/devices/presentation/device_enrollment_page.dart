@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:communication_platform/app/config/deployment_disclosure.dart';
 import 'package:communication_platform/app/dependencies/core_providers.dart';
@@ -10,9 +11,9 @@ import 'package:communication_platform/features/authentication/presentation/auth
 import 'package:communication_platform/features/devices/domain/device_enrollment_model.dart';
 import 'package:communication_platform/features/devices/presentation/device_enrollment_controller.dart';
 import 'package:communication_platform/features/devices/presentation/security_notice_sections.dart';
+import 'package:communication_platform/features/devices/presentation/sensitive_screen_control.dart';
 import 'package:communication_platform/l10n/generated/app_localizations.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -565,39 +566,4 @@ final class _EnrollmentNotice extends StatelessWidget {
       ),
     ),
   );
-}
-
-final class SensitiveScreenControl {
-  const SensitiveScreenControl();
-
-  static const MethodChannel _channel = MethodChannel(
-    'communication_platform/protected_storage',
-  );
-
-  Future<void> setEnabled(bool enabled) async {
-    try {
-      await _channel.invokeMethod<void>('setSensitiveScreen', {
-        'enabled': enabled,
-      });
-    } on MissingPluginException {
-      // Widget tests and unsupported future platforms remain fail-closed at
-      // the crypto boundary; they simply lack the Android screenshot control.
-    } on PlatformException {
-      // No error detail is surfaced across the privacy boundary.
-    }
-  }
-
-  Future<bool> copyText(String text) async {
-    try {
-      await _channel.invokeMethod<void>('copySensitiveText', {
-        'text': text,
-        'clearAfterSeconds': 60,
-      });
-      return true;
-    } on MissingPluginException {
-      return false;
-    } on PlatformException {
-      return false;
-    }
-  }
 }

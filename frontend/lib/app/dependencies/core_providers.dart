@@ -17,6 +17,7 @@ import 'package:communication_platform/core/protocol/enrollment_crypto_model.dar
 import 'package:communication_platform/core/protocol/identity_protocol_model.dart';
 import 'package:communication_platform/core/result/failure.dart';
 import 'package:communication_platform/core/result/result.dart';
+import 'package:communication_platform/features/networking/infrastructure/diagnostics/network_diagnostics.dart';
 import 'package:communication_platform/shared/infrastructure/crypto/crypto_core_runtime.dart';
 import 'package:communication_platform/shared/infrastructure/crypto/native/pairwise_session_crypto.dart';
 import 'package:communication_platform/shared/infrastructure/crypto/platform_crypto_core.dart';
@@ -49,6 +50,17 @@ final appEnvironmentProvider = Provider<AppEnvironment>(
 /// surface has been measured on *this* processor.
 final runtimeAbiProvider = Provider<GroupMlsFieldCell?>(
   (ref) => currentGroupMlsAbiCell(),
+);
+
+/// The one place request outcomes are counted, for the whole process.
+///
+/// It is a provider so that both entry points take the *same* recorder from
+/// `ApplicationRuntime` — a second one beside it would describe half the
+/// traffic and read as a working transport in a report written to explain a
+/// broken one. The default instance exists so that a test scope and a screen
+/// harness have somewhere to write; nothing durable is created either way.
+final networkDiagnosticsProvider = Provider<RecordingNetworkDiagnostics>(
+  (ref) => RecordingNetworkDiagnostics(),
 );
 
 typedef CryptoCoreFactory = CryptoCorePort Function();

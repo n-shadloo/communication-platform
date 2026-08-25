@@ -10,6 +10,7 @@ import 'package:communication_platform/features/devices/infrastructure/dio_devic
 import 'package:communication_platform/features/devices/infrastructure/drift_enrollment_journal_store.dart';
 import 'package:communication_platform/features/local_storage/infrastructure/local_storage_runtime.dart';
 import 'package:communication_platform/features/networking/infrastructure/api/dio_rest_client.dart';
+import 'package:communication_platform/features/networking/infrastructure/diagnostics/network_diagnostics.dart';
 import 'package:communication_platform/features/networking/infrastructure/tls/transport_security.dart';
 
 /// The application's authenticated composition root.
@@ -34,6 +35,7 @@ final class AuthenticationAssembly {
     required EnrollmentCryptoPort enrollmentCrypto,
     TransportSecurity transportSecurity =
         const TransportSecurity.platformDefault(),
+    NetworkDiagnostics diagnostics = const NoopNetworkDiagnostics(),
   }) {
     final lifecycle = AuthenticationLifecycleBus();
     final tokenStore = SecureSessionTokenAdapter(localStorage);
@@ -46,6 +48,7 @@ final class AuthenticationAssembly {
       ),
       timeSource: timeSource,
       transportSecurity: transportSecurity,
+      diagnostics: diagnostics,
     );
     final restClient = networking.restClient;
     final session = CoordinatedAuthenticationSession(

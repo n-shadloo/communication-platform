@@ -429,6 +429,11 @@ final class _FakeEnrollmentCrypto implements EnrollmentCryptoPort {
       Future.value(Result.success(device));
 
   @override
+  Future<Result<IdentityKeyPackage>> rotateRecoverySecret({
+    required IdentityKeyPackage package,
+  }) => Future.value(Result.success(displayIdentity));
+
+  @override
   Future<Result<IdentityKeyPackage>> prepareFirstIdentity({
     required Uint8List userId,
   }) => Future.value(Result.success(displayIdentity));

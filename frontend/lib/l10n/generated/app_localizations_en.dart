@@ -166,9 +166,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get roomPlaceholderTitle => 'Voice room detail';
 
   @override
-  String get appearancePlaceholderTitle => 'Appearance detail';
-
-  @override
   String get newChatPlaceholderTitle => 'New conversation';
 
   @override
@@ -1438,4 +1435,305 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get sustainedRefusedWithheld =>
       'Not turned on: this build does not offer it yet.';
+
+  @override
+  String settingsSignedInAs(String username) {
+    return 'Signed in as $username';
+  }
+
+  @override
+  String get settingsProfileSummary =>
+      'Your display name and photo, and what other people can see';
+
+  @override
+  String get settingsSavedMessagesSummary =>
+      'Notes to yourself, kept on this phone';
+
+  @override
+  String get settingsSecurityTitle => 'Security & recovery';
+
+  @override
+  String get settingsSecuritySummary =>
+      'Replace your recovery secret and review verified contacts';
+
+  @override
+  String get settingsAppearanceSummary =>
+      'Theme and language on this phone only';
+
+  @override
+  String get settingsAboutTitle => 'About';
+
+  @override
+  String get settingsAboutSummary =>
+      'Version, what this build is, and a report you can copy';
+
+  @override
+  String get settingsLogOutTitle => 'Log out';
+
+  @override
+  String get settingsLogOutConfirmTitle => 'Log out of this device?';
+
+  @override
+  String get settingsLogOutConfirmBody =>
+      'Everything this phone holds is erased: your messages, your contacts and the keys that decrypt them. The server keeps no copy of your history, so nothing comes back when you sign in again — only another device that still has your history can send it to you. Your recovery secret restores your identity, never your messages.';
+
+  @override
+  String get settingsLogOutConfirmAction => 'Log out and erase';
+
+  @override
+  String get settingsCancelAction => 'Cancel';
+
+  @override
+  String get appearanceTitle => 'Appearance';
+
+  @override
+  String get appearanceLocalOnlyNotice =>
+      'These two settings stay on this phone. They are not sent anywhere and nobody else can see them.';
+
+  @override
+  String get appearanceThemeSection => 'Theme';
+
+  @override
+  String get appearanceThemeSystem => 'Follow my phone';
+
+  @override
+  String get appearanceThemeLight => 'Light';
+
+  @override
+  String get appearanceThemeDark => 'Dark';
+
+  @override
+  String get appearanceContrastNotice =>
+      'High contrast follows your phone’s accessibility settings and has no switch here.';
+
+  @override
+  String get appearanceLanguageSection => 'Language';
+
+  @override
+  String get appearanceLanguageSystem => 'Follow my phone';
+
+  @override
+  String get appearanceLanguageEnglish => 'English';
+
+  @override
+  String get appearanceLanguagePersian => 'فارسی';
+
+  @override
+  String get appearanceNotStoredNotice =>
+      'This phone could not save the choice. It applies now and goes back to following your phone when the app restarts.';
+
+  @override
+  String get securitySettingsTitle => 'Security & recovery';
+
+  @override
+  String get securityRecoveryTitle => 'Recovery secret';
+
+  @override
+  String get securityRecoveryBody =>
+      'A recovery secret is shown once, when it is made, and this app never keeps a copy — so it cannot be shown again. If you have lost yours, or somebody else may have seen it, make a new one here. The server holds only an unreadable backup of your identity, never your messages.';
+
+  @override
+  String get securityRecoveryAction => 'Make a new recovery secret';
+
+  @override
+  String get securitySafetyNumbersTitle => 'Safety numbers';
+
+  @override
+  String get securitySafetyNumbersSummary =>
+      'Which contacts you have checked in person, and which you have not';
+
+  @override
+  String get safetyNumbersReviewBody =>
+      'Open a contact to compare their safety number in person or over another channel you trust. Until you do, messaging with them is withheld.';
+
+  @override
+  String get recoveryRotationTitle => 'New recovery secret';
+
+  @override
+  String get recoveryRotationExplain =>
+      'This makes a new secret for the identity you already have. Your contacts stay verified and your other devices stay linked — only the secret that unlocks your identity backup changes.';
+
+  @override
+  String get recoveryRotationCost =>
+      'The secret you have now stops working as soon as the new one is made. Write the new one down before you leave this screen: it is shown once and this app keeps no copy.';
+
+  @override
+  String get recoveryRotationNoHistoryNotice =>
+      'A recovery secret brings back who you are, never what was said. Message history lives on your devices and nowhere else.';
+
+  @override
+  String get recoveryRotationStartAction => 'Make the new secret';
+
+  @override
+  String get recoveryRotationWorking => 'Making a new secret…';
+
+  @override
+  String get recoveryRotationDoneTitle => 'Write this down now';
+
+  @override
+  String get recoveryRotationShownOnce =>
+      'This is the only time this secret is shown. The old one no longer works.';
+
+  @override
+  String get recoveryRotationScreenshotNotice =>
+      'Screenshots are blocked on this screen, and a copy is cleared from the clipboard after a minute.';
+
+  @override
+  String get recoveryRotationCopyAction => 'Copy the secret';
+
+  @override
+  String get recoveryRotationCopiedMessage =>
+      'Copied. It will be cleared in a minute.';
+
+  @override
+  String get recoveryRotationCopyUnavailable =>
+      'This build cannot use the clipboard safely, so copying is switched off. Write the secret down instead.';
+
+  @override
+  String get recoveryRotationFinishAction => 'I have written it down';
+
+  @override
+  String get recoveryRotationFailedTitle => 'Nothing changed';
+
+  @override
+  String get recoveryRotationFailedBody =>
+      'The new secret was not saved on the server, so your current recovery secret still works. Try again when you have a connection.';
+
+  @override
+  String get recoveryRotationUnavailableBody =>
+      'This device has no completed identity to protect, so there is nothing to replace. Finish setting up encryption first.';
+
+  @override
+  String get aboutVersionLabel => 'Version';
+
+  @override
+  String get aboutDisclosureLabel => 'Statement revision';
+
+  @override
+  String get aboutLocalOnlyNotice =>
+      'Everything on this screen was read from this phone. Nothing was fetched and nothing was sent.';
+
+  @override
+  String get diagnosticsTitle => 'Diagnostics report';
+
+  @override
+  String get diagnosticsSummary =>
+      'A short technical report you can copy and send to whoever runs your server';
+
+  @override
+  String get diagnosticsExplain =>
+      'This is everything the report contains, exactly as it will be copied. It carries no message, no name, no address, no key and no identifier — only settings, states and rough counts.';
+
+  @override
+  String get diagnosticsNothingSentNotice =>
+      'Copying puts it on this phone’s clipboard. The app sends it nowhere; where it goes next is your choice.';
+
+  @override
+  String get diagnosticsLoadingTitle => 'Reading this device…';
+
+  @override
+  String get diagnosticsCopyAction => 'Copy the report';
+
+  @override
+  String get diagnosticsCopiedMessage => 'Report copied.';
+
+  @override
+  String get diagnosticsCopyFailed =>
+      'This phone did not let the app use the clipboard.';
+
+  @override
+  String get diagnosticsRefreshAction => 'Read again';
+
+  @override
+  String chatSearchTruncatedNotice(int shown) {
+    return 'Showing the first $shown matches. Type more of the message to narrow it down.';
+  }
+
+  @override
+  String chatSearchResultCount(int count) {
+    return '$count matches on this phone';
+  }
+
+  @override
+  String get chatClearHistoryTitle => 'Clear this conversation?';
+
+  @override
+  String get chatClearHistoryBody =>
+      'Every message in this conversation is removed from this phone and cannot be brought back here. The other person keeps their copy, and your other devices keep theirs.';
+
+  @override
+  String get chatClearHistoryAction => 'Clear on this phone';
+
+  @override
+  String get linkedDevicesRefreshAction => 'Refresh';
+
+  @override
+  String get linkedDevicesLabelsEncrypted =>
+      'Device names are encrypted on this phone';
+
+  @override
+  String get linkedDevicesLoadingTitle => 'Loading your devices';
+
+  @override
+  String get linkedDevicesUnavailableTitle => 'Device list unavailable';
+
+  @override
+  String get linkedDevicesUnavailableMessage =>
+      'This device could not read the list. Check your connection and try again.';
+
+  @override
+  String get linkedDevicesEmptyTitle => 'No other devices';
+
+  @override
+  String get linkedDevicesThisDevice => 'This device';
+
+  @override
+  String get linkedDevicesUnnamed => 'Unnamed device';
+
+  @override
+  String get linkedDevicesCurrentSubtitle => 'The device you are using now';
+
+  @override
+  String linkedDevicesLastActive(String date) {
+    return 'Last active: $date';
+  }
+
+  @override
+  String get linkedDevicesLastActiveUnknown => 'Last active: not reported';
+
+  @override
+  String get linkedDevicesRenameAction => 'Rename';
+
+  @override
+  String get linkedDevicesRemoveAction => 'Remove';
+
+  @override
+  String get linkedDevicesRenameTitle => 'Rename device';
+
+  @override
+  String get linkedDevicesRenameLabel => 'Device name';
+
+  @override
+  String get linkedDevicesSaveAction => 'Save';
+
+  @override
+  String get linkedDevicesRemoveTitle => 'Remove this device?';
+
+  @override
+  String get linkedDevicesRemoveSelfTitle => 'Remove the device you are using?';
+
+  @override
+  String get linkedDevicesRemoveBody =>
+      'The device stops being able to read new messages, and this cannot be undone. Everything it holds stays on it until it is signed out or erased.';
+
+  @override
+  String get linkedDevicesRemoveSelfBody =>
+      'This phone is signed out and everything on it is erased, including your messages and the keys that decrypt them. This cannot be undone.';
+
+  @override
+  String get linkedDevicesAddTitle => 'Add another device';
+
+  @override
+  String get linkedDevicesAddBody =>
+      'Install the app on the other device, sign in there, and enter your recovery secret when it asks. It appears in this list once it is signed. Keep this phone online afterwards so it can send your history across; the server has no copy to send.';
 }

@@ -2,10 +2,11 @@
 
 Flutter client for Android, with a preserved post-v1 Web foundation. The product name
 and all brand assets remain provisional. Registration, login, device enrollment and
-cross-signing, contacts, direct messaging, Saved Messages, linked devices, history
-transfer and the closed-beta group stack are implemented; voice rooms, search,
-notifications, background delivery, file attachments and profile publishing are not,
-and every surface that is routed without an implementation behind it says so
+cross-signing, contacts, direct messaging, Saved Messages, local search, linked devices,
+history transfer, notifications, background delivery, the settings surfaces, the
+user-initiated diagnostics export and the closed-beta group stack are implemented; voice
+rooms, file attachments, shared media and profile publishing are not, and every surface
+that is routed without an implementation behind it says so
 ([ADR-045](docs/decisions.md)). `docs/implementation-checklist.md` is the live status.
 
 The app bundles Vazirmatn `v33.003` and its SIL OFL 1.1 license under

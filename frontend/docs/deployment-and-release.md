@@ -57,7 +57,9 @@ configuration.
 
 Track independently:
 
-- human application version;
+- human application version, which `BuildIdentity.version` mirrors from `pubspec.yaml`
+  so that the About screen and the diagnostics export name the artifact the user
+  actually installed; an architecture test fails if the two drift apart;
 - monotonically increasing Android version code;
 - future Web artifact/build ID (post-v1);
 - local database schema version;
@@ -264,6 +266,9 @@ downgrade.
   record in `SustainedDeliveryGate.releaseAssertion`, or the capability is still withheld.
   **Currently withheld; the gate is CLOSED and no cell has been run.** A partially
   satisfied matrix opens nothing, and an emulator record can never satisfy a cell.
-- [ ] No forbidden network calls or sensitive logs/artifacts detected.
+- [ ] No forbidden network calls or sensitive logs/artifacts detected. This now includes
+  the user-initiated diagnostics export (§15.3): the report a recipient can be asked for
+  is inspected on a real device with real content behind it, as well as by the
+  adversarial host test that stuffs a canary into every table it reads.
 - [ ] SBOM, hashes, signatures, update metadata, and rollback plan archived.
 - [ ] Staging rehearsal and isolated-network production rehearsal completed.

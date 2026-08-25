@@ -407,14 +407,25 @@ state its own scope; borrowing the other's is a false promise ([ADR-052](decisio
 - **The chat-list box (this screen).** Filters the conversation list on **name and latest
   message only**. It does not read history. Its hint and its empty state say so, and point
   the user at the in-conversation search for anything older.
-- **In-conversation search (§7).** Reads **that conversation's entire local history** —
-  the message stream carries no limit — and matching results scroll the timeline to the
-  message. Its notice says the search covers only messages stored on this phone, and that
-  the server never sees them or the query.
-- **States.** Empty query, no results, and the scope note belonging to that surface.
+- **In-conversation search (§8, §9, §14).** One surface, opened from the overflow of
+  every conversation kind — direct, saved and group. It reads **that conversation's
+  entire local history** — the message stream carries no limit — and a matching result
+  scrolls the timeline to the message. Its notice says the search covers only messages
+  stored on this phone, and that the server never sees them or the query. It shows at
+  most 30 matches at a time and **says so** when it is showing that many, because a
+  silently capped result set misdescribes the scope the notice just promised
+  ([ADR-057](decisions.md)).
+- **States.** Empty query, no results, the match count, the truncation notice, and the
+  scope note belonging to that surface.
 
 A single merged results screen grouping **Chats** / **Messages** / **Contacts** is not
-built. Nothing in the app offers it, and the disclosure does not imply it.
+built. Nothing in the app offers it, and the disclosure does not imply it. Contacts are
+filtered where they are listed (§7), which is the third and last search surface.
+
+**[PRIVACY]** There is no separate search index. The encrypted database is the index:
+the decrypted message projection lives inside it, under the Keystore-wrapped key, and a
+search is a filter over rows that are already there. A second structure would hold a
+second copy of every message body ([ADR-057](decisions.md)).
 
 ---
 
@@ -756,7 +767,10 @@ appear pinned in the Chats list.
 8. **Log out** → confirm. **[PRIVACY]** The confirm clearly states whether local
    history/keys are wiped. The recovery secret can recover cross-signing identity, not
    messages; history returns only from another device that still has it.
-9. **About** — app/version info (all local; no external calls).
+9. **About** — app/version info (all local; no external calls): the build's own name,
+   the packaged version, which build it is, and the revision of the statement this
+   build carries. It states that nothing on it was fetched. Behind it sits
+   **Diagnostics** (§15.3).
 
 ### 15.1 Edit Profile
 - Set display name and avatar. State clearly what is visible to contacts. (Keep personal
@@ -768,8 +782,41 @@ appear pinned in the Chats list.
   rewrap the same cross-signing identity material, upload a higher backup version, show
   the new secret once, and invalidate the old secret. Honest note: the server holds only
   an **unreadable identity backup** and no message history.
-- **Safety numbers** — a shortcut to review verified contacts (§11.1).
+- **Safety numbers** — a shortcut to review verified contacts (§11.1): every known
+  contact with the trust state the conversation screens gate on, tapping through to that
+  contact's Safety Number screen. An unverified row never renders cached profile
+  identity.
 - **Security notice** link (§5).
+
+**Replacement flow states.** *Explain* (what it does, what it costs, and that a recovery
+secret restores identity and never history) → *working* → *shown once* → *done*, with a
+single *failed* state. Screen capture is blocked for as long as the screen is open, and a
+copy goes through the clipboard path that expires; a build without that path says copying
+is unavailable rather than using a clipboard that never clears. **The new secret is shown
+only after the server has accepted the higher backup version.** Every failure says the
+current secret still works, because it does ([ADR-057](decisions.md)).
+
+### 15.3 Diagnostics
+
+**Purpose.** A short technical report the user can copy and hand to whoever runs their
+server. Reached from About and from nowhere else.
+
+**[PRIVACY]** The report cannot contain a message, a name, an address, a key, a token or
+any identifier — not by review but by construction: its values are booleans,
+enumerations, order-of-magnitude counts and compile-time constants, and there is no way
+to put text into one. Counts are bucketed and the timestamp is an hour, because an exact
+description of one person's usage is a needlessly precise thing to put in a document they
+may pass on.
+
+**Layout.** The explanation, a statement that the application sends it nowhere, the
+**complete report text exactly as it will be copied**, and a Copy action. What is on the
+screen and what reaches the clipboard are the same bytes; showing a summary and copying
+something larger would ask a person to share a document they have not read. The report
+itself is locale-independent ASCII — its recipient may not read the sender's language —
+while the chrome around it is translated.
+
+**States.** *Reading this device*, *report*, *copied*, *clipboard refused*, and a re-read
+action.
 
 ---
 
@@ -782,9 +829,14 @@ transfer locally held history.
 **Layout (top → bottom).**
 1. **Top bar:** back; title "Linked Devices".
 2. **This device** row — current device, marked.
-3. **Other devices** list — each row: device label, last-active (as available), and
-   **Remove device** (→ confirm). Removing revokes it.
-4. **Add device** → Add Device flow (§16.1).
+3. **Other devices** list — each row: device label, last-active (as available, at the
+   day-level coarseness the backend reports and **not** shifted into local time), and
+   **Remove device** (→ confirm). Removing revokes it. Removing *this* device is a
+   distinct confirmation, because it also erases everything on this phone.
+4. **Add device** — an explanation, not a button. The flow in §16.1 starts on the *other*
+   device, so this screen has nothing to start; what it says is what the other device
+   needs, and that this one should stay online afterwards so it can send its history
+   across, because the server has none to send ([ADR-057](decisions.md)).
 
 ### 16.1 Add Device flow
 - **Purpose.** Bring a new device online, recover/cross-sign identity, then optionally
@@ -860,6 +912,11 @@ Every dialog that performs an irreversible or best-effort action must carry hone
 29. Settings home (§15)
 30. Edit Profile (§15.1)
 31. Security settings (§15.2)
-32. Linked Devices (§16)
-33. Add Device (§16.1)
-34. Global dialogs/sheets/menus (§17)
+32. Appearance (§15, item 6)
+33. Recovery-secret replacement (§15.2)
+34. Safety-number review (§15.2)
+35. About (§15, item 9)
+36. Diagnostics (§15.3)
+37. Linked Devices (§16)
+38. Add Device (§16.1)
+39. Global dialogs/sheets/menus (§17)

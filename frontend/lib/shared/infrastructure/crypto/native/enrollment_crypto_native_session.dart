@@ -37,6 +37,12 @@ final class EnrollmentCryptoNativeSession {
         IdentityKeyPackage.fromNative,
       );
 
+  Result<IdentityKeyPackage> rotateRecoverySecret(IdentityKeyPackage package) =>
+      _decode(
+        api.rotateRecoverySecret(package.opaqueBytes),
+        IdentityKeyPackage.fromNative,
+      );
+
   Result<Uint8List> crossSignDevice(
     DeviceKeyPackage device,
     IdentityKeyPackage identity,

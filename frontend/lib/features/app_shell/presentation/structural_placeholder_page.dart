@@ -19,7 +19,6 @@ enum StructuralPlaceholderKind {
   settings,
   thread,
   room,
-  appearance,
   newChat,
   newRoom,
 }
@@ -38,7 +37,6 @@ class StructuralPlaceholderPage extends StatelessWidget {
       StructuralPlaceholderKind.settings => l10n.settingsPlaceholderTitle,
       StructuralPlaceholderKind.thread => l10n.threadPlaceholderTitle,
       StructuralPlaceholderKind.room => l10n.roomPlaceholderTitle,
-      StructuralPlaceholderKind.appearance => l10n.appearancePlaceholderTitle,
       StructuralPlaceholderKind.newChat => l10n.newChatPlaceholderTitle,
       StructuralPlaceholderKind.newRoom => l10n.newRoomPlaceholderTitle,
     };
@@ -55,8 +53,7 @@ class StructuralPlaceholderPage extends StatelessWidget {
       StructuralPlaceholderKind.voiceRooms ||
       StructuralPlaceholderKind.room ||
       StructuralPlaceholderKind.newRoom => AppIcons.voiceRooms,
-      StructuralPlaceholderKind.settings ||
-      StructuralPlaceholderKind.appearance => AppIcons.settings,
+      StructuralPlaceholderKind.settings => AppIcons.settings,
     };
     final route = GoRouterState.of(context).uri.path;
 

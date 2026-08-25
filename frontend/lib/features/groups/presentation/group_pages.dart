@@ -14,6 +14,7 @@ import 'package:communication_platform/features/contacts/presentation/contact_av
 import 'package:communication_platform/features/groups/domain/group_model.dart';
 import 'package:communication_platform/features/messaging/presentation/chat_timeline.dart';
 import 'package:communication_platform/features/messaging/presentation/chat_view_models.dart';
+import 'package:communication_platform/features/messaging/presentation/conversation_search.dart';
 import 'package:communication_platform/l10n/generated/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -551,6 +552,17 @@ class _GroupChatViewState extends State<GroupChatView> {
           ),
         ),
         actions: [
+          // The same sheet a direct conversation opens, over the same
+          // kind of list: `watchMessages` loads a group's local history
+          // without a limit, so the scope this sheet states — everything
+          // stored on this phone for this conversation — is true here
+          // too.
+          AppIconButton(
+            icon: AppIcons.search,
+            semanticLabel: strings.chatSearchAction,
+            onPressed: () => unawaited(_search(viewMessages)),
+            kind: AppButtonKind.ghost,
+          ),
           AppIconButton(
             icon: AppIcons.info,
             semanticLabel: strings.groupInfoTitle,
@@ -580,6 +592,13 @@ class _GroupChatViewState extends State<GroupChatView> {
           : chat,
     );
   }
+
+  Future<void> _search(List<ChatMessageViewModel> messages) =>
+      showConversationSearch(
+        context: context,
+        messages: messages,
+        onJumpToMessage: (id) => _handleIntent(JumpToMessageIntent(id)),
+      );
 
   ChatMessageViewModel _messageView(GroupMessage message, int index) {
     final member = widget.state.member(message.senderUserId);
@@ -755,9 +774,15 @@ class _GroupInfoViewState extends State<GroupInfoView> {
                 kind: AppButtonKind.outline,
               ),
               AppButton(
+                key: const ValueKey('group-info-search'),
                 label: strings.groupSearchChatAction,
                 leading: AppIcons.search,
-                onPressed: null,
+                // Searching happens in the conversation, over the
+                // messages it has loaded. A permanently disabled button
+                // offering it here was a control that could never
+                // succeed, which the UI specification's core rules
+                // forbid.
+                onPressed: () => context.go('/groups/${state.groupId}'),
                 kind: AppButtonKind.outline,
               ),
               AppButton(

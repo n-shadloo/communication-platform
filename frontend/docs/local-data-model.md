@@ -53,7 +53,7 @@ Names are conceptual; migrations may refine physical layout without changing own
 | `voice_rooms` | Local room capability, encrypted metadata, live state |
 | `history_transfers` | Device-to-device content transfer manifests, event progress, source completeness |
 | `sync_checkpoint` | Highest contiguous acked seq, `pruned_through`, ETags, retry state, protocol version |
-| `local_preferences` | Theme, language, mute, pin, star, preview policy, and whether the notification permission prompt has ever been shown |
+| `local_preferences` | Theme and language (`appearance.theme.v1`, `appearance.language.v1`), mute, pin, star, preview policy, the accepted disclosure revision, and whether the notification permission prompt has ever been shown. Client-only display values live here rather than in a plain file so that the logout wipe, which destroys the database key, destroys them too |
 | `quarantine` | Bounded metadata about rejected input; never plaintext or raw secrets |
 
 ## Identity and uniqueness
@@ -141,6 +141,11 @@ cross-check authorization rather than trusting a server-supplied projection.
 
 ## Search
 
-Android maintains a local index inside the encrypted database. A future Web build uses an
-in-memory index from decrypted session content. Search input/results never leave the
-device. The UI states that results cover only history available on this device.
+The encrypted database **is** the index. `messages` holds the decrypted message
+projection inside SQLCipher, under the Keystore-wrapped key, and a search is a filter
+over rows that are already there; a conversation's stream carries no limit, so an
+in-conversation search covers the whole of that conversation's local history. No separate
+index structure is built: it would hold a second copy of every message body, enlarge what
+a wipe has to reach, and buy nothing at this scale ([ADR-057](decisions.md)). A future Web
+build uses an in-memory index from decrypted session content. Search input and results
+never leave the device. Each surface states its own scope.

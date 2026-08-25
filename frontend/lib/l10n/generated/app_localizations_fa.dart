@@ -166,9 +166,6 @@ class AppLocalizationsFa extends AppLocalizations {
   String get roomPlaceholderTitle => 'جزئیات اتاق صوتی';
 
   @override
-  String get appearancePlaceholderTitle => 'جزئیات نمایش';
-
-  @override
   String get newChatPlaceholderTitle => 'گفت‌وگوی جدید';
 
   @override
@@ -1437,4 +1434,305 @@ class AppLocalizationsFa extends AppLocalizations {
   @override
   String get sustainedRefusedWithheld =>
       'روشن نشد: این نسخه هنوز این گزینه را ارائه نمی‌دهد.';
+
+  @override
+  String settingsSignedInAs(String username) {
+    return 'وارد‌شده با $username';
+  }
+
+  @override
+  String get settingsProfileSummary =>
+      'نام نمایشی و عکس شما، و آنچه دیگران می‌بینند';
+
+  @override
+  String get settingsSavedMessagesSummary =>
+      'یادداشت‌های شخصی، ذخیره‌شده روی همین گوشی';
+
+  @override
+  String get settingsSecurityTitle => 'امنیت و بازیابی';
+
+  @override
+  String get settingsSecuritySummary =>
+      'جایگزینی رمز بازیابی و مرور مخاطبان تأیید‌شده';
+
+  @override
+  String get settingsAppearanceSummary => 'پوسته و زبان، فقط روی همین گوشی';
+
+  @override
+  String get settingsAboutTitle => 'درباره';
+
+  @override
+  String get settingsAboutSummary =>
+      'نسخه، ماهیت این نسخه، و گزارشی که می‌توانید کپی کنید';
+
+  @override
+  String get settingsLogOutTitle => 'خروج از حساب';
+
+  @override
+  String get settingsLogOutConfirmTitle => 'از این دستگاه خارج می‌شوید؟';
+
+  @override
+  String get settingsLogOutConfirmBody =>
+      'هر چیزی که این گوشی نگه داشته پاک می‌شود: پیام‌ها، مخاطبان، و کلیدهایی که آن‌ها را رمزگشایی می‌کنند. سرور هیچ نسخه‌ای از تاریخچهٔ شما نگه نمی‌دارد، پس با ورود دوباره چیزی بازنمی‌گردد — تنها دستگاه دیگری که هنوز تاریخچه را دارد می‌تواند آن را برای شما بفرستد. رمز بازیابی هویت شما را بازمی‌گرداند، هرگز پیام‌ها را.';
+
+  @override
+  String get settingsLogOutConfirmAction => 'خروج و پاک‌سازی';
+
+  @override
+  String get settingsCancelAction => 'انصراف';
+
+  @override
+  String get appearanceTitle => 'ظاهر';
+
+  @override
+  String get appearanceLocalOnlyNotice =>
+      'این دو تنظیم روی همین گوشی می‌مانند. جایی فرستاده نمی‌شوند و کسی دیگر آن‌ها را نمی‌بیند.';
+
+  @override
+  String get appearanceThemeSection => 'پوسته';
+
+  @override
+  String get appearanceThemeSystem => 'مطابق گوشی';
+
+  @override
+  String get appearanceThemeLight => 'روشن';
+
+  @override
+  String get appearanceThemeDark => 'تیره';
+
+  @override
+  String get appearanceContrastNotice =>
+      'کنتراست بالا از تنظیمات دسترس‌پذیری گوشی پیروی می‌کند و کلیدی در اینجا ندارد.';
+
+  @override
+  String get appearanceLanguageSection => 'زبان';
+
+  @override
+  String get appearanceLanguageSystem => 'مطابق گوشی';
+
+  @override
+  String get appearanceLanguageEnglish => 'English';
+
+  @override
+  String get appearanceLanguagePersian => 'فارسی';
+
+  @override
+  String get appearanceNotStoredNotice =>
+      'این گوشی نتوانست این انتخاب را ذخیره کند. همین حالا اعمال می‌شود و با راه‌اندازی دوبارهٔ برنامه دوباره از گوشی پیروی می‌کند.';
+
+  @override
+  String get securitySettingsTitle => 'امنیت و بازیابی';
+
+  @override
+  String get securityRecoveryTitle => 'رمز بازیابی';
+
+  @override
+  String get securityRecoveryBody =>
+      'رمز بازیابی فقط یک بار، هنگام ساخته شدن، نشان داده می‌شود و این برنامه هرگز نسخه‌ای از آن نگه نمی‌دارد — پس دوباره قابل نمایش نیست. اگر رمز خود را گم کرده‌اید یا ممکن است کس دیگری آن را دیده باشد، اینجا یکی تازه بسازید. سرور فقط یک نسخهٔ غیرقابل‌خواندن از هویت شما را نگه می‌دارد، هرگز پیام‌های شما را.';
+
+  @override
+  String get securityRecoveryAction => 'ساخت رمز بازیابی تازه';
+
+  @override
+  String get securitySafetyNumbersTitle => 'شماره‌های ایمنی';
+
+  @override
+  String get securitySafetyNumbersSummary =>
+      'کدام مخاطبان را حضوری بررسی کرده‌اید و کدام را نه';
+
+  @override
+  String get safetyNumbersReviewBody =>
+      'برای مقایسهٔ شمارهٔ ایمنی حضوری یا از راهی که به آن اعتماد دارید، مخاطب را باز کنید. تا آن زمان، پیام‌رسانی با او متوقف می‌ماند.';
+
+  @override
+  String get recoveryRotationTitle => 'رمز بازیابی تازه';
+
+  @override
+  String get recoveryRotationExplain =>
+      'این کار برای همان هویتی که دارید رمزی تازه می‌سازد. مخاطبان شما تأیید‌شده می‌مانند و دستگاه‌های دیگرتان متصل می‌مانند — تنها رمزی که پشتیبان هویت شما را باز می‌کند عوض می‌شود.';
+
+  @override
+  String get recoveryRotationCost =>
+      'رمزی که اکنون دارید به محض ساخته شدن رمز تازه از کار می‌افتد. پیش از خروج از این صفحه رمز تازه را یادداشت کنید: فقط یک بار نشان داده می‌شود و این برنامه نسخه‌ای از آن نگه نمی‌دارد.';
+
+  @override
+  String get recoveryRotationNoHistoryNotice =>
+      'رمز بازیابی هویت شما را بازمی‌گرداند، نه آنچه گفته شده است. تاریخچهٔ پیام‌ها فقط روی دستگاه‌های شماست و هیچ جای دیگر.';
+
+  @override
+  String get recoveryRotationStartAction => 'ساخت رمز تازه';
+
+  @override
+  String get recoveryRotationWorking => 'در حال ساخت رمز تازه…';
+
+  @override
+  String get recoveryRotationDoneTitle => 'همین حالا این را یادداشت کنید';
+
+  @override
+  String get recoveryRotationShownOnce =>
+      'این تنها باری است که این رمز نشان داده می‌شود. رمز قبلی دیگر کار نمی‌کند.';
+
+  @override
+  String get recoveryRotationScreenshotNotice =>
+      'در این صفحه عکس گرفتن از صفحه مسدود است و نسخهٔ کپی‌شده پس از یک دقیقه از حافظه پاک می‌شود.';
+
+  @override
+  String get recoveryRotationCopyAction => 'کپی رمز';
+
+  @override
+  String get recoveryRotationCopiedMessage =>
+      'کپی شد. تا یک دقیقهٔ دیگر پاک می‌شود.';
+
+  @override
+  String get recoveryRotationCopyUnavailable =>
+      'این نسخه نمی‌تواند از حافظهٔ موقت به شکل ایمن استفاده کند، پس کپی خاموش است. رمز را یادداشت کنید.';
+
+  @override
+  String get recoveryRotationFinishAction => 'یادداشتش کردم';
+
+  @override
+  String get recoveryRotationFailedTitle => 'چیزی تغییر نکرد';
+
+  @override
+  String get recoveryRotationFailedBody =>
+      'رمز تازه روی سرور ذخیره نشد، پس رمز بازیابی فعلی شما همچنان کار می‌کند. وقتی اتصال داشتید دوباره تلاش کنید.';
+
+  @override
+  String get recoveryRotationUnavailableBody =>
+      'این دستگاه هویت کامل‌شده‌ای برای محافظت ندارد، پس چیزی برای جایگزینی نیست. ابتدا راه‌اندازی رمزنگاری را کامل کنید.';
+
+  @override
+  String get aboutVersionLabel => 'نسخه';
+
+  @override
+  String get aboutDisclosureLabel => 'ویرایش بیانیه';
+
+  @override
+  String get aboutLocalOnlyNotice =>
+      'هر چیزی در این صفحه از همین گوشی خوانده شده است. چیزی دریافت و چیزی ارسال نشده است.';
+
+  @override
+  String get diagnosticsTitle => 'گزارش عیب‌یابی';
+
+  @override
+  String get diagnosticsSummary =>
+      'یک گزارش فنی کوتاه که می‌توانید کپی کنید و برای گردانندهٔ سرورتان بفرستید';
+
+  @override
+  String get diagnosticsExplain =>
+      'این تمام محتوای گزارش است، دقیقاً همان‌گونه که کپی می‌شود. هیچ پیام، نام، نشانی، کلید یا شناسه‌ای در آن نیست — تنها تنظیمات، وضعیت‌ها و شمارش‌های تقریبی.';
+
+  @override
+  String get diagnosticsNothingSentNotice =>
+      'کپی کردن آن را در حافظهٔ موقت همین گوشی می‌گذارد. برنامه آن را جایی نمی‌فرستد؛ اینکه بعد کجا برود انتخاب شماست.';
+
+  @override
+  String get diagnosticsLoadingTitle => 'در حال خواندن این دستگاه…';
+
+  @override
+  String get diagnosticsCopyAction => 'کپی گزارش';
+
+  @override
+  String get diagnosticsCopiedMessage => 'گزارش کپی شد.';
+
+  @override
+  String get diagnosticsCopyFailed =>
+      'این گوشی اجازه نداد برنامه از حافظهٔ موقت استفاده کند.';
+
+  @override
+  String get diagnosticsRefreshAction => 'خواندن دوباره';
+
+  @override
+  String chatSearchTruncatedNotice(int shown) {
+    return 'نمایش $shown مورد نخست. برای محدودتر شدن، بیشتر از متن پیام را بنویسید.';
+  }
+
+  @override
+  String chatSearchResultCount(int count) {
+    return '$count مورد روی این گوشی';
+  }
+
+  @override
+  String get chatClearHistoryTitle => 'این گفتگو پاک شود؟';
+
+  @override
+  String get chatClearHistoryBody =>
+      'همهٔ پیام‌های این گفتگو از این گوشی حذف می‌شود و دیگر اینجا بازنمی‌گردد. طرف مقابل نسخهٔ خود را نگه می‌دارد و دستگاه‌های دیگر شما هم نسخهٔ خود را.';
+
+  @override
+  String get chatClearHistoryAction => 'پاک کردن روی این گوشی';
+
+  @override
+  String get linkedDevicesRefreshAction => 'تازه‌سازی';
+
+  @override
+  String get linkedDevicesLabelsEncrypted =>
+      'نام دستگاه‌ها روی این گوشی رمزنگاری شده است';
+
+  @override
+  String get linkedDevicesLoadingTitle => 'در حال بارگذاری دستگاه‌ها';
+
+  @override
+  String get linkedDevicesUnavailableTitle => 'فهرست دستگاه‌ها در دسترس نیست';
+
+  @override
+  String get linkedDevicesUnavailableMessage =>
+      'این دستگاه نتوانست فهرست را بخواند. اتصال خود را بررسی کنید و دوباره تلاش کنید.';
+
+  @override
+  String get linkedDevicesEmptyTitle => 'دستگاه دیگری نیست';
+
+  @override
+  String get linkedDevicesThisDevice => 'همین دستگاه';
+
+  @override
+  String get linkedDevicesUnnamed => 'دستگاه بدون نام';
+
+  @override
+  String get linkedDevicesCurrentSubtitle => 'دستگاهی که اکنون استفاده می‌کنید';
+
+  @override
+  String linkedDevicesLastActive(String date) {
+    return 'آخرین فعالیت: $date';
+  }
+
+  @override
+  String get linkedDevicesLastActiveUnknown => 'آخرین فعالیت: گزارش نشده';
+
+  @override
+  String get linkedDevicesRenameAction => 'تغییر نام';
+
+  @override
+  String get linkedDevicesRemoveAction => 'حذف';
+
+  @override
+  String get linkedDevicesRenameTitle => 'تغییر نام دستگاه';
+
+  @override
+  String get linkedDevicesRenameLabel => 'نام دستگاه';
+
+  @override
+  String get linkedDevicesSaveAction => 'ذخیره';
+
+  @override
+  String get linkedDevicesRemoveTitle => 'این دستگاه حذف شود؟';
+
+  @override
+  String get linkedDevicesRemoveSelfTitle =>
+      'دستگاهی که استفاده می‌کنید حذف شود؟';
+
+  @override
+  String get linkedDevicesRemoveBody =>
+      'آن دستگاه دیگر نمی‌تواند پیام‌های تازه را بخواند و این کار بازگشت‌پذیر نیست. هر چه روی آن است تا زمان خروج یا پاک‌سازی همانجا می‌ماند.';
+
+  @override
+  String get linkedDevicesRemoveSelfBody =>
+      'این گوشی از حساب خارج می‌شود و هر چه روی آن است پاک می‌شود، از جمله پیام‌ها و کلیدهایی که آن‌ها را رمزگشایی می‌کنند. این کار بازگشت‌پذیر نیست.';
+
+  @override
+  String get linkedDevicesAddTitle => 'افزودن دستگاه دیگر';
+
+  @override
+  String get linkedDevicesAddBody =>
+      'برنامه را روی دستگاه دیگر نصب کنید، همانجا وارد شوید و وقتی پرسید، رمز بازیابی خود را وارد کنید. پس از امضا شدن، در این فهرست دیده می‌شود. پس از آن این گوشی را متصل نگه دارید تا تاریخچه را بفرستد؛ سرور نسخه‌ای برای فرستادن ندارد.';
 }

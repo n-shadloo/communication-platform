@@ -281,6 +281,13 @@ final class CryptoCoreRuntime
   }) => enrollmentWorker?.sanitizeIdentity(package: package) ?? _unsupported();
 
   @override
+  Future<Result<IdentityKeyPackage>> rotateRecoverySecret({
+    required IdentityKeyPackage package,
+  }) =>
+      enrollmentWorker?.rotateRecoverySecret(package: package) ??
+      _unsupported();
+
+  @override
   Future<Result<Uint8List>> crossSignDevice({
     required DeviceKeyPackage device,
     required IdentityKeyPackage identity,
@@ -1084,6 +1091,13 @@ final class UnsupportedCryptoCore
 
   @override
   Future<Result<IdentityKeyPackage>> sanitizeIdentity({
+    required IdentityKeyPackage package,
+  }) async => const Result.failure(
+    UnsupportedProtocolFailure(UnsupportedProtocolFailureKind.capability),
+  );
+
+  @override
+  Future<Result<IdentityKeyPackage>> rotateRecoverySecret({
     required IdentityKeyPackage package,
   }) async => const Result.failure(
     UnsupportedProtocolFailure(UnsupportedProtocolFailureKind.capability),

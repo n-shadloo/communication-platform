@@ -55,6 +55,11 @@ final class UnsupportedEnrollmentCrypto implements EnrollmentCryptoPort {
   }) => _unsupported();
 
   @override
+  Future<Result<IdentityKeyPackage>> rotateRecoverySecret({
+    required IdentityKeyPackage package,
+  }) => _unsupported();
+
+  @override
   Future<Result<IdentityKeyPackage>> sanitizeIdentity({
     required IdentityKeyPackage package,
   }) => _unsupported();

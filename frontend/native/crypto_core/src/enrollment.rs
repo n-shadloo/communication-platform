@@ -311,6 +311,51 @@ pub fn sanitize_identity_package(package: &[u8]) -> CryptoResult<Vec<u8>> {
     )
 }
 
+/// Re-wraps the *same* cross-signing identity under a freshly generated
+/// recovery secret and returns a package carrying both, for one display.
+///
+/// This is the replacement half of recovery: an already-saved secret is never
+/// re-shown, because the application does not retain one, so the only honest
+/// remedy for a lost or exposed secret is a new one over the identity that
+/// already exists. Generating a *new* identity would invalidate every device
+/// cross-signature and every peer attestation of the master key, which is why
+/// the caller may not reach for `prepare_first_identity` here.
+///
+/// No construction changes. The entropy, the Crockford encoding and the
+/// Argon2id/XChaCha20-Poly1305 backup are exactly the ones the first upload
+/// used, and the encoded package is byte-identical to the original apart from
+/// the recovery and backup fields — the master signature included, because
+/// Ed25519 signing is deterministic over the same key and message. The old
+/// secret stops being usable when the server accepts the higher backup
+/// version, not here: this function does not touch the network.
+pub fn rotate_recovery_secret(identity_package: &[u8]) -> CryptoResult<Vec<u8>> {
+    rotate_recovery_secret_with_provider(&RustCryptoProvider::default(), identity_package)
+}
+
+pub fn rotate_recovery_secret_with_provider<P: CryptoProvider>(
+    provider: &P,
+    identity_package: &[u8],
+) -> CryptoResult<Vec<u8>> {
+    let parsed = parse_identity_package(identity_package)?;
+    let mut recovery_entropy = [0u8; RECOVERY_ENTROPY_BYTES];
+    provider.random_bytes(&mut recovery_entropy)?;
+    let recovery_secret = encode_recovery_secret(provider, &recovery_entropy)?;
+    recovery_entropy.zeroize();
+    let backup = encrypt_backup(
+        provider,
+        &parsed.user_id,
+        &parsed.secrets,
+        recovery_secret.as_bytes(),
+    )?;
+    encode_identity_package(
+        provider,
+        parsed.user_id,
+        &parsed.secrets,
+        recovery_secret.as_bytes(),
+        &backup,
+    )
+}
+
 /// Encrypts an account-private device label into the backend's smallest label bucket.
 ///
 /// The key is domain-separated from the self-signing seed shared through recovery.
@@ -1450,9 +1495,10 @@ mod tests {
         create_device_log_record_with_provider, cross_sign_device, inspect_device_log_record,
         inspect_peer_device_log_record, open_device_label, parse_device_package,
         parse_identity_package, prepare_device_with_provider, prepare_first_identity,
-        prepare_first_identity_with_provider, restore_identity_with_provider, safety_fingerprint,
-        sanitize_identity_package, seal_device_label, verify_claimed_device_bundle,
-        verify_published_identity, verify_user_attestation,
+        prepare_first_identity_with_provider, restore_identity_with_provider,
+        rotate_recovery_secret_with_provider, safety_fingerprint, sanitize_identity_package,
+        seal_device_label, verify_claimed_device_bundle, verify_published_identity,
+        verify_user_attestation,
     };
     use crate::{
         device_signatures::{
@@ -1581,6 +1627,84 @@ mod tests {
         assert_eq!(after.master_public, before.master_public);
         assert_eq!(after.master_signature, before.master_signature);
         assert!(sanitized.len() < prepared.len());
+    }
+
+    #[test]
+    fn rotating_the_recovery_secret_keeps_the_identity_and_retires_the_old_secret() {
+        // The whole point of replacement: the account keeps the master key its
+        // peers attested and its devices are cross-signed by, and only the
+        // wrapping changes. A rotation that produced a new identity would
+        // silently un-verify every contact.
+        let provider = deterministic_provider(24_000);
+        let prepared = prepare_first_identity_with_provider(&provider, &USER_ID).unwrap();
+        let before = parse_identity_package(&prepared).unwrap();
+
+        let rotated = rotate_recovery_secret_with_provider(&provider, &prepared).unwrap();
+        let after = parse_identity_package(&rotated).unwrap();
+
+        assert_eq!(after.master_public, before.master_public);
+        assert_eq!(after.self_signing_public, before.self_signing_public);
+        assert_eq!(after.master_signature, before.master_signature);
+        assert_eq!(after.backup.len(), BACKUP_BUCKET_BYTES);
+        assert_ne!(after.recovery_secret, before.recovery_secret);
+        assert_ne!(after.backup, before.backup);
+
+        // The new secret opens the new backup, and recovers the same keys.
+        let restored = restore_identity_with_provider(
+            &RustCryptoProvider::default(),
+            &USER_ID,
+            after.recovery_secret,
+            after.backup,
+        )
+        .unwrap();
+        let restored = parse_identity_package(&restored).unwrap();
+        assert_eq!(restored.master_public, before.master_public);
+        assert_eq!(restored.self_signing_public, before.self_signing_public);
+
+        // And the retired one does not, which is what "invalidates the old
+        // secret" means once the server has taken the higher version.
+        let stale = restore_identity_with_provider(
+            &RustCryptoProvider::default(),
+            &USER_ID,
+            before.recovery_secret,
+            after.backup,
+        );
+        assert_eq!(stale.unwrap_err(), CryptoError::AuthenticationFailed);
+    }
+
+    #[test]
+    fn rotation_refuses_a_package_with_no_identity_in_it() {
+        let provider = deterministic_provider(24_000);
+        let prepared = prepare_first_identity_with_provider(&provider, &USER_ID).unwrap();
+        let mut malformed = prepared.clone();
+        malformed[0] ^= 0xff;
+        assert_eq!(
+            rotate_recovery_secret_with_provider(&provider, &malformed).unwrap_err(),
+            CryptoError::MalformedInput
+        );
+        assert_eq!(
+            rotate_recovery_secret_with_provider(&provider, &[]).unwrap_err(),
+            CryptoError::MalformedInput
+        );
+
+        // A package whose user id no longer matches the signature it carries is
+        // refused before any new secret exists, so a substituted identity can
+        // never be handed a fresh backup to be recovered from.
+        let mut substituted = prepared.clone();
+        substituted[9] ^= 0xff;
+        assert_eq!(
+            rotate_recovery_secret_with_provider(&provider, &substituted).unwrap_err(),
+            CryptoError::AuthenticationFailed
+        );
+
+        // A sanitized package still carries the private identity, so it is the
+        // ordinary input: a signed-in device holds exactly that and nothing
+        // else once enrollment has finished.
+        let sanitized = sanitize_identity_package(&prepared).unwrap();
+        let rotated = rotate_recovery_secret_with_provider(&provider, &sanitized).unwrap();
+        let after = parse_identity_package(&rotated).unwrap();
+        assert!(!after.recovery_secret.is_empty());
+        assert_eq!(after.backup.len(), BACKUP_BUCKET_BYTES);
     }
 
     #[test]

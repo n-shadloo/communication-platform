@@ -338,6 +338,11 @@ final class _WrongSecretCrypto implements EnrollmentCryptoPort {
       throw UnimplementedError();
 
   @override
+  Future<Result<IdentityKeyPackage>> rotateRecoverySecret({
+    required IdentityKeyPackage package,
+  }) => throw UnimplementedError();
+
+  @override
   Future<Result<IdentityKeyPackage>> prepareFirstIdentity({
     required Uint8List userId,
   }) => throw UnimplementedError();

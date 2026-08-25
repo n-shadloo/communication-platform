@@ -80,6 +80,12 @@ int32_t cp_crypto_v1_sanitize_identity(
     uint8_t* output,
     uintptr_t output_len,
     uintptr_t* written);
+int32_t cp_crypto_v1_rotate_recovery_secret(
+    const uint8_t* identity_package,
+    uintptr_t identity_package_len,
+    uint8_t* output,
+    uintptr_t output_len,
+    uintptr_t* written);
 int32_t cp_crypto_v1_cross_sign_device(
     const uint8_t* device_package,
     uintptr_t device_package_len,

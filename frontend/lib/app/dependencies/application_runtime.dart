@@ -14,6 +14,7 @@ import 'package:communication_platform/features/bootstrap/domain/bootstrap_model
 import 'package:communication_platform/features/devices/presentation/device_enrollment_controller.dart';
 import 'package:communication_platform/features/local_storage/infrastructure/local_storage_runtime.dart';
 import 'package:communication_platform/features/local_storage/infrastructure/platform/platform_local_storage.dart';
+import 'package:communication_platform/features/networking/infrastructure/diagnostics/network_diagnostics.dart';
 import 'package:communication_platform/features/networking/infrastructure/tls/transport_security.dart';
 import 'package:communication_platform/features/synchronization/application/ports/sync_ports.dart';
 import 'package:communication_platform/shared/infrastructure/crypto/platform_crypto_core.dart';
@@ -45,6 +46,7 @@ final class ApplicationRuntime {
     required this.cryptoCore,
     required this.enrollmentCrypto,
     required this.authentication,
+    required this.networkDiagnostics,
   });
 
   static Future<ApplicationRuntime> create(
@@ -67,6 +69,10 @@ final class ApplicationRuntime {
       ConfigurationNotProvisioned() =>
         const TransportSecurity.platformDefault(),
     };
+    // One recorder per process, created here so the activity and the
+    // headless catch-up count into the same one rather than each keeping a
+    // private tally of half the traffic.
+    final networkDiagnostics = RecordingNetworkDiagnostics();
     final cryptoCore = createPlatformCryptoCore(
       betaMlsEnabled: environment == AppEnvironment.beta,
     );
@@ -81,6 +87,7 @@ final class ApplicationRuntime {
       localStorage: localStorage,
       cryptoCore: cryptoCore,
       enrollmentCrypto: enrollmentCrypto,
+      networkDiagnostics: networkDiagnostics,
       authentication: switch (configuration) {
         ConfigurationLoaded(:final configuration) =>
           AuthenticationAssembly.create(
@@ -89,6 +96,7 @@ final class ApplicationRuntime {
             timeSource: const SystemTimeSource(),
             enrollmentCrypto: enrollmentCrypto,
             transportSecurity: transportSecurity,
+            diagnostics: networkDiagnostics,
           ),
         ConfigurationNotProvisioned() => null,
       },
@@ -102,6 +110,11 @@ final class ApplicationRuntime {
   final SecureLocalStorageRuntime localStorage;
   final CryptoCorePort cryptoCore;
   final EnrollmentCryptoPort enrollmentCrypto;
+
+  /// Counts request outcomes for the life of this process, and nothing
+  /// else. Payload-free by the type it records, memory-only by decision, and
+  /// read only by a diagnostics export the user asks for.
+  final RecordingNetworkDiagnostics networkDiagnostics;
 
   /// Null when this build carries no provisioning, in which case nothing
   /// authenticated is composed at all rather than composed against a default.
@@ -127,6 +140,7 @@ final class ApplicationRuntime {
       networkingFoundationProvider.overrideWithValue(assembly.networking),
     ],
     appEnvironmentProvider.overrideWithValue(environment),
+    networkDiagnosticsProvider.overrideWithValue(networkDiagnostics),
     cryptoCoreProvider.overrideWithValue(cryptoCore),
     enrollmentCryptoProvider.overrideWithValue(enrollmentCrypto),
     localStorageRuntimeProvider.overrideWith((ref) {

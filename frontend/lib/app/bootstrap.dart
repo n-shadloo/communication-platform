@@ -35,6 +35,7 @@ Future<void> bootstrap(AppEnvironment environment) async {
     trust: const ProvisionedTrustPort(),
     health: DioHealthReachabilityPort(
       transportSecurity: runtime.transportSecurity,
+      diagnostics: runtime.networkDiagnostics,
     ),
     platform: runtime.platform,
   );

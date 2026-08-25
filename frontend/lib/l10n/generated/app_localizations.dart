@@ -386,12 +386,6 @@ abstract class AppLocalizations {
   /// **'Voice room detail'**
   String get roomPlaceholderTitle;
 
-  /// No description provided for @appearancePlaceholderTitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Appearance detail'**
-  String get appearancePlaceholderTitle;
-
   /// No description provided for @newChatPlaceholderTitle.
   ///
   /// In en, this message translates to:
@@ -2623,6 +2617,528 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Not turned on: this build does not offer it yet.'**
   String get sustainedRefusedWithheld;
+
+  /// No description provided for @settingsSignedInAs.
+  ///
+  /// In en, this message translates to:
+  /// **'Signed in as {username}'**
+  String settingsSignedInAs(String username);
+
+  /// No description provided for @settingsProfileSummary.
+  ///
+  /// In en, this message translates to:
+  /// **'Your display name and photo, and what other people can see'**
+  String get settingsProfileSummary;
+
+  /// No description provided for @settingsSavedMessagesSummary.
+  ///
+  /// In en, this message translates to:
+  /// **'Notes to yourself, kept on this phone'**
+  String get settingsSavedMessagesSummary;
+
+  /// No description provided for @settingsSecurityTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Security & recovery'**
+  String get settingsSecurityTitle;
+
+  /// No description provided for @settingsSecuritySummary.
+  ///
+  /// In en, this message translates to:
+  /// **'Replace your recovery secret and review verified contacts'**
+  String get settingsSecuritySummary;
+
+  /// No description provided for @settingsAppearanceSummary.
+  ///
+  /// In en, this message translates to:
+  /// **'Theme and language on this phone only'**
+  String get settingsAppearanceSummary;
+
+  /// No description provided for @settingsAboutTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'About'**
+  String get settingsAboutTitle;
+
+  /// No description provided for @settingsAboutSummary.
+  ///
+  /// In en, this message translates to:
+  /// **'Version, what this build is, and a report you can copy'**
+  String get settingsAboutSummary;
+
+  /// No description provided for @settingsLogOutTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Log out'**
+  String get settingsLogOutTitle;
+
+  /// No description provided for @settingsLogOutConfirmTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Log out of this device?'**
+  String get settingsLogOutConfirmTitle;
+
+  /// No description provided for @settingsLogOutConfirmBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Everything this phone holds is erased: your messages, your contacts and the keys that decrypt them. The server keeps no copy of your history, so nothing comes back when you sign in again — only another device that still has your history can send it to you. Your recovery secret restores your identity, never your messages.'**
+  String get settingsLogOutConfirmBody;
+
+  /// No description provided for @settingsLogOutConfirmAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Log out and erase'**
+  String get settingsLogOutConfirmAction;
+
+  /// No description provided for @settingsCancelAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel'**
+  String get settingsCancelAction;
+
+  /// No description provided for @appearanceTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Appearance'**
+  String get appearanceTitle;
+
+  /// No description provided for @appearanceLocalOnlyNotice.
+  ///
+  /// In en, this message translates to:
+  /// **'These two settings stay on this phone. They are not sent anywhere and nobody else can see them.'**
+  String get appearanceLocalOnlyNotice;
+
+  /// No description provided for @appearanceThemeSection.
+  ///
+  /// In en, this message translates to:
+  /// **'Theme'**
+  String get appearanceThemeSection;
+
+  /// No description provided for @appearanceThemeSystem.
+  ///
+  /// In en, this message translates to:
+  /// **'Follow my phone'**
+  String get appearanceThemeSystem;
+
+  /// No description provided for @appearanceThemeLight.
+  ///
+  /// In en, this message translates to:
+  /// **'Light'**
+  String get appearanceThemeLight;
+
+  /// No description provided for @appearanceThemeDark.
+  ///
+  /// In en, this message translates to:
+  /// **'Dark'**
+  String get appearanceThemeDark;
+
+  /// No description provided for @appearanceContrastNotice.
+  ///
+  /// In en, this message translates to:
+  /// **'High contrast follows your phone’s accessibility settings and has no switch here.'**
+  String get appearanceContrastNotice;
+
+  /// No description provided for @appearanceLanguageSection.
+  ///
+  /// In en, this message translates to:
+  /// **'Language'**
+  String get appearanceLanguageSection;
+
+  /// No description provided for @appearanceLanguageSystem.
+  ///
+  /// In en, this message translates to:
+  /// **'Follow my phone'**
+  String get appearanceLanguageSystem;
+
+  /// No description provided for @appearanceLanguageEnglish.
+  ///
+  /// In en, this message translates to:
+  /// **'English'**
+  String get appearanceLanguageEnglish;
+
+  /// No description provided for @appearanceLanguagePersian.
+  ///
+  /// In en, this message translates to:
+  /// **'فارسی'**
+  String get appearanceLanguagePersian;
+
+  /// No description provided for @appearanceNotStoredNotice.
+  ///
+  /// In en, this message translates to:
+  /// **'This phone could not save the choice. It applies now and goes back to following your phone when the app restarts.'**
+  String get appearanceNotStoredNotice;
+
+  /// No description provided for @securitySettingsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Security & recovery'**
+  String get securitySettingsTitle;
+
+  /// No description provided for @securityRecoveryTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Recovery secret'**
+  String get securityRecoveryTitle;
+
+  /// No description provided for @securityRecoveryBody.
+  ///
+  /// In en, this message translates to:
+  /// **'A recovery secret is shown once, when it is made, and this app never keeps a copy — so it cannot be shown again. If you have lost yours, or somebody else may have seen it, make a new one here. The server holds only an unreadable backup of your identity, never your messages.'**
+  String get securityRecoveryBody;
+
+  /// No description provided for @securityRecoveryAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Make a new recovery secret'**
+  String get securityRecoveryAction;
+
+  /// No description provided for @securitySafetyNumbersTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Safety numbers'**
+  String get securitySafetyNumbersTitle;
+
+  /// No description provided for @securitySafetyNumbersSummary.
+  ///
+  /// In en, this message translates to:
+  /// **'Which contacts you have checked in person, and which you have not'**
+  String get securitySafetyNumbersSummary;
+
+  /// No description provided for @safetyNumbersReviewBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Open a contact to compare their safety number in person or over another channel you trust. Until you do, messaging with them is withheld.'**
+  String get safetyNumbersReviewBody;
+
+  /// No description provided for @recoveryRotationTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'New recovery secret'**
+  String get recoveryRotationTitle;
+
+  /// No description provided for @recoveryRotationExplain.
+  ///
+  /// In en, this message translates to:
+  /// **'This makes a new secret for the identity you already have. Your contacts stay verified and your other devices stay linked — only the secret that unlocks your identity backup changes.'**
+  String get recoveryRotationExplain;
+
+  /// No description provided for @recoveryRotationCost.
+  ///
+  /// In en, this message translates to:
+  /// **'The secret you have now stops working as soon as the new one is made. Write the new one down before you leave this screen: it is shown once and this app keeps no copy.'**
+  String get recoveryRotationCost;
+
+  /// No description provided for @recoveryRotationNoHistoryNotice.
+  ///
+  /// In en, this message translates to:
+  /// **'A recovery secret brings back who you are, never what was said. Message history lives on your devices and nowhere else.'**
+  String get recoveryRotationNoHistoryNotice;
+
+  /// No description provided for @recoveryRotationStartAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Make the new secret'**
+  String get recoveryRotationStartAction;
+
+  /// No description provided for @recoveryRotationWorking.
+  ///
+  /// In en, this message translates to:
+  /// **'Making a new secret…'**
+  String get recoveryRotationWorking;
+
+  /// No description provided for @recoveryRotationDoneTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Write this down now'**
+  String get recoveryRotationDoneTitle;
+
+  /// No description provided for @recoveryRotationShownOnce.
+  ///
+  /// In en, this message translates to:
+  /// **'This is the only time this secret is shown. The old one no longer works.'**
+  String get recoveryRotationShownOnce;
+
+  /// No description provided for @recoveryRotationScreenshotNotice.
+  ///
+  /// In en, this message translates to:
+  /// **'Screenshots are blocked on this screen, and a copy is cleared from the clipboard after a minute.'**
+  String get recoveryRotationScreenshotNotice;
+
+  /// No description provided for @recoveryRotationCopyAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy the secret'**
+  String get recoveryRotationCopyAction;
+
+  /// No description provided for @recoveryRotationCopiedMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Copied. It will be cleared in a minute.'**
+  String get recoveryRotationCopiedMessage;
+
+  /// No description provided for @recoveryRotationCopyUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'This build cannot use the clipboard safely, so copying is switched off. Write the secret down instead.'**
+  String get recoveryRotationCopyUnavailable;
+
+  /// No description provided for @recoveryRotationFinishAction.
+  ///
+  /// In en, this message translates to:
+  /// **'I have written it down'**
+  String get recoveryRotationFinishAction;
+
+  /// No description provided for @recoveryRotationFailedTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing changed'**
+  String get recoveryRotationFailedTitle;
+
+  /// No description provided for @recoveryRotationFailedBody.
+  ///
+  /// In en, this message translates to:
+  /// **'The new secret was not saved on the server, so your current recovery secret still works. Try again when you have a connection.'**
+  String get recoveryRotationFailedBody;
+
+  /// No description provided for @recoveryRotationUnavailableBody.
+  ///
+  /// In en, this message translates to:
+  /// **'This device has no completed identity to protect, so there is nothing to replace. Finish setting up encryption first.'**
+  String get recoveryRotationUnavailableBody;
+
+  /// No description provided for @aboutVersionLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Version'**
+  String get aboutVersionLabel;
+
+  /// No description provided for @aboutDisclosureLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Statement revision'**
+  String get aboutDisclosureLabel;
+
+  /// No description provided for @aboutLocalOnlyNotice.
+  ///
+  /// In en, this message translates to:
+  /// **'Everything on this screen was read from this phone. Nothing was fetched and nothing was sent.'**
+  String get aboutLocalOnlyNotice;
+
+  /// No description provided for @diagnosticsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Diagnostics report'**
+  String get diagnosticsTitle;
+
+  /// No description provided for @diagnosticsSummary.
+  ///
+  /// In en, this message translates to:
+  /// **'A short technical report you can copy and send to whoever runs your server'**
+  String get diagnosticsSummary;
+
+  /// No description provided for @diagnosticsExplain.
+  ///
+  /// In en, this message translates to:
+  /// **'This is everything the report contains, exactly as it will be copied. It carries no message, no name, no address, no key and no identifier — only settings, states and rough counts.'**
+  String get diagnosticsExplain;
+
+  /// No description provided for @diagnosticsNothingSentNotice.
+  ///
+  /// In en, this message translates to:
+  /// **'Copying puts it on this phone’s clipboard. The app sends it nowhere; where it goes next is your choice.'**
+  String get diagnosticsNothingSentNotice;
+
+  /// No description provided for @diagnosticsLoadingTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Reading this device…'**
+  String get diagnosticsLoadingTitle;
+
+  /// No description provided for @diagnosticsCopyAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy the report'**
+  String get diagnosticsCopyAction;
+
+  /// No description provided for @diagnosticsCopiedMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Report copied.'**
+  String get diagnosticsCopiedMessage;
+
+  /// No description provided for @diagnosticsCopyFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'This phone did not let the app use the clipboard.'**
+  String get diagnosticsCopyFailed;
+
+  /// No description provided for @diagnosticsRefreshAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Read again'**
+  String get diagnosticsRefreshAction;
+
+  /// No description provided for @chatSearchTruncatedNotice.
+  ///
+  /// In en, this message translates to:
+  /// **'Showing the first {shown} matches. Type more of the message to narrow it down.'**
+  String chatSearchTruncatedNotice(int shown);
+
+  /// No description provided for @chatSearchResultCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} matches on this phone'**
+  String chatSearchResultCount(int count);
+
+  /// No description provided for @chatClearHistoryTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear this conversation?'**
+  String get chatClearHistoryTitle;
+
+  /// No description provided for @chatClearHistoryBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Every message in this conversation is removed from this phone and cannot be brought back here. The other person keeps their copy, and your other devices keep theirs.'**
+  String get chatClearHistoryBody;
+
+  /// No description provided for @chatClearHistoryAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear on this phone'**
+  String get chatClearHistoryAction;
+
+  /// No description provided for @linkedDevicesRefreshAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Refresh'**
+  String get linkedDevicesRefreshAction;
+
+  /// No description provided for @linkedDevicesLabelsEncrypted.
+  ///
+  /// In en, this message translates to:
+  /// **'Device names are encrypted on this phone'**
+  String get linkedDevicesLabelsEncrypted;
+
+  /// No description provided for @linkedDevicesLoadingTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Loading your devices'**
+  String get linkedDevicesLoadingTitle;
+
+  /// No description provided for @linkedDevicesUnavailableTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Device list unavailable'**
+  String get linkedDevicesUnavailableTitle;
+
+  /// No description provided for @linkedDevicesUnavailableMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'This device could not read the list. Check your connection and try again.'**
+  String get linkedDevicesUnavailableMessage;
+
+  /// No description provided for @linkedDevicesEmptyTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'No other devices'**
+  String get linkedDevicesEmptyTitle;
+
+  /// No description provided for @linkedDevicesThisDevice.
+  ///
+  /// In en, this message translates to:
+  /// **'This device'**
+  String get linkedDevicesThisDevice;
+
+  /// No description provided for @linkedDevicesUnnamed.
+  ///
+  /// In en, this message translates to:
+  /// **'Unnamed device'**
+  String get linkedDevicesUnnamed;
+
+  /// No description provided for @linkedDevicesCurrentSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'The device you are using now'**
+  String get linkedDevicesCurrentSubtitle;
+
+  /// No description provided for @linkedDevicesLastActive.
+  ///
+  /// In en, this message translates to:
+  /// **'Last active: {date}'**
+  String linkedDevicesLastActive(String date);
+
+  /// No description provided for @linkedDevicesLastActiveUnknown.
+  ///
+  /// In en, this message translates to:
+  /// **'Last active: not reported'**
+  String get linkedDevicesLastActiveUnknown;
+
+  /// No description provided for @linkedDevicesRenameAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Rename'**
+  String get linkedDevicesRenameAction;
+
+  /// No description provided for @linkedDevicesRemoveAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove'**
+  String get linkedDevicesRemoveAction;
+
+  /// No description provided for @linkedDevicesRenameTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Rename device'**
+  String get linkedDevicesRenameTitle;
+
+  /// No description provided for @linkedDevicesRenameLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Device name'**
+  String get linkedDevicesRenameLabel;
+
+  /// No description provided for @linkedDevicesSaveAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Save'**
+  String get linkedDevicesSaveAction;
+
+  /// No description provided for @linkedDevicesRemoveTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove this device?'**
+  String get linkedDevicesRemoveTitle;
+
+  /// No description provided for @linkedDevicesRemoveSelfTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove the device you are using?'**
+  String get linkedDevicesRemoveSelfTitle;
+
+  /// No description provided for @linkedDevicesRemoveBody.
+  ///
+  /// In en, this message translates to:
+  /// **'The device stops being able to read new messages, and this cannot be undone. Everything it holds stays on it until it is signed out or erased.'**
+  String get linkedDevicesRemoveBody;
+
+  /// No description provided for @linkedDevicesRemoveSelfBody.
+  ///
+  /// In en, this message translates to:
+  /// **'This phone is signed out and everything on it is erased, including your messages and the keys that decrypt them. This cannot be undone.'**
+  String get linkedDevicesRemoveSelfBody;
+
+  /// No description provided for @linkedDevicesAddTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Add another device'**
+  String get linkedDevicesAddTitle;
+
+  /// No description provided for @linkedDevicesAddBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Install the app on the other device, sign in there, and enter your recovery secret when it asks. It appears in this list once it is signed. Keep this phone online afterwards so it can send your history across; the server has no copy to send.'**
+  String get linkedDevicesAddBody;
 }
 
 class _AppLocalizationsDelegate

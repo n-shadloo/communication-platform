@@ -52,7 +52,7 @@ is not silently edited out of history.
 
 | ADR-043 | Accepted | The client's own transport trusts the provisioned private CA exclusively; Android's network security configuration is retained as defence in depth for non-Dart traffic only (2026-08-20) | Release validation of a real signed Beta APK found the app could not reach a healthy, correctly provisioned server. Every network precondition held - DNS, TCP, TLS from the host, a chain verifying against the provisioned CA, ~1.1s latency - and removing the pin-set from a diagnostic build changed nothing. The cause is that Android's `network_security_config` governs the platform's Java HTTP stacks and WebView, while this app's REST and WebSocket traffic both run on `dart:io`, which does not consult it. The configuration was therefore protecting no traffic at all: the app was simultaneously unable to reach its own server and, had it reached one, unpinned. Trust now comes from a `SecurityContext` built with `withTrustedRoots: false` plus the provisioned authority, so the built-in root store is **replaced** rather than extended and no public authority can issue a certificate this client accepts; chain construction, expiry, and hostname verification are still performed in full by BoringSSL. Both transports share one context, and the authority reaches the app as `<ENV>_PRIVATE_CA_PEM_BASE64` because `dart:io` verifies against a certificate, not the digest the configuration previously carried. Absent or malformed authority material fails configuration closed rather than falling back to public roots. Leaf SPKI pinning is deliberately **not** reimplemented in Dart: `X509Certificate` exposes no SPKI accessor and no SHA-256, so it would require hand-written ASN.1 parsing plus a hashing dependency inside the TLS path, which `AGENTS.md` forbids and which would be unreviewed cryptographic code. Anchoring exclusively to a single offline private root is a stronger constraint than the public-CA-plus-leaf-pin model it replaces, and the residual exposure - a stolen CA key minting a new leaf - is accepted for the closed beta and recorded here. The rendered Android configuration and its two pins are kept and still verified in the artifact, but only as defence in depth for any future WebView or Java-side traffic; no document may claim they protect the app's API traffic. Health checks now distinguish `trustRejected` from ordinary connectivity so a refused certificate is never reported, or retried, as an outage. |
 
-| ADR-044 | Accepted, tier-2 exposure amended by ADR-055 | The initial deployment is one Private Experimental Android artifact carrying declared maturity tiers, distributed privately under the frozen Beta identity, while Production stays uninstallable (2026-08-20) | A 20-30 person private deployment needed one authoritative definition, and the repository did not have one. Inspection found the existing build-time separation correct and worth keeping - three flavors, three application IDs, two Cargo profiles whose native symbol sets are verified in the packaged artifact, a signing identity attached only to Beta, and `signingConfig = null` on the release build type so Production packages unsigned and the OS cannot install it. It also found the separation incomplete in one place: `groupFeatureAvailabilityProvider` derived availability from the development-preview permit alone, which requires `!kReleaseMode`, so every group screen in the shipped Beta artifact rendered the closed gate while that same artifact composed `NativeBetaGroupMls`, ran `GroupKeyPackageMaintenanceService`, and processed inbound group objects - uploading MLS KeyPackages for groups no user of it could create. One source-only `GroupProductionGate.privateExperimentalPermit` now decides both the stack and its screens, and the screens gate on `isAvailable` rather than naming one tier. The deployment is defined as **experimental, not beta**: nothing in it has been independently reviewed, its group suite is MLS Private Use `0xFE4C` and is not `TBD2`-conformant (ADR-040), and it has no background delivery, notifications, voice, or search. The frozen application ID keeps its `.beta` suffix because ADR-042 makes it unchangeable and an identifier is not a claim; every user-facing string says Experimental. One artifact carries three declared tiers - supported (pairwise messaging, identity, devices, attachments, history transfer), experimental (closed-beta PQ MLS groups, whose state is disposable by ADR-036 and is disclosed as such on every group screen), and visibly absent (voice, search, notifications, background delivery). Confidentiality, integrity, client-side verification, hybrid PQXDH with no fallback, provisioned-CA-only transport, encrypted local state, key continuity, and the Beta/Production artifact separation all stay mandatory; independent review, registry assignment, interoperability, upstream vectors, reproducible builds, and background delivery are deferred with their residual risk recorded and disclosed to users in writing at handover. Piece 19's closed-beta half is delivered as the experimental tier and its production half stays blocked on the same five external prerequisites; piece 20 is re-scoped from "after every production gate" - unreachable, and therefore dead rather than blocked - to a decision about which MLS exporter may key real-time media, which this decision does not grant. Opens no production gate and supersedes nothing. |
+| ADR-044 | Accepted, tier-2 exposure amended by ADR-055, tier-3 contents amended by ADR-057 | The initial deployment is one Private Experimental Android artifact carrying declared maturity tiers, distributed privately under the frozen Beta identity, while Production stays uninstallable (2026-08-20) | A 20-30 person private deployment needed one authoritative definition, and the repository did not have one. Inspection found the existing build-time separation correct and worth keeping - three flavors, three application IDs, two Cargo profiles whose native symbol sets are verified in the packaged artifact, a signing identity attached only to Beta, and `signingConfig = null` on the release build type so Production packages unsigned and the OS cannot install it. It also found the separation incomplete in one place: `groupFeatureAvailabilityProvider` derived availability from the development-preview permit alone, which requires `!kReleaseMode`, so every group screen in the shipped Beta artifact rendered the closed gate while that same artifact composed `NativeBetaGroupMls`, ran `GroupKeyPackageMaintenanceService`, and processed inbound group objects - uploading MLS KeyPackages for groups no user of it could create. One source-only `GroupProductionGate.privateExperimentalPermit` now decides both the stack and its screens, and the screens gate on `isAvailable` rather than naming one tier. The deployment is defined as **experimental, not beta**: nothing in it has been independently reviewed, its group suite is MLS Private Use `0xFE4C` and is not `TBD2`-conformant (ADR-040), and it has no background delivery, notifications, voice, or search. The frozen application ID keeps its `.beta` suffix because ADR-042 makes it unchangeable and an identifier is not a claim; every user-facing string says Experimental. One artifact carries three declared tiers - supported (pairwise messaging, identity, devices, attachments, history transfer), experimental (closed-beta PQ MLS groups, whose state is disposable by ADR-036 and is disclosed as such on every group screen), and visibly absent (voice, search, notifications, background delivery). Confidentiality, integrity, client-side verification, hybrid PQXDH with no fallback, provisioned-CA-only transport, encrypted local state, key continuity, and the Beta/Production artifact separation all stay mandatory; independent review, registry assignment, interoperability, upstream vectors, reproducible builds, and background delivery are deferred with their residual risk recorded and disclosed to users in writing at handover. Piece 19's closed-beta half is delivered as the experimental tier and its production half stays blocked on the same five external prerequisites; piece 20 is re-scoped from "after every production gate" - unreachable, and therefore dead rather than blocked - to a decision about which MLS exporter may key real-time media, which this decision does not grant. Opens no production gate and supersedes nothing. |
 
 | ADR-045 | Accepted, re-presentation completed by ADR-052 | One application-level maturity word - Experimental - two feature labels that only ever read *down* from it, and one mandatory first-run disclosure inside the enrollment gate that already exists; amends two rows of ADR-044's tier table (2026-08-20) | ADR-044 defined what the deployment *is* and deferred what the software *says*. Inspection of the running surfaces found four different vocabularies reaching users and two of them false in the artifact that carries them: the task-switcher title called the Private Experimental build "Communication Platform (Development)" while its own launcher label said Experimental; the wide navigation rail carried a permanent "Structural placeholder - not for shipping" footer in **every** build including production; Edit Profile claimed a "development-only fake transport" in a build that composes no profile adapter at all, so Save could only fail; and the composer's paperclip opened three inert options because no build composes an attachment picker or transfer service. Those last two are also a correction to ADR-044, whose supported tier listed encrypted profiles and attachments: both are absent and are now labelled **Not built yet**. Terminology was re-derived rather than inherited and landed in the same place for a better reason - Google's published launch-stage definition of Experimental ("not intended for production use or covered by any SLA, support obligation, or deprecation policy and might be subject to backward-incompatible changes", read at primary source 2026-08-20) describes this artifact exactly, including the backward-incompatible clause that is ADR-036's disposable group state, while Preview promises the previewed thing ships and Beta promises feature completeness. Consent reuses `EnrollmentPhase.securityNotice`, which is already mandatory, already durable in the enrollment journal, and already withholds messaging until accepted, rather than adding a second blocking screen that would split the attention paid to both. Seven disclosure points state only the facts that make an ordinary expectation wrong - no review, foreground-only delivery, device-only history, recovery without history, resettable groups, unbuilt surfaces, intended use - and cryptographic identifiers are excluded by decision because printing them beside those seven would bury them. Periodic re-acknowledgement is rejected on measured evidence that repetition destroys a warning and that the damage generalises to this app's genuinely blocking security states; re-consent is content-triggered through `DeploymentDisclosure.revision`, pinned by a test to the exact disclosure text. There is deliberately no label meaning supported, stable, verified or audited: the absence of a badge must never read as an assurance. Opens no production gate and supersedes nothing. |
 
@@ -67,6 +67,208 @@ is not silently edited out of history.
 | ADR-054 | Accepted | The delivery and notification path's platform integration was enumerated from the code and decided point by point: nine of twelve points are written on the framework and three adopt `androidx.core`, which was already in the artifact and is now pinned at 1.16.0 for a stated reason; `connectivity_plus` stays at 6.0.5 because 7.1.0 and later force `androidx.core` 1.18.0 and with it `compileSdk` 36.1; the Android dependency set is locked for the first time, four declared-and-unused packages and a retracted `jni` 1.0.1 are removed, `ACCESS_NETWORK_STATE` is declared where it can be justified, and an exported receiver `androidx.profileinstaller` merged into every artifact is refused (2026-08-24) | A dependency that nobody decided is still a dependency the artifact carries. Every integration point was traced from the code rather than from a package list; what is adopted is pinned exactly and recorded in `android/app/gradle.lockfile` and `pubspec.lock`; what is written is bounded by a port this project owns; and the shipped `classes.dex` is proved to contain no code capable of opening a network connection at all. Supersedes ADR-007's adoption of Flyer Chat, which piece 15 contradicted without a record. |
 | ADR-055 | Accepted, exposure amended by ADR-056 | The first externally distributed artifact exposes **direct messaging only**; closed-beta PQ MLS group messaging is withheld in substance behind a source-only evidence ledger that opens when the packaged native core has been observed executing on real ARM hardware; amends ADR-044's tier 2 and takes the disclosure to revision 6 (2026-08-24) | ADR-044 put groups in the deployment as a declared experimental tier and rejected direct-message-only as its alternative E. Re-deciding on evidence: the group *logic* is well evidenced - 17 Dart test files, a 30-test queue-gap recovery matrix, fork convergence, crash injection, 128 Rust tests under `--all-features`, 12 fuzz targets - but `cp_crypto_v1_beta_mls_operation` has **never executed on any device or emulator**, which the repository's own records already said in five places. The `beta` Cargo profile is the only one linking `aws-lc-sys`, C and assembly cross-compiled per ABI, and `catch_unwind` at the C ABI contains a Rust panic but not a fault below Rust - which would take the direct-message tier down with it. Three asymmetries decide it: a pruned envelope costs a Double Ratchet session some messages and costs an MLS member the whole group, unrecoverable without an owner removing and re-adding them, in a deployment whose delivery timeliness is entirely unmeasured and whose server prunes at 7 days (`ENVELOPE_TTL_DAYS`, read from backend source); a device whose core is wrong on its ABI still uploads KeyPackages, so peers add it, consume them, and *they* carry a member who never converges - a failure whose signature is absence on somebody else's phone, the category ADR-053 refused to ship; and withholding is free to reverse while exposing is not, because ADR-036 has already *scheduled* experimental group history for destruction. ADR-044's alternative E was rejected partly on the ground that the outstanding evidence could only be produced by people using the feature; that is false in its own terms, because *does the packaged core compute correctly on this CPU* needs one person with one phone, no backend and no second device, and is separable from *does the group system work between people*. So the gate is an evidence ledger rather than a removal: nothing is unwired, ADR-036, ADR-037, ADR-039, ADR-040 and ADR-041 are untouched and every one of their tests still runs, and `tool/measure_beta_mls_core.sh` runs the crate's own beta test suite on-device with nothing added to the application. Withheld means withheld: the unsupported adapter on all nine port methods, **no KeyPackage generated or uploaded**, no post-inbox maintenance composed, inbound group objects refused, screens closed, and the Contacts entry disabled and labelled rather than routing to a refusal. Also fixes a real defect - three group screens checked their injected-collaborator path *before* the availability gate, so a caller could render the flow around it. External research on 2026-08-24 found nothing arguing against exposure and no deadline forcing it: `aws-lc-sys` 0.40.0 is patched against all five filed RustSec advisories, `mls-rs` 0.55.2 is unaffected by the one security fix in its update range (it lands in a crate this project does not use), Android aarch64 is a supported `aws-lc` platform, `TBD2` is still unassigned at draft-06, and developer-verification enforcement reaches only four countries' app stores on 2026-09-30 with global rollout in 2027 - discharging ADR-044's revisit condition 6, which required the primary source be read and dated before any of it became binding. The decision therefore rests on the repository's evidence rather than the ecosystem's: an officially supported platform is a statement of intent, not an observation of this build on this hardware. Production is untouched and provably so - a test asserts a fully satisfied ledger still leaves production holding no permit. Opens no production gate and supersedes nothing. |
 | ADR-056 | Accepted | The closed-beta PQ MLS core was measured on real hardware and the group surface opens on the ABI that was measured and no other: the evidence gate becomes per-ABI rather than per-artifact, `arm64-v8a` is open, `armeabi-v7a` and `x86_64` stay withheld, and the disclosure moves to revision 7; amends ADR-055 (2026-08-24) | A Samsung Galaxy A56 (SM-A566B, Android 16, API 36, retail `user` build, `release-keys`) became available, so ADR-055's one outstanding item was run rather than argued about. `tool/measure_beta_mls_core.sh arm64-v8a` cross-compiled the crate's own `--features beta-pq-mls` test binary with the pinned toolchain, pushed it to the phone and ran it there, installing nothing and needing no backend, account or root: **128 passed, 0 failed, 3 ignored in 172.07 s, exit 0** - the *same* counts `cargo test --locked --all-features` gives on the x86_64 host, so the device ran the whole suite to the same conclusion rather than a subset that happened to link. Forty `mls_beta::` tests ran, including the create/join/private-message/proposal/commit/remove round trip and `suite_signs_with_ed25519_and_round_trips_hybrid_hpke`, which is where `aws-lc`'s ML-KEM runs - the C-and-assembly dependency the `beta` profile adds and `foundation` does not. Contact with hardware also exposed two defects in the instrument, neither findable any other way: MSYS rewrote `adb push … /data/local/tmp/…` into `C:/Program Files/Git/data/…` so the first run failed with `remote secure_mkdirs() failed`, and the three setup lines sent stdout to `/dev/null` while `adb shell` folds remote stderr into stdout, so that failure printed nothing at all. Both fixed. The A56 reports an **empty `abilist32`** - its Exynos s5e8855 is 64-bit-only and cannot execute AArch32 - so `armeabi-v7a` is unmeasurable on the hardware that measured `arm64-v8a`. ADR-055's all-or-nothing framing then left only two moves, both bad: demote the cell for being unmeasurable, which is the reason ADR-053 exists and which ADR-055 explicitly pre-refused; or withhold from everyone over a 32-bit device nobody in this deployment is known to have, while ignoring a passing run for the ABI every recipient loads. So the *question* changed rather than the standard: one APK carries three libraries and the installer picks one, so `hasEvidenceFor(GroupMlsFieldCell?)` replaces the global `isOpen` and the permit takes the running ABI. **No cell was demoted** - `armeabi-v7a` stays in the ledger recorded as unmeasured, and opens on the same rule if 32-bit hardware ever appears. This is **stricter** than ADR-055 where it matters, not looser: under ADR-055 a satisfied ledger would have opened every ABI including one added later with no run behind it, while now an ABI without an admissible record is withheld whatever else the ledger holds, and an ABI this artifact packages no library for maps to no cell and fails closed. The ABI is **read, never chosen** - `Abi.current()` is fixed by the AOT snapshot the platform loaded, reaches the application through one `runtimeAbiProvider` seam that a test asserts is the only caller, can only narrow, and cannot reach production, which fails the environment test first and packages a core without the symbol. Rejected: opening globally on one ABI's record; demoting the cell; dropping `armeabi-v7a` from the APK, which would deny a 32-bit user the whole supported direct-message tier to protect them from an experimental group feature; and blanket risk acceptance, because once `arm64-v8a` was measured there was no blanket risk left to accept - only 32-bit ARM, which per-ABI resolution removes outright for about sixty lines. Closes none of the seven production gates, does not satisfy gate 6 (process kill, Doze, force-stop, torn writes and Keystore-after-reboot are still unrun), reviews nothing, and leaves multi-device and live-backend execution outstanding. Production re-verified: rebuilt and `verify_release_apk.sh --production` passed all seven checks, and a test asserts a fully satisfied ledger still leaves production holding no permit on any ABI. Disclosure moves 6 → 7. Opens no production gate and supersedes nothing. |
+| ADR-057 | Accepted | The remainder of piece 21 is built as it was measured rather than as it was described: local search needed one shared surface and a group entry point rather than an encrypted index; the settings set gets Appearance, Security & recovery with a real recovery-secret replacement, About and a user-initiated diagnostics export; and the export is made incapable of carrying a prohibited value by its type rather than by review (2026-08-25) | Three of piece 21's named remainders turned out to be three different situations, and the audit that found that out is the decision. **Search was already built and the checklist said it was not.** ADR-052 had already established the two-surface design and pinned it with a test; the row `Local search | Pending Android encrypted index` had never been updated and was wrong in both halves. The phrase "Android encrypted index" traces to one sentence in `local-data-model.md` and to the piece-21 prompt that repeated it; the only *accepted* decision about search is ADR-012, which says the server never receives content or search terms and says nothing about an index. Meanwhile the encrypted database already **is** the index the sentence asks for: `messages.projection_ciphertext` holds the decrypted body inside SQLCipher under a Keystore-wrapped key, `watchMessages` reads it with no `LIMIT`, and a second FTS structure would duplicate every message body into a second place, enlarge what a wipe has to reach, and buy nothing at this deployment's scale. So no index is built, the sentence is corrected to describe what exists, and the row is corrected. What search *did* need was the gap the audit found: `GroupChatView` had no search at all and Group Info offered a permanently disabled "Search this chat" button — a control that can never succeed, which the UI specification's own core rules forbid. One shared `showConversationSearch` now serves direct, saved and group conversations, so the scope notice, the empty states and the result cap cannot disagree between two surfaces promising the same thing; and the cap, which was silently 30, is now stated on screen when it bites, for the reason ADR-052 corrected `chatsSearchHint`. **The settings set was genuinely absent and one of its screens could not be built honestly without a new primitive.** §15.2 requires that an unlocked device be able to generate a fresh recovery secret, re-wrap the same cross-signing identity, upload a higher backup version and invalidate the old secret — and the crypto core had no operation that re-wraps without regenerating. `cp_crypto_v1_rotate_recovery_secret` adds one. It changes no construction, no ciphersuite and no state format: it parses the existing package, draws fresh entropy, and calls the same `encode_recovery_secret` and `encrypt_backup` the first upload used, so the encoded package is byte-identical to the original apart from the recovery and backup fields, master signature included, because Ed25519 signing is deterministic. Generating a new *identity* instead — the only thing the existing API could have done — would have silently un-verified every contact and invalidated every device cross-signature, which is why the caller may not reach for `prepare_first_identity` here. The flow's ordering is the security property: the secret is shown **only** after the server accepted the higher version, and every refusal says the current secret still works, because the server still holds the blob it opens. Nothing local is rewritten, so no crash can leave a device holding keys that do not match a backup. **The diagnostics export is made safe by its type.** A report is a list of typed entries whose keys are an enumeration and whose values are constructible only from a boolean, an enumeration, a bounded integer or a declared constant — there is no constructor taking runtime text, so a username, a display name, a message body, a device label, a token, a server origin, a capability or a key cannot reach the export, not because a reviewer checked but because the type will not hold one. Counts leave as orders of magnitude and the timestamp is an hour, because an exact description of one person's usage is a needlessly precise thing to put in a document they may hand to somebody else. What is on the screen is byte-for-byte what the copy button copies, in locale-independent ASCII: a screen showing a friendly summary while copying something larger would ask a person to share a document they have not read, which is the failure this surface exists to avoid. The application sends it nowhere and says so; the clipboard is the whole export path and where the text goes next is the user's decision. The counters it reports come from `NetworkDiagnostics`, which piece 06 already made payload-free, now recorded in a bounded in-memory counter owned by `ApplicationRuntime` so both entry points count into one — and deliberately never persisted, because a diagnostics buffer that survived a restart would be a durable record of when its owner used the application. Adds no Dart dependency, no Android library, no permission and no manifest component; adds one native symbol to the export allowlist. Four smaller corrections travel with it, all found by the same audit and all in the settings surface set: the in-conversation "Clear history" row closed the menu and did nothing; Linked Devices was entirely unlocalised, printed a raw failure object to the user, rendered a coarse UTC calendar day through `toLocal()` so every reader west of UTC saw the previous day, and offered an "Add device" button routed to `/devices/enroll`, which is not a route this application has. Opens no production gate, touches no cryptographic construction, and leaves the Beta/Production boundary, the group gate and the delivery behaviour untouched. Full reasoning in "ADR-057 in full" below. |
+
+## ADR-057 in full — the remainder of piece 21, as measured (2026-08-25)
+
+**Status:** Accepted. Implementation decision. **Opens no production gate.** Changes no
+cryptographic construction, ciphersuite identifier or state format.
+
+### The question
+
+Piece 21 names four remainders: local search, the settings surface set, the diagnostics
+export, and notifications with background polling. The last of those was delivered under
+ADR-048, ADR-049, ADR-050, ADR-051 and ADR-053 and is not reopened here. The question is
+what the other three actually still need — established from the composed artifact, not
+from the checklist, the prompt or this register, because ADR-052 found by doing exactly
+that audit that four user-facing claims in this application were false.
+
+### What the audit found
+
+| Claim | Verdict | Evidence |
+|---|---|---|
+| `Local search \| Pending Android encrypted index` (checklist) | **Wrong in both halves** | ADR-052 already recorded search as built and pinned it with a test. The chat-list filter is `chat_pages.dart` (`item.title`/`item.preview`); the in-conversation filter read `widget.model.messages`, which `watchMessages` loads with no `LIMIT`. |
+| "Android maintains a local index inside the encrypted database" (`local-data-model.md`) | **True already, and read as a promise of something else** | `messages.projection_ciphertext` holds the decrypted body — the column name is historical — inside SQLCipher under a Keystore-wrapped key. That *is* an index inside the encrypted database. |
+| "Implement local-only conversation/message/contact search with Android encrypted indexes" (prompt 21) | **Not a recorded decision** | The only accepted decision about search is ADR-012: "the server never receives content or search terms." No ADR, no checklist row and no owning document records a decision to build a separate index structure. The phrase appears in `local-data-model.md` and in the prompt that repeated it. |
+| Group conversations can be searched | **False** | `GroupChatView`'s app bar had one action, Group Info. `_GroupInfoSummary` rendered a "Search this chat" button with `onPressed: null` — permanently. |
+| "Clear history" in the direct-conversation overflow | **False** | `onTap: () => Navigator.pop(context)`. It closed the menu and did nothing. |
+| Linked Devices is a reviewed, localized surface | **False** | Every string was a hard-coded English literal; `error` printed the raw failure object to the user; "Add device" routed to `/devices/enroll`, which the router does not declare; and `Last active` rendered a day-level UTC value through `toLocal()`. |
+| Appearance is routed | **True, and unbuilt** | `/settings/appearance` resolved to `StructuralPlaceholderPage`. The deployment disclosure lists the unbuilt surfaces and does not name it. |
+| Settings offers Saved Messages, Security & recovery, About and Log out | **False** | None of the four existed. §15 lists all four. |
+| A user-initiated diagnostics export exists | **False** | `NetworkDiagnostics` was a port with one implementation, `NoopNetworkDiagnostics`, composed everywhere. Nothing collected and nothing exported. |
+
+### The decisions
+
+**1. No search index is built, and the sentence that asked for one is corrected.**
+
+A second index would hold a second copy of every message body. That is a larger wipe
+surface, a second thing a migration can corrupt, and a second place a future defect can
+leak from — against a benefit that does not exist at this scale, because the timeline
+already materialises the whole conversation and the filter runs over what is already in
+memory. `local-data-model.md` now describes the index that exists rather than one that
+does not, and the checklist row is corrected. This is recorded rather than done silently
+because the phrasing had already been copied forward twice.
+
+**2. One shared in-conversation search surface, and the group entry point it was
+missing.**
+
+`showConversationSearch` is opened by direct, saved and group conversations over the same
+`ChatMessageViewModel` list, so the scope notice, the empty states, the result cap and
+the jump behaviour cannot drift between two surfaces that promise the same thing. The
+filter itself is a pure function, which is what lets a test assert the scope claim — the
+whole of this conversation's local history and nothing else — without a widget, and what
+makes it obvious that nothing here touches storage, the network or the crypto core.
+
+The result cap was already 30 and was silent. It now says so on screen when it bites, for
+the reason ADR-052 gave when it corrected `chatsSearchHint`: a surface that shows fewer
+results than it found, without saying so, is misdescribing its own scope.
+
+Group Info's disabled button now opens the conversation, where the messages are. A
+control that can never succeed is what the UI specification's core rules forbid, and it
+had been sitting in a shipped screen.
+
+**3. The settings set, as §15 lists it.**
+
+Settings home gains the profile header, Saved Messages, Security & recovery, Appearance,
+About and Log out. Appearance owns exactly two client-only choices — theme and language —
+and says so; high contrast deliberately has no control, because Android owns that switch,
+`MaterialApp` follows it, and a second control could only disagree with the system one.
+Both values live in the encrypted preference table, so the logout wipe that destroys the
+database key destroys them too and a second account on the same phone does not inherit
+the first one's screen. A write that fails is reported on the screen as a preference that
+will not survive a restart, rather than silently accepted.
+
+Log out states what it costs before it happens, and states it in the vocabulary the
+security notice uses: everything on the phone is erased, the server keeps no copy of the
+history, and the recovery secret restores the identity and never the messages.
+
+**4. Recovery-secret replacement, and the one native operation it needed.**
+
+§15.2 requires replacement, and replacement requires re-wrapping the *same* identity. The
+crypto core could generate a new identity or restore one from a backup; it could not
+re-wrap. `cp_crypto_v1_rotate_recovery_secret` parses the existing package, draws fresh
+entropy, and calls the same `encode_recovery_secret` and `encrypt_backup` that the first
+upload used. No construction changes, no format changes, and the encoded package is
+byte-identical to the original apart from the recovery and backup fields — the master
+signature included, because Ed25519 signing is deterministic over the same key and
+message.
+
+The alternative — reaching for `prepare_first_identity` — was rejected outright. It would
+have produced a new master key, invalidating every device cross-signature and every peer
+attestation, and it would have done so silently, presented to the user as "make a new
+recovery secret".
+
+The ordering is the security property, and it is asserted rather than described:
+
+* The new secret is produced locally and shown **only** after the server accepted the new
+  backup at a strictly higher version.
+* Every refusal — offline, stale after a retry, a crypto core that will not compose —
+  reports that the *current* secret still works, because the server still holds the blob
+  it opens. A user can never be left having written down a secret that recovers nothing.
+* Nothing local is rewritten. The private material on the device is unchanged by
+  construction, so there is no window in which a crash leaves a device holding keys that
+  do not match a backup; the only durable local effect is the recorded backup version,
+  and a stale one costs one extra round trip rather than an identity.
+
+The screen blocks screen capture for as long as the route is mounted and releases it when
+it is not, and copies through the clipboard path that expires — both required controls in
+the threat model, and both now asserted by a test rather than assumed. A build without
+that path says copying is unavailable rather than falling back to an ordinary clipboard
+that never clears.
+
+**5. The diagnostics export is safe by its type, not by review.**
+
+A `DiagnosticsReport` is a list of `DiagnosticEntry`. An entry's key is a
+`DiagnosticField` — an enumeration — and its value is a `DiagnosticValue`, whose every
+subclass is constructible only from a boolean, an enumeration, a bounded integer, or a
+compile-time constant this repository declares. There is no constructor that takes
+runtime text. That is the whole redaction mechanism: a plaintext, a credential, a stable
+identifier, a key, a recovery secret, a ciphertext, a capability or a decoded token
+cannot reach the export because the type will not hold one.
+
+Three consequences were chosen deliberately:
+
+* **Counts leave as orders of magnitude.** An exact count is not a prohibited value, but
+  it is a needlessly precise description of one person's usage to put in a document they
+  may hand to somebody else. `0`, `1-9`, `10-99`, `100-999`, `1000+` answers every
+  question a reader of this report actually has.
+* **The timestamp is an hour.** Enough to find the right window in an operator's log,
+  which is the only reason a timestamp is there.
+* **What is shown is what is copied, byte for byte, in locale-independent ASCII.** A
+  screen that rendered a friendly localized summary and copied something larger would be
+  asking a person to share a document they have not read. The chrome is translated; the
+  report is not, because its recipient may not read the sender's language.
+
+The application sends it nowhere, and the screen says so: the clipboard is the entire
+export path, and where the text goes next is the user's decision. A file written through
+`FileProvider` and handed to an arbitrary application through `ACTION_SEND` was considered
+and rejected — it would add a platform channel, a new intent and a third-party recipient
+chosen at the moment of use, for no gain over a paste.
+
+The one string-taking constructor cannot be closed by the type system, so its call sites
+are enumerated in `test/architecture/settings_and_diagnostics_policy_test.dart`. A fourth
+one has to be added there, deliberately, where the decision to put something new into an
+exportable document is visible to a reviewer — the same mechanism this repository already
+uses for dependencies and for manifest permissions.
+
+The counters come from `NetworkDiagnostics`, which piece 06 built payload-free and which
+nothing had ever collected. `RecordingNetworkDiagnostics` is one integer per enumeration
+cell, so it is O(1) whatever the application does, owned by `ApplicationRuntime` so the
+activity and the headless catch-up count into the same one, and **never persisted**: a
+diagnostics buffer that survived a restart would be a durable record of when its owner
+used the application, kept for a screen almost nobody opens.
+
+**6. Four corrections in the settings surface set, found by the same audit.**
+
+`Clear history` now dispatches a typed intent that the layer owning the repository
+handles, behind a confirmation that states the consequence: this phone's copy is removed,
+the peer keeps theirs, this account's other devices keep theirs, and nothing asks anybody
+to forget anything.
+
+Linked Devices is localized in both languages; its failure state is reviewed copy rather
+than a raw failure object; `Last active` renders the calendar day the backend reported
+rather than that day shifted into local time, which had been showing the previous day to
+every reader west of UTC and was finer-grained than the value the server holds; and the
+"Add device" button is replaced by the explanation §16.1 actually describes, because the
+flow starts on the *other* device and there was nothing here to start — the route it
+pointed at does not exist.
+
+### What this amends
+
+ADR-044's **Absent** tier listed "voice rooms, local search, notifications, background
+delivery, appearance settings". Three of those five have since left it: notifications at
+ADR-048, background delivery at ADR-049, and now appearance settings. **Local search was
+never in it correctly** — ADR-052 established that the artifact already searched when
+ADR-044 was written, and corrected the user-facing disclosure accordingly without editing
+the tier table. The tier now reads: **voice rooms, file attachments, profile publishing,
+shared media**. The dated ledgers inside ADR-042 and ADR-044 are left as written; they
+record what was observed on the day they were made, and this register does not edit
+history out of itself.
+
+### What this does not do
+
+* It opens no production gate, and leaves ADR-017, the PQ MLS gates in `mls-profile.md`
+  and ADR-053's sustained-delivery gate exactly as they were.
+* It does not touch the Beta/Production boundary, the frozen application identity, or the
+  group experimental gate.
+* It adds no Dart dependency, no Android library, no permission and no manifest
+  component. It adds one native symbol, which is recorded in the export allowlist
+  `tool/build_rust_android.sh` checks.
+* It does not move the deployment disclosure. No disclosure point becomes false: the
+  unbuilt-surfaces point names voice rooms, file attachments and profile publishing, and
+  all three remain unbuilt. `DeploymentDisclosure.revision` stays at 7, so the
+  release-blocking written re-delivery obligation is unchanged.
+
+### Not verified by any test here
+
+* What the recovery rotation does against a live backend. The use case is covered against
+  faked ports, including the stale-version conflict the backend documents; a real 409 from
+  a running server has not been exercised.
+* What the diagnostics screen and the recovery screen look like on a device, including
+  whether `FLAG_SECURE` actually blocks a capture and whether the clipboard clear fires.
+  Both are Android behaviours no host test reaches, and both join the existing release
+  gate for the notification path.
+* Whether a reader understands any of the wording added here.
 
 ## ADR-056 in full — the first measurement, and what it opens (2026-08-24)
 

@@ -21,6 +21,11 @@
   reuse with a different event ID, stale revision, clock skew, and unknown-version
   behavior.
 - Error-code mapping and localized honest wording selection.
+- Structural redaction of anything the user can export: the diagnostics report's value
+  type is proved to admit no runtime text, and the collector is run against a database
+  whose every readable column holds a canary.
+- Recovery-secret replacement: the new secret is produced only after the server accepted
+  a higher backup version, and every refusal leaves the current secret working.
 - Riverpod use cases with in-memory/fake ports; no widget is required to test domain
   behavior.
 
@@ -179,8 +184,8 @@ Version-1 release budgets are measured on representative low/mid Android devices
 
 - Static analysis, dependency/license audit, SBOM, secret scan, and release-config audit.
 - Confirm no foreign DNS/network attempt in an isolated-network rehearsal.
-- Inspect logs, notifications, crash paths, backups, screenshots, clipboard, and temporary
-  files for forbidden data.
+- Inspect logs, notifications, crash paths, backups, screenshots, clipboard, temporary
+  files, and the user-initiated diagnostics export for forbidden data.
 - Independent security assessment and remediation sign-off.
 
 ## Merge and release gates

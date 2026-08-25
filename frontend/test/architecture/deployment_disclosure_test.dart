@@ -247,13 +247,31 @@ void main() {
   test('the disclosure may not call a built surface unbuilt', () {
     // Revision 5 removed "search" from the unbuilt list. Search is composed:
     // the chat list filters on title and preview, and a conversation's own
-    // search reads that conversation's whole local history. If either filter
-    // is still here, the disclosure may not deny it.
+    // search reads that conversation's whole local history. If either
+    // filter is still here, the disclosure may not deny it.
     final chats = File(
       'lib/features/messaging/presentation/chat_pages.dart',
     ).readAsStringSync();
     expect(chats, contains('item.title.toLowerCase().contains(query)'));
-    expect(chats, contains('message.text?.toLowerCase().contains(query)'));
+    // The in-conversation filter moved into one shared surface after
+    // ADR-052, so that a group conversation gets the same search rather
+    // than a disabled button offering one. It is still the same filter
+    // over the same unbounded projection, and it is now reached from more
+    // screens, not fewer.
+    final search = File(
+      'lib/features/messaging/presentation/conversation_search.dart',
+    ).readAsStringSync();
+    expect(search, contains('text.toLowerCase().contains(needle)'));
+    for (final path in const [
+      'lib/features/messaging/presentation/chat_pages.dart',
+      'lib/features/groups/presentation/group_pages.dart',
+    ]) {
+      expect(
+        File(path).readAsStringSync(),
+        contains('showConversationSearch('),
+        reason: '\$path offers the search the disclosure does not deny',
+      );
+    }
 
     final unbuilt =
         _catalogue('lib/l10n/app_en.arb')['disclosureUnbuiltSurfaces']!

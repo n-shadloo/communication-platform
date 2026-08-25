@@ -51,6 +51,7 @@ const int _operationPairwise = 17;
 const int _operationApplicationProtocol = 18;
 const int _operationAttachment = 19;
 const int _operationBetaMls = 20;
+const int _operationRotateRecoverySecret = 21;
 const int _attachmentCreate = 1;
 const int _attachmentPush = 2;
 const int _attachmentPullCreate = 3;
@@ -309,6 +310,19 @@ final class IsolateCryptoCoreWorker
     required IdentityKeyPackage package,
   }) => _guarded(() async {
     final reply = await _request(_operationSanitizeIdentity, <Object?>[
+      package.opaqueBytes,
+    ]);
+    return _decodePackageReply<IdentityKeyPackage>(
+      reply,
+      IdentityKeyPackage.fromNative,
+    );
+  });
+
+  @override
+  Future<Result<IdentityKeyPackage>> rotateRecoverySecret({
+    required IdentityKeyPackage package,
+  }) => _guarded(() async {
+    final reply = await _request(_operationRotateRecoverySecret, <Object?>[
       package.opaqueBytes,
     ]);
     return _decodePackageReply<IdentityKeyPackage>(
@@ -978,6 +992,15 @@ Future<void> _runCryptoCoreWorker(
             replyPort.send(
               _encodePackageReply(
                 enrollmentSession.sanitizeIdentity(
+                  IdentityKeyPackage.fromNative(_bytesArgument(message, 2)),
+                ),
+              ),
+            );
+            continue;
+          case _operationRotateRecoverySecret:
+            replyPort.send(
+              _encodePackageReply(
+                enrollmentSession.rotateRecoverySecret(
                   IdentityKeyPackage.fromNative(_bytesArgument(message, 2)),
                 ),
               ),

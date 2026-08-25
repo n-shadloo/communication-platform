@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:communication_platform/app/config/app_environment.dart';
 import 'package:communication_platform/app/design_system/app_tokens.dart';
 import 'package:communication_platform/features/app_shell/presentation/app_shell.dart';
-import 'package:communication_platform/features/app_shell/presentation/settings_page.dart';
 import 'package:communication_platform/features/app_shell/presentation/structural_placeholder_page.dart';
 import 'package:communication_platform/features/authentication/presentation/authentication_pages.dart';
 import 'package:communication_platform/features/authentication/presentation/authentication_route_state.dart';
@@ -13,8 +12,15 @@ import 'package:communication_platform/features/bootstrap/presentation/bootstrap
 import 'package:communication_platform/features/contacts/presentation/contact_pages.dart';
 import 'package:communication_platform/features/devices/presentation/device_enrollment_page.dart';
 import 'package:communication_platform/features/devices/presentation/linked_devices_page.dart';
+import 'package:communication_platform/features/diagnostics/presentation/diagnostics_page.dart';
 import 'package:communication_platform/features/groups/presentation/group_pages.dart';
 import 'package:communication_platform/features/messaging/presentation/chat_pages.dart';
+import 'package:communication_platform/features/settings/presentation/about_page.dart';
+import 'package:communication_platform/features/settings/presentation/appearance_page.dart';
+import 'package:communication_platform/features/settings/presentation/recovery_rotation_page.dart';
+import 'package:communication_platform/features/settings/presentation/safety_numbers_page.dart';
+import 'package:communication_platform/features/settings/presentation/security_settings_page.dart';
+import 'package:communication_platform/features/settings/presentation/settings_page.dart';
 import 'package:communication_platform/features/synchronization/presentation/sustained_delivery_page.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
@@ -284,13 +290,40 @@ GoRouter createAppRouter({
               routes: [
                 GoRoute(
                   path: 'appearance',
-                  pageBuilder: (context, state) => _page(
-                    context,
-                    state,
-                    const StructuralPlaceholderPage(
-                      kind: StructuralPlaceholderKind.appearance,
+                  pageBuilder: (context, state) =>
+                      _page(context, state, const AppearancePage()),
+                ),
+                // Security and recovery, and the two screens behind it.
+                // Both are reached only from here: neither is ever
+                // suggested, prompted or linked from a conversation.
+                GoRoute(
+                  path: 'security',
+                  pageBuilder: (context, state) =>
+                      _page(context, state, const SecuritySettingsPage()),
+                  routes: [
+                    GoRoute(
+                      path: 'recovery',
+                      pageBuilder: (context, state) =>
+                          _page(context, state, const RecoveryRotationPage()),
                     ),
-                  ),
+                    GoRoute(
+                      path: 'safety-numbers',
+                      pageBuilder: (context, state) =>
+                          _page(context, state, const SafetyNumbersPage()),
+                    ),
+                  ],
+                ),
+                GoRoute(
+                  path: 'about',
+                  pageBuilder: (context, state) =>
+                      _page(context, state, const AboutPage()),
+                  routes: [
+                    GoRoute(
+                      path: 'diagnostics',
+                      pageBuilder: (context, state) =>
+                          _page(context, state, const DiagnosticsPage()),
+                    ),
+                  ],
                 ),
                 GoRoute(
                   path: 'profile',

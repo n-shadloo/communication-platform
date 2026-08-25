@@ -15,6 +15,7 @@ import 'package:communication_platform/features/messaging/domain/conversation_mo
 import 'package:communication_platform/features/messaging/presentation/chat_timeline.dart';
 import 'package:communication_platform/features/messaging/presentation/chat_view_model_mapper.dart';
 import 'package:communication_platform/features/messaging/presentation/chat_view_models.dart';
+import 'package:communication_platform/features/messaging/presentation/conversation_search.dart';
 import 'package:communication_platform/features/messaging/presentation/visible_conversation.dart';
 import 'package:communication_platform/l10n/generated/app_localizations.dart';
 import 'package:flutter/material.dart';
@@ -602,6 +603,13 @@ class _ProjectedConversationPage extends ConsumerWidget {
       await manager.saveDraft(conversationId: conversationId, text: text);
       return;
     }
+    if (intent is ClearConversationHistoryIntent) {
+      final manager = await ref.read(
+        manageLocalConversationStateProvider.future,
+      );
+      await manager.deleteConversationForMe(conversationId);
+      return;
+    }
     if (intent case OpenAttachmentIntent(:final attachment)) {
       if (context.mounted) {
         await showModalBottomSheet<void>(
@@ -944,87 +952,11 @@ class _ChatConversationViewState extends State<ChatConversationView> {
     );
   }
 
-  Future<void> _showSearch() async {
-    final strings = AppLocalizations.of(context);
-    final controller = TextEditingController();
-    await showAppSheet<void>(
-      context: context,
-      semanticLabel: strings.chatSearchAction,
-      child: StatefulBuilder(
-        builder: (context, setModalState) {
-          final query = controller.text.trim().toLowerCase();
-          final results = query.isEmpty
-              ? const <ChatMessageViewModel>[]
-              : widget.model.messages
-                    .where(
-                      (message) =>
-                          message.text?.toLowerCase().contains(query) ?? false,
-                    )
-                    .take(30)
-                    .toList(growable: false);
-          return SizedBox(
-            height: mathMin(MediaQuery.sizeOf(context).height * .7, 560),
-            child: Column(
-              children: [
-                TextField(
-                  controller: controller,
-                  autofocus: true,
-                  decoration: InputDecoration(
-                    labelText: strings.chatSearchInputLabel,
-                    prefixIcon: Padding(
-                      padding: const EdgeInsets.all(AppSpacing.x3),
-                      child: AppIcon(AppIcons.search),
-                    ),
-                  ),
-                  onChanged: (_) => setModalState(() {}),
-                ),
-                Padding(
-                  padding: const EdgeInsets.all(AppSpacing.x2),
-                  child: Text(
-                    strings.chatsDeviceSearchScopeNotice,
-                    style: context.tokens.typography.label.copyWith(
-                      color: context.tokens.colors.textMuted,
-                    ),
-                  ),
-                ),
-                Expanded(
-                  child: query.isEmpty
-                      ? AppStatePanel.empty(
-                          title: strings.chatSearchEmptyQueryTitle,
-                          message: strings.chatsDeviceSearchScopeNotice,
-                        )
-                      : results.isEmpty
-                      ? AppStatePanel.empty(
-                          title: strings.chatsNoSearchResultsTitle,
-                          message: strings.chatsDeviceSearchScopeNotice,
-                        )
-                      : ListView.builder(
-                          itemCount: results.length,
-                          itemBuilder: (context, index) {
-                            final message = results[index];
-                            return ListTile(
-                              title: Text(
-                                message.text ?? '',
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                              subtitle: Text(message.authorName),
-                              onTap: () {
-                                Navigator.pop(context);
-                                _handleIntent(JumpToMessageIntent(message.id));
-                              },
-                            );
-                          },
-                        ),
-                ),
-              ],
-            ),
-          );
-        },
-      ),
-    );
-    controller.dispose();
-  }
+  Future<void> _showSearch() => showConversationSearch(
+    context: context,
+    messages: widget.model.messages,
+    onJumpToMessage: (id) => _handleIntent(JumpToMessageIntent(id)),
+  );
 
   Future<void> _showPinnedMessages() async {
     final strings = AppLocalizations.of(context);
@@ -1156,6 +1088,38 @@ class _ChatConversationViewState extends State<ChatConversationView> {
     );
   }
 
+  /// Clearing is local, and the dialog says so.
+  ///
+  /// It removes this device's copy of the conversation and nothing else:
+  /// the peer keeps theirs, this account's other devices keep theirs, and no
+  /// request is sent asking anybody to forget anything. Wording that implied
+  /// otherwise would be the promise §17 forbids a destructive dialog from
+  /// making.
+  Future<void> _confirmClearHistory() async {
+    final strings = AppLocalizations.of(context);
+    final confirmed = await showAppDialog<bool>(
+      context: context,
+      title: strings.chatClearHistoryTitle,
+      body: strings.chatClearHistoryBody,
+      actions: [
+        AppButton(
+          label: strings.chatCancelAction,
+          kind: AppButtonKind.ghost,
+          onPressed: () => Navigator.pop(context, false),
+        ),
+        AppButton(
+          key: const ValueKey('chat-clear-history-confirm'),
+          label: strings.chatClearHistoryAction,
+          kind: AppButtonKind.danger,
+          onPressed: () => Navigator.pop(context, true),
+        ),
+      ],
+    );
+    if (confirmed ?? false) {
+      _handleIntent(const ClearConversationHistoryIntent());
+    }
+  }
+
   Future<void> _showConversationMenu() async {
     final strings = AppLocalizations.of(context);
     await showAppSheet<void>(
@@ -1189,7 +1153,10 @@ class _ChatConversationViewState extends State<ChatConversationView> {
             label: strings.contactClearHistoryAction,
             icon: AppIcons.delete,
             danger: true,
-            onTap: () => Navigator.pop(context),
+            onTap: () {
+              Navigator.pop(context);
+              unawaited(_confirmClearHistory());
+            },
           ),
         ],
       ),
