@@ -151,7 +151,25 @@ final class TokenCoordinator implements AccessTokenCoordinator {
             AuthenticationFailure(AuthenticationFailureKind.sessionExpired),
           );
         }
-        await store.replace(tokens);
+        // `/auth/refresh` returns a token pair and nothing else, so the value
+        // decoded from it carries no `userId`, `deviceId` or `username`.
+        // Replacing the durable record with it verbatim erased the identity
+        // the session is bound to, and the next restore read that back as a
+        // null user and reported a malformed server response - signing the
+        // account out on the first cold start after the access token aged out,
+        // with a durable session that was still perfectly valid. A rotation
+        // changes the credentials, never whose credentials they are.
+        final identity = await store.read();
+        await store.replace(
+          SessionTokens(
+            accessToken: tokens.accessToken,
+            refreshToken: tokens.refreshToken,
+            refreshExpiresAt: tokens.refreshExpiresAt,
+            userId: tokens.userId ?? identity?.userId,
+            deviceId: tokens.deviceId ?? identity?.deviceId,
+            username: tokens.username ?? identity?.username,
+          ),
+        );
         return Result.success(tokens.accessToken);
       case FailureResult(failure: final failure):
         if (!_endsSession(failure)) {

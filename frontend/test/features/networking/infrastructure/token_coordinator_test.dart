@@ -410,6 +410,49 @@ void main() {
       );
     });
   });
+
+  test('a rotation keeps the identity the session is bound to', () async {
+    final store = MemoryTokenStore(
+      SessionTokens(
+        accessToken: AccessToken(
+          value: 'old-access',
+          expiresAt: DateTime.utc(2026, 7, 27, 12, 1),
+          scope: SessionScope.full,
+        ),
+        refreshToken: 'old-refresh',
+        userId: 'a3f1c8d2-0b57-4e6a-9c31-77d2e4b8f015',
+        deviceId: '5e2b9a41-6c73-4d8f-b210-9a4c6f3d7e88',
+        username: 'test2',
+      ),
+    );
+    final exchange = ControlledRefreshExchange();
+    final coordinator = TokenCoordinator(
+      store: store,
+      refreshExchange: exchange,
+      terminationHandler: RecordingTerminationHandler(),
+      timeSource: FixedTimeSource(DateTime.utc(2026, 7, 27, 12)),
+    );
+
+    final request = coordinator.accessToken();
+    await Future<void>.delayed(Duration.zero);
+    // `/auth/refresh` answers with a token pair and no identity at all, which
+    // is what `session()` models.
+    exchange.completer.complete(
+      Result.success(
+        session('new-access', 'new-refresh', DateTime.utc(2026, 7, 27, 13)),
+      ),
+    );
+    await request;
+
+    // Persisting the response verbatim erased these, and the next cold-start
+    // restore read the null user back as a malformed server response and
+    // signed the account out while its refresh token was still valid.
+    expect(store.current?.userId, 'a3f1c8d2-0b57-4e6a-9c31-77d2e4b8f015');
+    expect(store.current?.deviceId, '5e2b9a41-6c73-4d8f-b210-9a4c6f3d7e88');
+    expect(store.current?.username, 'test2');
+    expect(store.current?.accessToken.value, 'new-access');
+    expect(store.current?.refreshToken, 'new-refresh');
+  });
 }
 
 final class ScriptedRefreshExchange implements RefreshTokenExchange {
