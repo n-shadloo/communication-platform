@@ -16,6 +16,10 @@ enum ChatDeliveryViewState {
 }
 
 enum ChatSecurityGate {
+  /// The peer's trust state has not been read yet. Distinct from
+  /// [unverifiedIdentity]: nothing is known, so nothing may be claimed. Holds
+  /// the composer closed without telling the user their peer failed a check.
+  checking,
   ready,
   unverifiedIdentity,
   unverifiedDevice,

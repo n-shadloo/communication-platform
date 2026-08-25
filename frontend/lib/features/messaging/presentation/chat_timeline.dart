@@ -992,9 +992,15 @@ class ChatComposerBuilderState extends State<ChatComposerBuilder> {
   @override
   Widget build(BuildContext context) {
     final strings = AppLocalizations.of(context);
-    if (widget.securityGate != ChatSecurityGate.ready) {
-      return _WithheldComposer(gate: widget.securityGate);
+    final gate = widget.securityGate;
+    if (gate != ChatSecurityGate.ready && gate != ChatSecurityGate.checking) {
+      return _WithheldComposer(gate: gate);
     }
+    // While trust is still being read the composer stays in place and inert
+    // rather than being swapped for a banner. The answer usually lands within a
+    // frame or two, and a control that disappears and comes back reads as a
+    // fault; one that is briefly unavailable does not.
+    final ready = gate == ChatSecurityGate.ready;
     return Material(
       color: context.tokens.colors.surface,
       child: DecoratedBox(
@@ -1036,8 +1042,9 @@ class ChatComposerBuilderState extends State<ChatComposerBuilder> {
                     AppIconButton(
                       icon: AppIcons.attach,
                       semanticLabel: strings.chatAttachAction,
-                      onPressed: () =>
-                          widget.onIntent(const OpenAttachmentIntent()),
+                      onPressed: ready
+                          ? () => widget.onIntent(const OpenAttachmentIntent())
+                          : null,
                       kind: AppButtonKind.ghost,
                     ),
                     Expanded(
@@ -1047,6 +1054,7 @@ class ChatComposerBuilderState extends State<ChatComposerBuilder> {
                           key: const ValueKey('chat-composer-field'),
                           controller: _controller,
                           focusNode: _focusNode,
+                          enabled: ready,
                           minLines: 1,
                           maxLines: 6,
                           textInputAction: TextInputAction.newline,
@@ -1088,7 +1096,7 @@ class ChatComposerBuilderState extends State<ChatComposerBuilder> {
                       AppIconButton(
                         icon: AppIcons.emoji,
                         semanticLabel: strings.chatEmojiAction,
-                        onPressed: _insertEmoji,
+                        onPressed: ready ? _insertEmoji : null,
                         kind: AppButtonKind.ghost,
                       )
                     else
@@ -1097,7 +1105,7 @@ class ChatComposerBuilderState extends State<ChatComposerBuilder> {
                         semanticLabel: _mode == ChatComposerMode.edit
                             ? strings.chatSaveEditAction
                             : strings.chatSendAction,
-                        onPressed: _submit,
+                        onPressed: ready ? _submit : null,
                         kind: AppButtonKind.primary,
                       ),
                   ],
@@ -1464,7 +1472,8 @@ class _WithheldComposer extends StatelessWidget {
   Widget build(BuildContext context) {
     final strings = AppLocalizations.of(context);
     final message = switch (gate) {
-      ChatSecurityGate.ready => '',
+      // Neither gate withholds a message, so neither reaches this widget.
+      ChatSecurityGate.checking || ChatSecurityGate.ready => '',
       ChatSecurityGate.unverifiedIdentity =>
         strings.chatWithheldUnverifiedIdentity,
       ChatSecurityGate.unverifiedDevice => strings.chatWithheldUnverifiedDevice,

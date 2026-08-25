@@ -56,7 +56,8 @@ void main() {
   ) async {
     final semantics = tester.ensureSemantics();
     for (final gate in ChatSecurityGate.values.where(
-      (gate) => gate != ChatSecurityGate.ready,
+      (gate) =>
+          gate != ChatSecurityGate.ready && gate != ChatSecurityGate.checking,
     )) {
       await _pump(
         tester,
@@ -76,6 +77,26 @@ void main() {
         reason: gate.name,
       );
     }
+    semantics.dispose();
+  });
+
+  testWidgets('holds the composer inert while the trust state is unread', (
+    tester,
+  ) async {
+    final semantics = tester.ensureSemantics();
+    await _pump(
+      tester,
+      ChatConversationView(
+        model: _model(securityGate: ChatSecurityGate.checking),
+        onIntent: (_) {},
+      ),
+    );
+    // The composer keeps its place so opening a chat does not shuffle its
+    // layout, and says nothing about the peer while nothing is known.
+    final field = find.byKey(const ValueKey('chat-composer-field'));
+    expect(field, findsOneWidget);
+    expect(tester.widget<TextField>(field).enabled, isFalse);
+    expect(find.bySemanticsLabel(RegExp('Messaging withheld')), findsNothing);
     semantics.dispose();
   });
 

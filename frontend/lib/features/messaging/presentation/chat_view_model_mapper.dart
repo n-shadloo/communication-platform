@@ -3,16 +3,29 @@ import 'package:communication_platform/features/messaging/domain/conversation_mo
 import 'package:communication_platform/features/messaging/presentation/chat_view_models.dart';
 
 abstract final class ChatViewModelMapper {
-  static ChatSecurityGate securityGate(ContactTrustState? state) =>
-      switch (state) {
-        ContactTrustState.verified => ChatSecurityGate.ready,
-        null => ChatSecurityGate.unverifiedIdentity,
-        ContactTrustState.unverified || ContactTrustState.identityUnavailable =>
-          ChatSecurityGate.unverifiedIdentity,
-        ContactTrustState.invalidDevice => ChatSecurityGate.unverifiedDevice,
-        ContactTrustState.masterKeyChanged => ChatSecurityGate.masterKeyChanged,
-        ContactTrustState.deviceLogFork => ChatSecurityGate.deviceLogFork,
-      };
+  /// Maps a peer's trust state onto the composer's gate.
+  ///
+  /// [resolved] separates "this contact has no verified identity" from "the
+  /// contact projection has not arrived yet". Both leave [state] null, but only
+  /// the first is a finding worth showing the user: reporting the second as
+  /// unverified makes every chat open on a security warning that clears itself
+  /// a moment later.
+  static ChatSecurityGate securityGate(
+    ContactTrustState? state, {
+    bool resolved = true,
+  }) => resolved
+      ? switch (state) {
+          ContactTrustState.verified => ChatSecurityGate.ready,
+          null => ChatSecurityGate.unverifiedIdentity,
+          ContactTrustState.unverified ||
+          ContactTrustState.identityUnavailable =>
+            ChatSecurityGate.unverifiedIdentity,
+          ContactTrustState.invalidDevice => ChatSecurityGate.unverifiedDevice,
+          ContactTrustState.masterKeyChanged =>
+            ChatSecurityGate.masterKeyChanged,
+          ContactTrustState.deviceLogFork => ChatSecurityGate.deviceLogFork,
+        }
+      : ChatSecurityGate.checking;
 
   static List<ChatListItemViewModel> summaries(
     List<ConversationSummary> summaries, {

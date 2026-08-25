@@ -504,6 +504,17 @@ class _ProjectedConversationPage extends ConsumerWidget {
     final typing =
         ref.watch(typingProjectionsProvider(conversationId)).value ??
         const <TypingProjection>[];
+    // One gate for every load state. The projection is only allowed to speak
+    // about trust once it has an answer to give: a first read that is still in
+    // flight has neither a value nor an error, and reading that as "unverified"
+    // opened every conversation on a security warning that cleared itself.
+    // An error resolves closed, through the null branch of the mapper.
+    final securityGate = savedMessages
+        ? ChatSecurityGate.ready
+        : ChatViewModelMapper.securityGate(
+            contact.value?.trustState,
+            resolved: contact.hasValue || contact.hasError,
+          );
     final model = messages.when(
       data: (items) => ChatTimelineViewModel(
         state: items.isEmpty
@@ -512,9 +523,7 @@ class _ProjectedConversationPage extends ConsumerWidget {
         conversationId: conversationId,
         title: savedMessages ? strings.savedMessagesTitle : peerName,
         savedMessages: savedMessages,
-        securityGate: savedMessages
-            ? ChatSecurityGate.ready
-            : ChatViewModelMapper.securityGate(contact.value?.trustState),
+        securityGate: securityGate,
         offline: offline,
         hasMoreBefore: false,
         loadingBefore: false,
@@ -534,7 +543,7 @@ class _ProjectedConversationPage extends ConsumerWidget {
         conversationId: conversationId,
         title: savedMessages ? strings.savedMessagesTitle : peerName,
         savedMessages: savedMessages,
-        securityGate: ChatSecurityGate.ready,
+        securityGate: securityGate,
         offline: offline,
         hasMoreBefore: false,
         loadingBefore: false,
@@ -549,7 +558,7 @@ class _ProjectedConversationPage extends ConsumerWidget {
         conversationId: conversationId,
         title: savedMessages ? strings.savedMessagesTitle : peerName,
         savedMessages: savedMessages,
-        securityGate: ChatSecurityGate.ready,
+        securityGate: securityGate,
         offline: offline,
         hasMoreBefore: false,
         loadingBefore: false,
