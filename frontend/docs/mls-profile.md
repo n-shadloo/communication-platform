@@ -609,6 +609,26 @@ supported suites do not include the candidate. If maintained exact support canno
 produced for the target being released, groups remain disabled; the team does not
 replace the suite with classical MLS or ship newly invented cryptography.
 
+### The exporter, and what may not be keyed from it (ADR-058, 2026-08-25)
+
+The beta engine derives one exporter, under the label `chat:v1:beta-group-export`, and it
+**does not leave the Rust core**. `exporter_confirmation` returns SHA-256 over the 32-byte
+`export_secret` output, and Dart uses that digest for exactly one purpose: confirming that
+two members agree on an epoch. No exporter secret crosses the FFI boundary, on any profile.
+
+That is the intended posture and this decision does not change it. It is recorded here
+because piece 20 was re-scoped onto "which MLS exporter may key real-time media"
+(ADR-044) and the answer is currently *none, on either path* — there is no operation that
+returns media key material at all. Adding one is a change to the reviewed native surface:
+a new domain-separated label distinct from the group's, a new symbol in the export
+allowlist `tool/build_rust_android.sh` enforces, and rotation semantics tied to membership
+change. [ADR-058](decisions.md) P2 requires it before piece 20 begins, and ADR-058 P3
+requires that any such derivation resolve through the same per-ABI permit as the group
+stack, so media can never be keyed on a device where `GroupExperimentalGate` withholds the
+core that would key it.
+
+None of this opens, weakens, or partially satisfies any of the seven gates below.
+
 ## Production gates
 
 All of these are mandatory:

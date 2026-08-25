@@ -92,16 +92,28 @@ opaque/client-owned; **Pending** = Flutter implementation not started.
 
 ## Voice rooms and realtime
 
+**Decided, not implemented.** Piece 20 has no implementation of any kind and does not
+start until every condition of [ADR-058](decisions.md) is met — P1 a granted media-key
+source, P2 that exporter reachable through the native boundary, P3 the same per-ABI permit
+that governs groups, P4 a settled frame-encryption contract, P5 an admissible Android wire
+record under `docs/validation/voice-media/`, P6 self-hosted LiveKit and TURN reviewed into
+the pinned dependency map, P7 a truthful tier and disclosure. **On 2026-08-25 none of P1,
+P2, P4, P5 or P6 is met**, and the rows below stay Pending regardless of backend
+readiness. ADR-058 replaced ADR-044's "a decision must be made", which replaced the
+prompt's "after piece 19 passes every production gate" — unreachable, because
+`mls-profile.md` records that gate 2 cannot be reached by any work inside this project.
+
 | Capability | Backend | Flutter |
 |---|---|---|
 | Create/read/rename room | Ready opaque name | Pending |
-| Room live count/signals | Ready volatile relay | Pending |
-| LiveKit token | Ready | Pending join/reconnect client |
-| Self-hosted LiveKit/TURN | Deployment ready | Pending integration tests |
-| Room invitations/membership | Client protocol | Leave semantics specified; implementation pending |
-| Audio E2EE/key distribution | Server deliberately excluded | Pending MLS exporter/E2EE gate |
+| Room live count/signals | Ready volatile relay | Frame types only. `dio_websocket_gateway.dart` validates and routes `room_signal` and `room_presence`; no room behaviour is built on them |
+| LiveKit token | Ready | Pending join/reconnect client. No media dependency is declared, and `dependency_policy_test.dart` fails if one is added without an ADR-054 review |
+| Self-hosted LiveKit/TURN | Deployment ready | Pending. No deployment is recorded and no integration test exists (ADR-058 P6) |
+| Room invitations/membership | Client protocol | Leave semantics specified (ADR-023); implementation pending |
+| Audio E2EE/key distribution | Server deliberately excluded | **Blocked at the source.** The core returns only SHA-256 over `export_secret` as an epoch-agreement digest; no exporter secret crosses the FFI boundary, so there is nothing to key media with on any path (ADR-058 P2) |
+| Media framing contract | Not applicable | **Unresolved and recorded as unresolved.** `voice-and-realtime.md`, `cryptographic-protocol.md` and `backend/SECURITY.md` do not agree, and LiveKit's own documentation names no SFrame. ADR-058 P4/P5 require a recorded decision on a wire measurement |
 | Ephemeral room text | Volatile relay ready | Pending encrypted memory-only UI |
-| Android active-call service | Not applicable | Pending |
+| Android active-call service | Not applicable | Pending. ADR-051 records that two foreground services can be armed at once if voice ships; ADR-058 P7 requires that be decided in advance |
 | Web E2EE worker | Not applicable | Post-v1 backlog; not part of the Android release |
 
 ## UI
@@ -149,6 +161,12 @@ opaque/client-owned; **Pending** = Flutter implementation not started.
 - [ ] Android `mlkem_native` passes identical FIPS/PQXDH vectors; no educational or
   pure-Dart ML-KEM is present.
 - [ ] Hybrid PQXDH/Double Ratchet composition is independently reviewed.
+- [ ] Piece 20's Android media spike proves on real hardware that the self-hosted SFU
+  cannot decrypt published audio, and settles which frame encryption is in use. Not run,
+  and not startable: the exporter it would key from does not cross the FFI boundary
+  (ADR-058 P2), no self-hosted LiveKit or TURN deployment is recorded (P6), and no media
+  dependency is declared. `docs/validation/voice-media/` does not exist. A reasoned
+  argument that the SFU cannot decrypt is not an admissible record (ADR-058 P5).
 - [ ] Piece 19 Phase-A production prerequisites pass. The former combined
   specification/identifier prerequisite is now two separately evidenced rows, because the
   primitive mapping and the MLS suite value sit in different registries with different

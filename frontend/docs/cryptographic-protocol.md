@@ -62,7 +62,7 @@ Android-only completion is not a protocol downgrade or an alternate suite.
 | Backup AEAD | XChaCha20-Poly1305 with random 192-bit nonces |
 | Password/recovery KDF | Argon2id v1: 64 MiB, 3 iterations, parallelism 4, 16-byte salt, 32-byte output |
 | File streaming | libsodium `secretstream_xchacha20poly1305` |
-| Media framing | RFC 9605 SFrame or the LiveKit E2EE implementation after wire-level validation |
+| Media framing | **Undecided.** RFC 9605 SFrame or the LiveKit E2EE implementation, on a recorded decision standing on an Android wire measurement. LiveKit's own documentation names no SFrame and exposes `EncryptionType` as `kNone`/`kGcm`/`kCustom`, so this row is not settled by the SDK either; see [ADR-058](decisions.md) P4/P5 and [voice-and-realtime.md](voice-and-realtime.md) |
 
 Every KDF and signature input uses the exact domain label defined by its binding
 contract. Labels are constants in the shared crypto core and covered by test vectors;
