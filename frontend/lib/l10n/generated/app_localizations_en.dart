@@ -804,9 +804,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get chatReplyAction => 'Reply';
 
   @override
-  String get chatReactAction => 'React';
-
-  @override
   String get chatEditAction => 'Edit';
 
   @override
@@ -872,6 +869,22 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get chatReactionSelectorLabel => 'Choose a reaction';
+
+  @override
+  String chatReactionAddAction(String emoji) {
+    return 'React with $emoji';
+  }
+
+  @override
+  String chatReactionRemoveAction(String emoji) {
+    return 'Remove your $emoji reaction';
+  }
+
+  @override
+  String get chatMoreReactionsAction => 'More emoji';
+
+  @override
   String get chatRetrySendAction => 'Retry as a new encrypted send';
 
   @override
@@ -900,6 +913,12 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get chatEmojiAction => 'Insert emoji';
+
+  @override
+  String get emojiPickerLabel => 'Emoji picker';
+
+  @override
+  String get emojiPickerSearchHint => 'Search emoji';
 
   @override
   String get chatSendAction => 'Send encrypted message';

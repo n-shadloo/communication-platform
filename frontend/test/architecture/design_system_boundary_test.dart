@@ -30,4 +30,22 @@ void main() {
     }
     expect(references, ['lib/app/design_system/app_icons.dart']);
   });
+
+  test('emoji_picker_flutter is reached only through the app-owned picker', () {
+    // ADR-059. The package supplies a grid of glyphs; the application owns the
+    // component around it, including the two settings that keep it from
+    // writing a plaintext record of what a person picked. A feature screen
+    // that imported the package directly would get the package's defaults
+    // instead, and recents are on by default.
+    final references = <String>[];
+    for (final entry in Directory('lib').listSync(recursive: true)) {
+      if (entry is! File || !entry.path.endsWith('.dart')) {
+        continue;
+      }
+      if (entry.readAsStringSync().contains('package:emoji_picker_flutter/')) {
+        references.add(entry.path.replaceAll('\\', '/'));
+      }
+    }
+    expect(references, ['lib/app/design_system/app_emoji_picker.dart']);
+  });
 }

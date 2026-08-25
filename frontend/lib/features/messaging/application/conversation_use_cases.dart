@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:communication_platform/core/application/ports/application_protocol_port.dart';
@@ -167,20 +168,37 @@ final class SendConversationEvents {
     );
   }
 
+  /// Sets or, with a null [emoji], removes this user's reaction.
+  ///
+  /// The value is checked before anything is encoded, because the encoder does
+  /// not check it: `optionalText` writes whatever string it is handed, while
+  /// the reader on the other side of the same file bounds the field at 64 bytes
+  /// and 64 scalars. Without this an ordinary caller could produce an event
+  /// that this client's own decoder rejects, on a path where the failure would
+  /// surface as somebody else's message never arriving.
   Future<Result<void>> setReaction({
     required String currentUserId,
     required String currentDeviceId,
     required String conversationId,
     required String messageId,
     required String? emoji,
-  }) => _sendMutation(
-    currentUserId: currentUserId,
-    currentDeviceId: currentDeviceId,
-    conversationId: conversationId,
-    kind: ApplicationEventKind.reactionSet,
-    targetMessageId: messageId,
-    body: (target) => ReactionSetBody(targetMessageId: target, emoji: emoji),
-  );
+  }) {
+    if (emoji != null && !isSendableReaction(emoji)) {
+      return Future.value(
+        const Result.failure(
+          ValidationFailure(ValidationFailureKind.invalidInput),
+        ),
+      );
+    }
+    return _sendMutation(
+      currentUserId: currentUserId,
+      currentDeviceId: currentDeviceId,
+      conversationId: conversationId,
+      kind: ApplicationEventKind.reactionSet,
+      targetMessageId: messageId,
+      body: (target) => ReactionSetBody(targetMessageId: target, emoji: emoji),
+    );
+  }
 
   Future<Result<void>> setPin({
     required String currentUserId,
@@ -670,6 +688,89 @@ final class _OutboundConversation {
   final ConversationKind kind;
   final String? peerUserId;
 }
+
+/// The wire bound the reaction field is read back under, mirrored on the send
+/// side. `crypto_core_runtime.dart` decodes it with
+/// `optionalText(maximumBytes: 64, maximumScalars: 64)`.
+const int maximumReactionBytes = 64;
+const int maximumReactionScalars = 64;
+
+/// Whether [value] may be sent as a reaction.
+///
+/// `message-protocol.md` defines the value as "one normalized emoji grapheme or
+/// null". Two of those words are decidable here, and both are decided before
+/// the encoder runs:
+///
+///   * **one grapheme.** `dart:core` cannot segment grapheme clusters and
+///     `package:characters` is not a dependency of this application, so the
+///     emoji-relevant half of UAX #29 is implemented below. A boundary is
+///     refused before an extending scalar (combining marks, variation
+///     selectors, enclosing marks including the keycap, emoji modifiers and tag
+///     characters), refused after a ZERO WIDTH JOINER, and refused between the
+///     two regional indicators of a flag. Anything else between two scalars is
+///     a boundary, so the value is more than one cluster and is rejected.
+///   * **within the wire bound**, at 64 UTF-8 bytes and 64 scalars.
+///
+/// Whether the cluster is an *emoji* is deliberately not asserted. Deciding it
+/// needs Unicode property data this application does not carry, and it is not
+/// what protects the protocol - the cluster count is. What is refused outright
+/// is a leading control character or space, which is never a reaction and would
+/// render as an empty chip.
+bool isSendableReaction(String value) {
+  if (value.isEmpty) {
+    return false;
+  }
+  final scalars = value.runes.toList(growable: false);
+  if (scalars.length > maximumReactionScalars ||
+      utf8.encode(value).length > maximumReactionBytes) {
+    return false;
+  }
+  // A cluster begins with a base. A leading variation selector, combining mark
+  // or ZERO WIDTH JOINER has nothing to attach to and renders as nothing, which
+  // would put an empty chip on a message.
+  if (_isControlOrSpace(scalars.first) || _isExtending(scalars.first)) {
+    return false;
+  }
+  for (var index = 1; index < scalars.length; index += 1) {
+    final previous = scalars[index - 1];
+    final current = scalars[index];
+    final continues =
+        _isExtending(current) ||
+        previous == _zeroWidthJoiner ||
+        (index == 1 &&
+            _isRegionalIndicator(previous) &&
+            _isRegionalIndicator(current));
+    if (!continues) {
+      return false;
+    }
+  }
+  return true;
+}
+
+const int _zeroWidthJoiner = 0x200D;
+
+bool _isRegionalIndicator(int scalar) => scalar >= 0x1F1E6 && scalar <= 0x1F1FF;
+
+/// Scalars that continue the cluster they follow rather than opening a new one.
+bool _isExtending(int scalar) =>
+    scalar == _zeroWidthJoiner ||
+    (scalar >= 0x0300 && scalar <= 0x036F) ||
+    (scalar >= 0x1AB0 && scalar <= 0x1AFF) ||
+    (scalar >= 0x1DC0 && scalar <= 0x1DFF) ||
+    (scalar >= 0x20D0 && scalar <= 0x20F0) ||
+    (scalar >= 0xFE00 && scalar <= 0xFE0F) ||
+    (scalar >= 0xFE20 && scalar <= 0xFE2F) ||
+    (scalar >= 0x1F3FB && scalar <= 0x1F3FF) ||
+    (scalar >= 0xE0020 && scalar <= 0xE007F);
+
+bool _isControlOrSpace(int scalar) =>
+    scalar <= 0x20 ||
+    (scalar >= 0x7F && scalar <= 0xA0) ||
+    (scalar >= 0x2000 && scalar <= 0x200C) ||
+    scalar == 0x2028 ||
+    scalar == 0x2029 ||
+    scalar == 0x3000 ||
+    scalar == 0xFEFF;
 
 Uint8List _hexBytes(String value, {required int expectedLength}) {
   if (value.length != expectedLength * 2 ||

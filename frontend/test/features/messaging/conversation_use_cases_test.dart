@@ -203,6 +203,130 @@ void main() {
       expect(fanout.events, isEmpty);
     },
   );
+
+  group('a reaction value is one grapheme within the wire bound', () {
+    // `message-protocol.md`: the value of a reaction event is "one normalized
+    // emoji grapheme or null". The encoder writes whatever string it is given
+    // and only the reader is bounded, so this is the last place the two can be
+    // made to agree.
+    test('one cluster is one cluster however many scalars it takes', () {
+      for (final value in const [
+        '👍', // one scalar
+        '❤️', // base + U+FE0F
+        '🕊️',
+        '1️⃣', // keycap: digit + U+FE0F + U+20E3
+        '👍🏽', // base + emoji modifier
+        '🇮🇷', // two regional indicators
+        '👨‍👩‍👧', // three bases joined by U+200D
+        '\u{1F3F4}\u{E0067}\u{E0062}\u{E0073}\u{E0063}\u{E0074}\u{E007F}',
+        'e\u{0301}', // a base plus a combining acute is still one cluster
+      ]) {
+        expect(
+          isSendableReaction(value),
+          isTrue,
+          reason: 'rejected ${value.runes.map((r) => r.toRadixString(16))}',
+        );
+      }
+    });
+
+    test('anything that is two clusters, empty, or blank is refused', () {
+      for (final value in <String>[
+        '',
+        '👍👎', // two emoji
+        '👍 ', // emoji then a space
+        'ab',
+        '🇮🇷🇮🇷', // two flags is four regional indicators
+        ' ',
+        '\u{200D}', // a joiner with nothing to join
+        '\u{00A0}', // a no-break space
+        '\n',
+      ]) {
+        expect(
+          isSendableReaction(value),
+          isFalse,
+          reason: 'accepted ${value.runes.map((r) => r.toRadixString(16))}',
+        );
+      }
+    });
+
+    test('the wire bound is enforced on both of its axes', () {
+      // 64 scalars, all extending the first, so it stays one cluster and can
+      // only be refused by the bound itself.
+      final atTheScalarBound = '👍${'\u{FE00}' * 63}';
+      expect(atTheScalarBound.runes.length, maximumReactionScalars);
+      expect(
+        isSendableReaction(atTheScalarBound),
+        isFalse,
+        reason: 'over 64 bytes',
+      );
+      final overTheScalarBound = '👍${'\u{FE00}' * 64}';
+      expect(isSendableReaction(overTheScalarBound), isFalse);
+      // Inside both bounds, and still one cluster.
+      expect(isSendableReaction('👍${'\u{FE00}' * 10}'), isTrue);
+    });
+
+    test('setReaction refuses the value before anything is encoded', () async {
+      expect(
+        await sender.setReaction(
+          currentUserId: currentUser,
+          currentDeviceId: currentDevice,
+          conversationId: _directConversationHex,
+          messageId: _messageOne,
+          emoji: '👍👎',
+        ),
+        isA<FailureResult<void>>().having(
+          (result) => result.failure,
+          'failure',
+          const ValidationFailure(ValidationFailureKind.invalidInput),
+        ),
+      );
+      expect(fanout.events, isEmpty);
+      expect(repository.pending, isEmpty);
+    });
+
+    test(
+      'setReaction still sets one emoji and still removes with null',
+      () async {
+        repository.conversation = const ConversationSummary(
+          conversationId: _directConversationHex,
+          kind: ConversationKind.direct,
+          peerUserId: peerUser,
+          lastMessage: null,
+          lastActivityMs: 0,
+          unreadCount: 0,
+          mutedUntil: null,
+          draft: null,
+          pinnedMessageIds: {},
+        );
+
+        expect(
+          await sender.setReaction(
+            currentUserId: currentUser,
+            currentDeviceId: currentDevice,
+            conversationId: _directConversationHex,
+            messageId: _messageOne,
+            emoji: '🎉',
+          ),
+          isA<Success<void>>(),
+        );
+        expect((fanout.events.last.event.body as ReactionSetBody).emoji, '🎉');
+        expect(
+          await sender.setReaction(
+            currentUserId: currentUser,
+            currentDeviceId: currentDevice,
+            conversationId: _directConversationHex,
+            messageId: _messageOne,
+            emoji: null,
+          ),
+          isA<Success<void>>(),
+        );
+        expect(
+          (fanout.events.last.event.body as ReactionSetBody).emoji,
+          isNull,
+        );
+      },
+    );
+  });
 }
 
 const _directConversationHex =

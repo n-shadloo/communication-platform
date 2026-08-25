@@ -800,9 +800,6 @@ class AppLocalizationsFa extends AppLocalizations {
   String get chatReplyAction => 'پاسخ';
 
   @override
-  String get chatReactAction => 'واکنش';
-
-  @override
   String get chatEditAction => 'ویرایش';
 
   @override
@@ -868,6 +865,22 @@ class AppLocalizationsFa extends AppLocalizations {
   }
 
   @override
+  String get chatReactionSelectorLabel => 'انتخاب واکنش';
+
+  @override
+  String chatReactionAddAction(String emoji) {
+    return 'واکنش با $emoji';
+  }
+
+  @override
+  String chatReactionRemoveAction(String emoji) {
+    return 'برداشتن واکنش $emoji شما';
+  }
+
+  @override
+  String get chatMoreReactionsAction => 'شکلک‌های بیشتر';
+
+  @override
   String get chatRetrySendAction =>
       'تلاش دوباره به‌عنوان ارسال رمزنگاری‌شدهٔ جدید';
 
@@ -898,6 +911,12 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get chatEmojiAction => 'درج شکلک';
+
+  @override
+  String get emojiPickerLabel => 'انتخابگر شکلک';
+
+  @override
+  String get emojiPickerSearchHint => 'جست‌وجوی شکلک';
 
   @override
   String get chatSendAction => 'ارسال پیام رمزنگاری‌شده';

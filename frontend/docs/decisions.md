@@ -69,6 +69,312 @@ is not silently edited out of history.
 | ADR-056 | Accepted | The closed-beta PQ MLS core was measured on real hardware and the group surface opens on the ABI that was measured and no other: the evidence gate becomes per-ABI rather than per-artifact, `arm64-v8a` is open, `armeabi-v7a` and `x86_64` stay withheld, and the disclosure moves to revision 7; amends ADR-055 (2026-08-24) | A Samsung Galaxy A56 (SM-A566B, Android 16, API 36, retail `user` build, `release-keys`) became available, so ADR-055's one outstanding item was run rather than argued about. `tool/measure_beta_mls_core.sh arm64-v8a` cross-compiled the crate's own `--features beta-pq-mls` test binary with the pinned toolchain, pushed it to the phone and ran it there, installing nothing and needing no backend, account or root: **128 passed, 0 failed, 3 ignored in 172.07 s, exit 0** - the *same* counts `cargo test --locked --all-features` gives on the x86_64 host, so the device ran the whole suite to the same conclusion rather than a subset that happened to link. Forty `mls_beta::` tests ran, including the create/join/private-message/proposal/commit/remove round trip and `suite_signs_with_ed25519_and_round_trips_hybrid_hpke`, which is where `aws-lc`'s ML-KEM runs - the C-and-assembly dependency the `beta` profile adds and `foundation` does not. Contact with hardware also exposed two defects in the instrument, neither findable any other way: MSYS rewrote `adb push … /data/local/tmp/…` into `C:/Program Files/Git/data/…` so the first run failed with `remote secure_mkdirs() failed`, and the three setup lines sent stdout to `/dev/null` while `adb shell` folds remote stderr into stdout, so that failure printed nothing at all. Both fixed. The A56 reports an **empty `abilist32`** - its Exynos s5e8855 is 64-bit-only and cannot execute AArch32 - so `armeabi-v7a` is unmeasurable on the hardware that measured `arm64-v8a`. ADR-055's all-or-nothing framing then left only two moves, both bad: demote the cell for being unmeasurable, which is the reason ADR-053 exists and which ADR-055 explicitly pre-refused; or withhold from everyone over a 32-bit device nobody in this deployment is known to have, while ignoring a passing run for the ABI every recipient loads. So the *question* changed rather than the standard: one APK carries three libraries and the installer picks one, so `hasEvidenceFor(GroupMlsFieldCell?)` replaces the global `isOpen` and the permit takes the running ABI. **No cell was demoted** - `armeabi-v7a` stays in the ledger recorded as unmeasured, and opens on the same rule if 32-bit hardware ever appears. This is **stricter** than ADR-055 where it matters, not looser: under ADR-055 a satisfied ledger would have opened every ABI including one added later with no run behind it, while now an ABI without an admissible record is withheld whatever else the ledger holds, and an ABI this artifact packages no library for maps to no cell and fails closed. The ABI is **read, never chosen** - `Abi.current()` is fixed by the AOT snapshot the platform loaded, reaches the application through one `runtimeAbiProvider` seam that a test asserts is the only caller, can only narrow, and cannot reach production, which fails the environment test first and packages a core without the symbol. Rejected: opening globally on one ABI's record; demoting the cell; dropping `armeabi-v7a` from the APK, which would deny a 32-bit user the whole supported direct-message tier to protect them from an experimental group feature; and blanket risk acceptance, because once `arm64-v8a` was measured there was no blanket risk left to accept - only 32-bit ARM, which per-ABI resolution removes outright for about sixty lines. Closes none of the seven production gates, does not satisfy gate 6 (process kill, Doze, force-stop, torn writes and Keystore-after-reboot are still unrun), reviews nothing, and leaves multi-device and live-backend execution outstanding. Production re-verified: rebuilt and `verify_release_apk.sh --production` passed all seven checks, and a test asserts a fully satisfied ledger still leaves production holding no permit on any ABI. Disclosure moves 6 → 7. Opens no production gate and supersedes nothing. |
 | ADR-057 | Accepted | The remainder of piece 21 is built as it was measured rather than as it was described: local search needed one shared surface and a group entry point rather than an encrypted index; the settings set gets Appearance, Security & recovery with a real recovery-secret replacement, About and a user-initiated diagnostics export; and the export is made incapable of carrying a prohibited value by its type rather than by review (2026-08-25) | Three of piece 21's named remainders turned out to be three different situations, and the audit that found that out is the decision. **Search was already built and the checklist said it was not.** ADR-052 had already established the two-surface design and pinned it with a test; the row `Local search | Pending Android encrypted index` had never been updated and was wrong in both halves. The phrase "Android encrypted index" traces to one sentence in `local-data-model.md` and to the piece-21 prompt that repeated it; the only *accepted* decision about search is ADR-012, which says the server never receives content or search terms and says nothing about an index. Meanwhile the encrypted database already **is** the index the sentence asks for: `messages.projection_ciphertext` holds the decrypted body inside SQLCipher under a Keystore-wrapped key, `watchMessages` reads it with no `LIMIT`, and a second FTS structure would duplicate every message body into a second place, enlarge what a wipe has to reach, and buy nothing at this deployment's scale. So no index is built, the sentence is corrected to describe what exists, and the row is corrected. What search *did* need was the gap the audit found: `GroupChatView` had no search at all and Group Info offered a permanently disabled "Search this chat" button — a control that can never succeed, which the UI specification's own core rules forbid. One shared `showConversationSearch` now serves direct, saved and group conversations, so the scope notice, the empty states and the result cap cannot disagree between two surfaces promising the same thing; and the cap, which was silently 30, is now stated on screen when it bites, for the reason ADR-052 corrected `chatsSearchHint`. **The settings set was genuinely absent and one of its screens could not be built honestly without a new primitive.** §15.2 requires that an unlocked device be able to generate a fresh recovery secret, re-wrap the same cross-signing identity, upload a higher backup version and invalidate the old secret — and the crypto core had no operation that re-wraps without regenerating. `cp_crypto_v1_rotate_recovery_secret` adds one. It changes no construction, no ciphersuite and no state format: it parses the existing package, draws fresh entropy, and calls the same `encode_recovery_secret` and `encrypt_backup` the first upload used, so the encoded package is byte-identical to the original apart from the recovery and backup fields, master signature included, because Ed25519 signing is deterministic. Generating a new *identity* instead — the only thing the existing API could have done — would have silently un-verified every contact and invalidated every device cross-signature, which is why the caller may not reach for `prepare_first_identity` here. The flow's ordering is the security property: the secret is shown **only** after the server accepted the higher version, and every refusal says the current secret still works, because the server still holds the blob it opens. Nothing local is rewritten, so no crash can leave a device holding keys that do not match a backup. **The diagnostics export is made safe by its type.** A report is a list of typed entries whose keys are an enumeration and whose values are constructible only from a boolean, an enumeration, a bounded integer or a declared constant — there is no constructor taking runtime text, so a username, a display name, a message body, a device label, a token, a server origin, a capability or a key cannot reach the export, not because a reviewer checked but because the type will not hold one. Counts leave as orders of magnitude and the timestamp is an hour, because an exact description of one person's usage is a needlessly precise thing to put in a document they may hand to somebody else. What is on the screen is byte-for-byte what the copy button copies, in locale-independent ASCII: a screen showing a friendly summary while copying something larger would ask a person to share a document they have not read, which is the failure this surface exists to avoid. The application sends it nowhere and says so; the clipboard is the whole export path and where the text goes next is the user's decision. The counters it reports come from `NetworkDiagnostics`, which piece 06 already made payload-free, now recorded in a bounded in-memory counter owned by `ApplicationRuntime` so both entry points count into one — and deliberately never persisted, because a diagnostics buffer that survived a restart would be a durable record of when its owner used the application. Adds no Dart dependency, no Android library, no permission and no manifest component; adds one native symbol to the export allowlist. Four smaller corrections travel with it, all found by the same audit and all in the settings surface set: the in-conversation "Clear history" row closed the menu and did nothing; Linked Devices was entirely unlocalised, printed a raw failure object to the user, rendered a coarse UTC calendar day through `toLocal()` so every reader west of UTC saw the previous day, and offered an "Add device" button routed to `/devices/enroll`, which is not a route this application has. Opens no production gate, touches no cryptographic construction, and leaves the Beta/Production boundary, the group gate and the delivery behaviour untouched. Full reasoning in "ADR-057 in full" below. |
 | ADR-058 | Accepted | Piece 20's prerequisite becomes seven objectively checkable conditions that fail closed, replacing ADR-044's requirement that somebody make a decision; no exporter is granted and piece 20 stays unstarted (2026-08-25) | The prompt's original condition — piece 19 passing every production gate — is unreachable by this project's own record, since `mls-profile.md` states that gate 2 "cannot be reached by any work inside this project", so as written piece 20 was dead rather than blocked. ADR-044 diagnosed that and re-scoped it to "a decision about which MLS exporter it may derive media keys from", which was right in direction and left the bar unset: whoever wrote the granting ADR would set their own. Two things have also changed underneath it. ADR-055 and ADR-056 landed four days later and made the exporter's availability per-ABI, so on `armeabi-v7a` and `x86_64` the beta MLS stack is withheld entirely and ADR-044's path (b) points at something those devices cannot reach. And the exporter is not reachable as key material on any ABI: `mls_beta.rs` returns SHA-256 over `export_secret` as an epoch-agreement digest and no exporter secret crosses the FFI boundary, so keying media needs a new reviewed native operation nothing had named. The prerequisite is now P1 a granted media-key source named by a dated ADR, in one of exactly two forms; P2 that exporter reachable under its own domain separation and present in the native export allowlist; P3 the same per-ABI permit that governs groups, so voice is never offered where groups are withheld; P4 the frame-encryption contract settled by a recorded decision; P5 an admissible Android wire record under `docs/validation/voice-media/` showing the SFU cannot decrypt; P6 self-hosted LiveKit and TURN with the client package reviewed into the pinned dependency map; P7 a user-facing claim no stronger than the weakest layer underneath. Absence of evidence is refusal, and a partially satisfied list authorizes nothing. This is stricter than what it replaces on every axis: P1(a) preserves the prompt's production condition unchanged, and P2, P3, P4 and P5 are new. Only the four externally blocked registry and ecosystem facts are removed as preconditions for *experimental* voice, and P1(a) keeps every one of them in force for production. No new gate object is added, because voice is neither built nor half-built and a gate with no consumer is decoration; the conditions resolve instead against four mechanisms that already fail closed — the production gate's constructor assertion, `GroupExperimentalGate`'s per-ABI ledger, the native symbol allowlist `build_rust_android.sh` enforces, and the literal dependency map `dependency_policy_test.dart` pins. Also records a conflict rather than resolving it: `voice-and-realtime.md` calls RFC 9605 SFrame the framing contract, `cryptographic-protocol.md` permits LiveKit's own implementation after validation, `backend/SECURITY.md` states audio is SFrame-encrypted, and LiveKit's own documentation names no SFrame anywhere and exposes `EncryptionType` as `kNone`/`kGcm`/`kCustom`. P4 and P5 force that to be answered on evidence. Amends ADR-044's *Piece 20* section, supersedes nothing, opens no production gate, adds no dependency, changes no shipped runtime behaviour, and grants neither exporter path. |
+| ADR-059 | Accepted | The chat page's emoji surface is `emoji_picker_flutter` **4.5.3**, pinned exactly, reached only through one app-owned component, and configured so that it writes nothing to disk; it is at once the newest release and the only one that builds under this project's AGP 9 configuration, it reaches no network and bundles no font, and it brings 7 transitive Dart packages and 40 new Android modules that this decision enumerates rather than leaves to be found later (2026-08-25) | The React row sent a hardcoded `👍` and the composer button inserted a hardcoded `🙂`, in an application whose protocol has carried an arbitrary reaction grapheme since it was written and whose UI specification names an emoji reactor as a required surface — a control presenting itself as more than it is, which §8's own core rules call a defect. Making it real needs a picker, and the picker was evaluated as a dependency rather than as a widget. **The version is not a preference.** 4.5.3's entire changelog entry fixes an Android build failure "on AGP 9 when `android.builtInKotlin=false`", which is exactly what Flutter's own migrator wrote into this project's `gradle.properties` beside `com.android.application` 9.0.1; 4.5.0 is where this package moved its Android plugin *to* built-in Kotlin, so 4.5.0-4.5.2 are exactly the releases that cannot configure here and 4.5.3 restores the legacy path conditionally; 4.4.0 and earlier are superseded rather than tested, so 4.5.3 is both the newest release and the only one in its line that builds, with nothing recent to fall back on (follow-up F2). **It passes the constraint that actually governs**: it ships no asset and no font, every emoji is a Dart string literal compiled into `libapp.so`, glyphs are drawn with the platform emoji face, and its whole `lib/` contains no HTTP, no socket, no image URL and no Google or Firebase reference — its one platform call asks `PaintCompat.hasGlyph` which glyphs this device can draw, through `androidx.core`, already adopted at 1.16.0 under ADR-054. An emoji picker that carried its own Apple/Google/Twitter image sets was rejected on precisely this. **What it costs is on the Android side and is stated in full**: `shared_preferences` arrives to hold recent emoji, and behind it `shared_preferences_android` pulls `androidx.datastore` (with a repackaged protobuf and okio) and `androidx.preference`, which pulls **`androidx.appcompat` 1.1.0 from 2019** and the legacy support-library tree with it — 51 modules on a release runtime classpath become 91, of which 40 artifacts are new, in an application that instantiates no AppCompat class and renders nothing through a `RecyclerView`. That is the largest expansion of the Android set since ADR-054 locked it, it is accepted because the alternative is sourcing and maintaining 1500+ glyphs with per-locale names and skin-tone variants in application code, and it is accepted **enumerated**: the lockfile records every coordinate, `dependency_policy_test.dart` pins the resolved release set as a literal, and `docs/third-party-notices.md` now lists 91 modules instead of 51 and names the protobuf inside the AndroidX wrapper. **The storage half is refused rather than inherited.** The package's two `shared_preferences` features are guarded by `RecentTabBehavior` and `SkinToneConfig.rememberSkinTone`; `AppEmojiPicker` sets the first to `NONE` and leaves the second at its default `false`, so no write is reachable and Android never creates the file, because it creates it on first commit and there is no first commit. Everything else this application knows about a person is in SQLCipher under a Keystore-wrapped key; a plaintext list of the emoji they most recently used would be a durable record of their behaviour outside that boundary, which is the category ADR-057 built the diagnostics export's types to be incapable of holding. Losing recents is a real cost, answered where it matters by a fixed set of common reactions one tap away on the message itself rather than by writing a file. `lib/app/design_system/app_emoji_picker.dart` is the only file naming the package, on ADR-006's rule for Forui, and a new assertion in `design_system_boundary_test.dart` fails if a second one appears — which matters here because the package's defaults turn recents *on*. Adds no permission and no manifest component: both new plugin manifests are empty, and `verify_release_apk.sh --production` passes all seven checks on a built artifact, reading the same permission set and the same five components ADR-054 recorded out of the packaged file; the measured cost is +1.57 MiB on an unsigned production release APK, of which +426 KiB is the Android tree (far less than its own footprint, because almost none of it is reachable) and +1.16 MiB is the emoji data itself - after the wrapper named one locale set instead of letting the package's twelve-way switch keep all of them, which returned exactly 4,096,000 bytes and changes nothing a user sees. It does change the build once: these are the first plugin subprojects here that compile Kotlin, every release build of them failed with "Could not close incremental caches" five times out of five, and `kotlin.incremental=false` is now committed in `android/gradle.properties` with the reasoning beside it, because a release that only builds when somebody remembers a command-line flag is a release process with a hole in it. Also records something the regeneration exposed: `--write-locks` resolves *without* the lock while an ordinary build resolves *with* it, and locking applies the recorded versions as strict constraints, so a regenerated lockfile is not automatically a fixed point — one module the unconstrained graph evicts is kept by the constrained one, and the first regenerated lock was rejected by the next release build (follow-up F4). Opens no production gate, supersedes nothing, and changes no cryptographic construction, protocol, wire format or shipped delivery behaviour. |
+
+## ADR-059 in full — the chat page's emoji surface, and what it costs (2026-08-25)
+
+**Status:** Accepted. Dependency decision, under the rules ADR-054 established. Adds one
+direct Dart dependency and the Android modules it brings with it. Changes no cryptographic
+construction, no ciphersuite identifier, no protocol, no wire format, no transport trust,
+no state format, and no backend file. **Opens no production gate.**
+
+### The question
+
+> The chat page has an emoji button that inserts one hardcoded `🙂` and a React row that
+> sends one hardcoded `👍`. Making either of them real needs an emoji picker. Is there a
+> package that supplies one under this project's constraints, what exactly does it bring
+> with it, and what is pinned?
+
+Nothing was assumed: not that a package is needed, not that the newest version is the
+right one, and not that a picker is a purely visual component. The last two turned out to
+be the interesting ones.
+
+### D1. The version is not simply the newest
+
+`emoji_picker_flutter` **4.5.3**, published 2026-07-24, read from pub.dev and from
+`github.com/Fintasys/emoji_picker_flutter` on **2026-08-25**. Its `environment` is
+`sdk: ">=3.11.5 <4.0.0"`, `flutter: ">=3.41.8"`; this project is Dart 3.12.2 on Flutter
+3.44.7, so it resolves. It is pinned exactly, with no caret, and added to the literal map
+in `test/architecture/dependency_policy_test.dart`, as every direct dependency here is.
+
+What makes 4.5.3 the answer rather than merely the latest is its entire changelog entry:
+*"Fix Android build failure (`Could not find method kotlin()`) on AGP 9 when
+`android.builtInKotlin=false`."* `android/gradle.properties` in this project carries
+exactly `android.builtInKotlin=false`, written by Flutter's own AGP 9 migrator, and
+`android/settings.gradle.kts` pins `com.android.application` 9.0.1. 4.5.0 is where the
+package moved its Android plugin *to* Flutter's built-in Kotlin, so 4.5.0, 4.5.1 and 4.5.2
+are precisely the releases that cannot configure under this project's settings, and 4.5.3
+restores the legacy application conditionally. 4.4.0 and earlier still declare Dart 3.4 and
+were not built here; they are superseded rather than tested. The practical position is that
+4.5.3 is both the newest release and the only one in its line that configures, so there is
+nothing to move forward to and nothing recent to fall back on if a future release regresses
+it. Recorded as follow-up F2. 4.5.0 is also where the package raised its own floor to Flutter 3.41.8 and fixed a
+defect this application would have hit — the recent-emoji list changing on an unrelated
+parent rebuild — which is moot here only because recents are off (D4).
+
+### D2. It reaches no network and bundles no font
+
+The operating constraint is absolute: this application must work with no route out of the
+country, so a CDN, a remote font, a Google or Firebase service, or any other foreign
+runtime call disqualifies a dependency outright. This package makes none.
+
+- **It bundles no asset and no font.** Its `pubspec.yaml`'s `flutter:` section declares
+  only `plugin:` - no `assets:` and no `fonts:` - so nothing from the package is packaged
+  into the application at all. The images in its archive are pub.dev screenshots and its
+  own example app's background. Every emoji is a Dart string literal in
+  `lib/src/default_emoji_set.dart` and the twelve `lib/locales/emoji_set_*.dart` files,
+  compiled into `libapp.so` like any other constant.
+- **Glyphs come from the platform emoji font.** The only way to name a face here is
+  `Config.emojiTextStyle`, and the wrapper leaves it unset, so the grid is drawn with the
+  device's own emoji face — Noto Color Emoji on Android, which is part of the system image.
+  Nothing is downloaded and nothing needs bundling.
+- **There is no network surface at all.** Grepping the package's whole `lib/` for `http`,
+  `HttpClient`, `NetworkImage`, `Uri.parse`, `fetch(`, `dart:io` and `package:web` returns
+  comment URLs, one `Platform` shim behind a conditional import, and one `window` read on
+  the web branch, which this project does not build.
+- **Its one platform call is a font question, not a network one.** The Android plugin is a
+  single Kotlin class answering `getSupportedEmojis` with `PaintCompat.hasGlyph`, so the
+  grid can drop glyphs this device cannot draw rather than showing tofu. `androidx.core` is
+  already adopted at 1.16.0 under ADR-054, so that call costs nothing new.
+
+An emoji picker that carried its own image set — `emoji_mart_flutter`, with its Apple,
+Google, Facebook and Twitter presets — would have failed here for exactly this reason, and
+that is the main thing separating it from the package chosen.
+
+### D3. What it brings with it, stated in full
+
+This is the part that has to be written down rather than discovered later. **8 Dart
+packages** and **46 Android module coordinates** arrive with one line in `pubspec.yaml`.
+
+Dart, from `pubspec.lock`: `emoji_picker_flutter` 4.5.3 itself, then `shared_preferences`
+2.5.5 and its six platform implementations — `shared_preferences_android` 2.4.27,
+`_foundation` 2.5.6, `_linux` 2.4.1, `_platform_interface` 2.4.2, `_web` 2.4.3, `_windows`
+2.4.1. The package's other two dependencies, `plugin_platform_interface` and `web`, were
+already in the lock. Nothing is a pre-release and nothing is retracted, which
+`dependency_policy_test.dart` asserts.
+
+Android is where the weight is. `betaReleaseRuntimeClasspath` and
+`productionReleaseRuntimeClasspath` — identical, as they must be — go from **51 modules to
+91**: 46 coordinates added and 6 removed, each of the six being the same artifact at a
+lower version. **40 artifacts are genuinely new.** The chain is one link long and then fans
+out:
+
+```text
+emoji_picker_flutter 4.5.3
+  -> shared_preferences ^2.3.3        (recent emoji, remembered skin tone)
+     -> shared_preferences_android 2.4.27
+        -> androidx.datastore:datastore-preferences 1.1.7   (+ 9 datastore modules, okio, a repackaged protobuf)
+        -> androidx.preference:preference 1.2.1
+           -> androidx.appcompat:appcompat 1.1.0             (+ recyclerview, transition, the legacy-support tree)
+```
+
+Four modules already in the artifact resolve upward as a side effect:
+`androidx.customview` 1.0.0 to 1.1.0, `kotlin-stdlib-jdk7` 1.8.20 to 1.9.20, and
+`kotlinx-coroutines-*` 1.7.1 to 1.7.3. `kotlin-stdlib-jdk7` moves because
+`emoji_picker_flutter`'s own `android/build.gradle` declares it at 1.9.20 on the legacy
+Kotlin path this project's `android.builtInKotlin=false` selects.
+
+Two of the arrivals deserve to be named rather than counted.
+**`androidx.appcompat:appcompat:1.1.0` is from 2019**, and it is not here because anything
+wants AppCompat: `androidx.preference` depends on it, `shared_preferences_android` depends
+on `androidx.preference`, and this application never instantiates an AppCompat class. It
+brings `recyclerview`, `coordinatorlayout`, `drawerlayout`, `swiperefreshlayout`,
+`slidingpanelayout`, `asynclayoutinflater`, `cursoradapter`, `print`,
+`localbroadcastmanager`, `documentfile`, `transition`, `vectordrawable` and both
+`androidx.legacy:legacy-support-*` artifacts with it — a support-library tree in an
+application built entirely on Flutter's own rendering. **`androidx.datastore:
+datastore-preferences-external-protobuf` 1.1.7** is protobuf-javalite repackaged under
+`androidx.datastore.preferences.protobuf.*`, published by AndroidX under Apache-2.0 while
+its contents are Google's BSD 3-Clause protobuf; `docs/third-party-notices.md` now records
+both facts, because a recipient of the binary is owed the attribution for what is actually
+in it.
+
+This is the largest single expansion of the Android set since ADR-054 locked it, and the
+honest summary is that the *picker* is small and its *storage dependency* is not. It is
+accepted because the alternative is worse (see the alternatives below), not because it is
+cheap. `android/app/gradle.lockfile` records every coordinate,
+`dependency_policy_test.dart` pins the resolved release set as a literal, and
+`docs/third-party-notices.md` lists it — so the next module to arrive here arrives through
+a review conversation rather than a `pub get`.
+
+### D4. The picker writes nothing to disk, and that is configured, not hoped for
+
+`shared_preferences` is in the tree because the package persists two things: the
+recently-used emoji list, and the last skin tone the user chose. Both are reachable from
+exactly four call sites in `EmojiPickerInternalUtils`, and both are guarded:
+
+- `EmojiPickerState._onEmojiSelected` calls `addEmojiToRecentlyUsed` only under
+  `RecentTabBehavior.RECENT` and `addEmojiToPopularUsed` only under `POPULAR`;
+  `_updateEmojis` reads `getRecentEmojis` only under those same two;
+- `DefaultEmojiPickerView` and `SearchView` read and write the skin tone only when
+  `SkinToneConfig.rememberSkinTone` is true, which is the package's own default of `false`.
+
+`AppEmojiPicker` sets `recentTabBehavior: RecentTabBehavior.NONE` and leaves
+`rememberSkinTone` alone, so no write is reachable. `LegacySharedPreferencesPlugin`
+still calls `getSharedPreferences(..., MODE_PRIVATE)` when the engine attaches, which
+returns a handle and creates no file; Android writes `FlutterSharedPreferences.xml` on the
+first `commit`, and there is never a first `commit`. The one remaining read is
+`SearchView.initState`, which asks for the recent list when the search field opens and gets
+an empty answer.
+
+This is a deliberate refusal, not tidiness. Everything else this application knows about a
+person lives in the Drift database of ADR-002, which is SQLCipher under a Keystore-wrapped
+key. A plaintext
+list of the emoji someone most recently used is a durable, readable record of their
+behaviour, sitting outside that boundary, in a file any process with the app's UID or a
+backup extraction can read — the same category of thing ADR-057 built the diagnostics
+export's type system to be incapable of holding. Turning the feature off costs a
+convenience nobody has yet; leaving it on would have been a privacy regression introduced
+by an emoji keyboard.
+
+Losing recents is a real usability cost and is acknowledged as one. It is answered where it
+actually matters — by a fixed set of common reactions one tap away on the message itself,
+held as a `const` in presentation code — rather than by writing a file.
+
+### D5. It is wrapped, never imported
+
+`lib/app/design_system/app_emoji_picker.dart` is the only file in this repository that
+names `package:emoji_picker_flutter`. Feature screens use `AppEmojiPicker` and
+`showAppEmojiPicker`. This is the rule ADR-006 set for Forui and ADR-007 set for the
+timeline, applied again: the package supplies primitives, the application owns the
+component, and replacing the package is an edit to one file rather than a search across
+`lib/features`.
+
+The wrapper also owns three settings that are properties of the application rather than of
+any screen — the two in D4, and the deliberate absence of `emojiTextStyle`, which is the
+only place a font family could be named and would otherwise put Vazirmatn in front of the
+platform emoji face and leave every cell to font fallback.
+
+### D6. It changes the build, once, and that is recorded here rather than left to be rediscovered
+
+`emoji_picker_flutter` and the `shared_preferences_android` behind it are the first plugin
+subprojects in this build that compile Kotlin of their own. Every release build after they
+arrived failed:
+
+```text
+Execution failed for task ':shared_preferences_android:compileReleaseKotlin'.
+> java.lang.Exception: Could not close incremental caches in
+  <build>/shared_preferences_android/kotlin/compileReleaseKotlin/cacheable/caches-jvm/jvm/kotlin:
+  class-fq-name-to-source.tab, source-to-classes.tab, internal-name-to-source.tab
+```
+
+Five attempts, five failures. It survived stopping the Gradle daemon and deleting both
+plugin build directories, and it is not a race between concurrent builds, because it
+reproduced on a single build with nothing else running. The Kotlin Build Tools API cannot
+release its memory-mapped incremental-cache files on this workstation. The same build with
+`-Pkotlin.incremental=false` succeeded, and `tool/verify_release_apk.sh --production` then
+passed all seven checks on its artifact.
+
+`kotlin.incremental=false` is therefore set in `android/gradle.properties`, with the
+reasoning beside it. This project owns five Kotlin files and the two plugins own a handful
+between them, so the whole of what this disables is a few seconds of compilation; what it
+buys is a build that finishes. It is a workstation-visible symptom rather than a
+project-wide one, but the property is committed rather than left as a local flag, because a
+release build that only works when somebody remembers a command-line argument is a release
+process with a hole in it.
+
+### Alternatives
+
+**A. Write the grid in application code.** No dependency, no Android modules, complete
+control, and it is the option that best fits this project's instincts. Rejected on scope:
+1500+ glyphs across eight categories, per-locale names for search, skin-tone variants and
+the platform-support filter are a body of data and behaviour that would have to be sourced
+from Unicode CLDR, kept current, and tested — for a control that inserts a character. The
+40 new Android modules are the price of not maintaining that, and they are at least
+enumerated, pinned and reviewable.
+
+**B. An earlier version of the same package.** Rejected without being measured in detail,
+because it cannot buy the thing that matters: `shared_preferences` is declared by 4.5.3 and
+by the 4.x releases before it, so the Android weight it drags in is a property of the
+package rather than of this version, and 4.5.0-4.5.2 are precisely the releases that cannot
+configure under this project's AGP 9 settings. Going back further than 4.5.0 means taking a
+release from nine months or more ago to avoid a dependency it also has.
+
+**C. A different package.** Surveyed on 2026-08-25 from pub.dev: `awesome_emoji_picker`
+states that it persists recently used emoji with `SharedPreferences`, so it carries the same
+tree for the same reason; `emoji_mart_flutter` offers native, Facebook, Apple, Google and
+Twitter presets, which means an image set rather than the platform font and fails D2;
+`emoji_text_field`, `flutter_emoji_picker`, `flutter_emoji_selector_plus` and `gugor_emoji`
+remain, and the last two describe themselves as modifications of `emoji_selector` and of the
+deprecated `emoji_picker`. None was read line by line, because none of them removes the
+storage dependency that is the actual cost here, and `emoji_picker_flutter` is the one
+carrying a verified publisher and a maintained release line.
+
+**D. Keep the fixed `👍` and the fixed `🙂`.** Rejected: the protocol has carried an
+arbitrary reaction grapheme since it was written (`message-protocol.md`, "one normalized
+emoji grapheme or null"), every layer below presentation already supports it, and the UI
+specification §8 and §17 both name an emoji reactor as a required surface. A React button
+that can only ever send one emoji is the shape the specification's own core rules call a
+defect — a control that presents itself as more than it is.
+
+### What this does not decide
+
+No cryptographic construction, ciphersuite, protocol version, wire format or state format
+changes. No permission and no manifest component is added — both new plugin manifests are
+empty, and `tool/verify_release_apk.sh --production`, which reads the merged result out of
+the packaged artifact rather than out of source, passes all seven checks on a build carrying
+this change: the same permission set and the same five components ADR-054 recorded, one
+exported component, and a native core that still does not export
+`cp_crypto_v1_beta_mls_operation`. The Beta/Production separation, the per-ABI group gate
+(ADR-056) and the delivery behaviour are untouched, and Production still packages unsigned.
+The measured cost in the artifact is **+1.57 MiB**: an unsigned production release APK goes
+from 86,760,406 to 88,410,103 bytes. It divides in two, and both halves were measured
+rather than estimated. The Android module tree costs **+426 KiB** (86,760,406 to
+87,196,563, taken with the dependency declared and the picker not yet reachable) - far less
+than those modules' own footprint, because almost nothing in that support-library tree is
+reachable from this application. The picker itself costs the remaining **+1.16 MiB**, which
+is the emoji data: 1500 glyphs with their names and search keywords, as Dart constants in
+`libapp.so`.
+
+It would have been **+5.48 MiB**. The package ships twelve locale sets and selects between
+them in a `switch`, so all twelve are reachable and all twelve compile in; the artifact
+measured 92,506,103 bytes before the wrapper named one. `AppEmojiPicker` passes
+`emojiSet: (_) => emojiSetEnglish`, which changes nothing anybody sees - the package's own
+`getDefaultEmojiLocale` already returns that set for `en` directly and for `fa` through its
+default branch - and returns **4,096,000 bytes** exactly to an artifact that is handed to
+people over a slow link. That line has to move together with follow-up F1.
+
+### Sources, read on 2026-08-25
+
+| Claim | Source | State on 2026-08-25 |
+|---|---|---|
+| 4.5.3 is the newest published version, and what its releases changed | [pub.dev](https://pub.dev/packages/emoji_picker_flutter), [versions](https://pub.dev/packages/emoji_picker_flutter/versions), [CHANGELOG](https://github.com/Fintasys/emoji_picker_flutter/blob/master/CHANGELOG.md) | 4.5.3 published 2026-07-24; 4.5.0-4.5.3 are the only releases requiring Dart 3.11; 4.4.0 and earlier require Dart 3.4. 4.5.3 is the AGP 9 / `builtInKotlin=false` fix |
+| Its SDK constraints and its complete dependency list | [`pubspec.yaml`](https://github.com/Fintasys/emoji_picker_flutter/blob/master/pubspec.yaml) | `sdk: ">=3.11.5 <4.0.0"`, `flutter: ">=3.41.8"`; `flutter`, `flutter_web_plugins`, `plugin_platform_interface ^2.1.8`, `shared_preferences ^2.3.3`, `web ^1.1.0`. Declares plugin classes for six platforms |
+| Its Android code, and that it is a font query rather than a network one | [`EmojiPickerFlutterPlugin.kt`](https://github.com/Fintasys/emoji_picker_flutter/blob/master/android/src/main/kotlin/com/fintasys/emoji_picker_flutter/EmojiPickerFlutterPlugin.kt) | One `MethodChannel`, one method `getSupportedEmojis`, answered by `androidx.core.graphics.PaintCompat.hasGlyph` |
+| Its Android build applies the Kotlin Gradle Plugin on the legacy path | [`android/build.gradle`](https://github.com/Fintasys/emoji_picker_flutter/blob/master/android/build.gradle) | `compileSdk` 35, `minSdk` 21, JVM 17; applies `kotlin-android` 1.9.20 and adds `kotlin-stdlib-jdk7:1.9.20` when AGP < 9 **or** `android.builtInKotlin=false` |
+| What actually reaches storage, and what guards it | Package sources at 4.5.3 in the pub cache: `src/emoji_picker_internal_utils.dart`, `src/emoji_picker.dart`, `src/skin_tones/skin_tone_config.dart`, `src/search_view/search_view.dart` | Four `SharedPreferences` call sites; writes reachable only under `RecentTabBehavior.RECENT`/`POPULAR` or `rememberSkinTone: true`, whose default is `false` |
+| The Android side creates no file until something is written | [`LegacySharedPreferencesPlugin.kt`](https://github.com/flutter/packages/blob/main/packages/shared_preferences/shared_preferences_android/android/src/main/kotlin/io/flutter/plugins/sharedpreferences/LegacySharedPreferencesPlugin.kt) at 2.4.27 | `onAttachedToEngine` calls `getSharedPreferences(name, MODE_PRIVATE)`, which returns a handle; the XML file is written on the first `commit` |
+| What `shared_preferences_android` links on Android | `android/build.gradle.kts` at 2.4.27, in the pub cache | `androidx.datastore:datastore:1.1.7`, `androidx.datastore:datastore-preferences:1.1.7`, `androidx.preference:preference:1.2.1` |
+| The alternatives, and why each was rejected | [pub.dev](https://pub.dev/packages/awesome_emoji_picker), [pub.dev](https://pub.dev/packages/emoji_mart_flutter) and the surrounding search results | `awesome_emoji_picker` persists recents to `SharedPreferences`; `emoji_mart_flutter` offers native/Facebook/Apple/Google/Twitter presets |
+
+### Follow-ups
+
+- **F1.** The package carries no Persian emoji set, so under `fa` its own
+  `getDefaultEmojiLocale` falls back to the English names and search matches English
+  keywords in both locales. The glyphs, the categories and the layout are unaffected.
+  Supplying a Persian set through `Config.emojiSet` is a self-contained piece of work.
+- **F2.** 4.5.3 is the only release in its line that builds here. Watch the package for one that adopts
+  Flutter's built-in Kotlin — the build already warns that a future Flutter will fail on a
+  plugin applying the Kotlin Gradle Plugin, and this is now the only such plugin in the
+  artifact.
+- **F3.** `androidx.appcompat` 1.1.0 is six years old and arrives two levels below anything
+  this project chose. If `shared_preferences_android` ever drops `androidx.preference`, or
+  if the picker ever stops needing `shared_preferences`, roughly twenty modules leave with
+  it. Re-check on every `shared_preferences` bump.
+- **F4.** Regenerating the Gradle lock is not the fixed-point operation it looks like, and
+  this change is where that showed. `./gradlew :app:writeDependencyLocks --write-locks`
+  produced a lock in which `kotlin-stdlib-common:2.3.20` was absent from all three runtime
+  classpaths; the next ordinary release build then failed with *"Resolved
+  'org.jetbrains.kotlin:kotlin-stdlib-common:2.3.20' which is not part of the dependency
+  lock state"*. Running the real `assemble`/`merge` tasks under `--write-locks` reproduced
+  the same omission, because `--write-locks` resolves **without** the lock, while an
+  ordinary build resolves **with** it — dependency locking applies the recorded versions as
+  strict constraints, and those constraints changed conflict resolution enough to keep a
+  module the unconstrained graph evicts. The entry was therefore recorded from what a
+  constrained build actually resolves, and a plain `flutter build apk --release --flavor
+  production` then passed against it, which is the fixed point. Anyone regenerating this
+  lock must build afterwards and expect to reconcile, not assume the regenerated file is
+  correct because the command succeeded.
 
 ## ADR-058 in full — what piece 20 is actually waiting for (2026-08-25)
 

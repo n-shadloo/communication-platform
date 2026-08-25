@@ -478,15 +478,25 @@ second copy of every message body ([ADR-057](decisions.md)).
 3. **Input bar (bottom):**
    - **Attachment** button → attachment sheet (§8.2).
    - Text input (multiline, grows).
-   - **Emoji** access.
-   - **Send** (appears when text present).
+   - **Emoji** — always present; opens the full emoji picker and inserts the chosen
+     glyph at the caret. Dismissing the picker leaves the draft untouched.
+   - **Send** (appears when text present, beside the emoji button rather than in place
+     of it).
    - When replying/editing, a **context strip** above the input shows the quoted/edited
      message with a cancel (×).
 
-**Message interactions (long-press / right-click → context menu):**
+**Message interactions.** A **single tap** or a right-click opens the context menu with the
+**reaction selector** floating above it, anchored to the message. A **double tap** sets 👍
+straight away, or removes it when it is already this user's, and opens nothing. There is no
+long-press.
+
+- **React** — the floating selector: twenty-four common reactions in one horizontally
+  scrollable row, the current user's marked as selected, tapping it again removes it, and
+  an expand control at the trailing edge that opens the full emoji picker. Reactions are a
+  set operation per `(message, user)`, so choosing a second one replaces the first.
+  **[PRIVACY]** the reaction is encrypted, and the server never sees the emoji. No control
+  anywhere sends a fixed emoji ([ADR-059](decisions.md)).
 - **Reply** — sets the reply strip.
-- **React** — emoji reactor; **[PRIVACY]** reaction is encrypted, server never sees the
-  emoji.
 - **Edit** (own messages) — loads the message into the input with an edit strip.
 - **Forward** — Forward target picker (§8.4).
 - **Copy** — local clipboard.
@@ -867,7 +877,9 @@ The recurring modal surfaces and their contents:
 - **Confirm dialogs** — Leave group, Remove member, Remove device, Clear history, Log out:
   each states the consequence plainly, including irreversibility where true.
 - **Mute options sheet** — durations / until toggled.
-- **Emoji reactor** — for reactions.
+- **Emoji reactor** (§8) — the floating reaction selector, which opens with the message
+  context menu and is drawn above it, plus the full emoji picker its expand control opens.
+  The same picker serves the composer's emoji button ([ADR-059](decisions.md)).
 - **Attachment sheet** (§8.2).
 - **Context menus** — message long-press menu (§8/§9) and conversation-list item menu (§6).
 - **Forward target picker** (§8.4).

@@ -322,7 +322,6 @@
   },
   "chatMessageActionsLabel": "Message actions",
   "chatReplyAction": "Reply",
-  "chatReactAction": "React",
   "chatEditAction": "Edit",
   "chatForwardAction": "Forward",
   "chatCopyAction": "Copy",
@@ -349,6 +348,28 @@
       "count": {"type": "int"}
     }
   },
+  "chatReactionSelectorLabel": "Choose a reaction",
+  "@chatReactionSelectorLabel": {
+    "description": "Accessible name of the floating reaction selector that opens with the message actions. It names the surface, not the message, because the message already has its own label."
+  },
+  "chatReactionAddAction": "React with {emoji}",
+  "@chatReactionAddAction": {
+    "description": "Accessible name of one emoji in the reaction selector, when it is not the reaction this user has set.",
+    "placeholders": {
+      "emoji": {"type": "String"}
+    }
+  },
+  "chatReactionRemoveAction": "Remove your {emoji} reaction",
+  "@chatReactionRemoveAction": {
+    "description": "Accessible name of the emoji in the reaction selector that this user has already set. Choosing it removes the reaction, so the label has to say so rather than repeating the add wording.",
+    "placeholders": {
+      "emoji": {"type": "String"}
+    }
+  },
+  "chatMoreReactionsAction": "More emoji",
+  "@chatMoreReactionsAction": {
+    "description": "The control at the end of the reaction selector that opens the full emoji picker."
+  },
   "chatRetrySendAction": "Retry as a new encrypted send",
   "chatUnreadDivider": "Unread messages",
   "chatLoadingOlder": "Loading older messages",
@@ -359,6 +380,14 @@
   "chatComposerHint": "Message",
   "chatAttachAction": "Attach",
   "chatEmojiAction": "Insert emoji",
+  "emojiPickerLabel": "Emoji picker",
+  "@emojiPickerLabel": {
+    "description": "Accessible name of the full emoji picker surface (ADR-059). It is opened both from the composer and from the reaction selector, so the wording names the surface rather than either caller."
+  },
+  "emojiPickerSearchHint": "Search emoji",
+  "@emojiPickerSearchHint": {
+    "description": "Placeholder in the emoji picker's search field. The search runs over the locally bundled emoji names only; nothing is sent anywhere."
+  },
   "chatSendAction": "Send encrypted message",
   "chatSaveEditAction": "Save encrypted edit",
   "chatCancelContextAction": "Cancel reply or edit",

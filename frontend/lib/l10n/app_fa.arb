@@ -259,7 +259,6 @@
   },
   "chatMessageActionsLabel": "عملیات پیام",
   "chatReplyAction": "پاسخ",
-  "chatReactAction": "واکنش",
   "chatEditAction": "ویرایش",
   "chatForwardAction": "بازفرستادن",
   "chatCopyAction": "رونوشت",
@@ -286,6 +285,20 @@
       "count": {"type": "int"}
     }
   },
+  "chatReactionSelectorLabel": "انتخاب واکنش",
+  "chatReactionAddAction": "واکنش با {emoji}",
+  "@chatReactionAddAction": {
+    "placeholders": {
+      "emoji": {"type": "String"}
+    }
+  },
+  "chatReactionRemoveAction": "برداشتن واکنش {emoji} شما",
+  "@chatReactionRemoveAction": {
+    "placeholders": {
+      "emoji": {"type": "String"}
+    }
+  },
+  "chatMoreReactionsAction": "شکلک‌های بیشتر",
   "chatRetrySendAction": "تلاش دوباره به‌عنوان ارسال رمزنگاری‌شدهٔ جدید",
   "chatUnreadDivider": "پیام‌های خوانده‌نشده",
   "chatLoadingOlder": "در حال بارگذاری پیام‌های قدیمی‌تر",
@@ -296,6 +309,8 @@
   "chatComposerHint": "پیام",
   "chatAttachAction": "پیوست",
   "chatEmojiAction": "درج شکلک",
+  "emojiPickerLabel": "انتخابگر شکلک",
+  "emojiPickerSearchHint": "جست‌وجوی شکلک",
   "chatSendAction": "ارسال پیام رمزنگاری‌شده",
   "chatSaveEditAction": "ذخیرهٔ ویرایش رمزنگاری‌شده",
   "chatCancelContextAction": "لغو پاسخ یا ویرایش",

@@ -1,12 +1,14 @@
 import 'dart:math' as math;
 
 import 'package:communication_platform/app/design_system/app_components.dart';
+import 'package:communication_platform/app/design_system/app_emoji_picker.dart';
 import 'package:communication_platform/app/design_system/app_icons.dart';
 import 'package:communication_platform/app/design_system/app_theme.dart';
 import 'package:communication_platform/features/messaging/presentation/chat_pages.dart';
 import 'package:communication_platform/features/messaging/presentation/chat_timeline.dart';
 import 'package:communication_platform/features/messaging/presentation/chat_view_models.dart';
 import 'package:communication_platform/l10n/generated/app_localizations.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -110,8 +112,7 @@ void main() {
     );
     intents.clear();
 
-    await tester.longPress(find.text('message-5'));
-    await tester.pumpAndSettle();
+    await _openMessageSurface(tester, find.text('message-5'));
     await tester.tap(find.text('Reply').last);
     await tester.pumpAndSettle();
     expect(find.text('Replying to Peer'), findsOneWidget);
@@ -126,8 +127,7 @@ void main() {
     await tester.pump();
     expect(intents.whereType<SendTextIntent>().last.replyToMessageId, _id(5));
 
-    await tester.longPress(find.text('message-4'));
-    await tester.pumpAndSettle();
+    await _openMessageSurface(tester, find.text('message-4'));
     await tester.tap(find.text('Edit').last);
     await tester.pumpAndSettle();
     expect(find.text('Editing message'), findsOneWidget);
@@ -162,6 +162,302 @@ void main() {
     expect(find.bySemanticsLabel('Message actions'), findsWidgets);
     expect(find.text('Reply'), findsOneWidget);
     expect(find.text('Delete'), findsOneWidget);
+    // The selector opens with the sheet and inside the same route, which is
+    // what puts it in the modal focus scope rather than behind it.
+    expect(find.bySemanticsLabel('Choose a reaction'), findsOneWidget);
+    expect(find.bySemanticsLabel('More emoji'), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.bySemanticsLabel('Choose a reaction'),
+        matching: find.byType(InkResponse),
+      ),
+      findsNWidgets(chatQuickReactions.length + 1),
+    );
+    // And Tab reaches it. This is the whole reason the panel is a sibling of
+    // the sheet inside one route rather than an overlay entry above it: a modal
+    // route traps focus in its own scope, and an entry outside the route would
+    // be visible, tappable, and unreachable from the keyboard.
+    var reached = false;
+    for (var press = 0; press < 6 && !reached; press += 1) {
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      await tester.pumpAndSettle();
+      (primaryFocus?.context as Element?)?.visitAncestorElements((ancestor) {
+        final widget = ancestor.widget;
+        if (widget is Semantics &&
+            widget.properties.label == 'Choose a reaction') {
+          reached = true;
+          return false;
+        }
+        return true;
+      });
+    }
+    expect(reached, isTrue, reason: 'Tab never landed inside the selector');
+    // Nothing on this surface may send a fixed emoji any more.
+    expect(find.text('React'), findsNothing);
+  });
+
+  testWidgets('the selector sets a reaction that is not the double-tap one', (
+    tester,
+  ) async {
+    final semantics = tester.ensureSemantics();
+    final intents = <ChatIntent>[];
+    await _pump(
+      tester,
+      ChatConversationView(model: _model(), onIntent: intents.add),
+    );
+    intents.clear();
+
+    await _openMessageSurface(tester, find.text('message-4'));
+    expect(find.bySemanticsLabel('Choose a reaction'), findsOneWidget);
+    await tester.tap(find.bySemanticsLabel('React with 🔥'));
+    await tester.pumpAndSettle();
+
+    expect(
+      intents.whereType<SetReactionIntent>().single,
+      isA<SetReactionIntent>()
+          .having((intent) => intent.messageId, 'messageId', _id(4))
+          .having((intent) => intent.emoji, 'emoji', '🔥'),
+    );
+    // Choosing dismisses the surface it was chosen from.
+    expect(find.bySemanticsLabel('Choose a reaction'), findsNothing);
+    semantics.dispose();
+  });
+
+  testWidgets('the selector removes the reaction this user already set', (
+    tester,
+  ) async {
+    final semantics = tester.ensureSemantics();
+    final intents = <ChatIntent>[];
+    await _pump(
+      tester,
+      ChatConversationView(model: _model(), onIntent: intents.add),
+    );
+    intents.clear();
+
+    // message-5 carries this user's own thumbs up in the default fixture, so
+    // the panel offers to take it away rather than to set it again.
+    await _openMessageSurface(tester, find.text('message-5'));
+    await tester.tap(find.bySemanticsLabel('Remove your 👍 reaction'));
+    await tester.pumpAndSettle();
+
+    expect(
+      intents.whereType<SetReactionIntent>().single,
+      isA<SetReactionIntent>()
+          .having((intent) => intent.messageId, 'messageId', _id(5))
+          .having((intent) => intent.emoji, 'emoji', isNull),
+    );
+    semantics.dispose();
+  });
+
+  testWidgets(
+    'a double tap sets and removes the default reaction, opening nothing',
+    (tester) async {
+      final intents = <ChatIntent>[];
+      await _pump(
+        tester,
+        ChatConversationView(model: _model(), onIntent: intents.add),
+      );
+      intents.clear();
+
+      await _doubleTap(tester, find.text('message-4'));
+      expect(
+        intents.whereType<SetReactionIntent>().single,
+        isA<SetReactionIntent>()
+            .having((intent) => intent.messageId, 'messageId', _id(4))
+            .having((intent) => intent.emoji, 'emoji', '👍'),
+      );
+      expect(find.text('Reply'), findsNothing);
+      expect(find.bySemanticsLabel('Choose a reaction'), findsNothing);
+
+      intents.clear();
+      await _doubleTap(tester, find.text('message-5'));
+      expect(
+        intents.whereType<SetReactionIntent>().single.emoji,
+        isNull,
+        reason:
+            'a double tap on a message already carrying this user thumbs up '
+            'takes it off',
+      );
+    },
+  );
+
+  testWidgets('the expand control opens the full picker and sets what it '
+      'returns', (tester) async {
+    final semantics = tester.ensureSemantics();
+    final intents = <ChatIntent>[];
+    await _pump(
+      tester,
+      ChatConversationView(model: _model(), onIntent: intents.add),
+    );
+    intents.clear();
+
+    await _openMessageSurface(tester, find.text('message-4'));
+    await tester.tap(find.bySemanticsLabel('More emoji'));
+    await tester.pumpAndSettle();
+    expect(find.byType(AppEmojiPicker), findsOneWidget);
+
+    await tester.tap(find.text('😀').first);
+    await tester.pumpAndSettle();
+
+    expect(
+      intents.whereType<SetReactionIntent>().single,
+      isA<SetReactionIntent>()
+          .having((intent) => intent.messageId, 'messageId', _id(4))
+          .having((intent) => intent.emoji, 'emoji', '😀'),
+    );
+    expect(find.byType(AppEmojiPicker), findsNothing);
+    expect(find.bySemanticsLabel('Choose a reaction'), findsNothing);
+    semantics.dispose();
+  });
+
+  testWidgets('a tap on a nested control belongs to that control', (
+    tester,
+  ) async {
+    final intents = <ChatIntent>[];
+    await _pump(
+      tester,
+      ChatConversationView(model: _model(), onIntent: intents.add),
+    );
+    intents.clear();
+
+    // The reply quote on message-5 jumps; it does not open the message surface.
+    // The quote repeats message-2's text, so the finder has to be scoped to the
+    // bubble carrying it rather than to the text.
+    await tester.tap(
+      find.descendant(
+        of: find.byKey(ValueKey('message-${_id(5)}')),
+        matching: find.text('message-2'),
+      ),
+    );
+    await tester.pump(kDoubleTapTimeout + const Duration(milliseconds: 50));
+    await tester.pumpAndSettle();
+    expect(intents.whereType<JumpToMessageIntent>(), isNotEmpty);
+    expect(find.text('Reply'), findsNothing);
+
+    // So does the reaction chip, which keeps the toggle it always had. It sits
+    // on the newest message, whose chip row starts below the timeline viewport.
+    intents.clear();
+    final chip = find.text('👍 2');
+    await tester.ensureVisible(chip);
+    await tester.pumpAndSettle();
+    await tester.tap(chip);
+    await tester.pump(kDoubleTapTimeout + const Duration(milliseconds: 50));
+    await tester.pumpAndSettle();
+    expect(intents.whereType<SetReactionIntent>().single.emoji, isNull);
+    expect(find.text('Reply'), findsNothing);
+  });
+
+  testWidgets('the failed-send retry button keeps its own tap', (tester) async {
+    final intents = <ChatIntent>[];
+    await _pump(
+      tester,
+      ChatConversationView(
+        model: _model(
+          messages: [
+            _message(0, delivery: ChatDeliveryViewState.failed, outgoing: true),
+          ],
+        ),
+        onIntent: intents.add,
+      ),
+    );
+    intents.clear();
+
+    await tester.tap(find.text('Retry as a new encrypted send'));
+    await tester.pump(kDoubleTapTimeout + const Duration(milliseconds: 50));
+    await tester.pumpAndSettle();
+
+    expect(intents.whereType<RetryMessageIntent>(), isNotEmpty);
+    expect(find.text('Reply'), findsNothing);
+  });
+
+  for (final size in const [
+    Size(360, 800), // narrow
+    Size(800, 900), // medium
+    Size(1440, 900), // wide
+  ]) {
+    testWidgets('the selector and the picker lay out in Persian RTL at '
+        '${size.width}', (tester) async {
+      await _pump(
+        tester,
+        ChatConversationView(model: _model(), onIntent: (_) {}),
+        size: size,
+        locale: const Locale('fa'),
+      );
+      await _openMessageSurface(tester, find.text('message-4'));
+      // Locale-independent finders: the panel is proved by a glyph only it
+      // carries, and the expand control by its semantic icon, so this test
+      // does not break the day the Persian wording is revised.
+      expect(find.text('🔥'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+
+      final expand = find.byWidgetPredicate(
+        (widget) => widget is AppIcon && identical(widget.data, AppIcons.add),
+      );
+      expect(expand, findsOneWidget);
+      await tester.tap(expand);
+      await tester.pumpAndSettle();
+
+      expect(find.byType(AppEmojiPicker), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      expect(
+        tester
+            .widget<Directionality>(find.byType(Directionality).first)
+            .textDirection,
+        TextDirection.rtl,
+      );
+    });
+  }
+
+  testWidgets('the composer emoji button inserts at the caret', (tester) async {
+    await _pump(
+      tester,
+      ChatConversationView(model: _model(), onIntent: (_) {}),
+    );
+    final field = find.byKey(const ValueKey('chat-composer-field'));
+    await tester.enterText(field, 'ab');
+    await tester.pump();
+    tester.widget<TextField>(field).controller!.selection =
+        const TextSelection.collapsed(offset: 1);
+    await tester.pump();
+
+    await tester.tap(find.bySemanticsLabel('Insert emoji').first);
+    await tester.pumpAndSettle();
+    expect(find.byType(AppEmojiPicker), findsOneWidget);
+
+    await tester.tap(find.text('😀').first);
+    await tester.pumpAndSettle();
+
+    final controller = tester.widget<TextField>(field).controller!;
+    expect(controller.text, 'a😀b');
+    expect(
+      controller.selection,
+      TextSelection.collapsed(offset: 1 + '😀'.length),
+    );
+    expect(find.byType(AppEmojiPicker), findsNothing);
+  });
+
+  testWidgets('dismissing the picker leaves the draft alone', (tester) async {
+    await _pump(
+      tester,
+      ChatConversationView(model: _model(), onIntent: (_) {}),
+    );
+    final field = find.byKey(const ValueKey('chat-composer-field'));
+    await tester.enterText(field, 'draft worth keeping');
+    await tester.pump();
+
+    await tester.tap(find.bySemanticsLabel('Insert emoji').first);
+    await tester.pumpAndSettle();
+    expect(find.byType(AppEmojiPicker), findsOneWidget);
+
+    // The back gesture, which leaves by the same door as the backdrop.
+    tester.state<NavigatorState>(find.byType(Navigator).first).pop();
+    await tester.pumpAndSettle();
+
+    expect(find.byType(AppEmojiPicker), findsNothing);
+    expect(
+      tester.widget<TextField>(field).controller!.text,
+      'draft worth keeping',
+    );
   });
 
   testWidgets('forward picker dispatches immutable targets as a typed intent', (
@@ -190,8 +486,7 @@ void main() {
     );
     intents.clear();
 
-    await tester.longPress(find.text('message-5'));
-    await tester.pumpAndSettle();
+    await _openMessageSurface(tester, find.text('message-5'));
     await tester.tap(find.text('Forward').last);
     await tester.pumpAndSettle();
     await tester.tap(find.text('Saved Messages').last);
@@ -439,6 +734,26 @@ void main() {
     );
     expect(find.text('Chats are unavailable'), findsOneWidget);
   });
+}
+
+/// Opens the message surface the way a person does: one tap on the bubble.
+///
+/// The wait is not padding. `onDoubleTap` holds the gesture arena for
+/// `kDoubleTapTimeout` before a single tap can be awarded, and `pumpAndSettle`
+/// advances 100 ms per frame only while something is animating - so on its own
+/// it returns before the hold expires and nothing has happened yet.
+Future<void> _openMessageSurface(WidgetTester tester, Finder target) async {
+  await tester.tap(target);
+  await tester.pump(kDoubleTapTimeout + const Duration(milliseconds: 50));
+  await tester.pumpAndSettle();
+}
+
+Future<void> _doubleTap(WidgetTester tester, Finder target) async {
+  await tester.tap(target);
+  await tester.pump(const Duration(milliseconds: 40));
+  await tester.tap(target);
+  await tester.pump(kDoubleTapTimeout + const Duration(milliseconds: 50));
+  await tester.pumpAndSettle();
 }
 
 Future<void> _pump(

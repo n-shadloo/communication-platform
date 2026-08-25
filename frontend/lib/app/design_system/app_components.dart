@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:communication_platform/app/design_system/app_icons.dart';
 import 'package:communication_platform/app/design_system/app_tokens.dart';
 import 'package:flutter/material.dart';
@@ -331,6 +333,130 @@ Future<T?> showAppSheet<T>({
     ),
   ),
 );
+
+/// A sheet with a second surface floating above it, anchored to the thing the
+/// sheet is about.
+///
+/// [showAppSheet] cannot express this. Its content is laid out inside the sheet,
+/// at the bottom of the screen, so a panel built there cannot sit beside the row
+/// the user pressed. The obvious alternative - an `OverlayEntry` above the sheet
+/// route - puts the panel outside the route, where a modal route's focus scope
+/// cannot reach it and a screen reader does not traverse it, which would fail
+/// two of the accessibility rules in `responsive-ui.md`. So both surfaces live
+/// in one route: the sheet keeps the bottom, and [anchored] is positioned in the
+/// space above it, as close to [anchor] as it fits.
+///
+/// [anchor] is in global coordinates and may be null, which parks [anchored]
+/// directly above the sheet. Dismissal is the barrier, the back gesture, or
+/// [popAppModal] - the same three doors as [showAppSheet]. It has no
+/// drag-to-dismiss, which the Forui sheet does.
+Future<T?> showAppAnchoredSheet<T>({
+  required BuildContext context,
+  required String semanticLabel,
+  required Widget child,
+  required Widget anchored,
+  Rect? anchor,
+  bool dismissible = true,
+}) {
+  final colors = context.tokens.colors;
+  final minimumTop = MediaQuery.paddingOf(context).top + AppSpacing.x2;
+  return showGeneralDialog<T>(
+    context: context,
+    useRootNavigator: true,
+    barrierDismissible: dismissible,
+    barrierLabel: semanticLabel,
+    barrierColor: colors.scrim,
+    transitionDuration: AppMotion.effective(context, AppMotion.route),
+    pageBuilder: (context, animation, secondaryAnimation) => Semantics(
+      container: true,
+      scopesRoute: true,
+      namesRoute: true,
+      explicitChildNodes: true,
+      label: semanticLabel,
+      child: Column(
+        children: [
+          Expanded(
+            child: CustomSingleChildLayout(
+              delegate: _AnchoredAboveLayout(
+                anchor: anchor,
+                gap: AppSpacing.x2,
+                minimumTop: minimumTop,
+              ),
+              child: anchored,
+            ),
+          ),
+          DecoratedBox(
+            decoration: BoxDecoration(
+              color: context.tokens.colors.surface,
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(18),
+              ),
+            ),
+            child: Material(
+              type: MaterialType.transparency,
+              child: Padding(
+                padding: const EdgeInsets.all(AppSpacing.x6),
+                child: child,
+              ),
+            ),
+          ),
+        ],
+      ),
+    ),
+    transitionBuilder: (context, animation, secondaryAnimation, child) {
+      final curved = animation.drive(CurveTween(curve: AppMotion.enter));
+      return FadeTransition(
+        opacity: curved,
+        child: SlideTransition(
+          position: Tween(
+            begin: const Offset(0, 0.04),
+            end: Offset.zero,
+          ).animate(curved),
+          child: child,
+        ),
+      );
+    },
+  );
+}
+
+/// Places a child just above [anchor], clamped into the space it is given.
+///
+/// The layout region is the part of the screen the sheet does not occupy, and
+/// it starts at the top of the screen, so the global coordinates [anchor]
+/// carries need no translation. A message near the bottom of the timeline
+/// therefore ends up with its panel resting on the sheet rather than behind it.
+class _AnchoredAboveLayout extends SingleChildLayoutDelegate {
+  const _AnchoredAboveLayout({
+    required this.anchor,
+    required this.gap,
+    required this.minimumTop,
+  });
+
+  final Rect? anchor;
+  final double gap;
+  final double minimumTop;
+
+  @override
+  BoxConstraints getConstraintsForChild(BoxConstraints constraints) =>
+      BoxConstraints.loose(constraints.biggest);
+
+  @override
+  Offset getPositionForChild(Size size, Size childSize) {
+    final horizontal = math.max(0, size.width - childSize.width) / 2;
+    final lowest = math.max(0.0, size.height - childSize.height);
+    final highest = math.min(minimumTop, lowest);
+    final preferred = anchor == null
+        ? lowest
+        : anchor!.top - childSize.height - gap;
+    return Offset(horizontal, preferred.clamp(highest, lowest));
+  }
+
+  @override
+  bool shouldRelayout(_AnchoredAboveLayout oldDelegate) =>
+      oldDelegate.anchor != anchor ||
+      oldDelegate.gap != gap ||
+      oldDelegate.minimumTop != minimumTop;
+}
 
 enum AppStateKind { loading, empty, error }
 

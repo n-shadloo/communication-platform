@@ -1490,12 +1490,6 @@ abstract class AppLocalizations {
   /// **'Reply'**
   String get chatReplyAction;
 
-  /// No description provided for @chatReactAction.
-  ///
-  /// In en, this message translates to:
-  /// **'React'**
-  String get chatReactAction;
-
   /// No description provided for @chatEditAction.
   ///
   /// In en, this message translates to:
@@ -1616,6 +1610,30 @@ abstract class AppLocalizations {
   /// **'{emoji} reaction, {count} people'**
   String chatReactionSemantics(String emoji, int count);
 
+  /// Accessible name of the floating reaction selector that opens with the message actions. It names the surface, not the message, because the message already has its own label.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose a reaction'**
+  String get chatReactionSelectorLabel;
+
+  /// Accessible name of one emoji in the reaction selector, when it is not the reaction this user has set.
+  ///
+  /// In en, this message translates to:
+  /// **'React with {emoji}'**
+  String chatReactionAddAction(String emoji);
+
+  /// Accessible name of the emoji in the reaction selector that this user has already set. Choosing it removes the reaction, so the label has to say so rather than repeating the add wording.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove your {emoji} reaction'**
+  String chatReactionRemoveAction(String emoji);
+
+  /// The control at the end of the reaction selector that opens the full emoji picker.
+  ///
+  /// In en, this message translates to:
+  /// **'More emoji'**
+  String get chatMoreReactionsAction;
+
   /// No description provided for @chatRetrySendAction.
   ///
   /// In en, this message translates to:
@@ -1675,6 +1693,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Insert emoji'**
   String get chatEmojiAction;
+
+  /// Accessible name of the full emoji picker surface (ADR-059). It is opened both from the composer and from the reaction selector, so the wording names the surface rather than either caller.
+  ///
+  /// In en, this message translates to:
+  /// **'Emoji picker'**
+  String get emojiPickerLabel;
+
+  /// Placeholder in the emoji picker's search field. The search runs over the locally bundled emoji names only; nothing is sent anywhere.
+  ///
+  /// In en, this message translates to:
+  /// **'Search emoji'**
+  String get emojiPickerSearchHint;
 
   /// No description provided for @chatSendAction.
   ///

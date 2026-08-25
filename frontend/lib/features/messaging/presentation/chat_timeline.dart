@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:communication_platform/app/design_system/app_components.dart';
+import 'package:communication_platform/app/design_system/app_emoji_picker.dart';
 import 'package:communication_platform/app/design_system/app_icons.dart';
 import 'package:communication_platform/app/design_system/app_tokens.dart';
 import 'package:communication_platform/core/protocol/attachment_crypto_model.dart';
@@ -12,6 +13,47 @@ import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
 
 typedef ChatIntentCallback = void Function(ChatIntent intent);
+
+/// The reactions the floating selector offers, in this order.
+///
+/// Presentation only, and deliberately so: `message-protocol.md` carries "one
+/// normalized emoji grapheme or null", every layer below this one takes whatever
+/// grapheme it is handed, and nothing outside this file knows which twenty-four
+/// are on the panel. Each entry is one grapheme cluster - `❤️` and `🕊️` are a
+/// base plus U+FE0F, the rest are single scalars - which is what
+/// `SendConversationEvents.setReaction` requires before it will encode one.
+const chatQuickReactions = <String>[
+  '👍',
+  '👎',
+  '❤️',
+  '🔥',
+  '🥰',
+  '👏',
+  '😁',
+  '🤔',
+  '🤯',
+  '😱',
+  '🤬',
+  '😢',
+  '🎉',
+  '🤩',
+  '🤮',
+  '💩',
+  '🙏',
+  '👌',
+  '🕊️',
+  '🤡',
+  '🥱',
+  '😍',
+  '🐳',
+  '💯',
+];
+
+/// The one reaction a double tap sets, and the one it removes when it is
+/// already this user's. It is the first entry of [chatQuickReactions] and has to
+/// stay in that list, because the selector marks the active reaction as selected
+/// and a double tap must be undoable from the panel as well.
+const chatDoubleTapReaction = '👍';
 
 /// Replaceable timeline boundary.
 ///
@@ -495,9 +537,20 @@ class ChatMessageBuilder extends StatelessWidget {
             // The whole bubble is the target, not the glyphs inside it. Under
             // the default `deferToChild` a press only counts where a descendant
             // answers the hit test, so the bubble's own padding and the gaps
-            // between its rows silently swallowed the long press.
+            // between its rows silently swallowed the press.
+            //
+            // `opaque` decides what happens where no descendant answers; it
+            // does not take a press away from one that does. The reply quote,
+            // the attachment tile, the reaction chips and the failed-send retry
+            // each keep their own recognizer, and a recognizer nested inside
+            // this one is entered into the gesture arena first, so it wins.
+            // What they do lose is immediacy: `onDoubleTap` holds the arena for
+            // `kDoubleTapTimeout` before a single tap can be awarded, and that
+            // hold is per pointer rather than per detector. Telegram's model
+            // costs the same.
             behavior: HitTestBehavior.opaque,
-            onLongPress: () => unawaited(_showActions(context)),
+            onTap: () => unawaited(_showActions(context)),
+            onDoubleTap: () => _toggleReaction(chatDoubleTapReaction),
             onSecondaryTapUp: (_) => unawaited(_showActions(context)),
             child: AnimatedContainer(
               key: ValueKey('message-${message.id}'),
@@ -692,11 +745,56 @@ class ChatMessageBuilder extends StatelessWidget {
     );
   }
 
+  /// The reaction this user has set on this message, or null.
+  ///
+  /// A reaction is a set operation per `(target, reacting_user)`, so at most one
+  /// chip can carry `selectedByCurrentUser`.
+  String? get _ownReaction {
+    for (final reaction in message.reactions) {
+      if (reaction.selectedByCurrentUser) {
+        return reaction.emoji;
+      }
+    }
+    return null;
+  }
+
+  /// Sets [emoji], or removes it when it is already this user's.
+  ///
+  /// The same rule the reaction chips have always used, reached from the
+  /// selector and from the double tap so that all three agree.
+  void _toggleReaction(String emoji) => onIntent(
+    SetReactionIntent(
+      messageId: message.id,
+      emoji: _ownReaction == emoji ? null : emoji,
+    ),
+  );
+
+  /// This bubble's rectangle in global coordinates, for the selector to sit
+  /// above. Null when the element has no attached box - which a modal opened
+  /// from a semantics action can reach - and the selector then parks itself
+  /// directly above the sheet instead.
+  Rect? _anchor(BuildContext context) {
+    final box = context.findRenderObject();
+    if (box is! RenderBox || !box.attached || !box.hasSize) {
+      return null;
+    }
+    return box.localToGlobal(Offset.zero) & box.size;
+  }
+
   Future<void> _showActions(BuildContext context) async {
     final strings = AppLocalizations.of(context);
-    await showAppSheet<void>(
+    await showAppAnchoredSheet<void>(
       context: context,
       semanticLabel: strings.chatMessageActionsLabel,
+      anchor: _anchor(context),
+      anchored: _ReactionSelector(
+        selected: _ownReaction,
+        onSelected: (emoji) {
+          popAppModal(context);
+          _toggleReaction(emoji);
+        },
+        onExpand: () => unawaited(_expandReactions(context)),
+      ),
       child: SafeArea(
         top: false,
         child: SingleChildScrollView(
@@ -709,16 +807,6 @@ class ChatMessageBuilder extends StatelessWidget {
                 onPressed: () {
                   popAppModal(context);
                   onIntent(ReplyToMessageIntent(message));
-                },
-              ),
-              _MessageAction(
-                label: strings.chatReactAction,
-                icon: AppIcons.emoji,
-                onPressed: () {
-                  popAppModal(context);
-                  onIntent(
-                    SetReactionIntent(messageId: message.id, emoji: '👍'),
-                  );
                 },
               ),
               if (message.canEdit)
@@ -792,6 +880,21 @@ class ChatMessageBuilder extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  /// Opens the full picker over the selector, and sets whatever comes back.
+  ///
+  /// Not a toggle: the panel is where a reaction is removed, and picking an
+  /// emoji out of 1500 is an act of choosing rather than of undoing. Dismissing
+  /// the picker leaves the message surface open, because the user has not
+  /// finished with it.
+  Future<void> _expandReactions(BuildContext context) async {
+    final emoji = await showAppEmojiPicker(context);
+    if (emoji == null || !context.mounted) {
+      return;
+    }
+    popAppModal(context);
+    onIntent(SetReactionIntent(messageId: message.id, emoji: emoji));
   }
 
   Future<void> _showDeleteDialog(BuildContext context) async {
@@ -1103,14 +1206,19 @@ class ChatComposerBuilderState extends State<ChatComposerBuilder> {
                       ),
                     ),
                     const SizedBox(width: AppSpacing.x1),
-                    if (_controller.text.trim().isEmpty)
-                      AppIconButton(
-                        icon: AppIcons.emoji,
-                        semanticLabel: strings.chatEmojiAction,
-                        onPressed: ready ? _insertEmoji : null,
-                        kind: AppButtonKind.ghost,
-                      )
-                    else
+                    // The emoji button stays put. It used to be swapped out for
+                    // Send as soon as the draft had a character in it, which
+                    // meant an emoji could only ever be inserted into an empty
+                    // field - and "insert at the caret" had nothing to insert
+                    // into. Send appears beside it instead of in place of it.
+                    AppIconButton(
+                      icon: AppIcons.emoji,
+                      semanticLabel: strings.chatEmojiAction,
+                      onPressed: ready ? () => unawaited(_insertEmoji()) : null,
+                      kind: AppButtonKind.ghost,
+                    ),
+                    if (_controller.text.trim().isNotEmpty) ...[
+                      const SizedBox(width: AppSpacing.x1),
                       AppIconButton(
                         icon: AppIcons.send,
                         semanticLabel: _mode == ChatComposerMode.edit
@@ -1119,6 +1227,7 @@ class ChatComposerBuilderState extends State<ChatComposerBuilder> {
                         onPressed: ready ? _submit : null,
                         kind: AppButtonKind.primary,
                       ),
+                    ],
                   ],
                 ),
               ),
@@ -1129,15 +1238,24 @@ class ChatComposerBuilderState extends State<ChatComposerBuilder> {
     );
   }
 
-  void _insertEmoji() {
+  /// Opens the picker and inserts what comes back at the caret.
+  ///
+  /// Dismissing it returns null and changes nothing, so the draft the composer
+  /// is holding survives a backdrop tap and a back gesture. An emoji is a
+  /// grapheme cluster of more than one UTF-16 unit, so the caret moves by the
+  /// string's length rather than by one.
+  Future<void> _insertEmoji() async {
+    final emoji = await showAppEmojiPicker(context);
+    if (emoji == null || !mounted) {
+      return;
+    }
+    final text = _controller.text;
     final selection = _controller.selection;
-    final offset = selection.isValid
-        ? selection.start
-        : _controller.text.length;
-    final next = _controller.text.replaceRange(offset, offset, '🙂');
+    final start = selection.isValid ? selection.start : text.length;
+    final end = selection.isValid ? selection.end : text.length;
     _controller.value = TextEditingValue(
-      text: next,
-      selection: TextSelection.collapsed(offset: offset + 2),
+      text: text.replaceRange(start, end, emoji),
+      selection: TextSelection.collapsed(offset: start + emoji.length),
     );
   }
 }
@@ -1182,6 +1300,177 @@ class _MessageAction extends StatelessWidget {
       onTap: onPressed,
     ),
   );
+}
+
+/// The floating panel of quick reactions that opens with the message actions.
+///
+/// One horizontally scrollable row on a raised rounded surface, ending in the
+/// control that opens the full picker. It is a sibling of the action sheet
+/// inside one route, which is what makes it keyboard reachable and traversable
+/// by a screen reader; see [showAppAnchoredSheet].
+class _ReactionSelector extends StatelessWidget {
+  const _ReactionSelector({
+    required this.selected,
+    required this.onSelected,
+    required this.onExpand,
+  });
+
+  /// The reaction this user has already set, marked as selected in the row.
+  final String? selected;
+
+  /// Called with the chosen emoji. Whether that sets or removes belongs to the
+  /// caller, which is the only place that knows the current reaction.
+  final ValueChanged<String> onSelected;
+
+  final VoidCallback onExpand;
+
+  @override
+  Widget build(BuildContext context) {
+    final strings = AppLocalizations.of(context);
+    final colors = context.tokens.colors;
+    return Semantics(
+      container: true,
+      explicitChildNodes: true,
+      label: strings.chatReactionSelectorLabel,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.x3),
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: colors.surface,
+            borderRadius: AppRadii.pill,
+            border: Border.all(color: colors.border),
+            boxShadow: AppElevation.level2,
+          ),
+          child: Material(
+            type: MaterialType.transparency,
+            child: Padding(
+              padding: const EdgeInsets.all(AppSpacing.x1),
+              child: Row(
+                children: [
+                  // Only the reactions scroll. The control that opens the full
+                  // picker stays pinned to the trailing edge, because twenty-four
+                  // targets are wider than any phone and an expand button a
+                  // thousand pixels away is one nobody finds.
+                  Flexible(
+                    child: SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          for (final emoji in chatQuickReactions)
+                            _ReactionOption(
+                              emoji: emoji,
+                              selected: emoji == selected,
+                              onPressed: () => onSelected(emoji),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  Container(
+                    width: 1,
+                    height: AppSpacing.x6,
+                    margin: const EdgeInsets.symmetric(
+                      horizontal: AppSpacing.x1,
+                    ),
+                    color: colors.border,
+                  ),
+                  _ReactionExpandOption(onPressed: onExpand),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ReactionOption extends StatelessWidget {
+  const _ReactionOption({
+    required this.emoji,
+    required this.selected,
+    required this.onPressed,
+  });
+
+  final String emoji;
+  final bool selected;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final strings = AppLocalizations.of(context);
+    final colors = context.tokens.colors;
+    return Semantics(
+      button: true,
+      selected: selected,
+      excludeSemantics: true,
+      label: selected
+          ? strings.chatReactionRemoveAction(emoji)
+          : strings.chatReactionAddAction(emoji),
+      child: InkResponse(
+        onTap: onPressed,
+        radius: AppFocus.minimumTarget / 2,
+        containedInkWell: true,
+        customBorder: const CircleBorder(),
+        child: Container(
+          width: AppFocus.minimumTarget,
+          height: AppFocus.minimumTarget,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: selected ? colors.accentSoft : null,
+            border: selected
+                ? Border.all(color: colors.accent, width: 2)
+                : null,
+          ),
+          // The glyph is a glyph in either direction; only the row around it
+          // follows the locale.
+          child: Text(
+            emoji,
+            textDirection: TextDirection.ltr,
+            style: const TextStyle(fontSize: 24),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ReactionExpandOption extends StatelessWidget {
+  const _ReactionExpandOption({required this.onPressed});
+
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final label = AppLocalizations.of(context).chatMoreReactionsAction;
+    final colors = context.tokens.colors;
+    return Semantics(
+      button: true,
+      excludeSemantics: true,
+      label: label,
+      child: Tooltip(
+        message: label,
+        child: InkResponse(
+          onTap: onPressed,
+          radius: AppFocus.minimumTarget / 2,
+          containedInkWell: true,
+          customBorder: const CircleBorder(),
+          child: Container(
+            width: AppFocus.minimumTarget,
+            height: AppFocus.minimumTarget,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: colors.surfaceRaised,
+            ),
+            child: AppIcon(AppIcons.add, color: colors.textPrimary, size: 20),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class _ReactionChip extends StatelessWidget {
