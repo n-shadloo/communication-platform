@@ -200,6 +200,7 @@ GoRouter createAppRouter({
         return AppShell(
           environment: environment,
           navigationShell: navigationShell,
+          location: state.uri.path,
           status: bootstrapOffline
               ? AppShellStatus(
                   connection: AppConnectionState.offline,

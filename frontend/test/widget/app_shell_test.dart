@@ -4,6 +4,7 @@ import 'package:communication_platform/app/design_system/app_tokens.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 
 void main() {
   testWidgets('selects narrow, medium, and wide structures by measured width', (
@@ -65,6 +66,30 @@ void main() {
 
     expect(find.text('No chats yet'), findsOneWidget);
     expect(find.text('Linked Devices'), findsNothing);
+  });
+
+  testWidgets('withdraws compose on a page pushed above the destination', (
+    tester,
+  ) async {
+    await _pumpApp(tester, size: const Size(360, 800));
+    expect(find.byTooltip('Start a conversation'), findsOneWidget);
+
+    // A sub-route of the branch, reached by navigating rather than by booting
+    // into it, so this also proves the shell re-reads the location on a push.
+    GoRouter.of(
+      tester.element(find.byKey(const ValueKey('shell-narrow'))),
+    ).go('/voice-rooms/sample-room');
+    await tester.pumpAndSettle();
+
+    expect(find.text('Route: /voice-rooms/sample-room'), findsOneWidget);
+    expect(find.byTooltip('Create a voice room'), findsNothing);
+    expect(find.byTooltip('Start a conversation'), findsNothing);
+
+    GoRouter.of(
+      tester.element(find.byKey(const ValueKey('shell-narrow'))),
+    ).go('/voice-rooms');
+    await tester.pumpAndSettle();
+    expect(find.byTooltip('Create a voice room'), findsOneWidget);
   });
 
   testWidgets('large text on an Android-sized viewport does not overflow', (

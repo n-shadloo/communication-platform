@@ -23,6 +23,13 @@ class AppShellStatus {
 enum AppDestination { chats, voiceRooms, settings }
 
 extension on AppDestination {
+  /// The branch's own route. Anything longer is a page pushed on top of it.
+  String get rootLocation => switch (this) {
+    AppDestination.chats => '/chats',
+    AppDestination.voiceRooms => '/voice-rooms',
+    AppDestination.settings => '/settings',
+  };
+
   String label(AppLocalizations l10n) => switch (this) {
     AppDestination.chats => l10n.chatsDestination,
     AppDestination.voiceRooms => l10n.voiceRoomsDestination,
@@ -40,12 +47,17 @@ class AppShell extends StatefulWidget {
   const AppShell({
     required this.environment,
     required this.navigationShell,
+    required this.location,
     this.status = const AppShellStatus(),
     super.key,
   });
 
   final AppEnvironment environment;
   final StatefulNavigationShell navigationShell;
+
+  /// Path of the route currently on screen, branch sub-routes included.
+  final String location;
+
   final AppShellStatus status;
 
   @override
@@ -100,6 +112,16 @@ class _AppShellState extends State<AppShell> {
     final l10n = AppLocalizations.of(context);
     final environmentBanner = widget.environment.configurationBanner(l10n);
     final selected = widget.navigationShell.currentIndex;
+    final destination = AppDestination.values[selected];
+    // Compose belongs to the destination's own screen. On a page pushed above
+    // it — a conversation, a room, a contact — the shell has nothing to compose
+    // and its button only gets in the way of the page's own controls: the
+    // narrow layout floats it directly over the chat composer's send button.
+    final onCompose =
+        destination == AppDestination.settings ||
+            widget.location != destination.rootLocation
+        ? null
+        : _compose;
     final widthClass = AppBreakpoints.of(MediaQuery.sizeOf(context).width);
     final shortcuts = <ShortcutActivator, VoidCallback>{
       const SingleActivator(LogicalKeyboardKey.digit1, alt: true): () =>
@@ -129,7 +151,7 @@ class _AppShellState extends State<AppShell> {
         selected: selected,
         status: widget.status,
         onSelect: _selectDestination,
-        onCompose: selected == AppDestination.settings.index ? null : _compose,
+        onCompose: onCompose,
         child: content,
       ),
       AppWidthClass.medium => _TwoPaneShell(
@@ -137,7 +159,7 @@ class _AppShellState extends State<AppShell> {
         selected: selected,
         status: widget.status,
         onSelect: _selectDestination,
-        onCompose: selected == AppDestination.settings.index ? null : _compose,
+        onCompose: onCompose,
         child: content,
       ),
       AppWidthClass.wide => _TwoPaneShell(
@@ -145,7 +167,7 @@ class _AppShellState extends State<AppShell> {
         selected: selected,
         status: widget.status,
         onSelect: _selectDestination,
-        onCompose: selected == AppDestination.settings.index ? null : _compose,
+        onCompose: onCompose,
         child: content,
       ),
     };
