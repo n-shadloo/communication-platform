@@ -1000,7 +1000,7 @@ final class LocalDatabase extends _$LocalDatabase {
   LocalDatabase(super.executor, {StorageMigrationHooks? migrationHooks})
     : _migrationHooks = migrationHooks ?? const StorageMigrationHooks();
 
-  static const currentSchemaVersion = 12;
+  static const currentSchemaVersion = 13;
   final StorageMigrationHooks _migrationHooks;
 
   @override
@@ -1326,6 +1326,19 @@ final class LocalDatabase extends _$LocalDatabase {
           if (!columns.contains(messages.alerted.$name)) {
             await migrator.addColumn(messages, messages.alerted);
           }
+        }
+        if (from < 13) {
+          // Enrolment wrote the account's own device bundle under the wire
+          // field names, producing a row `DriftContactRepository` throws on.
+          // Fixing the writer alone would strand every install that already
+          // enrolled, because the unreadable row is what stops the refresh
+          // that would otherwise overwrite it. This table is a cache of server
+          // state, so dropping bundles that carry no `format` key costs
+          // nothing: the next peer refresh writes them back correctly.
+          await customStatement(
+            'DELETE FROM devices '
+            "WHERE CAST(public_bundle AS TEXT) NOT LIKE '%\"format\"%'",
+          );
         }
         await _migrationHooks.afterUpgrade(from, to);
       });

@@ -353,12 +353,27 @@ final class DriftEnrollmentJournalStore
           }),
         ),
       );
+      // `devices.public_bundle` has exactly one reader - DriftContactRepository,
+      // which every send reaches through resolveLiveDevices - and it rejects a
+      // bundle that is not in this shape. Enrolment used to write the wire
+      // field names here (`version`, `ik_pub`, `registration_id`), so the row
+      // this transaction created could never be decoded again: reading the
+      // account's own devices threw, `_refresh` of the local user failed
+      // integrityCheckFailed, and every outbound message was refused from the
+      // moment enrolment finished. Peer rows were always written by the
+      // repository's own encoder, which is why only the local account broke.
+      // `cross` and `bundle_version` are deliberately absent: the cross
+      // signature belongs to the second enrolment phase and does not exist
+      // yet here, and PeerPublicDevice rejects one without the other. The row
+      // only has to survive being read - the first refresh of this account
+      // replaces it with the server's signed bundle.
       final publicDevice = Uint8List.fromList(
         utf8.encode(
           jsonEncode({
-            'version': 1,
-            'ik_pub': base64Encode(journal.devicePackage.public.ikPub),
-            'registration_id': journal.devicePackage.public.registrationId,
+            'format': 1,
+            'device_id': deviceId,
+            'ik': base64Encode(journal.devicePackage.public.ikPub),
+            'registration': journal.devicePackage.public.registrationId,
           }),
         ),
       );
