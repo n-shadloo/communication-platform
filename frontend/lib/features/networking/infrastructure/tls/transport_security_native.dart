@@ -33,6 +33,19 @@ final class TransportSecurity {
 
   bool get isProvisioned => _context != null;
 
+  /// How long an idle pooled connection is kept before `dart:io` closes it.
+  ///
+  /// Stated rather than inherited, because the two defaults either side of this
+  /// are both wrong for a client that talks to one origin in bursts: `dart:io`
+  /// gives fifteen seconds, and Dio's own client factory — which this replaces,
+  /// and could stop replacing — gives three, which is short enough that a
+  /// drain and the send that follows it pay a fresh TCP and TLS handshake each.
+  /// Thirty seconds spans the gap between the phases of one delivery cycle and
+  /// stays comfortably inside a stock nginx `keepalive_timeout` of sixty-five,
+  /// so this side gives the connection up before the server does and no request
+  /// races a close it cannot see.
+  static const idleConnectionLifetime = Duration(seconds: 30);
+
   HttpClient _createHttpClient() {
     final context = _context;
     final client = context == null
@@ -42,6 +55,7 @@ final class TransportSecurity {
     // exists only to make that refusal explicit and unconditional: returning
     // true here would defeat every check above.
     client.badCertificateCallback = (certificate, host, port) => false;
+    client.idleTimeout = idleConnectionLifetime;
     return client;
   }
 

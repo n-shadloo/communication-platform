@@ -283,6 +283,7 @@ final class DioRestClient {
       );
       if (declaredLength != null &&
           declaredLength > request.limits.maximumResponseBytes) {
+        await _abandon(cancelToken, response.data);
         return const Result.failure(
           TransportFailure(TransportFailureKind.responseTooLarge),
         );
@@ -301,10 +302,12 @@ final class DioRestClient {
         ),
       );
     } on _ResponseTooLarge {
+      await _abandon(cancelToken, null);
       return const Result.failure(
         TransportFailure(TransportFailureKind.responseTooLarge),
       );
     } on _ResponseCancelled {
+      await _abandon(cancelToken, null);
       return const Result.failure(
         CancellationFailure(CancellationFailureKind.requestedByUser),
       );
@@ -337,6 +340,14 @@ final class DioRestClient {
     return jsonDecode(utf8.decode(bytes));
   }
 
+  /// Reads a response body, and terminates its subscription on every path out.
+  ///
+  /// `ResponseType.stream` hands back a live socket rather than bytes, so the
+  /// subscription is the resource, not the buffer. Every way out of this method
+  /// — completion, a body larger than the caller will accept, a cancellation
+  /// the caller asked for, an error on the stream — goes through the same
+  /// cancel, so `dart:io` is always told the reader is finished instead of
+  /// being left holding a half-read response.
   Future<Uint8List> _readBounded(
     ResponseBody? body,
     int maximumBytes,
@@ -346,16 +357,83 @@ final class DioRestClient {
       return Uint8List(0);
     }
     final builder = BytesBuilder(copy: false);
-    await for (final chunk in body.stream) {
-      if (cancellation?.isCancelled ?? false) {
-        throw const _ResponseCancelled();
+    final finished = Completer<void>();
+    Object? abort;
+    StackTrace? abortTrace;
+    void stop(Object reason, [StackTrace? trace]) {
+      if (finished.isCompleted) {
+        return;
       }
-      if (builder.length + chunk.length > maximumBytes) {
-        throw const _ResponseTooLarge();
-      }
-      builder.add(chunk);
+      abort = reason;
+      abortTrace = trace;
+      finished.complete();
+    }
+
+    final subscription = body.stream.listen(
+      (chunk) {
+        if (finished.isCompleted) {
+          return;
+        }
+        if (cancellation?.isCancelled ?? false) {
+          stop(const _ResponseCancelled());
+          return;
+        }
+        if (builder.length + chunk.length > maximumBytes) {
+          stop(const _ResponseTooLarge());
+          return;
+        }
+        builder.add(chunk);
+      },
+      onError: stop,
+      onDone: () {
+        if (!finished.isCompleted) {
+          finished.complete();
+        }
+      },
+      cancelOnError: true,
+    );
+    try {
+      await finished.future;
+    } finally {
+      await subscription.cancel();
+    }
+    final reason = abort;
+    if (reason != null) {
+      Error.throwWithStackTrace(reason, abortTrace ?? StackTrace.current);
     }
     return builder.takeBytes();
+  }
+
+  /// Stops a transfer this client has decided not to finish.
+  ///
+  /// Cancelling the *token* is the part that matters, and it is not
+  /// interchangeable with dropping the subscription. Under
+  /// `ResponseType.stream` Dio does not hand back the socket: it subscribes to
+  /// the socket itself, the moment the headers arrive, and pumps every byte
+  /// into an internal controller whose stream is what the caller receives. That
+  /// controller has no cancel hook, so letting go of it stops nothing — the
+  /// download continues to completion into a buffer nobody will read, which
+  /// means the response limit this method exists to enforce was bounding the
+  /// decode and not the transfer. Cancelling the token is what reaches Dio's
+  /// own subscription, and through it the `HttpClientResponse`, so `dart:io`
+  /// stops reading and releases the connection instead of holding a half-read
+  /// response open for the life of the process.
+  ///
+  /// Dropping the caller-facing subscription as well is tidiness, not the fix:
+  /// the cancellation arrives at that controller as an error, and a listener
+  /// that has already gone is one place it cannot surface unhandled.
+  Future<void> _abandon(CancelToken cancelToken, ResponseBody? body) async {
+    if (body != null) {
+      try {
+        await body.stream.listen(null, cancelOnError: true).cancel();
+      } on Object {
+        // A body already consumed, or a stream that refuses a second listener,
+        // has nothing left to drop.
+      }
+    }
+    if (!cancelToken.isCancelled) {
+      cancelToken.cancel('abandoned by the caller');
+    }
   }
 
   Failure _mapDioFailure(DioException error) {
