@@ -45,6 +45,35 @@ boolean combination such as `isLoading && !hasToken` defines authentication beha
 
 Socket events may arrive during drain. Inbox uniqueness and event IDs make ordering safe.
 
+## Cycle order
+
+One cycle is: the outbox, then the inbox, then acknowledgements, then the authoritative
+drain loop (which runs the inbox and acknowledgements again per page), then the outbox a
+second time, then stale-device refresh, then the successful-sync and `online` markers.
+
+The outbox goes first because nothing a queued outbox row needs comes from the inbox: its
+per-recipient ciphertext is sealed and durable before the row exists, so the only thing the
+order decides is who waits for whom. It goes a second time because the inbound half queues
+rows of its own — delivery receipts, group Commits, eviction fan-out — and skips that
+second pass when the first already found the transport unwilling. [ADR-060](decisions.md)
+records why: with the inbound half first and every stage returning its first failure, one
+envelope a device could not open stopped a message the user had already sent from ever
+leaving the process.
+
+A cycle is asked for by an event — a socket hint, a growing durable outbox, a deferred
+platform wake-up — or by a *time*: the supervisor arms a wake-up on the projection's
+`nextRetryAt`, which is the earliest due time across the inbox, the outbox and the
+reconnect schedule. Reconnect backoff is applied only when a cycle failed for a
+transport-shaped reason, so a cycle that failed locally never puts the next send behind a
+random wait.
+
+A per-envelope failure is recorded against that envelope and the cycle continues. The one
+condition that ends a run is a failure of the *store* — a transaction that will not commit
+— because a run that cannot write cannot make progress. A failure that says the session
+rather than one envelope is unhealthy is carried to the end of the run and returned there,
+so the supervisor still backs off on a dead transport while the local half of the cycle
+still completes.
+
 ## Incoming durable envelopes
 
 For each envelope:
@@ -58,6 +87,23 @@ For each envelope:
 6. Queue any delivered receipt; local message history is already durable in Drift and is
    never uploaded to a history API.
 7. Ack via WebSocket or REST only after the transaction commits.
+
+An envelope that will not open is retired rather than retried forever. Causes are split in
+two: a transient one — offline, rate limited, out of storage, momentarily out of entropy —
+retries and spends no budget, because it says nothing about the bytes in hand. A settled
+one — the native core refused these bytes, policy rejected them, the protocol is one this
+build does not implement — spends one of `SyncEngineLimits.maximumInspectionAttempts`
+(eight), and the last one quarantines the envelope and then acknowledges it. Quarantining
+alone would leave the server serving the same bytes forever; the acknowledgement is what
+makes it stop. `inbox_envelopes.inspection_failures` holds that budget, deliberately
+separate from `attempt_count`, which counts every begun attempt and drives backoff and so
+rises while a device is merely offline.
+
+Envelopes are still handed out oldest-due-first. Two guards keep that from being a
+head-of-line block: an inspection retry carries a floor of one second, because the retry
+policy draws uniformly from zero and a zero backoff on the lowest-sequence row is a pass
+that inspects one envelope a thousand times; and a pass that is handed an envelope it has
+already deferred ends, leaving the drain, the acknowledgements and the outbox to run.
 8. Mark acked locally; an ambiguous ack is retried idempotently.
 
 Authentication failure, unknown session, missing MLS epoch, and unsupported version are
@@ -211,6 +257,13 @@ does not imply that the recovery secret or server can reconstruct content.
 Typing, presence, and ephemeral room signals do not enter the durable inbox. They have
 strict expiry, bounded maps, and are cleared on disconnect. UI never converts absence of
 a signal into durable message or membership state.
+
+**Presence is not subscribed, and is therefore not shown.** `subscribe_presence` is a frame
+this client validates and never sends — the only frame it writes is `auth` — so the server
+has no target to emit presence to and `onlineDeviceCount` is zero by construction. The chat
+header rendered "offline" for every peer forever because of it. [ADR-060](decisions.md)
+withdraws the claim rather than shipping one that is always wrong; the port, the projection
+and the frame validation stay, because what is missing is the subscription.
 
 ## Android lifecycle and post-v1 Web direction
 

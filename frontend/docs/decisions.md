@@ -70,6 +70,423 @@ is not silently edited out of history.
 | ADR-057 | Accepted | The remainder of piece 21 is built as it was measured rather than as it was described: local search needed one shared surface and a group entry point rather than an encrypted index; the settings set gets Appearance, Security & recovery with a real recovery-secret replacement, About and a user-initiated diagnostics export; and the export is made incapable of carrying a prohibited value by its type rather than by review (2026-08-25) | Three of piece 21's named remainders turned out to be three different situations, and the audit that found that out is the decision. **Search was already built and the checklist said it was not.** ADR-052 had already established the two-surface design and pinned it with a test; the row `Local search | Pending Android encrypted index` had never been updated and was wrong in both halves. The phrase "Android encrypted index" traces to one sentence in `local-data-model.md` and to the piece-21 prompt that repeated it; the only *accepted* decision about search is ADR-012, which says the server never receives content or search terms and says nothing about an index. Meanwhile the encrypted database already **is** the index the sentence asks for: `messages.projection_ciphertext` holds the decrypted body inside SQLCipher under a Keystore-wrapped key, `watchMessages` reads it with no `LIMIT`, and a second FTS structure would duplicate every message body into a second place, enlarge what a wipe has to reach, and buy nothing at this deployment's scale. So no index is built, the sentence is corrected to describe what exists, and the row is corrected. What search *did* need was the gap the audit found: `GroupChatView` had no search at all and Group Info offered a permanently disabled "Search this chat" button — a control that can never succeed, which the UI specification's own core rules forbid. One shared `showConversationSearch` now serves direct, saved and group conversations, so the scope notice, the empty states and the result cap cannot disagree between two surfaces promising the same thing; and the cap, which was silently 30, is now stated on screen when it bites, for the reason ADR-052 corrected `chatsSearchHint`. **The settings set was genuinely absent and one of its screens could not be built honestly without a new primitive.** §15.2 requires that an unlocked device be able to generate a fresh recovery secret, re-wrap the same cross-signing identity, upload a higher backup version and invalidate the old secret — and the crypto core had no operation that re-wraps without regenerating. `cp_crypto_v1_rotate_recovery_secret` adds one. It changes no construction, no ciphersuite and no state format: it parses the existing package, draws fresh entropy, and calls the same `encode_recovery_secret` and `encrypt_backup` the first upload used, so the encoded package is byte-identical to the original apart from the recovery and backup fields, master signature included, because Ed25519 signing is deterministic. Generating a new *identity* instead — the only thing the existing API could have done — would have silently un-verified every contact and invalidated every device cross-signature, which is why the caller may not reach for `prepare_first_identity` here. The flow's ordering is the security property: the secret is shown **only** after the server accepted the higher version, and every refusal says the current secret still works, because the server still holds the blob it opens. Nothing local is rewritten, so no crash can leave a device holding keys that do not match a backup. **The diagnostics export is made safe by its type.** A report is a list of typed entries whose keys are an enumeration and whose values are constructible only from a boolean, an enumeration, a bounded integer or a declared constant — there is no constructor taking runtime text, so a username, a display name, a message body, a device label, a token, a server origin, a capability or a key cannot reach the export, not because a reviewer checked but because the type will not hold one. Counts leave as orders of magnitude and the timestamp is an hour, because an exact description of one person's usage is a needlessly precise thing to put in a document they may hand to somebody else. What is on the screen is byte-for-byte what the copy button copies, in locale-independent ASCII: a screen showing a friendly summary while copying something larger would ask a person to share a document they have not read, which is the failure this surface exists to avoid. The application sends it nowhere and says so; the clipboard is the whole export path and where the text goes next is the user's decision. The counters it reports come from `NetworkDiagnostics`, which piece 06 already made payload-free, now recorded in a bounded in-memory counter owned by `ApplicationRuntime` so both entry points count into one — and deliberately never persisted, because a diagnostics buffer that survived a restart would be a durable record of when its owner used the application. Adds no Dart dependency, no Android library, no permission and no manifest component; adds one native symbol to the export allowlist. Four smaller corrections travel with it, all found by the same audit and all in the settings surface set: the in-conversation "Clear history" row closed the menu and did nothing; Linked Devices was entirely unlocalised, printed a raw failure object to the user, rendered a coarse UTC calendar day through `toLocal()` so every reader west of UTC saw the previous day, and offered an "Add device" button routed to `/devices/enroll`, which is not a route this application has. Opens no production gate, touches no cryptographic construction, and leaves the Beta/Production boundary, the group gate and the delivery behaviour untouched. Full reasoning in "ADR-057 in full" below. |
 | ADR-058 | Accepted | Piece 20's prerequisite becomes seven objectively checkable conditions that fail closed, replacing ADR-044's requirement that somebody make a decision; no exporter is granted and piece 20 stays unstarted (2026-08-25) | The prompt's original condition — piece 19 passing every production gate — is unreachable by this project's own record, since `mls-profile.md` states that gate 2 "cannot be reached by any work inside this project", so as written piece 20 was dead rather than blocked. ADR-044 diagnosed that and re-scoped it to "a decision about which MLS exporter it may derive media keys from", which was right in direction and left the bar unset: whoever wrote the granting ADR would set their own. Two things have also changed underneath it. ADR-055 and ADR-056 landed four days later and made the exporter's availability per-ABI, so on `armeabi-v7a` and `x86_64` the beta MLS stack is withheld entirely and ADR-044's path (b) points at something those devices cannot reach. And the exporter is not reachable as key material on any ABI: `mls_beta.rs` returns SHA-256 over `export_secret` as an epoch-agreement digest and no exporter secret crosses the FFI boundary, so keying media needs a new reviewed native operation nothing had named. The prerequisite is now P1 a granted media-key source named by a dated ADR, in one of exactly two forms; P2 that exporter reachable under its own domain separation and present in the native export allowlist; P3 the same per-ABI permit that governs groups, so voice is never offered where groups are withheld; P4 the frame-encryption contract settled by a recorded decision; P5 an admissible Android wire record under `docs/validation/voice-media/` showing the SFU cannot decrypt; P6 self-hosted LiveKit and TURN with the client package reviewed into the pinned dependency map; P7 a user-facing claim no stronger than the weakest layer underneath. Absence of evidence is refusal, and a partially satisfied list authorizes nothing. This is stricter than what it replaces on every axis: P1(a) preserves the prompt's production condition unchanged, and P2, P3, P4 and P5 are new. Only the four externally blocked registry and ecosystem facts are removed as preconditions for *experimental* voice, and P1(a) keeps every one of them in force for production. No new gate object is added, because voice is neither built nor half-built and a gate with no consumer is decoration; the conditions resolve instead against four mechanisms that already fail closed — the production gate's constructor assertion, `GroupExperimentalGate`'s per-ABI ledger, the native symbol allowlist `build_rust_android.sh` enforces, and the literal dependency map `dependency_policy_test.dart` pins. Also records a conflict rather than resolving it: `voice-and-realtime.md` calls RFC 9605 SFrame the framing contract, `cryptographic-protocol.md` permits LiveKit's own implementation after validation, `backend/SECURITY.md` states audio is SFrame-encrypted, and LiveKit's own documentation names no SFrame anywhere and exposes `EncryptionType` as `kNone`/`kGcm`/`kCustom`. P4 and P5 force that to be answered on evidence. Amends ADR-044's *Piece 20* section, supersedes nothing, opens no production gate, adds no dependency, changes no shipped runtime behaviour, and grants neither exporter path. |
 | ADR-059 | Accepted | The chat page's emoji surface is `emoji_picker_flutter` **4.5.3**, pinned exactly, reached only through one app-owned component, and configured so that it writes nothing to disk; it is at once the newest release and the only one that builds under this project's AGP 9 configuration, it reaches no network and bundles no font, and it brings 7 transitive Dart packages and 40 new Android modules that this decision enumerates rather than leaves to be found later (2026-08-25) | The React row sent a hardcoded `👍` and the composer button inserted a hardcoded `🙂`, in an application whose protocol has carried an arbitrary reaction grapheme since it was written and whose UI specification names an emoji reactor as a required surface — a control presenting itself as more than it is, which §8's own core rules call a defect. Making it real needs a picker, and the picker was evaluated as a dependency rather than as a widget. **The version is not a preference.** 4.5.3's entire changelog entry fixes an Android build failure "on AGP 9 when `android.builtInKotlin=false`", which is exactly what Flutter's own migrator wrote into this project's `gradle.properties` beside `com.android.application` 9.0.1; 4.5.0 is where this package moved its Android plugin *to* built-in Kotlin, so 4.5.0-4.5.2 are exactly the releases that cannot configure here and 4.5.3 restores the legacy path conditionally; 4.4.0 and earlier are superseded rather than tested, so 4.5.3 is both the newest release and the only one in its line that builds, with nothing recent to fall back on (follow-up F2). **It passes the constraint that actually governs**: it ships no asset and no font, every emoji is a Dart string literal compiled into `libapp.so`, glyphs are drawn with the platform emoji face, and its whole `lib/` contains no HTTP, no socket, no image URL and no Google or Firebase reference — its one platform call asks `PaintCompat.hasGlyph` which glyphs this device can draw, through `androidx.core`, already adopted at 1.16.0 under ADR-054. An emoji picker that carried its own Apple/Google/Twitter image sets was rejected on precisely this. **What it costs is on the Android side and is stated in full**: `shared_preferences` arrives to hold recent emoji, and behind it `shared_preferences_android` pulls `androidx.datastore` (with a repackaged protobuf and okio) and `androidx.preference`, which pulls **`androidx.appcompat` 1.1.0 from 2019** and the legacy support-library tree with it — 51 modules on a release runtime classpath become 91, of which 40 artifacts are new, in an application that instantiates no AppCompat class and renders nothing through a `RecyclerView`. That is the largest expansion of the Android set since ADR-054 locked it, it is accepted because the alternative is sourcing and maintaining 1500+ glyphs with per-locale names and skin-tone variants in application code, and it is accepted **enumerated**: the lockfile records every coordinate, `dependency_policy_test.dart` pins the resolved release set as a literal, and `docs/third-party-notices.md` now lists 91 modules instead of 51 and names the protobuf inside the AndroidX wrapper. **The storage half is refused rather than inherited.** The package's two `shared_preferences` features are guarded by `RecentTabBehavior` and `SkinToneConfig.rememberSkinTone`; `AppEmojiPicker` sets the first to `NONE` and leaves the second at its default `false`, so no write is reachable and Android never creates the file, because it creates it on first commit and there is no first commit. Everything else this application knows about a person is in SQLCipher under a Keystore-wrapped key; a plaintext list of the emoji they most recently used would be a durable record of their behaviour outside that boundary, which is the category ADR-057 built the diagnostics export's types to be incapable of holding. Losing recents is a real cost, answered where it matters by a fixed set of common reactions one tap away on the message itself rather than by writing a file. `lib/app/design_system/app_emoji_picker.dart` is the only file naming the package, on ADR-006's rule for Forui, and a new assertion in `design_system_boundary_test.dart` fails if a second one appears — which matters here because the package's defaults turn recents *on*. Adds no permission and no manifest component: both new plugin manifests are empty, and `verify_release_apk.sh --production` passes all seven checks on a built artifact, reading the same permission set and the same five components ADR-054 recorded out of the packaged file; the measured cost is +1.57 MiB on an unsigned production release APK, of which +426 KiB is the Android tree (far less than its own footprint, because almost none of it is reachable) and +1.16 MiB is the emoji data itself - after the wrapper named one locale set instead of letting the package's twelve-way switch keep all of them, which returned exactly 4,096,000 bytes and changes nothing a user sees. It does change the build once: these are the first plugin subprojects here that compile Kotlin, every release build of them failed with "Could not close incremental caches" five times out of five, and `kotlin.incremental=false` is now committed in `android/gradle.properties` with the reasoning beside it, because a release that only builds when somebody remembers a command-line flag is a release process with a hole in it. Also records something the regeneration exposed: `--write-locks` resolves *without* the lock while an ordinary build resolves *with* it, and locking applies the recorded versions as strict constraints, so a regenerated lockfile is not automatically a fixed point — one module the unconstrained graph evicts is kept by the constrained one, and the first regenerated lock was rejected by the next release build (follow-up F4). Opens no production gate, supersedes nothing, and changes no cryptographic construction, protocol, wire format or shipped delivery behaviour. |
+| ADR-060 | Accepted | A delivery cycle sends the user's message before it reads anybody else's, one envelope's failure stays on that envelope, and an envelope this device can never open is retired through a bounded attempt budget into quarantine and acknowledged (2026-08-26) | Measured on real devices: fifteen to twenty seconds to the first `POST /envelopes`, delivery that never arrived, 1.1 MB/min of idle re-download and up to one and a half CPU cores, all of it client-side against a network and backend measured clean. Every stage of a run returned its first failure and the inbound stages ran first, so one unopenable envelope stopped a sealed, durable outbox row from ever leaving the process; nothing retired that envelope, so the server re-served it forever; and a failed cycle scheduled *reconnect* backoff, whose uniform draw was the wait itself. Also: schema 14 repairs the devices already stranded, `cipher_memory_security` is turned off as a defence against a threat the model excludes and could not complete anyway, the socket hint stays a hint because `pruned_through` is how a lost envelope is detected, a response this client refuses now cancels its transfer instead of buffering it whole, and the always-false presence line is withdrawn until `subscribe_presence` exists. |
+
+## ADR-060 in full — what a delivery cycle owes the message the user just sent (2026-08-26)
+
+**Status:** Accepted. Client-side correctness and cost decision. Adds one local schema
+version (13 → 14) and one column. Changes no cryptographic construction, no ciphersuite
+identifier, no protocol, no wire format, no transport trust anchor, and no backend file.
+**Opens no production gate.**
+
+### The question
+
+> Sending a direct message on the beta artifact took fifteen to twenty seconds to reach
+> `POST /api/v1/envelopes`, and the peer never received it — not in twenty-seven minutes,
+> not at all. Meanwhile both devices, completely idle, re-downloaded about 1.1 MB every
+> minute and burned between two thirds and one and a half of a CPU core. Where is that,
+> and what is the smallest set of changes that makes a send a send?
+
+Measured on 2026-08-26 against `0.1.0+1` beta (versionCode 12) on a Samsung A56 and on the
+emulator. The network and the backend were measured first and cleared: ICMP to the server
+averaged 27.9 ms at 0 % loss, a real HTTP round trip from the phone — connect, request,
+response, close — was 107 to 137 ms, and Django plus daphne added about 30 ms over a pure
+nginx response on the same warm connection. The client's own counters agreed: over more
+than a thousand requests, `backend_rejected=0`, `transport_failed=0`, `cancelled=0`,
+`malformed_response=0`, `slowest_response=under2Seconds`. Every finding below is therefore
+client-side, and `backend/` is untouched by this decision.
+
+### D1. A run may not end because one envelope would not open
+
+`DurableSyncEngine._run` executed inbox, then post-inbox work, then acknowledgements, then
+the drain loop, and only then the outbox — and *every* one of those stages returned its
+first failure straight out of `_run`. Inside the inbox pass, an inspection failure that was
+not classified as rejectable wrote a retry row and then returned a failure too.
+
+The consequence is the entire user-visible fault. A device holding one envelope it cannot
+open never reached its own outbox, so a message whose per-recipient ciphertext was already
+sealed and already durable sat in `outbox_operations` while the engine spent every cycle
+failing on somebody else's bytes. Both measured devices were in exactly that state:
+`pending_inbound` frozen at 10-99 on the phone and 100-999 on the emulator, unchanged over
+nine and six minutes respectively, beside `quarantined_input=0`.
+
+**Decided.** A per-envelope failure is recorded against that envelope and the loop
+continues. The one condition that still ends a run is a failure of the *store* — a Drift
+transaction that will not commit — because a run that cannot write anything down cannot
+make progress and would spin. That distinction is drawn by *source*, not by type: a
+`StorageFailure` returned by a `_store` call ends the run; the same type returned by the
+inspector is one envelope's transient problem.
+
+The outbox now runs **first**, before any inbound work, and again at the end. Nothing a
+queued outbox row needs comes from the inbox — the ciphertext is sealed before the row
+exists — so the only thing the ordering decided was who waits for whom, and the answer was
+wrong. The second pass exists because the inbound half queues rows of its own: delivery
+receipts, group Commits, eviction fan-out. It is skipped when the first pass already found
+the transport unwilling, since a transport that refused one batch will refuse the next and
+those rows are durable.
+
+A failure that says the *session* rather than one envelope is unhealthy is still reported:
+it is carried in `_RunProgress.failure` and returned at the end, after the local half of
+the cycle has run to completion. The supervisor therefore still backs off on a transport
+that will not carry a request, and `recordSuccessfulSync` and `markConnectionPhase(online)`
+still happen only when the cycle genuinely completed. Neither had run on either measured
+device, because the run never reached them.
+
+### D2. An envelope this device can never open needs a terminal state
+
+`_isRejectableEnvelopeFailure` accepted a `ValidationFailure`, or a `SecurityFailure` that
+was not `policyBlocked`, and quarantined those. Everything else was retried forever. A
+`CryptoCoreFailure` — the native core refusing these bytes — is not in that set, and
+neither is `SecurityFailure(policyBlocked)` nor an unsupported protocol. So the server
+re-served the envelope on the next drain, the device re-stored it, re-inspected it,
+re-failed, and re-downloaded it again on the cycle after that. That loop is the 1.1 MB per
+minute: a hundred envelopes per page, fetched and stored and never retired, on a device
+where nothing at all was happening.
+
+**Decided.** Envelope inspection gets a bounded attempt budget,
+`SyncEngineLimits.maximumInspectionAttempts`, defaulting to **8**. Causes are split in two:
+
+- **Transient** — `TransportFailure`, `StorageFailure`, `CancellationFailure`,
+  `AuthenticationFailure`, `BackendFailure` that is `rateLimited`, `quotaExceeded` or the
+  `unknown` every unnamed 5xx maps to, and `CryptoCoreFailure` that is `resourceExhausted`
+  or `entropyUnavailable`. These retry and spend no budget. A device that is offline or out
+  of storage has learned nothing about the bytes in hand, and spending the budget on it
+  would quarantine messages the device could have opened.
+- **Settled** — everything else. The native core refused these bytes, policy rejected
+  them, or the protocol is one this build does not implement. No later attempt changes any
+  of those, so each one spends budget, and the eighth retires the envelope.
+
+Retirement is `recordEnvelopeRejection` followed by acknowledgement. Quarantining alone
+would leave `pending_inbound` falling while the server kept serving the same bytes; the
+acknowledgement is what makes the server delete them. The invariant that an envelope is
+never acknowledged without first being either applied or quarantined is unchanged, and a
+quarantine record still carries a numeric `reasonCode` and an empty digest — a number, and
+nothing that could identify anything.
+
+This is deliberately *not* a first-occurrence quarantine, even though every cause in the
+settled class is by definition permanent. A budget of eight costs a device eight attempts
+against bytes it will discard anyway, and buys back the case where the classification
+itself is wrong — a cause listed as settled that a future build handles. Eight failed
+attempts against one envelope is a cheap way to be wrong about that; discarding on the
+first is not.
+
+The budget lives in a new `inbox_envelopes.inspection_failures` column rather than in
+`attempt_count`. They answer different questions: `attempt_count` counts every begun
+attempt, inspection and acknowledgement alike, and drives retry backoff, so it rises while
+a device is merely offline. Overloading it would have made the two classes above
+indistinguishable, which is the whole point of drawing them.
+
+`SyncRunReport` gained `quarantinedEnvelopes` and `failedInspections`. Counts, and
+deliberately nothing else — which envelope, why, and what was in it are all identifiers.
+
+### D3. Ordering by sequence stays, because retirement is what unblocks the head
+
+`beginNextEnvelopeInspection` hands out the oldest due envelope, so a permanently
+un-openable low-sequence row was re-tried ahead of everything else on every pass. Once D1
+stops the pass aborting and D2 retires the row, the ordering is no longer the problem, and
+in-order delivery for healthy envelopes is worth keeping. It is kept.
+
+Two guards make that true rather than nearly true. `SyncRetryPolicy.delayFor` draws
+uniformly from `[0, cap]` and so returns zero on a real fraction of draws; on the
+lowest-sequence row that is a pass which inspects one envelope a thousand times and never
+reaches the second. Inspection retries therefore carry a floor,
+`SyncEngineLimits.minimumInspectionRetry`, of one second — the only thing that makes "leave
+it for later" mean later. And a pass working through a large mailbox can outlive that
+floor, so a pass also remembers what it has already deferred: when the head of the queue is
+something this pass has already dealt with, the pass ends, and the drain, the
+acknowledgements and the outbox all still run.
+
+### D4. Reconnect backoff is not delivery scheduling
+
+`SyncLifecycleSupervisor._runCycles` called `_scheduleReconnect` on *any* failed cycle, and
+that persists `reconnect_at = now + delayFor(attempt)` where the delay is a uniform draw
+from zero to a five-minute cap. That uniform draw **is** the thirteen to twenty seconds the
+user waited, and it is why the two measured runs differed at all: 15.05 s and 19.91 s are
+two samples from the same distribution.
+
+**Decided.** Reconnect backoff exists for a transport that will not carry a request, and is
+applied only to `TransportFailure`, `AuthenticationFailure`, and `BackendFailure`
+`rateLimited`. A cycle that failed locally — an envelope that would not open, a batch the
+server refused on its contents — schedules nothing, and if a request arrived while it was
+running it runs again immediately. That `continue` re-checks the loop condition, so it can
+only repeat while somebody is actually asking; it cannot spin on its own.
+
+The reconnect attempt counter is now retired by any completed cycle, not only by
+`_markStableAfterDelay` thirty seconds after a socket opens. A completed cycle is the
+stronger evidence: it means the REST path carried a drain, an acknowledgement and a send.
+A flag keeps that to a single write, and starts true so the first successful cycle of a
+process clears whatever the previous process left behind.
+
+**And the wake-up that came with it has to be replaced, not simply removed.** This was
+found on the devices rather than in the reasoning: with backoff no longer firing on every
+failed cycle, a row waiting out a retry had nothing left to wake it. Rows in retry-wait are
+the only work in this system that nothing announces — a socket hint is an inbound envelope
+and a growing outbox is a new send, both events with triggers, while a retry is a *time*,
+and the only thing that happened to re-run the engine on one was the bug. So the supervisor
+now arms a wake-up on `SyncProjection.nextRetryAt`, which is already the earliest due time
+across the inbox, the outbox and the reconnect schedule, so one timer covers all three. It
+cannot spin: it arms only for a time in the future, only when that time is earlier than
+whatever it is already waiting for, and the cycle it eventually runs either finishes the
+work or pushes the due time further out. On the emulator this is the difference between a
+poison envelope retiring and a poison envelope sitting until something unrelated happens.
+
+### D5. The devices that already ran the broken engine have to be repaired, not just fixed
+
+A code change alone leaves the measured devices exactly as they are. Their inbox rows are
+stranded in `inspecting` behind attempt counts high enough that the backoff they produce is
+a quarter of an hour of uniform jitter; their outbox rows — including the two stranded
+probe messages — are waiting out the same thing; and the emulator's `conversations`
+projection reads zero while its `messages` rows exist and the chat page renders one from
+them.
+
+**Decided.** Schema 14 carries a one-shot, idempotent repair beside the new column. It
+resets non-terminal inbox rows to `received` with a zero attempt count and no due time,
+does the same for non-terminal outbox rows, un-tombstones any conversation that has
+messages, and inserts a minimal conversation row for any conversation whose row is gone
+entirely. None of it is content, all of it is scheduling and projection state, and all of
+it is derivable — the ordering key comes back from `MAX(ordering_ms)`, and the rendered
+preview is left to the next projector pass rather than guessed at.
+
+The orphan-row branch is defensive: the foreign key makes that state unreachable while it
+is enforced, so it exists for a database written while it was not. The tombstone branch is
+the one the emulator is actually in.
+
+**This ships as an in-place update.** The A56 holds real beta data under a non-exportable
+Keystore key with `allowBackup="false"`; `adb install -r` under the frozen signing identity
+is the only route, `tool/verify_upgrade_continuity.sh` uninstalls the application under
+test and must never be pointed at that device.
+
+### D6. `cipher_memory_security` is turned off
+
+SQLCipher ships `cipher_memory_security` **off** and documents it as a large slowdown; it
+scrubs and locks every allocation the library makes. This project had it on, on the hot
+path of every statement.
+
+**Decided.** It goes, and the reason is not the cost. What it defends against is reading
+plaintext out of a live process, and `docs/threat-model.md` places "a device compromised
+while it can decrypt content" explicitly **outside the guarantee**. Even inside that
+threat, the defence would be partial in a way that makes it decorative: the same plaintext
+is simultaneously in the Dart heap, in the text-shaping and raster buffers of the Flutter
+engine, and in the platform's own view system, and this pragma reaches none of them. What
+the threat model *does* cover — "a person with filesystem access to a locked but otherwise
+uncompromised Android device" — is answered by the SQLCipher key itself, which is
+unchanged, still 256-bit, still wrapped by a non-exportable Keystore key. The line in
+`platform_local_storage_native.dart` is a comment saying this, so the next reader sees a
+decision and not an omission.
+
+`shareAcrossIsolates: true` **stays**, and this is the reason it is written down rather
+than left as a default. Delivery runs from a second entry point — the deferred catch-up
+wakes this process with no user interface at all — so two isolates genuinely can hold this
+database open at once, and a port round trip per statement is the price of that being safe
+rather than a race. It is not a knob to turn until somebody has measured what it actually
+costs after D7.
+
+### D7. The projection watch, the drain page, and the checkpoint row
+
+Three costs, all of them the same shape: work repeated once per envelope that only needed
+doing once.
+
+- **`persistDrainPage` asked about each envelope twice.** One `SELECT … WHERE envelope_id
+  = ?` and one `SELECT … WHERE sequence = ?` per envelope, plus a full `COUNT(*)` over
+  `inbox_envelopes`, inside a single write transaction — roughly two hundred statements per
+  page to establish that all hundred rows were already there, which during any backlog is
+  the ordinary case rather than an edge one. It is now two set-based reads for the whole
+  page, and the capacity check reads one primary-key value past the headroom instead of
+  counting the table. Measured in the suite: **four statements** for a fully re-served
+  hundred-envelope page. The `_ServerInvariant` semantics are byte-for-byte unchanged — a
+  re-served envelope whose ciphertext or sequence disagrees with the stored row is still a
+  hard violation, and so is a second envelope claiming a taken sequence.
+- **`readProjection()` ran once per envelope.** It is a three-subquery aggregate — two
+  `COUNT(*)`s over the two largest tables and a `MIN` over a three-way `UNION ALL` — and
+  the inbox loop recomputed it from scratch on every one of up to a thousand iterations to
+  read one boolean. There is now `readQueueGapState()`, one column off the singleton
+  checkpoint row, read once per pass. Once is correct and not merely cheaper: only
+  `persistDrainPage` sets that flag, which happens between passes, and nothing inside a
+  pass can clear it, because while a gap is open the inspector is forbidden from advancing
+  MLS state and the authenticated re-admission that would retire the obligation cannot be
+  committed from there.
+- **`watchProjection` re-ran that aggregate on every write.** Its `readsFrom` names
+  `sync_checkpoints`, `inbox_envelopes` and `outbox_operations` — exactly the three tables
+  the engine writes on every state transition. It is now conflated on a 250 ms window,
+  which keeps both properties a listener depends on: the first value is emitted
+  immediately, so a restart still replays the durable outbox depth and drains what was
+  queued before the process died, and the last value of every window is always emitted, so
+  no state is skipped. Growth of the outbox depth additionally bypasses an open window
+  entirely, because that transition is the one somebody is waiting on — a message the user
+  has already sent, whose only route out of the process is a listener noticing the rise. So
+  conflation can never cost a send its latency. The window is a constructor parameter so a
+  test can collapse it to one turn of the event loop.
+- **`_ensureCheckpoint` wrote on every read.** An unconditional `INSERT OR IGNORE` against
+  `sync_checkpoint` sat in front of every projection read, every phase transition and every
+  checkpoint read — an insert statement against one of the three tables that watch reads
+  from. It reads first now, and writes only when the row is genuinely absent.
+
+### D8. The socket hint stays a hint
+
+`GatewayRealtimeSyncAdapter` drops the envelope bytes a socket event carries and follows
+every hint with an authoritative REST drain. That was re-examined, and it is **kept**.
+
+The cost is real and now written into the comment: one REST round trip per inbound message,
+107 to 137 ms from a real phone, and one re-download of bytes the socket already delivered.
+What it buys is that one code path decides what is in this device's mailbox. The drain page
+is where `pruned_through` arrives, and `pruned_through` against the local contiguous
+acknowledgement watermark is the *only* way a lost envelope is detected — the mechanism the
+whole queue-gap recovery matrix is built on. A pushed frame carries no such watermark, so
+seeding the inbox from one would be a second admission path that cannot answer the question
+the first exists to answer.
+
+The measured idle traffic that made this look expensive was never this. It was D2: an inbox
+that could not retire what it could not open, so the same hundred envelopes were served,
+stored and served again on every cycle.
+
+### D9. A response this client refuses is a transfer it must stop
+
+Two sockets sat in `CLOSE_WAIT` against the server on the emulator for more than twenty
+minutes, holding 16,456 and 7,546 unread bytes. Reading Dio 5.11.0 rather than guessing:
+under `ResponseType.stream`, Dio does **not** hand back the socket. `handleResponseStream`
+subscribes to it the moment the headers arrive and pumps every byte into an internal
+`StreamController` whose stream is what the caller receives — and that controller has no
+cancel hook. A caller that stops reading stops nothing; the download runs to completion into
+a buffer nobody will read.
+
+The consequence is worse than a leaked socket. `DioRestClient` rejected a response whose
+declared `Content-Length` exceeded `maximumResponseBytes` and returned **without touching
+the body at all**, which means that limit was bounding the *decode* and not the *transfer*:
+the oversized body arrived in full, into Dio's buffer, and the connection was held until it
+did.
+
+**Decided.** Every path that abandons a response cancels the request's `CancelToken`, which
+is what reaches Dio's own subscription and through it the `HttpClientResponse`, so
+`dart:io` stops reading and releases the connection. That covers the declared-size
+rejection, the mid-stream size rejection and caller cancellation. `_readBounded` was also
+rewritten around an explicit subscription so that completion, overflow, cancellation and a
+stream error all leave through one `cancel`.
+
+Cancelling rather than draining is deliberate: the callers here are paths that rejected the
+response *because* it is larger than they are willing to read, so draining it to keep the
+connection poolable would be the same unbounded read under another name.
+
+Connection reuse is addressed alongside it, to the extent it can be without a device.
+`TransportSecurity` now states `idleTimeout` explicitly at thirty seconds rather than
+inheriting a default from whichever layer happens to supply the client: `dart:io` gives
+fifteen seconds and Dio's own factory — which this replaces, and could stop replacing —
+gives three, short enough that a drain and the send after it each pay a fresh TCP and TLS
+handshake. Thirty spans the phases of one delivery cycle and stays inside a stock nginx
+`keepalive_timeout` of sixty-five, so this side gives the connection up first and no
+request races a close it cannot see. **Whether that alone ends the observed churn is not
+measured**, and is recorded as open below.
+
+### D10. The application stops claiming a presence it cannot know
+
+The chat header rendered "online via a subscribed device" or, failing that, "offline". It
+always rendered the second, for everyone, forever — including a peer holding a live socket
+in the same conversation. The reason is structural: `subscribe_presence` is a frame this
+client validates and never sends. The only frame it writes is `auth`. With no subscription
+the server has no target to emit presence to, so `applyPresence` is called by nothing and
+`onlineDeviceCount` is zero by construction.
+
+**Decided.** The claim goes. Implementing `subscribe_presence` is a real feature with its
+own exposure question — a subscription tells the server which peers this device is watching
+— and it is not something to bolt onto a latency fix. Saying nothing is the honest state
+until the subscription exists; the header now speaks only while somebody is actually
+typing. The port, the projection and the frame validation are all left in place, because
+what is missing is the subscription and not the machinery.
+
+### D11. A stalled engine is now visible
+
+Nothing in the application consumed `SyncConnectionPhase`. The engine had been writing it
+all along and no screen read it, so a jammed engine and a slow network looked identical
+from outside — which is how a stall that lasted twenty-seven minutes went unnoticed by the
+person it was happening to.
+
+**Decided.** The chats list carries one content-free line, in the place the offline notice
+already occupies: connecting, syncing, waiting to reconnect, or — when the session is
+settled — nothing at all. Four states, no counts, no identifiers, no timings, and no alarm.
+An indicator that is always on screen is one nobody reads, and this one exists to be
+noticed on the day it stops changing. Every terminal phase — revoked, circuit open, origin
+rejected — reports as waiting, because the session-level surfaces already own those
+conditions and speak about them properly, and a second vaguer voice for them here would be
+worse than silence.
+
+### D12. What the fix unmasked: a delivered receipt owed once per rebuild
+
+Found on the devices, an hour after the rest of this had been installed and was working.
+Both phones were pulling and pushing continuously while nobody was using them — the A56 at
+roughly 250 KB/min inbound and 90 KB/min outbound, the emulator at 80 and 97 — and the rate
+did not decay over two hours, which is not what draining a backlog looks like. Backgrounding
+the application took the device-wide figure to 14 KB/min, so it was this process, and the
+outbound half said it was *sending*, not catching up.
+
+`DriftApplicationEventProjector._writeMessage` queued a delivered receipt whenever
+`pendingDeliveredReceipt` was true, and that flag is derived from three properties that
+never change: the message did not originate locally, the sender is not this account, and the
+conversation is direct. It is a statement that a receipt is owed *in principle*, not that one
+is outstanding. `_rebuildConversation` rewrites every message in a conversation on every
+applied event, so every event re-queued a receipt for every message that conversation had
+ever received — and each receipt is an event at the far end, which rebuilds that conversation
+and re-queues its own. Two devices in one conversation sustain that indefinitely, at a rate
+set by how much history they share.
+
+**Decided.** `messages.delivered_receipt_sent`, modelled on `messages.alerted`, which exists
+for exactly this shape of problem: a durable one-shot marker that a projection rebuild
+preserves because the rebuild's companion omits the column. `completePendingDeliveredReceipts`
+sets it in the same transaction that clears the queue row, and the projector consults it
+before queueing. Schema 15 adds the column, marks every existing message as already
+acknowledged — everything already on a device has had its receipt sent many times over — and
+empties the pending queue, so the upgrade itself does not send one more round.
+
+This is not one of the defects this work set out to fix, and it is not new: the loop has been
+there for as long as the projector has. It could not run, because the engine never reached
+the outbox — the receipts piled up locally behind the same wall as everything else. Fixing
+D1 opened it, and the idle-traffic figure this change is measured against cannot be met while
+it runs, so it is fixed here rather than filed.
+
+### What this does not do
+
+- It does not change `backend/`. The server was measured healthy and its wire contract is
+  correct. Nothing in `messaging/`, `realtime/`, nginx or the daphne unit is touched.
+- It does not weaken TLS or trust. `badCertificateCallback`, `withTrustedRoots: false` and
+  the provisioned-CA path are untouched; the only change in that file is an explicit idle
+  timeout on the pooled client.
+- It does not change the wire contract, the exact-ciphertext semantics of an outbox row, or
+  the rule that every network call is bracketed by a Drift journal transition.
+- It does not add a diagnostics field. `pending_inbound`, `quarantined_input` and
+  `conversations` already answer everything this change needs answered, and
+  `DiagnosticValue` still has no constructor that accepts a runtime string.
+
+### What it was worth, measured
+
+The before-and-after table is in
+[`docs/validation/delivery-latency/2026-08-26-adr-060/`](validation/delivery-latency/2026-08-26-adr-060/README.md),
+taken on the same two devices as the investigation, upgraded in place. In short:
+`pending_inbound` went from frozen at `10-99` and `100-999` to **zero** on both;
+`quarantined_input` from `0` to `100-999`, which is what a terminal state looks
+like from outside; the emulator's `conversations` from `0` to matching its own
+list; idle CPU from 4.37 CPU-s per ten seconds to **0.00**; and a message from
+one device was on the other **2.33 seconds** after the tap, against never. Both
+messages the investigation left stranded delivered, and `durably delivered` — the
+state that had never been reached at all — now arrives in both directions.
+
+Two readings carry caveats that are stated in full in that record rather than
+smoothed over here: idle traffic can only be measured device-wide on these
+kernels and is not certified under the twenty-kilobyte target, and the
+send-latency instrument cannot resolve below about two and a half seconds, so
+the sub-second figure is reached by implication from the peer-arrival number
+rather than measured directly.
+
+### Open, and named as open
+
+- **Connection reuse (D9) is unverified.** The leak is fixed and the keep-alive lifetime is
+  stated, but whether the measured `TIME_WAIT` churn ends is a device measurement that has
+  not been taken.
+- **`shareAcrossIsolates` (D6) is unmeasured.** It stays until somebody measures the port
+  round trip against the statement volume that survives D7.
+- **`subscribe_presence` (D10) is unimplemented.** Presence is absent rather than wrong,
+  which is the correct interim state and not the finished one.
+- **The idle-traffic target is not certified.** Neither device offers per-uid byte
+  accounting, so the residual can only be bounded, and what bounding it shows is socket
+  reconnect churn on a transport both devices already report as the thing that fails —
+  which is a different question from this one.
 
 ## ADR-059 in full — the chat page's emoji surface, and what it costs (2026-08-25)
 

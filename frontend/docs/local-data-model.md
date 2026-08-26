@@ -129,6 +129,20 @@ cross-check authorization rather than trusting a server-supplied projection.
   remain readable as local history, but absent cryptographic evidence cannot construct a
   verified v3 Welcome transcript and therefore fails closed. Disposable v2 beta groups
   must be recreated/rejoined; no opaque MLS state is silently rewritten.
+- Schema version 14 adds `inbox_envelopes.inspection_failures` and carries a one-shot,
+  idempotent repair for the devices that ran the delivery engine before
+  [ADR-060](decisions.md): non-terminal inbox and outbox rows are reset to a zero attempt
+  count with no due time, a conversation that has messages is un-tombstoned, and a
+  conversation whose row is missing entirely is rebuilt minimally from `MAX(ordering_ms)`.
+  It touches no message content, no envelope ciphertext and no projection ciphertext, and
+  is safe to run twice.
+- Schema version 15 adds `messages.delivered_receipt_sent`, a durable one-shot marker in the
+  style of `messages.alerted`. Whether a delivered receipt was owed used to be re-derived on
+  every projection rebuild from properties of the message that never change, so every rebuild
+  re-queued one for every message the conversation had received — and a receipt is an event
+  at the far end, so two devices sustained the loop indefinitely ([ADR-060](decisions.md)).
+  The upgrade marks every existing message as already acknowledged and empties the pending
+  queue, so it does not itself send one more round.
 
 ## Retention and deletion
 
