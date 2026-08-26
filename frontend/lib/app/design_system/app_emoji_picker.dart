@@ -36,11 +36,40 @@ import 'package:flutter/material.dart';
 /// adopts at 1.16.0 under ADR-054. Off Android the package short-circuits
 /// before the channel, so a widget test on this workstation never reaches it.
 class AppEmojiPicker extends StatelessWidget {
-  const AppEmojiPicker({required this.onSelected, this.height, super.key});
+  const AppEmojiPicker({
+    this.onSelected,
+    this.controller,
+    this.showBackspace = false,
+    this.height,
+    super.key,
+  }) : assert(
+         onSelected != null || controller != null,
+         'A picker that neither reports a selection nor edits a field does '
+         'nothing when it is tapped.',
+       );
 
   /// Called with the selected emoji grapheme. The component neither inserts nor
   /// sends it: what happens next belongs to the caller.
-  final ValueChanged<String> onSelected;
+  ///
+  /// A caller that passes [controller] does not need this: the package has
+  /// already written the emoji into the field by the time this runs, so a
+  /// listener that inserted again would type every emoji twice.
+  final ValueChanged<String>? onSelected;
+
+  /// The field this picker edits directly.
+  ///
+  /// Given one, the package inserts at the caret and the backspace button
+  /// deletes by grapheme cluster, which is what a picker that stays open across
+  /// many selections needs. Leave it null for a picker that reports a single
+  /// choice and closes.
+  final TextEditingController? controller;
+
+  /// Whether to draw the backspace button.
+  ///
+  /// Backspace edits a text field the caller may not have: the reaction
+  /// selector has none. A control that cannot act is one the UI specification's
+  /// core rules refuse to draw, so this stays off unless [controller] is given.
+  final bool showBackspace;
 
   /// Explicit height. When absent the picker takes a share of the viewport, so
   /// it stays usable at the narrow breakpoint without swallowing a wide one.
@@ -66,7 +95,8 @@ class AppEmojiPicker extends StatelessWidget {
         child: SizedBox(
           height: resolvedHeight,
           child: picker.EmojiPicker(
-            onEmojiSelected: (_, selected) => onSelected(selected.emoji),
+            textEditingController: controller,
+            onEmojiSelected: (_, selected) => onSelected?.call(selected.emoji),
             config: picker.Config(
               height: resolvedHeight,
               // Only the emoji *names* are localized, and the package carries
@@ -117,10 +147,9 @@ class AppEmojiPicker extends StatelessWidget {
                 dividerColor: colors.border,
               ),
               bottomActionBarConfig: picker.BottomActionBarConfig(
-                // Backspace edits a text field the caller may not have: the
-                // reaction selector has none. A control that cannot act is one
-                // the UI specification's core rules refuse to draw.
-                showBackspaceButton: false,
+                // Off unless the caller gave a field to edit: see
+                // [showBackspace].
+                showBackspaceButton: showBackspace,
                 backgroundColor: colors.surfaceRaised,
                 buttonColor: colors.surfaceRaised,
                 buttonIconColor: colors.textPrimary,

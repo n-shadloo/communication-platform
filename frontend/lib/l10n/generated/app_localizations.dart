@@ -1694,6 +1694,12 @@ abstract class AppLocalizations {
   /// **'Insert emoji'**
   String get chatEmojiAction;
 
+  /// Accessible name of the composer's emoji button while the inline emoji panel is open. Pressing it hides the panel and returns the soft keyboard, so the label names what the press does rather than what the panel is.
+  ///
+  /// In en, this message translates to:
+  /// **'Close emoji panel'**
+  String get chatEmojiPanelCloseAction;
+
   /// Accessible name of the full emoji picker surface (ADR-059). It is opened both from the composer and from the reaction selector, so the wording names the surface rather than either caller.
   ///
   /// In en, this message translates to:

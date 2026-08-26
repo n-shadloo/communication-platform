@@ -578,26 +578,45 @@ class ChatMessageBuilder extends StatelessWidget {
         ),
       ),
     );
-    return Align(
-      alignment: message.outgoing
-          ? AlignmentDirectional.centerEnd
-          : AlignmentDirectional.centerStart,
-      child: FractionallySizedBox(
-        widthFactor:
-            AppBreakpoints.of(MediaQuery.sizeOf(context).width) ==
-                AppWidthClass.narrow
-            ? 0.82
-            : 0.70,
-        child: bubble,
-      ),
+    // A fraction of the row is the bubble's *limit*, not its size.
+    // `FractionallySizedBox` passes a tight width down, so every bubble was
+    // exactly 82% of the row whatever it held, and a two-word message drew a
+    // reaction row and a timestamp across empty space. A maximum leaves the
+    // width to the content and keeps the long-message behaviour identical.
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final widthClass = AppBreakpoints.of(MediaQuery.sizeOf(context).width);
+        final limit = constraints.hasBoundedWidth
+            ? constraints.maxWidth
+            : MediaQuery.sizeOf(context).width;
+        return Align(
+          alignment: message.outgoing
+              ? AlignmentDirectional.centerEnd
+              : AlignmentDirectional.centerStart,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxWidth:
+                  limit * (widthClass == AppWidthClass.narrow ? 0.82 : 0.70),
+            ),
+            child: bubble,
+          ),
+        );
+      },
     );
   }
 
   Widget _content(BuildContext context) {
     final strings = AppLocalizations.of(context);
     final colors = context.tokens.colors;
+    // `stretch` is what forced a bubble to fill whatever width it was given:
+    // a stretched column takes `constraints.maxWidth`, so the maximum set
+    // above would have been the size again. Aligning to the message's own side
+    // lets every row size to itself, which is the whole point of the change.
+    final align = message.outgoing
+        ? CrossAxisAlignment.end
+        : CrossAxisAlignment.start;
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
+      crossAxisAlignment: align,
       children: [
         if (message.firstInAuthorGroup && !message.outgoing)
           Padding(
@@ -672,6 +691,11 @@ class ChatMessageBuilder extends StatelessWidget {
           ChatTimelineContentKind.unsupported =>
             const _UnsupportedMessageContent(),
         },
+        // This row is the one the reader called out: under `stretch` it was
+        // handed the bubble's full width whatever it held, so a single chip sat
+        // in a box the size of the message. Under a column that no longer
+        // stretches the `Wrap` takes the width of its chips and opens a new run
+        // once the bubble's width is used up.
         if (message.reactions.isNotEmpty)
           Padding(
             padding: const EdgeInsets.only(top: AppSpacing.x2),
@@ -695,6 +719,13 @@ class ChatMessageBuilder extends StatelessWidget {
             ),
           ),
         const SizedBox(height: AppSpacing.x1),
+        // The metadata keeps a row of its own rather than joining the last line
+        // of text. Beside the text it fits at one width and not at the next, so
+        // a bubble's height would start depending on the viewport, and a resize
+        // would hand the reading anchor a height change it cannot correct in
+        // one pass. On its own row the height is the same at every width, and
+        // the row follows the column: trailing on this user's own messages,
+        // leading on the other side's.
         Wrap(
           alignment: WrapAlignment.end,
           crossAxisAlignment: WrapCrossAlignment.center,
@@ -731,15 +762,16 @@ class ChatMessageBuilder extends StatelessWidget {
             _DeliveryIndicator(state: message.delivery),
           ],
         ),
+        // No `Align` around the retry: an `Align` takes the width it is offered
+        // and would put the bubble back at its maximum. A failed send is always
+        // this user's own, so the column's trailing alignment is already the
+        // alignment this button wants.
         if (message.delivery == ChatDeliveryViewState.failed)
-          Align(
-            alignment: AlignmentDirectional.centerEnd,
-            child: TextButton.icon(
-              onPressed: () => onIntent(RetryMessageIntent(message)),
-              icon: AppIcon(AppIcons.retry, color: colors.danger, size: 16),
-              label: Text(strings.chatRetrySendAction),
-              style: TextButton.styleFrom(foregroundColor: colors.danger),
-            ),
+          TextButton.icon(
+            onPressed: () => onIntent(RetryMessageIntent(message)),
+            icon: AppIcon(AppIcons.retry, color: colors.danger, size: 16),
+            label: Text(strings.chatRetrySendAction),
+            style: TextButton.styleFrom(foregroundColor: colors.danger),
           ),
       ],
     );
@@ -1018,6 +1050,7 @@ class ChatComposerBuilderState extends State<ChatComposerBuilder> {
   final FocusNode _focusNode = FocusNode();
   ChatComposerMode _mode = ChatComposerMode.compose;
   ChatMessageViewModel? _contextMessage;
+  bool _emojiPanelOpen = false;
 
   @override
   void initState() {
@@ -1041,6 +1074,7 @@ class ChatComposerBuilderState extends State<ChatComposerBuilder> {
         setState(() {
           _mode = ChatComposerMode.reply;
           _contextMessage = message;
+          _emojiPanelOpen = false;
         });
         _focusNode.requestFocus();
       case BeginEditMessageIntent(:final message):
@@ -1051,6 +1085,7 @@ class ChatComposerBuilderState extends State<ChatComposerBuilder> {
           _controller.selection = TextSelection.collapsed(
             offset: _controller.text.length,
           );
+          _emojiPanelOpen = false;
         });
         _focusNode.requestFocus();
       default:
@@ -1072,7 +1107,30 @@ class ChatComposerBuilderState extends State<ChatComposerBuilder> {
       _mode = ChatComposerMode.compose;
       _contextMessage = null;
       _controller.clear();
+      _emojiPanelOpen = false;
     });
+  }
+
+  /// Swaps the emoji panel for the soft keyboard, or back.
+  ///
+  /// The two never stack: opening drops focus so the keyboard retracts and the
+  /// panel takes the space it leaves, and closing asks for focus back. The
+  /// draft and the caret belong to the controller, which neither transition
+  /// touches.
+  void _toggleEmojiPanel() {
+    final opening = !_emojiPanelOpen;
+    if (opening) {
+      _focusNode.unfocus();
+    }
+    setState(() => _emojiPanelOpen = opening);
+    if (!opening) {
+      _focusNode.requestFocus();
+    }
+  }
+
+  void _closeEmojiPanel() {
+    if (!_emojiPanelOpen) return;
+    setState(() => _emojiPanelOpen = false);
   }
 
   void _submit() {
@@ -1100,6 +1158,7 @@ class ChatComposerBuilderState extends State<ChatComposerBuilder> {
       _controller.clear();
       _mode = ChatComposerMode.compose;
       _contextMessage = null;
+      _emojiPanelOpen = false;
     });
   }
 
@@ -1115,147 +1174,148 @@ class ChatComposerBuilderState extends State<ChatComposerBuilder> {
     // frame or two, and a control that disappears and comes back reads as a
     // fault; one that is briefly unavailable does not.
     final ready = gate == ChatSecurityGate.ready;
-    return Material(
-      color: context.tokens.colors.surface,
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          border: Border(top: BorderSide(color: context.tokens.colors.border)),
-        ),
-        child: SafeArea(
-          top: false,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (widget.offline)
-                Semantics(
-                  liveRegion: true,
-                  child: Container(
-                    width: double.infinity,
-                    color: context.tokens.colors.warning.withValues(
-                      alpha: 0.14,
-                    ),
-                    padding: const EdgeInsets.all(AppSpacing.x2),
-                    child: Text(
-                      strings.chatOfflineQueueNotice,
-                      style: context.tokens.typography.compact,
-                      textAlign: TextAlign.center,
+    return PopScope(
+      // Back closes the panel before it leaves the conversation, the way it
+      // dismisses a keyboard rather than the screen behind one.
+      canPop: !_emojiPanelOpen,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _closeEmojiPanel();
+      },
+      child: Material(
+        color: context.tokens.colors.surface,
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            border: Border(
+              top: BorderSide(color: context.tokens.colors.border),
+            ),
+          ),
+          child: SafeArea(
+            top: false,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (widget.offline)
+                  Semantics(
+                    liveRegion: true,
+                    child: Container(
+                      width: double.infinity,
+                      color: context.tokens.colors.warning.withValues(
+                        alpha: 0.14,
+                      ),
+                      padding: const EdgeInsets.all(AppSpacing.x2),
+                      child: Text(
+                        strings.chatOfflineQueueNotice,
+                        style: context.tokens.typography.compact,
+                        textAlign: TextAlign.center,
+                      ),
                     ),
                   ),
-                ),
-              if (_contextMessage != null)
-                _ComposerContextStrip(
-                  mode: _mode,
-                  message: _contextMessage!,
-                  onCancel: _cancelContext,
-                ),
-              Padding(
-                padding: const EdgeInsets.all(AppSpacing.x2),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    AppIconButton(
-                      icon: AppIcons.attach,
-                      semanticLabel: strings.chatAttachAction,
-                      onPressed: ready
-                          ? () => widget.onIntent(const OpenAttachmentIntent())
-                          : null,
-                      kind: AppButtonKind.ghost,
-                    ),
-                    Expanded(
-                      child: ConstrainedBox(
-                        constraints: const BoxConstraints(maxHeight: 144),
-                        child: TextField(
-                          key: const ValueKey('chat-composer-field'),
-                          controller: _controller,
-                          focusNode: _focusNode,
-                          enabled: ready,
-                          minLines: 1,
-                          maxLines: 6,
-                          textInputAction: TextInputAction.newline,
-                          keyboardType: TextInputType.multiline,
-                          maxLength: 16384,
-                          buildCounter:
-                              (
-                                context, {
-                                required currentLength,
-                                required isFocused,
-                                maxLength,
-                              }) => currentLength > 15000
-                              ? Text(
-                                  '$currentLength / $maxLength',
-                                  style: context.tokens.typography.label,
-                                )
-                              : null,
-                          decoration: InputDecoration(
-                            hintText: widget.savedMessages
-                                ? strings.savedMessagesComposerHint
-                                : strings.chatComposerHint,
-                            filled: true,
-                            fillColor: context.tokens.colors.surfaceRaised,
-                            border: const OutlineInputBorder(
-                              borderRadius: AppRadii.control,
-                              borderSide: BorderSide.none,
+                if (_contextMessage != null)
+                  _ComposerContextStrip(
+                    mode: _mode,
+                    message: _contextMessage!,
+                    onCancel: _cancelContext,
+                  ),
+                Padding(
+                  padding: const EdgeInsets.all(AppSpacing.x2),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      AppIconButton(
+                        icon: AppIcons.attach,
+                        semanticLabel: strings.chatAttachAction,
+                        onPressed: ready
+                            ? () =>
+                                  widget.onIntent(const OpenAttachmentIntent())
+                            : null,
+                        kind: AppButtonKind.ghost,
+                      ),
+                      Expanded(
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(maxHeight: 144),
+                          child: TextField(
+                            key: const ValueKey('chat-composer-field'),
+                            controller: _controller,
+                            focusNode: _focusNode,
+                            enabled: ready,
+                            minLines: 1,
+                            maxLines: 6,
+                            textInputAction: TextInputAction.newline,
+                            keyboardType: TextInputType.multiline,
+                            maxLength: 16384,
+                            buildCounter:
+                                (
+                                  context, {
+                                  required currentLength,
+                                  required isFocused,
+                                  maxLength,
+                                }) => currentLength > 15000
+                                ? Text(
+                                    '$currentLength / $maxLength',
+                                    style: context.tokens.typography.label,
+                                  )
+                                : null,
+                            decoration: InputDecoration(
+                              hintText: widget.savedMessages
+                                  ? strings.savedMessagesComposerHint
+                                  : strings.chatComposerHint,
+                              filled: true,
+                              fillColor: context.tokens.colors.surfaceRaised,
+                              border: const OutlineInputBorder(
+                                borderRadius: AppRadii.control,
+                                borderSide: BorderSide.none,
+                              ),
                             ),
+                            onSubmitted: (_) {
+                              if (HardwareKeyboard.instance.isControlPressed) {
+                                _submit();
+                              }
+                            },
                           ),
-                          onSubmitted: (_) {
-                            if (HardwareKeyboard.instance.isControlPressed) {
-                              _submit();
-                            }
-                          },
                         ),
                       ),
-                    ),
-                    const SizedBox(width: AppSpacing.x1),
-                    // The emoji button stays put. It used to be swapped out for
-                    // Send as soon as the draft had a character in it, which
-                    // meant an emoji could only ever be inserted into an empty
-                    // field - and "insert at the caret" had nothing to insert
-                    // into. Send appears beside it instead of in place of it.
-                    AppIconButton(
-                      icon: AppIcons.emoji,
-                      semanticLabel: strings.chatEmojiAction,
-                      onPressed: ready ? () => unawaited(_insertEmoji()) : null,
-                      kind: AppButtonKind.ghost,
-                    ),
-                    if (_controller.text.trim().isNotEmpty) ...[
                       const SizedBox(width: AppSpacing.x1),
+                      // The emoji button stays put. It used to be swapped out for
+                      // Send as soon as the draft had a character in it, which
+                      // meant an emoji could only ever be inserted into an empty
+                      // field - and "insert at the caret" had nothing to insert
+                      // into. Send appears beside it instead of in place of it.
                       AppIconButton(
-                        icon: AppIcons.send,
-                        semanticLabel: _mode == ChatComposerMode.edit
-                            ? strings.chatSaveEditAction
-                            : strings.chatSendAction,
-                        onPressed: ready ? _submit : null,
-                        kind: AppButtonKind.primary,
+                        icon: _emojiPanelOpen
+                            ? AppIcons.keyboard
+                            : AppIcons.emoji,
+                        semanticLabel: _emojiPanelOpen
+                            ? strings.chatEmojiPanelCloseAction
+                            : strings.chatEmojiAction,
+                        onPressed: ready ? _toggleEmojiPanel : null,
+                        kind: AppButtonKind.ghost,
                       ),
+                      if (_controller.text.trim().isNotEmpty) ...[
+                        const SizedBox(width: AppSpacing.x1),
+                        AppIconButton(
+                          icon: AppIcons.send,
+                          semanticLabel: _mode == ChatComposerMode.edit
+                              ? strings.chatSaveEditAction
+                              : strings.chatSendAction,
+                          onPressed: ready ? _submit : null,
+                          kind: AppButtonKind.primary,
+                        ),
+                      ],
                     ],
-                  ],
+                  ),
                 ),
-              ),
-            ],
+                // The panel is part of the composer, not a sheet over it: it
+                // stays open across as many selections as the user wants, and
+                // the field it is typing into stays visible directly above it.
+                // Insertion at the caret and grapheme-wise backspace are the
+                // package's own, driven by the controller handed to it.
+                if (_emojiPanelOpen)
+                  AppEmojiPicker(controller: _controller, showBackspace: true),
+              ],
+            ),
           ),
         ),
       ),
-    );
-  }
-
-  /// Opens the picker and inserts what comes back at the caret.
-  ///
-  /// Dismissing it returns null and changes nothing, so the draft the composer
-  /// is holding survives a backdrop tap and a back gesture. An emoji is a
-  /// grapheme cluster of more than one UTF-16 unit, so the caret moves by the
-  /// string's length rather than by one.
-  Future<void> _insertEmoji() async {
-    final emoji = await showAppEmojiPicker(context);
-    if (emoji == null || !mounted) {
-      return;
-    }
-    final text = _controller.text;
-    final selection = _controller.selection;
-    final start = selection.isValid ? selection.start : text.length;
-    final end = selection.isValid ? selection.end : text.length;
-    _controller.value = TextEditingValue(
-      text: text.replaceRange(start, end, emoji),
-      selection: TextSelection.collapsed(offset: start + emoji.length),
     );
   }
 }
@@ -1505,8 +1565,16 @@ class _ReactionChip extends StatelessWidget {
             ),
             borderRadius: AppRadii.pill,
           ),
-          alignment: Alignment.center,
-          child: Text('${reaction.emoji} ${reaction.count}'),
+          // No `alignment`: a `Container` given one wraps its child in an
+          // `Align`, which takes every pixel it is offered, and that is what
+          // drew one chip as a pill the width of the whole message. The minimum
+          // width reaches the text through the container's constraints instead,
+          // so `textAlign` centres a short label inside a chip that is still
+          // only as wide as it needs to be.
+          child: Text(
+            '${reaction.emoji} ${reaction.count}',
+            textAlign: TextAlign.center,
+          ),
         ),
       ),
     ),

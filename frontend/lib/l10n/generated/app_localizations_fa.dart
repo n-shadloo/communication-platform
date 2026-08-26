@@ -913,6 +913,9 @@ class AppLocalizationsFa extends AppLocalizations {
   String get chatEmojiAction => 'درج شکلک';
 
   @override
+  String get chatEmojiPanelCloseAction => 'بستن پنل شکلک';
+
+  @override
   String get emojiPickerLabel => 'انتخابگر شکلک';
 
   @override

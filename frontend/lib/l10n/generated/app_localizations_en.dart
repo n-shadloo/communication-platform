@@ -915,6 +915,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get chatEmojiAction => 'Insert emoji';
 
   @override
+  String get chatEmojiPanelCloseAction => 'Close emoji panel';
+
+  @override
   String get emojiPickerLabel => 'Emoji picker';
 
   @override

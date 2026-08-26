@@ -380,6 +380,10 @@
   "chatComposerHint": "Message",
   "chatAttachAction": "Attach",
   "chatEmojiAction": "Insert emoji",
+  "chatEmojiPanelCloseAction": "Close emoji panel",
+  "@chatEmojiPanelCloseAction": {
+    "description": "Accessible name of the composer's emoji button while the inline emoji panel is open. Pressing it hides the panel and returns the soft keyboard, so the label names what the press does rather than what the panel is."
+  },
   "emojiPickerLabel": "Emoji picker",
   "@emojiPickerLabel": {
     "description": "Accessible name of the full emoji picker surface (ADR-059). It is opened both from the composer and from the reaction selector, so the wording names the surface rather than either caller."

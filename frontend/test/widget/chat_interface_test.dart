@@ -406,9 +406,26 @@ void main() {
         TextDirection.rtl,
       );
     });
+
+    testWidgets('the inline composer panel lays out in Persian RTL at '
+        '${size.width}', (tester) async {
+      await _pump(
+        tester,
+        ChatConversationView(model: _model(), onIntent: (_) {}),
+        size: size,
+        locale: const Locale('fa'),
+      );
+      await tester.tap(_composerEmojiButton);
+      await tester.pumpAndSettle();
+
+      expect(find.byType(AppEmojiPicker), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
   }
 
-  testWidgets('the composer emoji button inserts at the caret', (tester) async {
+  testWidgets('the emoji panel inserts at the caret and stays open', (
+    tester,
+  ) async {
     await _pump(
       tester,
       ChatConversationView(model: _model(), onIntent: (_) {}),
@@ -420,6 +437,7 @@ void main() {
         const TextSelection.collapsed(offset: 1);
     await tester.pump();
 
+    expect(find.byType(AppEmojiPicker), findsNothing);
     await tester.tap(find.bySemanticsLabel('Insert emoji').first);
     await tester.pumpAndSettle();
     expect(find.byType(AppEmojiPicker), findsOneWidget);
@@ -433,10 +451,23 @@ void main() {
       controller.selection,
       TextSelection.collapsed(offset: 1 + '😀'.length),
     );
+    // The panel belongs to the composer, so one choice is not the end of the
+    // visit. This is the whole difference from the sheet it replaced.
+    expect(find.byType(AppEmojiPicker), findsOneWidget);
+
+    await tester.tap(find.text('😃').first);
+    await tester.pumpAndSettle();
+    expect(controller.text, 'a😀😃b');
+
+    await tester.tap(find.bySemanticsLabel('Close emoji panel').first);
+    await tester.pumpAndSettle();
     expect(find.byType(AppEmojiPicker), findsNothing);
+    expect(controller.text, 'a😀😃b');
   });
 
-  testWidgets('dismissing the picker leaves the draft alone', (tester) async {
+  testWidgets('the back gesture closes the panel and leaves the draft alone', (
+    tester,
+  ) async {
     await _pump(
       tester,
       ChatConversationView(model: _model(), onIntent: (_) {}),
@@ -449,8 +480,8 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(AppEmojiPicker), findsOneWidget);
 
-    // The back gesture, which leaves by the same door as the backdrop.
-    tester.state<NavigatorState>(find.byType(Navigator).first).pop();
+    // The system back, which the panel answers before the route does.
+    await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
 
     expect(find.byType(AppEmojiPicker), findsNothing);
@@ -458,6 +489,96 @@ void main() {
       tester.widget<TextField>(field).controller!.text,
       'draft worth keeping',
     );
+  });
+
+  testWidgets('a short message sizes the bubble and its reactions to what '
+      'they hold', (tester) async {
+    await _pump(
+      tester,
+      ChatConversationView(
+        model: _model(
+          messages: [
+            _message(
+              0,
+              text: 'ok',
+              reactions: const [
+                ChatReactionViewModel(
+                  emoji: '👍',
+                  count: 1,
+                  selectedByCurrentUser: false,
+                ),
+              ],
+            ),
+          ],
+        ),
+        onIntent: (_) {},
+      ),
+    );
+
+    // 430 logical pixels is `_pump`'s default row. The bubble used to be
+    // exactly 0.82 of it whatever the message said, which is what made a single
+    // reaction chip look like it was floating in a full-width box.
+    const rowWidth = 430.0;
+    final bubbleWidth = tester
+        .getSize(find.byKey(ValueKey('message-${_id(0)}')))
+        .width;
+    expect(bubbleWidth, lessThan(rowWidth * 0.82));
+
+    final reactions = find
+        .ancestor(of: find.text('👍 1'), matching: find.byType(Wrap))
+        .first;
+    expect(tester.getSize(reactions).width, lessThan(bubbleWidth));
+  });
+
+  testWidgets('reactions past the bubble width move to the next run', (
+    tester,
+  ) async {
+    const emojis = [
+      '👍',
+      '👎',
+      '❤️',
+      '🔥',
+      '🥰',
+      '👏',
+      '😁',
+      '🤔',
+      '🤯',
+      '😱',
+      '🎉',
+      '💯',
+    ];
+    await _pump(
+      tester,
+      ChatConversationView(
+        model: _model(
+          messages: [
+            _message(
+              0,
+              text: 'ok',
+              reactions: [
+                for (final emoji in emojis)
+                  ChatReactionViewModel(
+                    emoji: emoji,
+                    count: 1,
+                    selectedByCurrentUser: false,
+                  ),
+              ],
+            ),
+          ],
+        ),
+        onIntent: (_) {},
+      ),
+    );
+    expect(tester.takeException(), isNull);
+
+    final reactions = find
+        .ancestor(of: find.text('👍 1'), matching: find.byType(Wrap))
+        .first;
+    final size = tester.getSize(reactions);
+    // One chip is 32 high, so a taller row is a second run rather than an
+    // overflow or a horizontal scroll.
+    expect(size.height, greaterThan(32));
+    expect(size.width, lessThanOrEqualTo(430.0 * 0.82));
   });
 
   testWidgets('forward picker dispatches immutable targets as a typed intent', (
@@ -735,6 +856,13 @@ void main() {
     expect(find.text('Chats are unavailable'), findsOneWidget);
   });
 }
+
+/// The composer's emoji button, found by its icon rather than its wording so
+/// the Persian run does not depend on the translation staying put. It is the
+/// only place in the timeline that draws this icon.
+final _composerEmojiButton = find.byWidgetPredicate(
+  (widget) => widget is AppIcon && identical(widget.data, AppIcons.emoji),
+);
 
 /// Opens the message surface the way a person does: one tap on the bubble.
 ///

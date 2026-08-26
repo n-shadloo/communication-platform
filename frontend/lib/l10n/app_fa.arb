@@ -309,6 +309,7 @@
   "chatComposerHint": "پیام",
   "chatAttachAction": "پیوست",
   "chatEmojiAction": "درج شکلک",
+  "chatEmojiPanelCloseAction": "بستن پنل شکلک",
   "emojiPickerLabel": "انتخابگر شکلک",
   "emojiPickerSearchHint": "جست‌وجوی شکلک",
   "chatSendAction": "ارسال پیام رمزنگاری‌شده",
