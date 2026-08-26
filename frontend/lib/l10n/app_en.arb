@@ -280,6 +280,9 @@
   "@chatsListSearchScopeNotice": {
     "description": "The chat list filters on title and last-message preview and nothing else. Before ADR-052 it borrowed the in-conversation notice, which promised a search of this device's history that the list has never performed."
   },
+  "chatsDeliveryConnectingNotice": "Connecting…",
+  "chatsDeliverySyncingNotice": "Syncing…",
+  "chatsDeliveryWaitingNotice": "Waiting to reconnect…",
   "chatsOfflineCachedNotice": "Offline — showing cached conversations. New messages will queue locally.",
   "chatsNoMessagesPreview": "No messages yet",
   "chatsConversationActionsLabel": "Conversation actions",
@@ -413,8 +416,6 @@
   "chatPinnedExpandAction": "View all",
   "chatPinnedMessagesTitle": "Pinned messages",
   "chatTypingStatus": "typing… encrypted signal may lag",
-  "chatSocketOnlineStatus": "online via a subscribed device",
-  "chatOfflinePresenceStatus": "offline",
   "chatSearchAction": "Search in chat",
   "chatSearchInputLabel": "Search local messages",
   "chatSearchEmptyQueryTitle": "Search this device's history",

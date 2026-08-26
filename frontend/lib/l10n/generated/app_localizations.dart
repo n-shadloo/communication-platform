@@ -1340,6 +1340,24 @@ abstract class AppLocalizations {
   /// **'This list matches names and the latest message only. To search a conversation\'s history, open it and search inside.'**
   String get chatsListSearchScopeNotice;
 
+  /// No description provided for @chatsDeliveryConnectingNotice.
+  ///
+  /// In en, this message translates to:
+  /// **'Connecting…'**
+  String get chatsDeliveryConnectingNotice;
+
+  /// No description provided for @chatsDeliverySyncingNotice.
+  ///
+  /// In en, this message translates to:
+  /// **'Syncing…'**
+  String get chatsDeliverySyncingNotice;
+
+  /// No description provided for @chatsDeliveryWaitingNotice.
+  ///
+  /// In en, this message translates to:
+  /// **'Waiting to reconnect…'**
+  String get chatsDeliveryWaitingNotice;
+
   /// No description provided for @chatsOfflineCachedNotice.
   ///
   /// In en, this message translates to:
@@ -1801,18 +1819,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'typing… encrypted signal may lag'**
   String get chatTypingStatus;
-
-  /// No description provided for @chatSocketOnlineStatus.
-  ///
-  /// In en, this message translates to:
-  /// **'online via a subscribed device'**
-  String get chatSocketOnlineStatus;
-
-  /// No description provided for @chatOfflinePresenceStatus.
-  ///
-  /// In en, this message translates to:
-  /// **'offline'**
-  String get chatOfflinePresenceStatus;
 
   /// No description provided for @chatSearchAction.
   ///

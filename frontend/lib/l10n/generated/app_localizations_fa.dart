@@ -714,6 +714,15 @@ class AppLocalizationsFa extends AppLocalizations {
       'این فهرست فقط نام‌ها و آخرین پیام را می‌گردد. برای جست‌وجو در تاریخچهٔ یک گفت‌وگو، آن را باز کنید و داخل آن جست‌وجو کنید.';
 
   @override
+  String get chatsDeliveryConnectingNotice => 'در حال اتصال…';
+
+  @override
+  String get chatsDeliverySyncingNotice => 'در حال همگام‌سازی…';
+
+  @override
+  String get chatsDeliveryWaitingNotice => 'در انتظار اتصال دوباره…';
+
+  @override
   String get chatsOfflineCachedNotice =>
       'آفلاین — گفت‌وگوهای ذخیره‌شده نمایش داده می‌شوند. پیام‌های جدید در صف محلی می‌مانند.';
 
@@ -976,12 +985,6 @@ class AppLocalizationsFa extends AppLocalizations {
   @override
   String get chatTypingStatus =>
       'در حال نوشتن… سیگنال رمزنگاری‌شده ممکن است با تأخیر برسد';
-
-  @override
-  String get chatSocketOnlineStatus => 'آنلاین از طریق دستگاه متصل';
-
-  @override
-  String get chatOfflinePresenceStatus => 'آفلاین';
 
   @override
   String get chatSearchAction => 'جست‌وجو در گفت‌وگو';

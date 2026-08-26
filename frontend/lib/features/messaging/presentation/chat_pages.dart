@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:communication_platform/app/dependencies/contact_providers.dart';
 import 'package:communication_platform/app/dependencies/messaging_providers.dart';
+import 'package:communication_platform/app/dependencies/sync_providers.dart';
 import 'package:communication_platform/app/design_system/app_components.dart';
 import 'package:communication_platform/app/design_system/app_icons.dart';
 import 'package:communication_platform/app/design_system/app_tokens.dart';
@@ -17,6 +18,7 @@ import 'package:communication_platform/features/messaging/presentation/chat_view
 import 'package:communication_platform/features/messaging/presentation/chat_view_models.dart';
 import 'package:communication_platform/features/messaging/presentation/conversation_search.dart';
 import 'package:communication_platform/features/messaging/presentation/visible_conversation.dart';
+import 'package:communication_platform/features/synchronization/domain/sync_model.dart';
 import 'package:communication_platform/l10n/generated/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -89,6 +91,12 @@ class _ChatsListPageState extends State<ChatsListPage> {
     }
     final summaries = ref.watch(conversationSummariesProvider(currentUserId));
     final contacts = ref.watch(contactListProvider(currentUserId));
+    // A jammed engine and a slow network used to look identical from here,
+    // because nothing in this application read the phase the engine has been
+    // writing all along.
+    final delivery = _deliveryIndicator(
+      ref.watch(syncProjectionProvider).value?.connectionPhase,
+    );
     final names = {
       for (final contact in contacts.value ?? const <ContactProjection>[])
         contact.userId: contact.presentationName,
@@ -105,18 +113,21 @@ class _ChatsListPageState extends State<ChatsListPage> {
         loading: false,
         offline: auth.access == AuthenticationRouteAccess.offlineFullScope,
         failed: false,
+        delivery: delivery,
       ),
       loading: () => ChatListViewModel(
         items: const [],
         loading: true,
         offline: auth.access == AuthenticationRouteAccess.offlineFullScope,
         failed: false,
+        delivery: delivery,
       ),
       error: (_, _) => ChatListViewModel(
         items: const [],
         loading: false,
         offline: auth.access == AuthenticationRouteAccess.offlineFullScope,
         failed: true,
+        delivery: delivery,
       ),
     );
     return _scaffold(context, model, ref: ref);
@@ -144,6 +155,12 @@ class _ChatsListPageState extends State<ChatsListPage> {
             key: const ValueKey('chats-offline-notice'),
             label: strings.chatsOfflineCachedNotice,
             kind: AppStatusKind.warning,
+          )
+        else if (_deliveryNotice(model.delivery, strings) case final label?)
+          _InlineNotice(
+            key: const ValueKey('chats-delivery-notice'),
+            label: label,
+            kind: AppStatusKind.neutral,
           ),
         Padding(
           padding: const EdgeInsets.fromLTRB(
@@ -496,11 +513,6 @@ class _ProjectedConversationPage extends ConsumerWidget {
         ),
       );
     }
-    final presence = peerUserId == null
-        ? const AsyncValue<PresenceProjection>.data(
-            PresenceProjection(userId: '', onlineDeviceCount: 0),
-          )
-        : ref.watch(presenceProjectionProvider(peerUserId!));
     final typing =
         ref.watch(typingProjectionsProvider(conversationId)).value ??
         const <TypingProjection>[];
@@ -528,7 +540,6 @@ class _ProjectedConversationPage extends ConsumerWidget {
         hasMoreBefore: false,
         loadingBefore: false,
         olderLoadFailed: false,
-        presenceOnline: presence.value?.meaning == PresenceMeaning.socketOnline,
         typing: typing.isNotEmpty,
         pinnedMessageIds: summary?.pinnedMessageIds ?? const <String>[],
         messages: ChatViewModelMapper.messages(
@@ -548,7 +559,6 @@ class _ProjectedConversationPage extends ConsumerWidget {
         hasMoreBefore: false,
         loadingBefore: false,
         olderLoadFailed: false,
-        presenceOnline: false,
         typing: false,
         pinnedMessageIds: const [],
         messages: const [],
@@ -563,7 +573,6 @@ class _ProjectedConversationPage extends ConsumerWidget {
         hasMoreBefore: false,
         loadingBefore: false,
         olderLoadFailed: false,
-        presenceOnline: false,
         typing: false,
         pinnedMessageIds: const [],
         messages: const [],
@@ -826,7 +835,6 @@ class _ChatConversationViewState extends State<ChatConversationView> {
       hasMoreBefore: widget.model.hasMoreBefore,
       loadingBefore: widget.model.loadingBefore,
       olderLoadFailed: widget.model.olderLoadFailed,
-      presenceOnline: widget.model.presenceOnline,
       typing: widget.model.typing,
       pinnedMessageIds: widget.model.pinnedMessageIds,
       messages: widget.model.messages,
@@ -882,17 +890,20 @@ class _ChatConversationViewState extends State<ChatConversationView> {
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
-                        if (!widget.model.savedMessages)
+                        // Only while somebody is actually typing.
+                        //
+                        // This line used to fall through to a presence claim,
+                        // and the claim was structurally false: no part of this
+                        // client ever sends `subscribe_presence`, so the server
+                        // has no target to emit presence to and every peer read
+                        // as offline forever — including one holding a live
+                        // socket in the same room. Saying nothing is the honest
+                        // state until the subscription exists.
+                        if (!widget.model.savedMessages && widget.model.typing)
                           Text(
-                            widget.model.typing
-                                ? strings.chatTypingStatus
-                                : widget.model.presenceOnline
-                                ? strings.chatSocketOnlineStatus
-                                : strings.chatOfflinePresenceStatus,
+                            strings.chatTypingStatus,
                             style: context.tokens.typography.label.copyWith(
-                              color: widget.model.typing
-                                  ? context.tokens.colors.accent
-                                  : context.tokens.colors.textMuted,
+                              color: context.tokens.colors.accent,
                             ),
                           ),
                       ],
@@ -1520,6 +1531,41 @@ class _ConversationFailurePage extends StatelessWidget {
 }
 
 double mathMin(double left, double right) => left < right ? left : right;
+
+/// Reduces the engine's connection phase to the four states a screen may show.
+///
+/// The phases this collapses are not equally interesting to a person. Every
+/// terminal one — revoked, circuit open, origin rejected — is a condition the
+/// session-level surfaces already own and speak about properly, so this reports
+/// them as waiting rather than inventing a second, vaguer voice for them here.
+ChatDeliveryIndicator _deliveryIndicator(SyncConnectionPhase? phase) =>
+    switch (phase) {
+      null || SyncConnectionPhase.online => ChatDeliveryIndicator.settled,
+      SyncConnectionPhase.connecting => ChatDeliveryIndicator.connecting,
+      SyncConnectionPhase.draining => ChatDeliveryIndicator.syncing,
+      SyncConnectionPhase.stopped ||
+      SyncConnectionPhase.offline ||
+      SyncConnectionPhase.reconnectWaiting ||
+      SyncConnectionPhase.revoked ||
+      SyncConnectionPhase.protocolCircuitOpen ||
+      SyncConnectionPhase.originRejected => ChatDeliveryIndicator.waiting,
+    };
+
+/// The line for a delivery state, or nothing at all when there is nothing to
+/// say.
+///
+/// A settled session renders no notice. An indicator that is always on screen
+/// is one nobody reads, and this one exists precisely to be noticed on the day
+/// it stops changing.
+String? _deliveryNotice(
+  ChatDeliveryIndicator indicator,
+  AppLocalizations strings,
+) => switch (indicator) {
+  ChatDeliveryIndicator.settled => null,
+  ChatDeliveryIndicator.connecting => strings.chatsDeliveryConnectingNotice,
+  ChatDeliveryIndicator.syncing => strings.chatsDeliverySyncingNotice,
+  ChatDeliveryIndicator.waiting => strings.chatsDeliveryWaitingNotice,
+};
 
 String _shortIdentity(String value) =>
     value.length <= 12 ? value : '${value.substring(0, 8)}…';

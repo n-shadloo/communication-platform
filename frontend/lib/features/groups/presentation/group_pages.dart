@@ -504,7 +504,6 @@ class _GroupChatViewState extends State<GroupChatView> {
       hasMoreBefore: false,
       loadingBefore: false,
       olderLoadFailed: false,
-      presenceOnline: false,
       typing: false,
       pinnedMessageIds: const [],
       messages: viewMessages,

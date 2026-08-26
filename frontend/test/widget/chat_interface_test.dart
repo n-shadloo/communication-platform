@@ -968,7 +968,6 @@ ChatTimelineViewModel _model({
     hasMoreBefore: false,
     loadingBefore: false,
     olderLoadFailed: false,
-    presenceOnline: !savedMessages,
     typing: false,
     pinnedMessageIds: [
       for (final message in list)

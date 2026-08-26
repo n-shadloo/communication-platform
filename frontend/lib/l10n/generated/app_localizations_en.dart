@@ -718,6 +718,15 @@ class AppLocalizationsEn extends AppLocalizations {
       'This list matches names and the latest message only. To search a conversation\'s history, open it and search inside.';
 
   @override
+  String get chatsDeliveryConnectingNotice => 'Connecting…';
+
+  @override
+  String get chatsDeliverySyncingNotice => 'Syncing…';
+
+  @override
+  String get chatsDeliveryWaitingNotice => 'Waiting to reconnect…';
+
+  @override
   String get chatsOfflineCachedNotice =>
       'Offline — showing cached conversations. New messages will queue locally.';
 
@@ -977,12 +986,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get chatTypingStatus => 'typing… encrypted signal may lag';
-
-  @override
-  String get chatSocketOnlineStatus => 'online via a subscribed device';
-
-  @override
-  String get chatOfflinePresenceStatus => 'offline';
 
   @override
   String get chatSearchAction => 'Search in chat';

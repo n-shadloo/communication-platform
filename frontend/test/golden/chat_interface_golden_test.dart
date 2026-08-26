@@ -87,7 +87,6 @@ ChatTimelineViewModel _model() => ChatTimelineViewModel(
   hasMoreBefore: true,
   loadingBefore: false,
   olderLoadFailed: false,
-  presenceOnline: true,
   typing: false,
   pinnedMessageIds: const ['00000000000000000000000000000002'],
   messages: [

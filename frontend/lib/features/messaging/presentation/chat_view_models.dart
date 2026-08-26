@@ -116,7 +116,6 @@ final class ChatTimelineViewModel {
     required this.hasMoreBefore,
     required this.loadingBefore,
     required this.olderLoadFailed,
-    required this.presenceOnline,
     required this.typing,
     required Iterable<String> pinnedMessageIds,
     required Iterable<ChatMessageViewModel> messages,
@@ -134,7 +133,6 @@ final class ChatTimelineViewModel {
   final bool hasMoreBefore;
   final bool loadingBefore;
   final bool olderLoadFailed;
-  final bool presenceOnline;
   final bool typing;
   final List<String> pinnedMessageIds;
   final List<ChatMessageViewModel> messages;
@@ -173,6 +171,27 @@ final class ChatListItemViewModel {
   final bool group;
 }
 
+/// What the delivery engine is doing, as far as a screen is allowed to say.
+///
+/// Content-free by construction: four states, no counts, no identifiers, no
+/// timings. It exists because a jammed engine and a slow network were
+/// indistinguishable from the outside — the application looked identical in
+/// both cases, which is how a stall that lasted twenty-seven minutes went
+/// unnoticed by the person it was happening to.
+enum ChatDeliveryIndicator {
+  /// Nothing to say. The session is connected and the last cycle completed.
+  settled,
+
+  /// A socket is being opened.
+  connecting,
+
+  /// A cycle is in flight.
+  syncing,
+
+  /// There is no usable connection, or the session is waiting to retry one.
+  waiting,
+}
+
 @immutable
 final class ChatListViewModel {
   ChatListViewModel({
@@ -180,12 +199,14 @@ final class ChatListViewModel {
     required this.loading,
     required this.offline,
     required this.failed,
+    this.delivery = ChatDeliveryIndicator.settled,
   }) : items = List.unmodifiable(items);
 
   final List<ChatListItemViewModel> items;
   final bool loading;
   final bool offline;
   final bool failed;
+  final ChatDeliveryIndicator delivery;
 }
 
 sealed class ChatIntent {
