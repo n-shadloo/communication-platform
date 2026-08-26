@@ -16,12 +16,15 @@ final class SyncEngineLimits {
     this.maximumAcknowledgementBatchesPerRun = 100,
     this.maximumOutboxBatchesPerRun = 100,
     this.maximumStaleRefreshesPerRun = 32,
+    this.maximumInspectionAttempts = 8,
+    this.minimumInspectionRetry = const Duration(seconds: 1),
   }) : assert(drainPageSize >= 1 && drainPageSize <= 100),
        assert(maximumDrainPagesPerRun > 0),
        assert(maximumInspectionsPerRun > 0),
        assert(maximumAcknowledgementBatchesPerRun > 0),
        assert(maximumOutboxBatchesPerRun > 0),
-       assert(maximumStaleRefreshesPerRun > 0);
+       assert(maximumStaleRefreshesPerRun > 0),
+       assert(maximumInspectionAttempts > 0);
 
   final int drainPageSize;
   final int maximumDrainPagesPerRun;
@@ -29,6 +32,26 @@ final class SyncEngineLimits {
   final int maximumAcknowledgementBatchesPerRun;
   final int maximumOutboxBatchesPerRun;
   final int maximumStaleRefreshesPerRun;
+
+  /// How many times inspecting one envelope may fail for a cause that will not
+  /// resolve itself before the envelope is quarantined and acknowledged.
+  ///
+  /// Without a ceiling there is no terminal state for an envelope this device
+  /// can never open: it is re-served by the server on every drain, re-fetched,
+  /// re-inspected, re-failed, and counted forever in `pending_inbound`. Eight
+  /// is generous for a cause that is already known not to be transient, and it
+  /// is a field rather than a constant so a test can set it to two.
+  final int maximumInspectionAttempts;
+
+  /// The shortest time an envelope left for later may become due again.
+  ///
+  /// [SyncRetryPolicy] draws uniformly from `[0, cap]` and so returns zero on a
+  /// real fraction of draws. That is harmless for a batch the run will not look
+  /// at again, and wrong for an envelope the same pass is about to re-read from
+  /// the head of the queue: a zero backoff on the lowest-sequence row is a
+  /// pass that inspects one envelope a thousand times and never reaches the
+  /// second. A floor is what makes "leave it for later" mean later.
+  final Duration minimumInspectionRetry;
 }
 
 final class SyncRetryPolicy {
@@ -141,76 +164,153 @@ final class DurableSyncEngine {
       return Result.failure(failure);
     }
 
-    var inspected = 0;
-    var acknowledged = 0;
-    var sent = 0;
-    var drainedPages = 0;
-    var deferred = false;
+    final progress = _RunProgress();
 
-    final existingInbox = await _processInbox();
+    // The outbox goes first now, and it goes again at the end.
+    //
+    // It used to go last, behind the whole inbound half of the cycle, and every
+    // stage of that half ended the run on its first failure. One envelope this
+    // device could not open was therefore enough to stop a message the user had
+    // already sent from ever leaving the process. Nothing a queued outbox row
+    // needs comes from the inbox: its per-recipient ciphertext is sealed and
+    // durable before the row exists, so the only thing this ordering decides is
+    // who waits for whom. The second pass exists because the inbound half
+    // queues rows of its own — delivery receipts, group Commits, eviction
+    // fan-out — and they are ready by the time it finishes.
+    final firstOutbox = await _flushOutbox(progress);
+    if (firstOutbox case FailureResult(failure: final failure)) {
+      return Result.failure(failure);
+    }
+
+    final existingInbox = await _processInbox(progress);
     if (existingInbox case FailureResult(failure: final failure)) {
       return Result.failure(failure);
     }
-    inspected += (existingInbox as Success<_InboxProgress>).value.inspected;
     await _runPostInboxWork();
 
-    final existingAcks = await _flushAcknowledgements();
+    final existingAcks = await _flushAcknowledgements(progress);
     if (existingAcks case FailureResult(failure: final failure)) {
       return Result.failure(failure);
     }
-    acknowledged += (existingAcks as Success<int>).value;
 
+    final drained = await _drainPages(progress);
+    if (drained case FailureResult(failure: final failure)) {
+      return Result.failure(failure);
+    }
+
+    // Only while the cycle is still healthy. A transport that has already
+    // refused one batch will refuse this one, and the rows the inbound half
+    // queued are durable — the next cycle sends them.
+    if (progress.failure == null) {
+      final finalOutbox = await _flushOutbox(progress);
+      if (finalOutbox case FailureResult(failure: final failure)) {
+        return Result.failure(failure);
+      }
+    }
+
+    final refreshes = await _refreshStaleDevices();
+    if (refreshes case FailureResult(failure: final failure)) {
+      return Result.failure(failure);
+    }
+
+    // Carried, rather than returned at the point it happened. A drain the
+    // server refused or a batch the transport could not deliver still means
+    // this cycle failed, and the supervisor still has to be told so it can back
+    // off — but the local half of the cycle runs to completion first, which is
+    // the whole point of the reordering above. Per-envelope failures are never
+    // carried here: they belong to their envelope, they are counted in the
+    // report, and a mailbox holding one is still a healthy session.
+    final carried = progress.failure;
+    if (carried != null) {
+      return Result.failure(carried);
+    }
+
+    final finishedAt = _clock.now();
+    final recordedSync = await _store.recordSuccessfulSync(finishedAt);
+    if (recordedSync case FailureResult(failure: final failure)) {
+      return Result.failure(failure);
+    }
+    final online = await _store.markConnectionPhase(SyncConnectionPhase.online);
+    if (online case FailureResult(failure: final failure)) {
+      return Result.failure(failure);
+    }
+    return Result.success(progress.report());
+  }
+
+  /// Drains authoritative pages until the server says there are none left.
+  ///
+  /// Returns failure only when the store itself could not be written. A page
+  /// the transport could not fetch, or one that violated a server invariant, is
+  /// carried out through [progress] so that the rest of the run still happens.
+  Future<Result<void>> _drainPages(_RunProgress progress) async {
     for (
       var pageIndex = 0;
       pageIndex < limits.maximumDrainPagesPerRun;
       pageIndex += 1
     ) {
       if (_standDown.standDownRequested) {
-        deferred = true;
-        break;
+        progress.deferred = true;
+        return const Result.success(null);
       }
       final drain = await _remote.drain(limit: limits.drainPageSize);
       if (drain case FailureResult(failure: final failure)) {
-        return Result.failure(failure);
+        progress.fail(failure);
+        return const Result.success(null);
       }
       final page = (drain as Success<DrainPage>).value;
-      drainedPages += 1;
+      progress.drainedPages += 1;
       final persisted = await _store.persistDrainPage(page);
       if (persisted case FailureResult(failure: final failure)) {
-        return Result.failure(failure);
+        if (failure is StorageFailure) {
+          return Result.failure(failure);
+        }
+        // A re-served envelope whose ciphertext or sequence disagrees with the
+        // stored one is a server invariant violation, not an envelope fault. It
+        // ends the drain and is reported, and the local half of the cycle still
+        // finishes.
+        progress.fail(failure);
+        return const Result.success(null);
       }
 
-      final inbox = await _processInbox();
+      final inspectedBefore = progress.inspected;
+      final inbox = await _processInbox(progress);
       if (inbox case FailureResult(failure: final failure)) {
         return Result.failure(failure);
       }
-      final inboxProgress = (inbox as Success<_InboxProgress>).value;
-      inspected += inboxProgress.inspected;
       await _runPostInboxWork();
 
-      final acks = await _flushAcknowledgements();
+      final acknowledgedBefore = progress.acknowledged;
+      final acks = await _flushAcknowledgements(progress);
       if (acks case FailureResult(failure: final failure)) {
         return Result.failure(failure);
       }
-      final acknowledgedThisPage = (acks as Success<int>).value;
-      acknowledged += acknowledgedThisPage;
 
       if (!page.hasMore) {
-        break;
+        return const Result.success(null);
       }
-      if (inboxProgress.inspected == 0 && acknowledgedThisPage == 0) {
-        deferred = true;
-        break;
+      if (progress.inspected == inspectedBefore &&
+          progress.acknowledged == acknowledgedBefore) {
+        progress.deferred = true;
+        return const Result.success(null);
       }
       if (pageIndex + 1 == limits.maximumDrainPagesPerRun) {
-        deferred = true;
+        progress.deferred = true;
       }
     }
+    return const Result.success(null);
+  }
 
+  /// Sends every outbox batch that is due.
+  ///
+  /// Returns failure only when the store itself could not be written. A batch
+  /// the server refused permanently is retired against that batch; one the
+  /// transport could not deliver is left in retry-wait and the failure is
+  /// carried out through [progress].
+  Future<Result<void>> _flushOutbox(_RunProgress progress) async {
     for (var index = 0; index < limits.maximumOutboxBatchesPerRun; index += 1) {
       if (_standDown.standDownRequested) {
-        deferred = true;
-        break;
+        progress.deferred = true;
+        return const Result.success(null);
       }
       final now = _clock.now();
       final batchResult = await _store.beginNextOutboxBatch(now: now);
@@ -219,7 +319,7 @@ final class DurableSyncEngine {
       }
       final batch = (batchResult as Success<OutboxBatch?>).value;
       if (batch == null) {
-        break;
+        return const Result.success(null);
       }
       final response = await _remote.send(batch);
       if (response case FailureResult(failure: final failure)) {
@@ -246,7 +346,8 @@ final class DurableSyncEngine {
         if (retry case FailureResult(failure: final storageFailure)) {
           return Result.failure(storageFailure);
         }
-        return Result.failure(failure);
+        progress.fail(failure);
+        return const Result.success(null);
       }
       final acceptance = (response as Success<OutboxAcceptance>).value;
       if (!_isValidAcceptance(batch, acceptance)) {
@@ -266,7 +367,8 @@ final class DurableSyncEngine {
         if (retry case FailureResult(failure: final storageFailure)) {
           return Result.failure(storageFailure);
         }
-        return const Result.failure(failure);
+        progress.fail(failure);
+        return const Result.success(null);
       }
       final recorded = await _store.recordOutboxAcceptance(
         batch: batch,
@@ -276,35 +378,10 @@ final class DurableSyncEngine {
       if (recorded case FailureResult(failure: final failure)) {
         return Result.failure(failure);
       }
-      sent += acceptance.accepted;
-      if (index + 1 == limits.maximumOutboxBatchesPerRun) {
-        deferred = true;
-      }
+      progress.sent += acceptance.accepted;
     }
-
-    final refreshes = await _refreshStaleDevices();
-    if (refreshes case FailureResult(failure: final failure)) {
-      return Result.failure(failure);
-    }
-
-    final finishedAt = _clock.now();
-    final recordedSync = await _store.recordSuccessfulSync(finishedAt);
-    if (recordedSync case FailureResult(failure: final failure)) {
-      return Result.failure(failure);
-    }
-    final online = await _store.markConnectionPhase(SyncConnectionPhase.online);
-    if (online case FailureResult(failure: final failure)) {
-      return Result.failure(failure);
-    }
-    return Result.success(
-      SyncRunReport(
-        drainedPages: drainedPages,
-        inspectedEnvelopes: inspected,
-        acknowledgedEnvelopes: acknowledged,
-        sentTargets: sent,
-        deferred: deferred,
-      ),
-    );
+    progress.deferred = true;
+    return const Result.success(null);
   }
 
   Future<void> _runPostInboxWork() async {
@@ -316,20 +393,40 @@ final class DurableSyncEngine {
     }
   }
 
-  Future<Result<_InboxProgress>> _processInbox() async {
-    var inspected = 0;
-    var blocked = 0;
+  Future<Result<void>> _processInbox(_RunProgress progress) async {
+    // Read once per pass, not once per envelope.
+    //
+    // The gap flag is one column on the singleton checkpoint row, and only
+    // `persistDrainPage` sets it — which happens between calls to this method,
+    // never inside one. Nothing this loop does can clear it either: while a gap
+    // is open the inspector is forbidden from advancing MLS state, so the
+    // authenticated re-admission that retires the obligation cannot be
+    // committed from here. Reading it per envelope re-ran a three-subquery
+    // aggregate over the two largest tables in the database up to
+    // `maximumInspectionsPerRun` times per pass, for an answer that cannot
+    // change while the pass runs.
+    final gapResult = await _store.readQueueGapState();
+    if (gapResult case FailureResult(failure: final failure)) {
+      return Result.failure(failure);
+    }
+    final gapBlocked =
+        (gapResult as Success<QueueGapState>).value ==
+        QueueGapState.recoveryRequired;
+
+    // Every envelope this pass has already been handed. Only a deferred one can
+    // come back — an applied envelope advances and a blocked one moves out of
+    // the due set — and the retry floor below ordinarily keeps even that from
+    // happening inside the same pass. But a pass working through a large
+    // mailbox can outlive the floor, and the row it deferred first is also the
+    // lowest-sequence one, so without this it would return to the head of the
+    // queue and be handed out again in place of everything behind it.
+    final handled = <String>{};
+
     for (var index = 0; index < limits.maximumInspectionsPerRun; index += 1) {
       if (_standDown.standDownRequested) {
-        break;
+        progress.deferred = true;
+        return const Result.success(null);
       }
-      final projection = await _store.readProjection();
-      if (projection case FailureResult(failure: final failure)) {
-        return Result.failure(failure);
-      }
-      final gapBlocked =
-          (projection as Success<SyncProjection>).value.queueGapState ==
-          QueueGapState.recoveryRequired;
       final envelopeResult = await _store.beginNextEnvelopeInspection(
         now: _clock.now(),
       );
@@ -338,7 +435,15 @@ final class DurableSyncEngine {
       }
       final envelope = (envelopeResult as Success<SyncEnvelope?>).value;
       if (envelope == null) {
-        break;
+        return const Result.success(null);
+      }
+      if (!handled.add(envelope.id)) {
+        // The head of the queue is something this pass has already dealt with,
+        // so there is nothing new here. The pass ends; the drain, the
+        // acknowledgements and the outbox all still run, and the next cycle
+        // picks this up.
+        progress.deferred = true;
+        return const Result.success(null);
       }
       final inspection = await _inspector.inspect(
         envelopeId: envelope.id,
@@ -346,31 +451,15 @@ final class DurableSyncEngine {
         allowPotentiallyMls: !gapBlocked,
       );
       if (inspection case FailureResult(failure: final failure)) {
-        if (_isRejectableEnvelopeFailure(failure)) {
-          final rejected = await _store.recordEnvelopeRejection(
-            envelopeId: envelope.id,
-            reasonCode: _rejectionReason(failure),
-          );
-          if (rejected case FailureResult(failure: final storageFailure)) {
-            return Result.failure(storageFailure);
-          }
-          inspected += 1;
-          continue;
-        }
-        final retry = await _store.recordEnvelopeInspectionRetry(
-          envelopeId: envelope.id,
-          retryAt: _clock.now().add(
-            retryPolicy.delayFor(
-              attempt: envelope.attempt,
-              failure: failure,
-              jitter: _jitter,
-            ),
-          ),
+        final recorded = await _recordEnvelopeFailure(
+          envelope: envelope,
+          failure: failure,
+          progress: progress,
         );
-        if (retry case FailureResult(failure: final storageFailure)) {
+        if (recorded case FailureResult(failure: final storageFailure)) {
           return Result.failure(storageFailure);
         }
-        return Result.failure(failure);
+        continue;
       }
       final inspectedEnvelope =
           (inspection as Success<OpaqueEnvelopeInspection>).value;
@@ -382,7 +471,7 @@ final class DurableSyncEngine {
         if (blockedResult case FailureResult(failure: final failure)) {
           return Result.failure(failure);
         }
-        blocked += 1;
+        progress.blocked += 1;
         continue;
       }
       final committed = await _store.commitOpaqueInspection(
@@ -390,17 +479,99 @@ final class DurableSyncEngine {
         inspection: inspectedEnvelope,
       );
       if (committed case FailureResult(failure: final failure)) {
-        return Result.failure(failure);
+        // A commit that could not be written at all is the store being
+        // unavailable, and that ends the run. Anything else — a row that moved
+        // underneath this inspection, a projection the transaction refused —
+        // belongs to this envelope exactly as an inspection failure does.
+        if (failure is StorageFailure) {
+          return Result.failure(failure);
+        }
+        final recorded = await _recordEnvelopeFailure(
+          envelope: envelope,
+          failure: failure,
+          progress: progress,
+        );
+        if (recorded case FailureResult(failure: final storageFailure)) {
+          return Result.failure(storageFailure);
+        }
+        continue;
       }
-      inspected += 1;
+      progress.inspected += 1;
+      if (index + 1 == limits.maximumInspectionsPerRun) {
+        progress.deferred = true;
+      }
     }
-    return Result.success(
-      _InboxProgress(inspected: inspected, blocked: blocked),
+    return const Result.success(null);
+  }
+
+  /// Records one envelope's failure against that envelope, and returns.
+  ///
+  /// It returns failure only when the store could not record the outcome, which
+  /// is the single condition under which continuing is unsafe: a run that
+  /// cannot write cannot make progress, and would spin. Everything else stays
+  /// where it belongs — on the envelope — so a mailbox holding one unopenable
+  /// message still drains, still acknowledges, and still sends.
+  Future<Result<void>> _recordEnvelopeFailure({
+    required SyncEnvelope envelope,
+    required Failure failure,
+    required _RunProgress progress,
+  }) {
+    if (_isRejectableEnvelopeFailure(failure)) {
+      return _quarantineEnvelope(
+        envelope: envelope,
+        failure: failure,
+        progress: progress,
+      );
+    }
+    final transient = _isTransientEnvelopeFailure(failure);
+    if (!transient &&
+        envelope.inspectionFailures + 1 >= limits.maximumInspectionAttempts) {
+      // A cause that will not succeed on a retry, tried as often as this engine
+      // is willing to try it. Without a budget the envelope was re-served by
+      // the server, re-fetched, re-inspected and re-failed forever, which is
+      // what a frozen `pending_inbound` beside `quarantined_input=0` looks like
+      // from outside the process. Quarantining marks it terminal locally; the
+      // acknowledgement that follows is what makes the server stop serving it.
+      return _quarantineEnvelope(
+        envelope: envelope,
+        failure: failure,
+        progress: progress,
+      );
+    }
+    progress.failedInspections += 1;
+    final backoff = retryPolicy.delayFor(
+      attempt: envelope.attempt,
+      failure: failure,
+      jitter: _jitter,
+    );
+    return _store.recordEnvelopeInspectionRetry(
+      envelopeId: envelope.id,
+      retryAt: _clock.now().add(
+        backoff < limits.minimumInspectionRetry
+            ? limits.minimumInspectionRetry
+            : backoff,
+      ),
+      countsAgainstBudget: !transient,
     );
   }
 
-  Future<Result<int>> _flushAcknowledgements() async {
-    var acknowledged = 0;
+  Future<Result<void>> _quarantineEnvelope({
+    required SyncEnvelope envelope,
+    required Failure failure,
+    required _RunProgress progress,
+  }) async {
+    final rejected = await _store.recordEnvelopeRejection(
+      envelopeId: envelope.id,
+      reasonCode: _rejectionReason(failure),
+    );
+    if (rejected case FailureResult(failure: final storageFailure)) {
+      return Result.failure(storageFailure);
+    }
+    progress.quarantined += 1;
+    return const Result.success(null);
+  }
+
+  Future<Result<void>> _flushAcknowledgements(_RunProgress progress) async {
     for (
       var index = 0;
       index < limits.maximumAcknowledgementBatchesPerRun;
@@ -416,7 +587,7 @@ final class DurableSyncEngine {
       }
       final batch = (batchResult as Success<AcknowledgementBatch?>).value;
       if (batch == null) {
-        break;
+        return const Result.success(null);
       }
       final response = await _remote.acknowledge(batch.envelopeIds);
       if (response case FailureResult(failure: final failure)) {
@@ -433,7 +604,8 @@ final class DurableSyncEngine {
         if (retry case FailureResult(failure: final storageFailure)) {
           return Result.failure(storageFailure);
         }
-        return Result.failure(failure);
+        progress.fail(failure);
+        return const Result.success(null);
       }
       final recorded = await _store.recordAcknowledgementSuccess(
         batch: batch,
@@ -442,9 +614,9 @@ final class DurableSyncEngine {
       if (recorded case FailureResult(failure: final failure)) {
         return Result.failure(failure);
       }
-      acknowledged += batch.envelopeIds.length;
+      progress.acknowledged += batch.envelopeIds.length;
     }
-    return Result.success(acknowledged);
+    return const Result.success(null);
   }
 
   Future<Result<void>> _refreshStaleDevices() async {
@@ -513,6 +685,34 @@ final class DurableSyncEngine {
       (failure is SecurityFailure &&
           failure.kind != SecurityFailureKind.policyBlocked);
 
+  /// Whether a cause may succeed later without anything about the envelope
+  /// changing.
+  ///
+  /// A transient cause never consumes the attempt budget. A device that is
+  /// offline, rate limited, out of storage or momentarily out of entropy has
+  /// learned nothing about the bytes in hand, and spending the budget on it
+  /// would quarantine messages this device could have opened. Everything not
+  /// listed here has already been decided: the native core refused these bytes,
+  /// policy rejected them, or the protocol is one this build does not
+  /// implement — and no later attempt changes any of those.
+  bool _isTransientEnvelopeFailure(Failure failure) => switch (failure) {
+    TransportFailure() => true,
+    StorageFailure() => true,
+    CancellationFailure() => true,
+    AuthenticationFailure() => true,
+    BackendFailure(:final code) =>
+      code == BackendFailureCode.rateLimited ||
+          code == BackendFailureCode.quotaExceeded ||
+          // Every 5xx the backend mapper cannot name arrives as `unknown`.
+          code == BackendFailureCode.unknown,
+    CryptoCoreFailure(:final code) =>
+      code == CryptoCoreFailureCode.resourceExhausted ||
+          code == CryptoCoreFailureCode.entropyUnavailable,
+    ValidationFailure() ||
+    SecurityFailure() ||
+    UnsupportedProtocolFailure() => false,
+  };
+
   int _rejectionReason(Failure failure) => switch (failure.category) {
     FailureCategory.validation => 1,
     FailureCategory.security => 2,
@@ -521,9 +721,36 @@ final class DurableSyncEngine {
   };
 }
 
-final class _InboxProgress {
-  const _InboxProgress({required this.inspected, required this.blocked});
+/// What one run has done so far, and the one failure it will report.
+///
+/// A run used to return the moment any stage failed, which is why a device with
+/// an unopenable envelope in its inbox never reached its own outbox. Progress
+/// accumulates here instead and the run finishes; a failure that says the
+/// session rather than one envelope is unhealthy is held in [failure] and
+/// returned at the end, so the supervisor still backs off on a transport that
+/// will not carry a request.
+final class _RunProgress {
+  int drainedPages = 0;
+  int inspected = 0;
+  int blocked = 0;
+  int acknowledged = 0;
+  int sent = 0;
+  int quarantined = 0;
+  int failedInspections = 0;
+  bool deferred = false;
+  Failure? failure;
 
-  final int inspected;
-  final int blocked;
+  /// Keeps the first such failure. A later one is a consequence of the first
+  /// far more often than it is new information.
+  void fail(Failure value) => failure ??= value;
+
+  SyncRunReport report() => SyncRunReport(
+    drainedPages: drainedPages,
+    inspectedEnvelopes: inspected,
+    acknowledgedEnvelopes: acknowledged,
+    sentTargets: sent,
+    deferred: deferred,
+    quarantinedEnvelopes: quarantined,
+    failedInspections: failedInspections,
+  );
 }

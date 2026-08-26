@@ -12202,6 +12202,20 @@ class $MessagesTable extends Messages with TableInfo<$MessagesTable, Message> {
     ),
     defaultValue: const Constant(false),
   );
+  static const VerificationMeta _deliveredReceiptSentMeta =
+      const VerificationMeta('deliveredReceiptSent');
+  @override
+  late final GeneratedColumn<bool> deliveredReceiptSent = GeneratedColumn<bool>(
+    'delivered_receipt_sent',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("delivered_receipt_sent" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     messageId,
@@ -12224,6 +12238,7 @@ class $MessagesTable extends Messages with TableInfo<$MessagesTable, Message> {
     starred,
     unread,
     alerted,
+    deliveredReceiptSent,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -12404,6 +12419,15 @@ class $MessagesTable extends Messages with TableInfo<$MessagesTable, Message> {
         alerted.isAcceptableOrUnknown(data['alerted']!, _alertedMeta),
       );
     }
+    if (data.containsKey('delivered_receipt_sent')) {
+      context.handle(
+        _deliveredReceiptSentMeta,
+        deliveredReceiptSent.isAcceptableOrUnknown(
+          data['delivered_receipt_sent']!,
+          _deliveredReceiptSentMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -12493,6 +12517,10 @@ class $MessagesTable extends Messages with TableInfo<$MessagesTable, Message> {
         DriftSqlType.bool,
         data['${effectivePrefix}alerted'],
       )!,
+      deliveredReceiptSent: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}delivered_receipt_sent'],
+      )!,
     );
   }
 
@@ -12533,6 +12561,22 @@ class Message extends DataClass implements Insertable<Message> {
   /// companion omits this column and therefore leaves it unchanged - the same
   /// mechanism that already preserves [starred].
   final bool alerted;
+
+  /// Whether this device has already told the sender it received this message.
+  ///
+  /// Local, durable, and one-shot for the same reason as [alerted], which it is
+  /// modelled on. A delivered receipt is owed once per message; whether one is
+  /// *owed* was previously re-derived on every projection rebuild from
+  /// properties that never change — the message came from a peer, in a direct
+  /// conversation — so every rebuild re-queued a receipt for every message the
+  /// conversation had ever received. Each of those receipts is an event at the
+  /// far end, which rebuilds that conversation, which re-queues its own, and
+  /// two devices talking to each other sustain it indefinitely. This column is
+  /// what makes "owed" a fact about what has happened rather than a restatement
+  /// of what the message is. A projection rebuild writes messages through
+  /// `insertOnConflictUpdate` with a companion that omits this column, which is
+  /// the same mechanism that preserves [alerted] and [starred].
+  final bool deliveredReceiptSent;
   const Message({
     required this.messageId,
     required this.conversationId,
@@ -12554,6 +12598,7 @@ class Message extends DataClass implements Insertable<Message> {
     required this.starred,
     required this.unread,
     required this.alerted,
+    required this.deliveredReceiptSent,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -12584,6 +12629,7 @@ class Message extends DataClass implements Insertable<Message> {
     map['starred'] = Variable<bool>(starred);
     map['unread'] = Variable<bool>(unread);
     map['alerted'] = Variable<bool>(alerted);
+    map['delivered_receipt_sent'] = Variable<bool>(deliveredReceiptSent);
     return map;
   }
 
@@ -12613,6 +12659,7 @@ class Message extends DataClass implements Insertable<Message> {
       starred: Value(starred),
       unread: Value(unread),
       alerted: Value(alerted),
+      deliveredReceiptSent: Value(deliveredReceiptSent),
     );
   }
 
@@ -12646,6 +12693,9 @@ class Message extends DataClass implements Insertable<Message> {
       starred: serializer.fromJson<bool>(json['starred']),
       unread: serializer.fromJson<bool>(json['unread']),
       alerted: serializer.fromJson<bool>(json['alerted']),
+      deliveredReceiptSent: serializer.fromJson<bool>(
+        json['deliveredReceiptSent'],
+      ),
     );
   }
   @override
@@ -12676,6 +12726,7 @@ class Message extends DataClass implements Insertable<Message> {
       'starred': serializer.toJson<bool>(starred),
       'unread': serializer.toJson<bool>(unread),
       'alerted': serializer.toJson<bool>(alerted),
+      'deliveredReceiptSent': serializer.toJson<bool>(deliveredReceiptSent),
     };
   }
 
@@ -12700,6 +12751,7 @@ class Message extends DataClass implements Insertable<Message> {
     bool? starred,
     bool? unread,
     bool? alerted,
+    bool? deliveredReceiptSent,
   }) => Message(
     messageId: messageId ?? this.messageId,
     conversationId: conversationId ?? this.conversationId,
@@ -12725,6 +12777,7 @@ class Message extends DataClass implements Insertable<Message> {
     starred: starred ?? this.starred,
     unread: unread ?? this.unread,
     alerted: alerted ?? this.alerted,
+    deliveredReceiptSent: deliveredReceiptSent ?? this.deliveredReceiptSent,
   );
   Message copyWithCompanion(MessagesCompanion data) {
     return Message(
@@ -12772,6 +12825,9 @@ class Message extends DataClass implements Insertable<Message> {
       starred: data.starred.present ? data.starred.value : this.starred,
       unread: data.unread.present ? data.unread.value : this.unread,
       alerted: data.alerted.present ? data.alerted.value : this.alerted,
+      deliveredReceiptSent: data.deliveredReceiptSent.present
+          ? data.deliveredReceiptSent.value
+          : this.deliveredReceiptSent,
     );
   }
 
@@ -12797,13 +12853,14 @@ class Message extends DataClass implements Insertable<Message> {
           ..write('pinned: $pinned, ')
           ..write('starred: $starred, ')
           ..write('unread: $unread, ')
-          ..write('alerted: $alerted')
+          ..write('alerted: $alerted, ')
+          ..write('deliveredReceiptSent: $deliveredReceiptSent')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode => Object.hash(
+  int get hashCode => Object.hashAll([
     messageId,
     conversationId,
     currentEventId,
@@ -12824,7 +12881,8 @@ class Message extends DataClass implements Insertable<Message> {
     starred,
     unread,
     alerted,
-  );
+    deliveredReceiptSent,
+  ]);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -12854,7 +12912,8 @@ class Message extends DataClass implements Insertable<Message> {
           other.pinned == this.pinned &&
           other.starred == this.starred &&
           other.unread == this.unread &&
-          other.alerted == this.alerted);
+          other.alerted == this.alerted &&
+          other.deliveredReceiptSent == this.deliveredReceiptSent);
 }
 
 class MessagesCompanion extends UpdateCompanion<Message> {
@@ -12878,6 +12937,7 @@ class MessagesCompanion extends UpdateCompanion<Message> {
   final Value<bool> starred;
   final Value<bool> unread;
   final Value<bool> alerted;
+  final Value<bool> deliveredReceiptSent;
   final Value<int> rowid;
   const MessagesCompanion({
     this.messageId = const Value.absent(),
@@ -12900,6 +12960,7 @@ class MessagesCompanion extends UpdateCompanion<Message> {
     this.starred = const Value.absent(),
     this.unread = const Value.absent(),
     this.alerted = const Value.absent(),
+    this.deliveredReceiptSent = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   MessagesCompanion.insert({
@@ -12923,6 +12984,7 @@ class MessagesCompanion extends UpdateCompanion<Message> {
     this.starred = const Value.absent(),
     this.unread = const Value.absent(),
     this.alerted = const Value.absent(),
+    this.deliveredReceiptSent = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : messageId = Value(messageId),
        conversationId = Value(conversationId),
@@ -12952,6 +13014,7 @@ class MessagesCompanion extends UpdateCompanion<Message> {
     Expression<bool>? starred,
     Expression<bool>? unread,
     Expression<bool>? alerted,
+    Expression<bool>? deliveredReceiptSent,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -12978,6 +13041,8 @@ class MessagesCompanion extends UpdateCompanion<Message> {
       if (starred != null) 'starred': starred,
       if (unread != null) 'unread': unread,
       if (alerted != null) 'alerted': alerted,
+      if (deliveredReceiptSent != null)
+        'delivered_receipt_sent': deliveredReceiptSent,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -13003,6 +13068,7 @@ class MessagesCompanion extends UpdateCompanion<Message> {
     Value<bool>? starred,
     Value<bool>? unread,
     Value<bool>? alerted,
+    Value<bool>? deliveredReceiptSent,
     Value<int>? rowid,
   }) {
     return MessagesCompanion(
@@ -13027,6 +13093,7 @@ class MessagesCompanion extends UpdateCompanion<Message> {
       starred: starred ?? this.starred,
       unread: unread ?? this.unread,
       alerted: alerted ?? this.alerted,
+      deliveredReceiptSent: deliveredReceiptSent ?? this.deliveredReceiptSent,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -13098,6 +13165,11 @@ class MessagesCompanion extends UpdateCompanion<Message> {
     if (alerted.present) {
       map['alerted'] = Variable<bool>(alerted.value);
     }
+    if (deliveredReceiptSent.present) {
+      map['delivered_receipt_sent'] = Variable<bool>(
+        deliveredReceiptSent.value,
+      );
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -13127,6 +13199,7 @@ class MessagesCompanion extends UpdateCompanion<Message> {
           ..write('starred: $starred, ')
           ..write('unread: $unread, ')
           ..write('alerted: $alerted, ')
+          ..write('deliveredReceiptSent: $deliveredReceiptSent, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -16436,6 +16509,18 @@ class $InboxEnvelopesTable extends InboxEnvelopes
     requiredDuringInsert: false,
     defaultValue: const Constant(0),
   );
+  static const VerificationMeta _inspectionFailuresMeta =
+      const VerificationMeta('inspectionFailures');
+  @override
+  late final GeneratedColumn<int> inspectionFailures = GeneratedColumn<int>(
+    'inspection_failures',
+    aliasedName,
+    false,
+    check: () => ComparableExpr(inspectionFailures).isBiggerOrEqualValue(0),
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
   static const VerificationMeta _nextAttemptAtMeta = const VerificationMeta(
     'nextAttemptAt',
   );
@@ -16458,6 +16543,7 @@ class $InboxEnvelopesTable extends InboxEnvelopes
     opaqueEventId,
     dependencyClass,
     attemptCount,
+    inspectionFailures,
     nextAttemptAt,
   ];
   @override
@@ -16546,6 +16632,15 @@ class $InboxEnvelopesTable extends InboxEnvelopes
         ),
       );
     }
+    if (data.containsKey('inspection_failures')) {
+      context.handle(
+        _inspectionFailuresMeta,
+        inspectionFailures.isAcceptableOrUnknown(
+          data['inspection_failures']!,
+          _inspectionFailuresMeta,
+        ),
+      );
+    }
     if (data.containsKey('next_attempt_at')) {
       context.handle(
         _nextAttemptAtMeta,
@@ -16596,6 +16691,10 @@ class $InboxEnvelopesTable extends InboxEnvelopes
         DriftSqlType.int,
         data['${effectivePrefix}attempt_count'],
       )!,
+      inspectionFailures: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}inspection_failures'],
+      )!,
       nextAttemptAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}next_attempt_at'],
@@ -16618,6 +16717,16 @@ class InboxEnvelope extends DataClass implements Insertable<InboxEnvelope> {
   final String? opaqueEventId;
   final int? dependencyClass;
   final int attemptCount;
+
+  /// Failed inspections whose cause a later attempt cannot change.
+  ///
+  /// Deliberately not [attemptCount]. That column counts every begun attempt,
+  /// inspection and acknowledgement alike, and drives retry backoff; it rises
+  /// while a device is merely offline. This one rises only when the bytes
+  /// themselves were refused, and it is what retires an envelope this device
+  /// can never open into quarantine instead of leaving it to be re-served
+  /// forever.
+  final int inspectionFailures;
   final DateTime? nextAttemptAt;
   const InboxEnvelope({
     required this.envelopeId,
@@ -16628,6 +16737,7 @@ class InboxEnvelope extends DataClass implements Insertable<InboxEnvelope> {
     this.opaqueEventId,
     this.dependencyClass,
     required this.attemptCount,
+    required this.inspectionFailures,
     this.nextAttemptAt,
   });
   @override
@@ -16645,6 +16755,7 @@ class InboxEnvelope extends DataClass implements Insertable<InboxEnvelope> {
       map['dependency_class'] = Variable<int>(dependencyClass);
     }
     map['attempt_count'] = Variable<int>(attemptCount);
+    map['inspection_failures'] = Variable<int>(inspectionFailures);
     if (!nullToAbsent || nextAttemptAt != null) {
       map['next_attempt_at'] = Variable<DateTime>(nextAttemptAt);
     }
@@ -16665,6 +16776,7 @@ class InboxEnvelope extends DataClass implements Insertable<InboxEnvelope> {
           ? const Value.absent()
           : Value(dependencyClass),
       attemptCount: Value(attemptCount),
+      inspectionFailures: Value(inspectionFailures),
       nextAttemptAt: nextAttemptAt == null && nullToAbsent
           ? const Value.absent()
           : Value(nextAttemptAt),
@@ -16687,6 +16799,7 @@ class InboxEnvelope extends DataClass implements Insertable<InboxEnvelope> {
       opaqueEventId: serializer.fromJson<String?>(json['opaqueEventId']),
       dependencyClass: serializer.fromJson<int?>(json['dependencyClass']),
       attemptCount: serializer.fromJson<int>(json['attemptCount']),
+      inspectionFailures: serializer.fromJson<int>(json['inspectionFailures']),
       nextAttemptAt: serializer.fromJson<DateTime?>(json['nextAttemptAt']),
     );
   }
@@ -16702,6 +16815,7 @@ class InboxEnvelope extends DataClass implements Insertable<InboxEnvelope> {
       'opaqueEventId': serializer.toJson<String?>(opaqueEventId),
       'dependencyClass': serializer.toJson<int?>(dependencyClass),
       'attemptCount': serializer.toJson<int>(attemptCount),
+      'inspectionFailures': serializer.toJson<int>(inspectionFailures),
       'nextAttemptAt': serializer.toJson<DateTime?>(nextAttemptAt),
     };
   }
@@ -16715,6 +16829,7 @@ class InboxEnvelope extends DataClass implements Insertable<InboxEnvelope> {
     Value<String?> opaqueEventId = const Value.absent(),
     Value<int?> dependencyClass = const Value.absent(),
     int? attemptCount,
+    int? inspectionFailures,
     Value<DateTime?> nextAttemptAt = const Value.absent(),
   }) => InboxEnvelope(
     envelopeId: envelopeId ?? this.envelopeId,
@@ -16729,6 +16844,7 @@ class InboxEnvelope extends DataClass implements Insertable<InboxEnvelope> {
         ? dependencyClass.value
         : this.dependencyClass,
     attemptCount: attemptCount ?? this.attemptCount,
+    inspectionFailures: inspectionFailures ?? this.inspectionFailures,
     nextAttemptAt: nextAttemptAt.present
         ? nextAttemptAt.value
         : this.nextAttemptAt,
@@ -16757,6 +16873,9 @@ class InboxEnvelope extends DataClass implements Insertable<InboxEnvelope> {
       attemptCount: data.attemptCount.present
           ? data.attemptCount.value
           : this.attemptCount,
+      inspectionFailures: data.inspectionFailures.present
+          ? data.inspectionFailures.value
+          : this.inspectionFailures,
       nextAttemptAt: data.nextAttemptAt.present
           ? data.nextAttemptAt.value
           : this.nextAttemptAt,
@@ -16774,6 +16893,7 @@ class InboxEnvelope extends DataClass implements Insertable<InboxEnvelope> {
           ..write('opaqueEventId: $opaqueEventId, ')
           ..write('dependencyClass: $dependencyClass, ')
           ..write('attemptCount: $attemptCount, ')
+          ..write('inspectionFailures: $inspectionFailures, ')
           ..write('nextAttemptAt: $nextAttemptAt')
           ..write(')'))
         .toString();
@@ -16789,6 +16909,7 @@ class InboxEnvelope extends DataClass implements Insertable<InboxEnvelope> {
     opaqueEventId,
     dependencyClass,
     attemptCount,
+    inspectionFailures,
     nextAttemptAt,
   );
   @override
@@ -16806,6 +16927,7 @@ class InboxEnvelope extends DataClass implements Insertable<InboxEnvelope> {
           other.opaqueEventId == this.opaqueEventId &&
           other.dependencyClass == this.dependencyClass &&
           other.attemptCount == this.attemptCount &&
+          other.inspectionFailures == this.inspectionFailures &&
           other.nextAttemptAt == this.nextAttemptAt);
 }
 
@@ -16818,6 +16940,7 @@ class InboxEnvelopesCompanion extends UpdateCompanion<InboxEnvelope> {
   final Value<String?> opaqueEventId;
   final Value<int?> dependencyClass;
   final Value<int> attemptCount;
+  final Value<int> inspectionFailures;
   final Value<DateTime?> nextAttemptAt;
   final Value<int> rowid;
   const InboxEnvelopesCompanion({
@@ -16829,6 +16952,7 @@ class InboxEnvelopesCompanion extends UpdateCompanion<InboxEnvelope> {
     this.opaqueEventId = const Value.absent(),
     this.dependencyClass = const Value.absent(),
     this.attemptCount = const Value.absent(),
+    this.inspectionFailures = const Value.absent(),
     this.nextAttemptAt = const Value.absent(),
     this.rowid = const Value.absent(),
   });
@@ -16841,6 +16965,7 @@ class InboxEnvelopesCompanion extends UpdateCompanion<InboxEnvelope> {
     this.opaqueEventId = const Value.absent(),
     this.dependencyClass = const Value.absent(),
     this.attemptCount = const Value.absent(),
+    this.inspectionFailures = const Value.absent(),
     this.nextAttemptAt = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : envelopeId = Value(envelopeId),
@@ -16856,6 +16981,7 @@ class InboxEnvelopesCompanion extends UpdateCompanion<InboxEnvelope> {
     Expression<String>? opaqueEventId,
     Expression<int>? dependencyClass,
     Expression<int>? attemptCount,
+    Expression<int>? inspectionFailures,
     Expression<DateTime>? nextAttemptAt,
     Expression<int>? rowid,
   }) {
@@ -16869,6 +16995,7 @@ class InboxEnvelopesCompanion extends UpdateCompanion<InboxEnvelope> {
       if (opaqueEventId != null) 'opaque_event_id': opaqueEventId,
       if (dependencyClass != null) 'dependency_class': dependencyClass,
       if (attemptCount != null) 'attempt_count': attemptCount,
+      if (inspectionFailures != null) 'inspection_failures': inspectionFailures,
       if (nextAttemptAt != null) 'next_attempt_at': nextAttemptAt,
       if (rowid != null) 'rowid': rowid,
     });
@@ -16883,6 +17010,7 @@ class InboxEnvelopesCompanion extends UpdateCompanion<InboxEnvelope> {
     Value<String?>? opaqueEventId,
     Value<int?>? dependencyClass,
     Value<int>? attemptCount,
+    Value<int>? inspectionFailures,
     Value<DateTime?>? nextAttemptAt,
     Value<int>? rowid,
   }) {
@@ -16895,6 +17023,7 @@ class InboxEnvelopesCompanion extends UpdateCompanion<InboxEnvelope> {
       opaqueEventId: opaqueEventId ?? this.opaqueEventId,
       dependencyClass: dependencyClass ?? this.dependencyClass,
       attemptCount: attemptCount ?? this.attemptCount,
+      inspectionFailures: inspectionFailures ?? this.inspectionFailures,
       nextAttemptAt: nextAttemptAt ?? this.nextAttemptAt,
       rowid: rowid ?? this.rowid,
     );
@@ -16929,6 +17058,9 @@ class InboxEnvelopesCompanion extends UpdateCompanion<InboxEnvelope> {
     if (attemptCount.present) {
       map['attempt_count'] = Variable<int>(attemptCount.value);
     }
+    if (inspectionFailures.present) {
+      map['inspection_failures'] = Variable<int>(inspectionFailures.value);
+    }
     if (nextAttemptAt.present) {
       map['next_attempt_at'] = Variable<DateTime>(nextAttemptAt.value);
     }
@@ -16949,6 +17081,7 @@ class InboxEnvelopesCompanion extends UpdateCompanion<InboxEnvelope> {
           ..write('opaqueEventId: $opaqueEventId, ')
           ..write('dependencyClass: $dependencyClass, ')
           ..write('attemptCount: $attemptCount, ')
+          ..write('inspectionFailures: $inspectionFailures, ')
           ..write('nextAttemptAt: $nextAttemptAt, ')
           ..write('rowid: $rowid')
           ..write(')'))
@@ -31764,6 +31897,7 @@ typedef $$MessagesTableCreateCompanionBuilder =
       Value<bool> starred,
       Value<bool> unread,
       Value<bool> alerted,
+      Value<bool> deliveredReceiptSent,
       Value<int> rowid,
     });
 typedef $$MessagesTableUpdateCompanionBuilder =
@@ -31788,6 +31922,7 @@ typedef $$MessagesTableUpdateCompanionBuilder =
       Value<bool> starred,
       Value<bool> unread,
       Value<bool> alerted,
+      Value<bool> deliveredReceiptSent,
       Value<int> rowid,
     });
 
@@ -32008,6 +32143,11 @@ class $$MessagesTableFilterComposer
 
   ColumnFilters<bool> get alerted => $composableBuilder(
     column: $table.alerted,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get deliveredReceiptSent => $composableBuilder(
+    column: $table.deliveredReceiptSent,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -32241,6 +32381,11 @@ class $$MessagesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<bool> get deliveredReceiptSent => $composableBuilder(
+    column: $table.deliveredReceiptSent,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   $$ConversationsTableOrderingComposer get conversationId {
     final $$ConversationsTableOrderingComposer composer = $composerBuilder(
       composer: this,
@@ -32352,6 +32497,11 @@ class $$MessagesTableAnnotationComposer
 
   GeneratedColumn<bool> get alerted =>
       $composableBuilder(column: $table.alerted, builder: (column) => column);
+
+  GeneratedColumn<bool> get deliveredReceiptSent => $composableBuilder(
+    column: $table.deliveredReceiptSent,
+    builder: (column) => column,
+  );
 
   $$ConversationsTableAnnotationComposer get conversationId {
     final $$ConversationsTableAnnotationComposer composer = $composerBuilder(
@@ -32536,6 +32686,7 @@ class $$MessagesTableTableManager
                 Value<bool> starred = const Value.absent(),
                 Value<bool> unread = const Value.absent(),
                 Value<bool> alerted = const Value.absent(),
+                Value<bool> deliveredReceiptSent = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => MessagesCompanion(
                 messageId: messageId,
@@ -32558,6 +32709,7 @@ class $$MessagesTableTableManager
                 starred: starred,
                 unread: unread,
                 alerted: alerted,
+                deliveredReceiptSent: deliveredReceiptSent,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -32583,6 +32735,7 @@ class $$MessagesTableTableManager
                 Value<bool> starred = const Value.absent(),
                 Value<bool> unread = const Value.absent(),
                 Value<bool> alerted = const Value.absent(),
+                Value<bool> deliveredReceiptSent = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => MessagesCompanion.insert(
                 messageId: messageId,
@@ -32605,6 +32758,7 @@ class $$MessagesTableTableManager
                 starred: starred,
                 unread: unread,
                 alerted: alerted,
+                deliveredReceiptSent: deliveredReceiptSent,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
@@ -34763,6 +34917,7 @@ typedef $$InboxEnvelopesTableCreateCompanionBuilder =
       Value<String?> opaqueEventId,
       Value<int?> dependencyClass,
       Value<int> attemptCount,
+      Value<int> inspectionFailures,
       Value<DateTime?> nextAttemptAt,
       Value<int> rowid,
     });
@@ -34776,6 +34931,7 @@ typedef $$InboxEnvelopesTableUpdateCompanionBuilder =
       Value<String?> opaqueEventId,
       Value<int?> dependencyClass,
       Value<int> attemptCount,
+      Value<int> inspectionFailures,
       Value<DateTime?> nextAttemptAt,
       Value<int> rowid,
     });
@@ -34826,6 +34982,11 @@ class $$InboxEnvelopesTableFilterComposer
 
   ColumnFilters<int> get attemptCount => $composableBuilder(
     column: $table.attemptCount,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get inspectionFailures => $composableBuilder(
+    column: $table.inspectionFailures,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -34884,6 +35045,11 @@ class $$InboxEnvelopesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<int> get inspectionFailures => $composableBuilder(
+    column: $table.inspectionFailures,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get nextAttemptAt => $composableBuilder(
     column: $table.nextAttemptAt,
     builder: (column) => ColumnOrderings(column),
@@ -34934,6 +35100,11 @@ class $$InboxEnvelopesTableAnnotationComposer
 
   GeneratedColumn<int> get attemptCount => $composableBuilder(
     column: $table.attemptCount,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get inspectionFailures => $composableBuilder(
+    column: $table.inspectionFailures,
     builder: (column) => column,
   );
 
@@ -34988,6 +35159,7 @@ class $$InboxEnvelopesTableTableManager
                 Value<String?> opaqueEventId = const Value.absent(),
                 Value<int?> dependencyClass = const Value.absent(),
                 Value<int> attemptCount = const Value.absent(),
+                Value<int> inspectionFailures = const Value.absent(),
                 Value<DateTime?> nextAttemptAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => InboxEnvelopesCompanion(
@@ -34999,6 +35171,7 @@ class $$InboxEnvelopesTableTableManager
                 opaqueEventId: opaqueEventId,
                 dependencyClass: dependencyClass,
                 attemptCount: attemptCount,
+                inspectionFailures: inspectionFailures,
                 nextAttemptAt: nextAttemptAt,
                 rowid: rowid,
               ),
@@ -35012,6 +35185,7 @@ class $$InboxEnvelopesTableTableManager
                 Value<String?> opaqueEventId = const Value.absent(),
                 Value<int?> dependencyClass = const Value.absent(),
                 Value<int> attemptCount = const Value.absent(),
+                Value<int> inspectionFailures = const Value.absent(),
                 Value<DateTime?> nextAttemptAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => InboxEnvelopesCompanion.insert(
@@ -35023,6 +35197,7 @@ class $$InboxEnvelopesTableTableManager
                 opaqueEventId: opaqueEventId,
                 dependencyClass: dependencyClass,
                 attemptCount: attemptCount,
+                inspectionFailures: inspectionFailures,
                 nextAttemptAt: nextAttemptAt,
                 rowid: rowid,
               ),

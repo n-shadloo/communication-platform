@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:communication_platform/core/result/failure.dart';
 import 'package:communication_platform/core/result/result.dart';
 import 'package:communication_platform/features/groups/domain/group_model.dart';
@@ -15,12 +17,24 @@ final class DriftSyncStore implements DurableSyncStore {
     this.database, {
     this.maximumInboxEntries = 10000,
     this.maximumOutboxTargets = 50000,
+    this.projectionWindow = const Duration(milliseconds: 250),
   }) : assert(maximumInboxEntries > 0),
-       assert(maximumOutboxTargets > 0);
+       assert(maximumOutboxTargets > 0),
+       assert(projectionWindow >= Duration.zero);
 
   final LocalDatabase database;
   final int maximumInboxEntries;
   final int maximumOutboxTargets;
+
+  /// How long [watchProjection] holds a value before re-emitting.
+  ///
+  /// A knob so a test can collapse it to one turn of the event loop rather than
+  /// wait out a real timer. In the application it is a quarter of a second,
+  /// which is invisible next to the socket and REST round trips either side of
+  /// it and short enough that a queued send is still signalled promptly: a
+  /// window is only ever open because the engine just wrote something, and an
+  /// idle process has no open window to wait out.
+  final Duration projectionWindow;
 
   @override
   Stream<SyncProjection> watchProjection() async* {
@@ -55,7 +69,129 @@ WHERE c.singleton_id = 1
         database.outboxOperations,
       },
     );
-    yield* query.watchSingle().map(_projectionFromRow);
+    yield* _conflated(
+      query.watchSingle().map(_projectionFromRow),
+      // Growth of the durable outbox is never held back. It is the one
+      // transition in this projection that somebody is waiting on — a message
+      // the user has already sent, whose only route out of this process is a
+      // listener noticing the depth rise — so it goes out the moment it
+      // happens, and the window governs everything else.
+      urgent: (previous, next) => next.outboxDepth > previous.outboxDepth,
+    );
+  }
+
+  /// One projection at a time, and never more often than [projectionWindow].
+  ///
+  /// The query above is a three-subquery aggregate over `sync_checkpoint`,
+  /// `inbox_envelopes` and `outbox_operations` — precisely the three tables the
+  /// engine writes on every state transition — so an unconflated watch re-runs
+  /// the whole aggregate once per write and re-delivers it to every listener.
+  ///
+  /// Every property a listener depends on survives. The first value is emitted
+  /// immediately, which is what lets a restart replay the durable outbox depth
+  /// and drain what was queued before the process died. The last value of every
+  /// window is always emitted, so no state is skipped — only the intermediate
+  /// values a writer passed through on its way there. And a value [urgent]
+  /// accepts bypasses an open window entirely, so conflation can never cost a
+  /// send its latency.
+  Stream<T> _conflated<T>(
+    Stream<T> source, {
+    required bool Function(T previous, T next) urgent,
+  }) {
+    late StreamController<T> controller;
+    StreamSubscription<T>? subscription;
+    Timer? timer;
+    var hasPending = false;
+    late T pending;
+    T? emitted;
+    var closed = false;
+
+    void emit(T value) {
+      emitted = value;
+      if (!controller.isClosed) {
+        controller.add(value);
+      }
+    }
+
+    void openWindow() {
+      timer = Timer(projectionWindow, () {
+        timer = null;
+        if (!hasPending) {
+          return;
+        }
+        hasPending = false;
+        emit(pending);
+        openWindow();
+      });
+    }
+
+    controller = StreamController<T>(
+      onListen: () {
+        subscription = source.listen(
+          (value) {
+            final previous = emitted;
+            if (timer == null ||
+                (previous != null && urgent(previous, value))) {
+              // Whatever was waiting is superseded: this value is newer, and it
+              // is going out now. The window restarts from here so an urgent
+              // value does not become a way to bypass conflation entirely.
+              timer?.cancel();
+              hasPending = false;
+              emit(value);
+              openWindow();
+              return;
+            }
+            pending = value;
+            hasPending = true;
+          },
+          onError: (Object error, StackTrace stackTrace) {
+            if (!controller.isClosed) {
+              controller.addError(error, stackTrace);
+            }
+          },
+          onDone: () {
+            closed = true;
+            // A trailing value is never dropped: the source ending is the last
+            // chance to deliver it.
+            if (hasPending) {
+              hasPending = false;
+              emit(pending);
+            }
+            timer?.cancel();
+            timer = null;
+            unawaited(controller.close());
+          },
+        );
+      },
+      onPause: () => subscription?.pause(),
+      onResume: () => subscription?.resume(),
+      onCancel: () async {
+        timer?.cancel();
+        timer = null;
+        hasPending = false;
+        if (!closed) {
+          await subscription?.cancel();
+        }
+        subscription = null;
+      },
+    );
+    return controller.stream;
+  }
+
+  @override
+  Future<Result<QueueGapState>> readQueueGapState() async {
+    try {
+      final checkpoint = await _checkpoint();
+      return Result.success(
+        checkpoint.queueGapState == QueueGapState.clear.index
+            ? QueueGapState.clear
+            : QueueGapState.recoveryRequired,
+      );
+    } on Object {
+      return const Result.failure(
+        StorageFailure(StorageFailureKind.unavailable),
+      );
+    }
   }
 
   @override
@@ -203,15 +339,48 @@ WHERE c.singleton_id = 1
         if (page.prunedThrough < checkpoint.prunedThrough) {
           throw const _ServerInvariant();
         }
-        var newEntries = 0;
-        for (final envelope in page.envelopes) {
-          if (envelope.sequence <= checkpoint.highestContiguousAckedSequence) {
-            continue;
+        final candidates = page.envelopes
+            .where(
+              (envelope) =>
+                  envelope.sequence > checkpoint.highestContiguousAckedSequence,
+            )
+            .toList(growable: false);
+
+        // Two set-based reads for the whole page, not two per envelope.
+        //
+        // A page the server re-serves is the ordinary case, not the exception:
+        // an envelope stays in the mailbox until this device acknowledges it,
+        // so every drain during a backlog returns rows that are already here.
+        // Asking about each one individually meant roughly two hundred
+        // statements inside one write transaction to establish that nothing had
+        // changed. The invariant they check is unchanged — a re-served envelope
+        // whose sequence or ciphertext disagrees with the stored row is still a
+        // hard violation, and so is a second envelope claiming a taken
+        // sequence.
+        final ids = candidates
+            .map((envelope) => envelope.id)
+            .toList(growable: false);
+        final sequences = candidates
+            .map((envelope) => envelope.sequence)
+            .toList(growable: false);
+        final storedById = <String, InboxEnvelope>{};
+        final storedBySequence = <int, InboxEnvelope>{};
+        if (candidates.isNotEmpty) {
+          for (final row in await (database.select(
+            database.inboxEnvelopes,
+          )..where((row) => row.envelopeId.isIn(ids))).get()) {
+            storedById[row.envelopeId] = row;
           }
-          final byId =
-              await (database.select(database.inboxEnvelopes)
-                    ..where((row) => row.envelopeId.equals(envelope.id)))
-                  .getSingleOrNull();
+          for (final row in await (database.select(
+            database.inboxEnvelopes,
+          )..where((row) => row.sequence.isIn(sequences))).get()) {
+            storedBySequence[row.sequence] = row;
+          }
+        }
+
+        final fresh = <SyncEnvelope>[];
+        for (final envelope in candidates) {
+          final byId = storedById[envelope.id];
           if (byId != null) {
             if (byId.sequence != envelope.sequence ||
                 !_bytesEqual(
@@ -222,34 +391,30 @@ WHERE c.singleton_id = 1
             }
             continue;
           }
-          final bySequence =
-              await (database.select(database.inboxEnvelopes)
-                    ..where((row) => row.sequence.equals(envelope.sequence)))
-                  .getSingleOrNull();
-          if (bySequence != null) {
+          if (storedBySequence.containsKey(envelope.sequence)) {
             throw const _ServerInvariant();
           }
-          newEntries += 1;
+          fresh.add(envelope);
         }
-        final currentCount = await _count(database.inboxEnvelopes);
-        if (currentCount + newEntries > maximumInboxEntries) {
-          throw const _SyncCapacity();
-        }
-        for (final envelope in page.envelopes) {
-          if (envelope.sequence <= checkpoint.highestContiguousAckedSequence) {
-            continue;
+
+        if (fresh.isNotEmpty) {
+          if (fresh.length > maximumInboxEntries ||
+              await _isAtOrOverCapacity(maximumInboxEntries - fresh.length)) {
+            throw const _SyncCapacity();
           }
-          await database
-              .into(database.inboxEnvelopes)
-              .insert(
-                InboxEnvelopesCompanion.insert(
-                  envelopeId: envelope.id,
-                  sequence: envelope.sequence,
-                  envelopeCiphertext: envelope.exactCiphertext,
-                  processingState: InboxProcessingState.received.index,
-                ),
-                mode: InsertMode.insertOrIgnore,
-              );
+          for (final envelope in fresh) {
+            await database
+                .into(database.inboxEnvelopes)
+                .insert(
+                  InboxEnvelopesCompanion.insert(
+                    envelopeId: envelope.id,
+                    sequence: envelope.sequence,
+                    envelopeCiphertext: envelope.exactCiphertext,
+                    processingState: InboxProcessingState.received.index,
+                  ),
+                  mode: InsertMode.insertOrIgnore,
+                );
+          }
         }
         final gapDetected =
             checkpoint.highestContiguousAckedSequence < page.prunedThrough;
@@ -295,12 +460,34 @@ WHERE c.singleton_id = 1
     }
   }
 
+  /// Whether the inbox already holds more than [headroom] rows.
+  ///
+  /// A `COUNT(*)` answers a question nobody asked. The ceiling is ten thousand
+  /// rows and the only thing that matters is whether one more page fits, so
+  /// this reads a single primary-key value past the headroom and stops: it
+  /// touches at most `headroom + 1` index entries where the count scanned the
+  /// whole table on every page of every drain.
+  Future<bool> _isAtOrOverCapacity(int headroom) async {
+    if (headroom < 0) {
+      return true;
+    }
+    final probe = database.selectOnly(database.inboxEnvelopes)
+      ..addColumns([database.inboxEnvelopes.envelopeId])
+      ..limit(1, offset: headroom);
+    return (await probe.get()).isNotEmpty;
+  }
+
   @override
   Future<Result<SyncEnvelope?>> beginNextEnvelopeInspection({
     required DateTime now,
   }) async {
     try {
       final envelope = await database.writeTransaction(() async {
+        // Oldest due envelope first, which is what keeps healthy delivery in
+        // order. It is safe to leave it that way now that an envelope that will
+        // not open carries a retry time after every failure and a terminal
+        // state after `maximumInspectionAttempts` of them: the row stops being
+        // due instead of being picked ahead of everything else on every pass.
         final query = database.select(database.inboxEnvelopes)
           ..where(
             (row) =>
@@ -333,6 +520,7 @@ WHERE c.singleton_id = 1
           id: row.envelopeId,
           sequence: row.sequence,
           attempt: attempt,
+          inspectionFailures: row.inspectionFailures,
           exactCiphertext: row.envelopeCiphertext,
         );
       });
@@ -596,12 +784,25 @@ WHERE c.singleton_id = 1
   Future<Result<void>> recordEnvelopeInspectionRetry({
     required String envelopeId,
     required DateTime retryAt,
+    required bool countsAgainstBudget,
   }) => _write(() async {
+    // Read-modify-write inside the caller's transaction rather than a bare
+    // increment expression, so the value the budget is checked against is the
+    // value this row actually holds.
+    final row = await (database.select(
+      database.inboxEnvelopes,
+    )..where((item) => item.envelopeId.equals(envelopeId))).getSingleOrNull();
+    if (row == null) {
+      return;
+    }
     await (database.update(
       database.inboxEnvelopes,
-    )..where((row) => row.envelopeId.equals(envelopeId))).write(
+    )..where((item) => item.envelopeId.equals(envelopeId))).write(
       InboxEnvelopesCompanion(
         processingState: Value(InboxProcessingState.received.index),
+        inspectionFailures: countsAgainstBudget
+            ? Value(row.inspectionFailures + 1)
+            : const Value.absent(),
         nextAttemptAt: Value(retryAt),
       ),
     );
@@ -1257,7 +1458,17 @@ WHERE c.singleton_id = 1
     }
   }
 
+  /// Reads first, and writes only when the singleton row is genuinely absent.
+  ///
+  /// This is on the path of every projection read, every phase transition and
+  /// every checkpoint read, so an unconditional `INSERT OR IGNORE` here is an
+  /// insert statement against `sync_checkpoint` several times per envelope —
+  /// and `sync_checkpoint` is one of the three tables the projection watch
+  /// reads from, so each one is also a reason to re-run that aggregate.
   Future<void> _ensureCheckpoint() async {
+    if (await _existingCheckpoint() != null) {
+      return;
+    }
     await database
         .into(database.syncCheckpoints)
         .insert(
@@ -1272,7 +1483,15 @@ WHERE c.singleton_id = 1
 
   Future<void> _ensureCheckpointInTransaction() => _ensureCheckpoint();
 
+  Future<SyncCheckpoint?> _existingCheckpoint() => (database.select(
+    database.syncCheckpoints,
+  )..where((row) => row.singletonId.equals(1))).getSingleOrNull();
+
   Future<SyncCheckpoint> _checkpoint() async {
+    final existing = await _existingCheckpoint();
+    if (existing != null) {
+      return existing;
+    }
     await _ensureCheckpoint();
     return (database.select(
       database.syncCheckpoints,

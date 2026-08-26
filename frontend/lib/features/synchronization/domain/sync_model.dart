@@ -65,12 +65,27 @@ final class SyncEnvelope {
     required this.id,
     required this.sequence,
     this.attempt = 1,
+    this.inspectionFailures = 0,
     required Uint8List exactCiphertext,
   }) : exactCiphertext = Uint8List.fromList(exactCiphertext);
 
   final String id;
   final int sequence;
+
+  /// How many times this envelope has been begun, inspection and
+  /// acknowledgement alike. It drives retry backoff and nothing else.
   final int attempt;
+
+  /// How many times inspecting this envelope has failed for a cause that will
+  /// not resolve itself.
+  ///
+  /// Separate from [attempt] because they answer different questions. [attempt]
+  /// asks how long to wait; this asks whether waiting can ever help. A device
+  /// that is offline, rate limited or out of storage raises [attempt] on every
+  /// pass without learning anything about the envelope, so spending an attempt
+  /// budget on it would quarantine messages this device could have opened.
+  final int inspectionFailures;
+
   final Uint8List exactCiphertext;
 }
 
@@ -210,6 +225,8 @@ final class SyncRunReport {
     required this.acknowledgedEnvelopes,
     required this.sentTargets,
     required this.deferred,
+    this.quarantinedEnvelopes = 0,
+    this.failedInspections = 0,
   });
 
   const SyncRunReport.alreadyRunning()
@@ -217,13 +234,24 @@ final class SyncRunReport {
       inspectedEnvelopes = 0,
       acknowledgedEnvelopes = 0,
       sentTargets = 0,
-      deferred = true;
+      deferred = true,
+      quarantinedEnvelopes = 0,
+      failedInspections = 0;
 
   final int drainedPages;
   final int inspectedEnvelopes;
   final int acknowledgedEnvelopes;
   final int sentTargets;
   final bool deferred;
+
+  /// How many envelopes this run retired into quarantine. A count, and
+  /// deliberately nothing else: which envelope, why, and what was in it are all
+  /// identifiers, and none of them may leave the engine.
+  final int quarantinedEnvelopes;
+
+  /// How many envelopes failed inspection and were left for a later run. Also a
+  /// count only, for the same reason.
+  final int failedInspections;
 }
 
 final class RealtimeDisconnect {

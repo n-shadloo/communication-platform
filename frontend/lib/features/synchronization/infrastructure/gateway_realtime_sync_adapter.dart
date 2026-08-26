@@ -11,6 +11,19 @@ import 'package:communication_platform/features/synchronization/domain/sync_mode
 ///
 /// The envelope bytes carried by a socket event are deliberately ignored. Every hint
 /// is followed by an authoritative REST drain through [DurableSyncEngine].
+///
+/// Measured, and kept (ADR-060). The cost is one REST round trip per inbound
+/// message — 107 to 137 ms from a real phone, connect through close — and one
+/// re-download of bytes the socket already carried. What it buys is that a
+/// single code path decides what is in this device's mailbox: the drain page is
+/// where `pruned_through` arrives, and `pruned_through` against the local
+/// contiguous-acknowledgement watermark is the *only* way a lost envelope is
+/// detected. A pushed frame carries no such watermark, so seeding the inbox
+/// from one would mean a second admission path that cannot answer the question
+/// the first exists to answer. The idle re-download that made this look
+/// expensive was never this: it was an inbox that could not retire what it
+/// could not open, so the same hundred envelopes were served, stored and served
+/// again on every cycle.
 final class GatewayRealtimeSyncAdapter
     implements RealtimeSyncPort, RealtimeReconnectHook {
   final StreamController<void> _hints = StreamController<void>.broadcast();

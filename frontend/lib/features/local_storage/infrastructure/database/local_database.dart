@@ -500,6 +500,23 @@ class Messages extends Table {
   /// mechanism that already preserves [starred].
   BoolColumn get alerted => boolean().withDefault(const Constant(false))();
 
+  /// Whether this device has already told the sender it received this message.
+  ///
+  /// Local, durable, and one-shot for the same reason as [alerted], which it is
+  /// modelled on. A delivered receipt is owed once per message; whether one is
+  /// *owed* was previously re-derived on every projection rebuild from
+  /// properties that never change — the message came from a peer, in a direct
+  /// conversation — so every rebuild re-queued a receipt for every message the
+  /// conversation had ever received. Each of those receipts is an event at the
+  /// far end, which rebuilds that conversation, which re-queues its own, and
+  /// two devices talking to each other sustain it indefinitely. This column is
+  /// what makes "owed" a fact about what has happened rather than a restatement
+  /// of what the message is. A projection rebuild writes messages through
+  /// `insertOnConflictUpdate` with a companion that omits this column, which is
+  /// the same mechanism that preserves [alerted] and [starred].
+  BoolColumn get deliveredReceiptSent =>
+      boolean().withDefault(const Constant(false))();
+
   @override
   Set<Column<Object>> get primaryKey => {messageId};
 }
@@ -647,6 +664,18 @@ class InboxEnvelopes extends Table {
   IntColumn get attemptCount => integer()
       .withDefault(const Constant(0))
       .check(attemptCount.isBiggerOrEqualValue(0))();
+
+  /// Failed inspections whose cause a later attempt cannot change.
+  ///
+  /// Deliberately not [attemptCount]. That column counts every begun attempt,
+  /// inspection and acknowledgement alike, and drives retry backoff; it rises
+  /// while a device is merely offline. This one rises only when the bytes
+  /// themselves were refused, and it is what retires an envelope this device
+  /// can never open into quarantine instead of leaving it to be re-served
+  /// forever.
+  IntColumn get inspectionFailures => integer()
+      .withDefault(const Constant(0))
+      .check(inspectionFailures.isBiggerOrEqualValue(0))();
   DateTimeColumn get nextAttemptAt => dateTime().nullable()();
 
   @override
@@ -1000,7 +1029,7 @@ final class LocalDatabase extends _$LocalDatabase {
   LocalDatabase(super.executor, {StorageMigrationHooks? migrationHooks})
     : _migrationHooks = migrationHooks ?? const StorageMigrationHooks();
 
-  static const currentSchemaVersion = 13;
+  static const currentSchemaVersion = 15;
   final StorageMigrationHooks _migrationHooks;
 
   @override
@@ -1339,6 +1368,92 @@ final class LocalDatabase extends _$LocalDatabase {
             'DELETE FROM devices '
             "WHERE CAST(public_bundle AS TEXT) NOT LIKE '%\"format\"%'",
           );
+        }
+        if (from < 14) {
+          // Two things at once, because they are the same repair.
+          //
+          // The column is new: inspection failures used to be indistinguishable
+          // from ordinary retries, so an envelope this device could never open
+          // had no terminal state and was re-served, re-fetched and re-failed
+          // on every drain forever.
+          //
+          // The rest un-strands the installs that ran the version without it.
+          // Those devices are carrying inbox rows left in `inspecting` by a run
+          // that ended mid-envelope, attempt counts driven high enough that the
+          // backoff they produce is a quarter of an hour of uniform jitter, and
+          // outbox rows waiting out the same thing. None of it is content, all
+          // of it is scheduling state, and re-deriving it from zero costs one
+          // extra attempt and fixes a queue that would otherwise never move.
+          //
+          // Every statement here is idempotent and none of them touch a
+          // message, an envelope ciphertext or a projection.
+          final inboxColumns = await customSelect(
+            'PRAGMA table_info(inbox_envelopes)',
+          ).map((row) => row.read<String>('name')).get();
+          if (!inboxColumns.contains(inboxEnvelopes.inspectionFailures.$name)) {
+            await migrator.addColumn(
+              inboxEnvelopes,
+              inboxEnvelopes.inspectionFailures,
+            );
+          }
+          await customStatement(
+            'UPDATE inbox_envelopes '
+            'SET processing_state = 0, attempt_count = 0, next_attempt_at = NULL '
+            'WHERE processing_state IN (0, 1)',
+          );
+          await customStatement(
+            'UPDATE outbox_operations '
+            'SET attempt_state = 0, attempt_count = 0, next_attempt_at = NULL '
+            'WHERE attempt_state IN (0, 1, 2)',
+          );
+          // A conversation with messages in it exists, whatever its row says.
+          // Tombstoning is how a conversation is retired, and a row tombstoned
+          // while its messages survived is a conversation the list will not
+          // show and the diagnostics report will not count while the chat page
+          // renders it from the message rows underneath — which is exactly what
+          // the affected devices show. Un-tombstoning restores the row the
+          // projector already maintains; nothing is created and nothing is
+          // deleted.
+          await customStatement(
+            'UPDATE conversations SET tombstoned = 0 '
+            'WHERE tombstoned = 1 AND conversation_id IN '
+            '(SELECT DISTINCT conversation_id FROM messages)',
+          );
+          // And a conversation whose row is gone entirely. The foreign key
+          // makes that unreachable while it is enforced, so this is for a
+          // database that was written while it was not. The row is minimal on
+          // purpose: the ordering key is recoverable from the messages, the
+          // rendered preview is not, and the next projector pass writes it.
+          await customStatement(
+            'INSERT INTO conversations '
+            '(conversation_id, kind, list_projection_ciphertext, sort_key, '
+            'tombstoned, pinned, unread_count) '
+            "SELECT m.conversation_id, 0, X'', MAX(m.ordering_ms), 0, 0, 0 "
+            'FROM messages m '
+            'WHERE m.conversation_id NOT IN '
+            '(SELECT conversation_id FROM conversations) '
+            'GROUP BY m.conversation_id',
+          );
+        }
+        if (from < 15) {
+          // Checked rather than assumed, in the style of the schema-7, -11 and
+          // -12 steps: a database whose recorded version is behind its actual
+          // shape is a real condition on a device that has taken a development
+          // build, and an upgrade that fails on it leaves the application
+          // unable to open its own storage.
+          final columns = await customSelect(
+            'PRAGMA table_info(messages)',
+          ).map((row) => row.read<String>('name')).get();
+          if (!columns.contains(messages.deliveredReceiptSent.$name)) {
+            await migrator.addColumn(messages, messages.deliveredReceiptSent);
+          }
+          // Everything already here has had its receipt sent many times over,
+          // which is the defect. Marking the existing rows sent is what stops
+          // the upgrade itself from queueing one more round of them.
+          await customStatement(
+            'UPDATE messages SET delivered_receipt_sent = 1',
+          );
+          await customStatement('DELETE FROM pending_application_receipts');
         }
         await _migrationHooks.afterUpgrade(from, to);
       });

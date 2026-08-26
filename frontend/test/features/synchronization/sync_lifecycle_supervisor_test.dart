@@ -170,6 +170,82 @@ void main() {
   );
 
   test(
+    'a durable retry time is a wake-up, so a poison envelope retires with no '
+    'other stimulus',
+    () async {
+      final database = LocalDatabase(NativeDatabase.memory());
+      final store = DriftSyncStore(database, projectionWindow: Duration.zero);
+      final remote = SilentRemote();
+      final inspector = RefusingInspector();
+      final clock = AdvancingClock();
+      final engine = DurableSyncEngine(
+        store: store,
+        remote: remote,
+        inspector: inspector,
+        staleDeviceRefresh: const NoopStaleRefresh(),
+        clock: clock,
+        jitter: const ZeroJitter(),
+        limits: const SyncEngineLimits(maximumInspectionAttempts: 3),
+      );
+      final supervisor = SyncLifecycleSupervisor(
+        engine: engine,
+        store: store,
+        realtime: FakeRealtimeSyncPort(),
+        network: FakeNetworkPort(NetworkAvailability.available),
+        lifecycle: FakeLifecyclePort(ApplicationExecutionState.foreground),
+        polling: FakePollingPort(),
+        clock: clock,
+        jitter: const ZeroJitter(),
+        // Waiting is what this test is about, so the wait is where the clock
+        // moves: the supervisor asks for a delay, and the delay happens.
+        delay: ClockAdvancingDelay(clock),
+      );
+
+      await store.persistDrainPage(
+        DrainPage(
+          envelopes: [
+            SyncEnvelope(
+              id: '00000000-0000-4000-8000-0000000000aa',
+              sequence: 1,
+              exactCiphertext: Uint8List(1024),
+            ),
+          ],
+          hasMore: false,
+          prunedThrough: 0,
+        ),
+      );
+
+      await supervisor.start();
+      for (var index = 0; index < 40; index += 1) {
+        await pumpEvents();
+      }
+
+      // Nothing arrived, nothing was sent, no socket event happened and nobody
+      // touched the application. The only thing that moved is time, and the
+      // envelope is gone.
+      expect(
+        inspector.calls,
+        greaterThanOrEqualTo(3),
+        reason: 'the retry time is what brought the engine back',
+      );
+      expect(remote.sends, 0);
+      expect(
+        await database.select(database.quarantineRecords).get(),
+        hasLength(1),
+        reason: 'the budget ran out and the envelope was retired',
+      );
+      expect(
+        remote.acknowledged.expand((batch) => batch),
+        contains('00000000-0000-4000-8000-0000000000aa'),
+        reason: 'and the server is told, so it stops serving these bytes',
+      );
+
+      await supervisor.dispose();
+      await database.close();
+    },
+  );
+
+  test(
     'a growing durable outbox drives a cycle; a stalled one does not spin',
     () async {
       final database = LocalDatabase(NativeDatabase.memory());
@@ -421,6 +497,80 @@ final class CountingRemote implements SyncRemotePort {
 
 /// Drains cleanly and refuses every send, so a queued target stays durable and
 /// keeps the outbox depth pinned above zero.
+/// A clock a test moves, unlike [SupervisorClock], which is frozen.
+final class AdvancingClock implements TimeSource {
+  DateTime value = DateTime.utc(2026, 8, 26);
+
+  @override
+  DateTime now() => value;
+}
+
+/// Waiting, made observable: the delay a caller asked for is exactly how far
+/// the clock moves, so a durable retry time genuinely falls due.
+final class ClockAdvancingDelay implements DelayPort {
+  ClockAdvancingDelay(this.clock);
+
+  final AdvancingClock clock;
+
+  @override
+  Future<void> wait(Duration delay) async {
+    clock.value = clock.value.add(delay);
+  }
+}
+
+final class ZeroJitter implements JitterSource {
+  const ZeroJitter();
+
+  @override
+  int nextInt(int upperBoundExclusive) => 0;
+}
+
+/// A server with nothing to say: no envelopes, and every acknowledgement
+/// accepted.
+final class SilentRemote implements SyncRemotePort {
+  int sends = 0;
+  final List<List<String>> acknowledged = [];
+
+  @override
+  Future<Result<DrainPage>> drain({required int limit}) async => Result.success(
+    DrainPage(envelopes: const [], hasMore: false, prunedThrough: 0),
+  );
+
+  @override
+  Future<Result<int>> acknowledge(List<String> envelopeIds) async {
+    acknowledged.add(List.of(envelopeIds));
+    return Result.success(envelopeIds.length);
+  }
+
+  @override
+  Future<Result<OutboxAcceptance>> send(OutboxBatch batch) async {
+    sends += 1;
+    return Result.success(
+      OutboxAcceptance(
+        accepted: batch.targets.length,
+        staleDeviceIds: const {},
+      ),
+    );
+  }
+}
+
+/// The native core refusing bytes it will refuse every time.
+final class RefusingInspector implements OpaqueEnvelopeInspector {
+  int calls = 0;
+
+  @override
+  Future<Result<OpaqueEnvelopeInspection>> inspect({
+    required String envelopeId,
+    required Uint8List exactCiphertext,
+    required bool allowPotentiallyMls,
+  }) async {
+    calls += 1;
+    return const Result.failure(
+      CryptoCoreFailure(CryptoCoreFailureCode.authenticationFailed),
+    );
+  }
+}
+
 final class RefusingSendRemote implements SyncRemotePort {
   int drains = 0;
   int sends = 0;

@@ -71,6 +71,14 @@ final class SyncLifecycleSupervisor {
   int _generation = 0;
   int _observedOutboxDepth = 0;
 
+  /// Whether durable reconnect state may still be carrying an attempt counter
+  /// or a due time from an earlier failure. True at start so the first
+  /// successful cycle of a process retires whatever the previous one left.
+  bool _reconnectPending = true;
+
+  /// The durable retry time this session is currently waiting out, if any.
+  DateTime? _retryWakeAt;
+
   Stream<SyncProjection> get projections => _projections.stream;
 
   Future<void> start() async {
@@ -148,6 +156,15 @@ final class SyncLifecycleSupervisor {
   /// connection phase and so re-emits this projection: reacting to "depth is
   /// non-zero" would spin against a row waiting out its retry backoff, while
   /// reacting to "depth grew" cannot, since only a new durable target grows it.
+  ///
+  /// That last clause is load-bearing and worth stating as the invariant it is:
+  /// the engine's own writes only ever *retire* outbox rows — acceptance, stale
+  /// device, permanent failure — and a retry leaves the row exactly as
+  /// countable as it was, so no transition the engine makes can drive this
+  /// trigger. The store conflates the stream it comes from, which changes
+  /// nothing here: conflation keeps the first value and the last value of every
+  /// window, and the only writer that raises the depth never lowers it again in
+  /// the same breath.
   void _onProjection(SyncProjection projection) {
     _projections.add(projection);
     final previous = _observedOutboxDepth;
@@ -155,6 +172,45 @@ final class SyncLifecycleSupervisor {
     if (projection.outboxDepth > previous) {
       unawaited(_requestCycle());
     }
+    unawaited(_armRetryWake(projection.nextRetryAt));
+  }
+
+  /// Wakes the engine when durable work becomes due again.
+  ///
+  /// Rows waiting out a backoff are the only work in this system that nothing
+  /// else announces. A socket hint means an inbound envelope and a growing
+  /// outbox means a new send — both are events, and both already have a
+  /// trigger. A retry is a *time*, and it had none: the only thing that
+  /// happened to re-run the engine on one was reconnect backoff firing on every
+  /// failed cycle, which is to say, the bug. Taking that accidental wake-up away
+  /// without putting a deliberate one in its place would leave a deferred
+  /// envelope, or a batch in retry-wait, sitting until something unrelated woke
+  /// the session.
+  ///
+  /// `nextRetryAt` is the earliest due time across the inbox, the outbox and
+  /// the reconnect schedule, so one timer covers all three. It cannot spin: it
+  /// arms only for a time in the future, only when that time is earlier than
+  /// whatever it is already waiting for, and the cycle it eventually runs
+  /// either finishes the work or pushes the due time further out.
+  Future<void> _armRetryWake(DateTime? dueAt) async {
+    if (_disposed || dueAt == null) {
+      return;
+    }
+    final delay = dueAt.difference(_clock.now());
+    if (delay <= Duration.zero) {
+      return;
+    }
+    final pending = _retryWakeAt;
+    if (pending != null && !dueAt.isBefore(pending)) {
+      return;
+    }
+    _retryWakeAt = dueAt;
+    await _delay.wait(delay);
+    if (_disposed || _retryWakeAt != dueAt) {
+      return;
+    }
+    _retryWakeAt = null;
+    await _requestCycle();
   }
 
   Future<void> _recordHintAndDrain() async {
@@ -292,23 +348,74 @@ final class SyncLifecycleSupervisor {
     return run;
   }
 
+  /// Runs delivery cycles until nothing more has been asked for.
+  ///
+  /// The two things that can go wrong here are not the same thing, and treating
+  /// them as one is what put a user-initiated send behind a random wait. A
+  /// transport that will not carry a request needs reconnect backoff, and gets
+  /// it. A cycle that failed locally — an envelope that would not open, a batch
+  /// the server refused — needs nothing of the sort: the socket is up, the REST
+  /// path is up, and the next request deserves to be serviced now rather than
+  /// after a uniform draw of up to five minutes.
   Future<void> _runCycles() async {
     try {
       do {
         _cycleRequested = false;
         final result = await _engine.synchronize();
         if (result case FailureResult(failure: final failure)) {
-          if (_mayConnectNow) {
-            await _scheduleReconnect(failure, _generation);
+          if (_isTransportUnhealthy(failure)) {
+            if (_mayConnectNow) {
+              await _scheduleReconnect(failure, _generation);
+            }
+            break;
           }
-          break;
+          // The durable queue moved even though the cycle reported a failure,
+          // so a request that arrived while this one was running still gets its
+          // own cycle. `continue` re-checks the loop condition, which means
+          // this can only repeat while somebody is actually asking — it cannot
+          // spin on its own.
+          continue;
         }
+        await _markCycleSucceeded();
       } while (_cycleRequested && !_disposed);
     } finally {
       // Cleared here rather than from a callback on the returned future, so
       // that a request arriving in the microtask after this run finishes starts
       // a new cycle instead of joining a completed one and being dropped.
       _activeCycle = null;
+    }
+  }
+
+  /// Whether a failed cycle is evidence that the connection itself is unusable.
+  ///
+  /// Only the transport-shaped failures are. Everything else — a local storage
+  /// fault, an envelope that would not open, a batch the server rejected on its
+  /// contents — says nothing about whether the next request would arrive.
+  bool _isTransportUnhealthy(Failure failure) =>
+      failure is TransportFailure ||
+      failure is AuthenticationFailure ||
+      (failure is BackendFailure &&
+          failure.code == BackendFailureCode.rateLimited);
+
+  /// Retires the reconnect backoff after a cycle that demonstrably worked.
+  ///
+  /// It used to be retired only by [_markStableAfterDelay], thirty seconds
+  /// after a socket opened, so an attempt counter raised by failures the
+  /// transport had nothing to do with kept growing and kept lengthening the
+  /// wait in front of the next connect. A completed cycle is stronger evidence
+  /// than an open socket: it means the REST path carried a drain, an
+  /// acknowledgement and a send.
+  ///
+  /// The flag keeps this to one write. It starts true so that the first
+  /// successful cycle of a process clears whatever the previous process left
+  /// behind, and is raised again whenever a reconnect is scheduled.
+  Future<void> _markCycleSucceeded() async {
+    if (!_reconnectPending) {
+      return;
+    }
+    final cleared = await _store.clearReconnect(syncedAt: null);
+    if (cleared is Success<void>) {
+      _reconnectPending = false;
     }
   }
 
@@ -371,6 +478,7 @@ final class SyncLifecycleSupervisor {
     if (persisted is FailureResult<DurableReconnectState>) {
       return;
     }
+    _reconnectPending = true;
     unawaited(_waitThenReconnect(delay, generation));
   }
 
@@ -393,6 +501,7 @@ final class SyncLifecycleSupervisor {
     }
     _disposed = true;
     _generation += 1;
+    _retryWakeAt = null;
     for (final subscription in _subscriptions) {
       await subscription.cancel();
     }

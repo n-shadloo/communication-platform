@@ -28,11 +28,26 @@ QueryExecutor _openEncryptedNativeDatabase(PlatformStorageUnlock unlock) {
   return driftDatabase(
     name: _databaseName,
     native: DriftNativeOptions(
+      // Delivery runs from a second entry point — the deferred catch-up wakes
+      // this process with no user interface at all — so two isolates can hold
+      // this database open at once. A port round trip per statement is the
+      // price of that being safe rather than a race, and it is not a knob to
+      // turn until it is the measured cost (ADR-060).
       shareAcrossIsolates: true,
       setup: (CommonDatabase database) {
-        database
-          ..execute('PRAGMA key = "x\'$keyHex\'"')
-          ..execute('PRAGMA cipher_memory_security = ON');
+        // `cipher_memory_security` is deliberately not enabled (ADR-060).
+        //
+        // It scrubs and locks every SQLCipher allocation, which SQLCipher's own
+        // documentation describes as a large slowdown, and it defends against
+        // reading plaintext out of a live process. That adversary is explicitly
+        // outside this client's guarantee — "a device compromised while it can
+        // decrypt content" — and the defence would be partial even inside it:
+        // the same plaintext is simultaneously in the Dart heap, in the text
+        // shaping and raster buffers of the Flutter engine, and in the
+        // platform's own view system, none of which this pragma reaches. What
+        // the threat model does cover is a locked, uncompromised device whose
+        // filesystem is read, and that is the key below, not this.
+        database.execute('PRAGMA key = "x\'$keyHex\'"');
       },
     ),
   );

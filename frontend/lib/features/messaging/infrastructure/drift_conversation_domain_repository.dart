@@ -570,6 +570,13 @@ final class DriftConversationDomainRepository extends DriftRepositoryBase
                 row.messageId.isIn(messageIds),
           ))
           .go();
+      // The durable half of the same fact. Deleting the queue row alone said
+      // only that this receipt is not queued *right now*, and the next
+      // projection rebuild re-derived it from the message and queued it again.
+      // This is what makes the receipt spent.
+      await (database.update(database.messages)
+            ..where((row) => row.messageId.isIn(messageIds)))
+          .write(const MessagesCompanion(deliveredReceiptSent: Value(true)));
     });
   }
 

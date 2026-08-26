@@ -17,6 +17,14 @@ abstract interface class DurableSyncStore implements Port {
 
   Future<Result<SyncProjection>> readProjection();
 
+  /// Reads only the queue-gap flag from the singleton checkpoint row.
+  ///
+  /// [readProjection] answers this question too, but it answers five others
+  /// with it — three of them aggregates over the two largest tables in the
+  /// database. The inbox loop needs this one column and nothing else, once per
+  /// pass, so it gets its own read rather than paying for the projection.
+  Future<Result<QueueGapState>> readQueueGapState();
+
   Future<Result<void>> queuePreparedOperation({
     required String operationId,
     required String eventId,
@@ -38,9 +46,16 @@ abstract interface class DurableSyncStore implements Port {
 
   Future<Result<void>> blockEnvelopeForQueueGap(String envelopeId);
 
+  /// Leaves an envelope for a later attempt.
+  ///
+  /// [countsAgainstBudget] is what separates "this device could not reach the
+  /// server" from "these bytes will never open". Only the second raises the
+  /// envelope's inspection-failure count, and only that count can retire an
+  /// envelope into quarantine.
   Future<Result<void>> recordEnvelopeInspectionRetry({
     required String envelopeId,
     required DateTime retryAt,
+    required bool countsAgainstBudget,
   });
 
   Future<Result<void>> recordEnvelopeRejection({

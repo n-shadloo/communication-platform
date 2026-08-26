@@ -6,6 +6,7 @@ import 'package:communication_platform/core/protocol/application_message_model.d
 import 'package:communication_platform/features/local_storage/infrastructure/database/local_database.dart';
 import 'package:communication_platform/features/messaging/domain/conversation_model.dart';
 import 'package:communication_platform/features/messaging/infrastructure/drift_application_event_projector.dart';
+import 'package:communication_platform/features/messaging/infrastructure/drift_conversation_domain_repository.dart';
 import 'package:drift/drift.dart' show OrderingTerm, Value;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -450,6 +451,80 @@ void main() {
     expect(pending.targetUserId, peerUser);
     expect(pending.localDeviceId, currentDevice);
   });
+
+  test(
+    'a delivered receipt is owed once, not once per projection rebuild',
+    () async {
+      final database = LocalDatabase(NativeDatabase.memory());
+      addTearDown(database.close);
+      final messageId = _id(76, 16);
+      await _apply(
+        database,
+        _commit(
+          eventSeed: 76,
+          kind: ApplicationEventKind.messageCreate,
+          senderUser: peerUser,
+          senderDevice: peerDevice,
+          counter: 1,
+          body: MessageCreateBody(messageId: messageId, text: 'incoming'),
+          authenticatedAt: authenticatedAt,
+        ),
+      );
+      final hex = protocolBytesToHex(messageId);
+      expect(
+        await database.select(database.pendingApplicationReceipts).get(),
+        hasLength(1),
+      );
+
+      // The receipt is sent, which is what the flush does when it succeeds.
+      await DriftConversationDomainRepository(
+        database,
+      ).completePendingDeliveredReceipts(
+        localDeviceId: currentDevice,
+        messageIds: [hex],
+      );
+      expect(
+        await database.select(database.pendingApplicationReceipts).get(),
+        isEmpty,
+      );
+
+      // Anything at all in this conversation rebuilds its projection, and the
+      // rebuild rewrites every message in it. Before the durable marker existed
+      // this re-queued a receipt for every message the conversation had ever
+      // received — and a receipt is an event at the far end, which rebuilds
+      // that conversation and re-queues its own, so two devices in one
+      // conversation sustained it indefinitely.
+      await _apply(
+        database,
+        _commit(
+          eventSeed: 77,
+          kind: ApplicationEventKind.messageCreate,
+          senderUser: peerUser,
+          senderDevice: peerDevice,
+          counter: 2,
+          body: MessageCreateBody(messageId: _id(77, 16), text: 'and another'),
+          authenticatedAt: authenticatedAt,
+        ),
+      );
+
+      final pending = await database
+          .select(database.pendingApplicationReceipts)
+          .get();
+      expect(
+        pending.map((row) => row.messageId),
+        [protocolBytesToHex(_id(77, 16))],
+        reason: 'only the message nobody has been told about yet',
+      );
+      final sent = await (database.select(
+        database.messages,
+      )..where((row) => row.messageId.equals(hex))).getSingle();
+      expect(
+        sent.deliveredReceiptSent,
+        isTrue,
+        reason: 'and the rebuild preserved the marker rather than clearing it',
+      );
+    },
+  );
 
   test(
     'Saved Messages is own-account-only, unread-free, and local-only',

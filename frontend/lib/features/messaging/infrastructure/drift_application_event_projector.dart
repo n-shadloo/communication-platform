@@ -805,17 +805,33 @@ final class DriftApplicationEventProjector {
       );
     }
     if (message.pendingDeliveredReceipt && message.localDeviceId.isNotEmpty) {
-      await database
-          .into(database.pendingApplicationReceipts)
-          .insert(
-            PendingApplicationReceiptsCompanion.insert(
-              messageId: message.messageId,
-              conversationId: message.conversationId,
-              targetUserId: message.receiptTargetUserId,
-              localDeviceId: message.localDeviceId,
-            ),
-            mode: InsertMode.insertOrIgnore,
-          );
+      // Only for a message this device has not already acknowledged to its
+      // sender. `pendingDeliveredReceipt` says a receipt is *owed in principle*
+      // — the message came from a peer, in a direct conversation — and those
+      // are properties that never change, so re-deriving the queue from them on
+      // every rebuild re-queued a receipt for every message the conversation
+      // had ever received. Each is an event at the far end, which rebuilds that
+      // conversation and re-queues its own, and two devices in a conversation
+      // sustain that indefinitely: measured at roughly seventy to a hundred and
+      // eighty envelopes a minute between two idle phones (ADR-060). The column
+      // read here is the durable record of what has actually been sent.
+      final existing =
+          await (database.select(database.messages)
+                ..where((row) => row.messageId.equals(message.messageId)))
+              .getSingleOrNull();
+      if (existing != null && !existing.deliveredReceiptSent) {
+        await database
+            .into(database.pendingApplicationReceipts)
+            .insert(
+              PendingApplicationReceiptsCompanion.insert(
+                messageId: message.messageId,
+                conversationId: message.conversationId,
+                targetUserId: message.receiptTargetUserId,
+                localDeviceId: message.localDeviceId,
+              ),
+              mode: InsertMode.insertOrIgnore,
+            );
+      }
     }
   }
 
