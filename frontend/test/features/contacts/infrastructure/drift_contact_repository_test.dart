@@ -121,17 +121,15 @@ void main() {
   });
 }
 
-Future<void> _writePosture(
-  LocalDatabase database,
-  GlobalSecurityState state,
-) => database
-    .into(database.securityPostures)
-    .insertOnConflictUpdate(
-      SecurityPosturesCompanion.insert(
-        singletonId: const Value(1),
-        state: state.index,
-      ),
-    );
+Future<void> _writePosture(LocalDatabase database, GlobalSecurityState state) =>
+    database
+        .into(database.securityPostures)
+        .insertOnConflictUpdate(
+          SecurityPosturesCompanion.insert(
+            singletonId: const Value(1),
+            state: state.index,
+          ),
+        );
 
 Uint8List _bytes(int length, int value) =>
     Uint8List.fromList(List<int>.filled(length, value));

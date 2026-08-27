@@ -143,30 +143,33 @@ void main() {
     },
   );
 
-  test('the device bundle enrolment writes is one the reader accepts', () async {
-    final store = _store(runtime);
-    final complete = _journal(
-      EnrollmentPhase.complete,
-      deviceId: deviceId,
-      identity: IdentityKeyPackage.fromNative(_identityBytes()),
-    );
-    await store.persistPrepared(complete);
-    expect(await store.update(complete), isA<Success<void>>());
+  test(
+    'the device bundle enrolment writes is one the reader accepts',
+    () async {
+      final store = _store(runtime);
+      final complete = _journal(
+        EnrollmentPhase.complete,
+        deviceId: deviceId,
+        identity: IdentityKeyPackage.fromNative(_identityBytes()),
+      );
+      await store.persistPrepared(complete);
+      expect(await store.update(complete), isA<Success<void>>());
 
-    // `devices.public_bundle` is written here and read only by
-    // DriftContactRepository, which every send reaches when it resolves the
-    // local account's own devices. Enrolment wrote the wire field names, so
-    // this read threw and no message could leave the device - a break neither
-    // component's own tests could see, because each one used its own fake.
-    final devices = await DriftContactRepository(
-      runtime.openedDatabase!,
-    ).readDevices(userId);
+      // `devices.public_bundle` is written here and read only by
+      // DriftContactRepository, which every send reaches when it resolves the
+      // local account's own devices. Enrolment wrote the wire field names, so
+      // this read threw and no message could leave the device - a break neither
+      // component's own tests could see, because each one used its own fake.
+      final devices = await DriftContactRepository(
+        runtime.openedDatabase!,
+      ).readDevices(userId);
 
-    final stored = (devices as Success<List<PeerPublicDevice>>).value;
-    expect(stored, hasLength(1));
-    expect(stored.single.deviceId, deviceId);
-    expect(stored.single.identityPublic, hasLength(64));
-  });
+      final stored = (devices as Success<List<PeerPublicDevice>>).value;
+      expect(stored, hasLength(1));
+      expect(stored.single.deviceId, deviceId);
+      expect(stored.single.identityPublic, hasLength(64));
+    },
+  );
 }
 
 const userId = '6f0c2f5e-8a41-4c9e-9a34-1f3d8f2b7c10';
