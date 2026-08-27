@@ -667,9 +667,148 @@ void main() {
       await upgraded.close();
     },
   );
+
+  test(
+    'version-sixteen upgrade indexes a populated database without moving a row',
+    () async {
+      final current = LocalDatabase(NativeDatabase(databaseFile));
+      await current.customSelect('SELECT 1').getSingle();
+      await current.close();
+
+      final versionSixteen = sqlite3.open(databaseFile.path);
+      _dropPhaseTwoIndexes(versionSixteen);
+      versionSixteen
+        ..execute(
+          'INSERT INTO conversations (conversation_id, kind, '
+          'list_projection_ciphertext, sort_key, tombstoned, pinned, '
+          'unread_count) VALUES (?, ?, ?, ?, ?, ?, ?)',
+          <Object?>[
+            'conversation-v16',
+            0,
+            Uint8List.fromList(const [1]),
+            42,
+            0,
+            0,
+            1,
+          ],
+        )
+        ..execute('PRAGMA user_version = 16');
+      for (var index = 0; index < 64; index += 1) {
+        versionSixteen
+          ..execute(
+            'INSERT INTO messages (message_id, conversation_id, '
+            'current_event_id, projection_ciphertext, status, revision, '
+            'created_at, ordering_ms, ordering_event_id, pinned, unread) '
+            'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+            <Object?>[
+              'message-v16-$index',
+              'conversation-v16',
+              'event-v16-$index',
+              Uint8List.fromList(const [2]),
+              3,
+              0,
+              index,
+              1700000000000 + index,
+              'event-v16-$index',
+              index == 7 ? 1 : 0,
+              index == 63 ? 1 : 0,
+            ],
+          )
+          ..execute(
+            'INSERT INTO attachments (attachment_id, message_id, '
+            'encrypted_descriptor, transfer_state) VALUES (?, ?, ?, ?)',
+            <Object?>[
+              'attachment-v16-$index',
+              'message-v16-$index',
+              Uint8List.fromList(const [3]),
+              0,
+            ],
+          );
+      }
+      versionSixteen.close();
+
+      final upgraded = LocalDatabase(NativeDatabase(databaseFile));
+      await upgraded.customSelect('SELECT 1').getSingle();
+
+      // Every index this schema declares now exists, by name, on the table it
+      // names. `CREATE INDEX` is the whole of the upgrade: no table is dropped,
+      // re-keyed or rewritten.
+      final indexes = await upgraded
+          .customSelect(
+            "SELECT name, tbl_name FROM sqlite_master WHERE type = 'index' "
+            "AND name NOT LIKE 'sqlite_autoindex%'",
+          )
+          .map(
+            (row) =>
+                '${row.read<String>('name')} on ${row.read<String>('tbl_name')}',
+          )
+          .get();
+      expect(indexes, <String>{
+        'messages_conversation_ordering on messages',
+        'messages_pinned_by_conversation on messages',
+        'application_events_conversation_apply_state on application_events',
+        'application_events_sender_counter on application_events',
+        'attachments_by_message on attachments',
+        'outbox_operations_by_event on outbox_operations',
+      });
+
+      // And every row is exactly the row it was.
+      final messages = await upgraded
+          .customSelect(
+            "SELECT * FROM messages WHERE conversation_id = 'conversation-v16' "
+            'ORDER BY ordering_ms ASC',
+          )
+          .get();
+      expect(messages, hasLength(64));
+      expect(messages.first.read<String>('message_id'), 'message-v16-0');
+      expect(messages.last.read<int>('unread'), 1);
+      expect(
+        messages
+            .where((row) => row.read<int>('pinned') == 1)
+            .single
+            .read<String>('message_id'),
+        'message-v16-7',
+      );
+      expect(
+        await upgraded
+            .customSelect('SELECT COUNT(*) AS total FROM attachments')
+            .map((row) => row.read<int>('total'))
+            .getSingle(),
+        64,
+      );
+      expect(
+        await upgraded
+            .customSelect(
+              "SELECT sort_key FROM conversations "
+              "WHERE conversation_id = 'conversation-v16'",
+            )
+            .map((row) => row.read<int>('sort_key'))
+            .getSingle(),
+        42,
+      );
+      expect(
+        await upgraded
+            .customSelect('PRAGMA user_version')
+            .map((row) => row.read<int>('user_version'))
+            .getSingle(),
+        LocalDatabase.currentSchemaVersion,
+      );
+      // Idempotent, because the declaration carries `IF NOT EXISTS`: a
+      // database that already holds these indexes re-runs the step cleanly.
+      expect(
+        await upgraded.customSelect('PRAGMA quick_check').getSingle(),
+        isNotNull,
+      );
+      await upgraded.close();
+    },
+  );
 }
 
 void _dropPieceFourteenSchema(Database database) {
+  // Before the columns, because an index that names a column is what stops
+  // SQLite dropping it. These arrived with schema 17, so every schema this
+  // helper reconstructs predates all of them.
+  _dropPhaseTwoIndexes(database);
   for (final table in const [
     'application_events',
     'unsupported_application_events',
@@ -704,6 +843,19 @@ void _dropPieceFourteenSchema(Database database) {
     'unread',
   ]) {
     database.execute('ALTER TABLE messages DROP COLUMN $column');
+  }
+}
+
+void _dropPhaseTwoIndexes(Database database) {
+  for (final index in const [
+    'messages_conversation_ordering',
+    'messages_pinned_by_conversation',
+    'application_events_conversation_apply_state',
+    'application_events_sender_counter',
+    'attachments_by_message',
+    'outbox_operations_by_event',
+  ]) {
+    database.execute('DROP INDEX IF EXISTS $index');
   }
 }
 

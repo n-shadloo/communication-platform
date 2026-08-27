@@ -24872,6 +24872,30 @@ abstract class _$LocalDatabase extends GeneratedDatabase {
   );
   late final $QuarantineRecordsTable quarantineRecords =
       $QuarantineRecordsTable(this);
+  late final Index messagesConversationOrdering = Index(
+    'messages_conversation_ordering',
+    'CREATE INDEX IF NOT EXISTS messages_conversation_ordering ON messages (conversation_id, ordering_ms, ordering_event_id, message_id)',
+  );
+  late final Index messagesPinnedByConversation = Index(
+    'messages_pinned_by_conversation',
+    'CREATE INDEX IF NOT EXISTS messages_pinned_by_conversation ON messages (conversation_id, message_id) WHERE pinned',
+  );
+  late final Index applicationEventsConversationApplyState = Index(
+    'application_events_conversation_apply_state',
+    'CREATE INDEX IF NOT EXISTS application_events_conversation_apply_state ON application_events (conversation_id, apply_state)',
+  );
+  late final Index applicationEventsSenderCounter = Index(
+    'application_events_sender_counter',
+    'CREATE INDEX IF NOT EXISTS application_events_sender_counter ON application_events (sender_device_id, sender_counter)',
+  );
+  late final Index attachmentsByMessage = Index(
+    'attachments_by_message',
+    'CREATE INDEX IF NOT EXISTS attachments_by_message ON attachments (message_id)',
+  );
+  late final Index outboxOperationsByEvent = Index(
+    'outbox_operations_by_event',
+    'CREATE INDEX IF NOT EXISTS outbox_operations_by_event ON outbox_operations (event_id)',
+  );
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -24921,6 +24945,12 @@ abstract class _$LocalDatabase extends GeneratedDatabase {
     syncCheckpoints,
     localPreferences,
     quarantineRecords,
+    messagesConversationOrdering,
+    messagesPinnedByConversation,
+    applicationEventsConversationApplyState,
+    applicationEventsSenderCounter,
+    attachmentsByMessage,
+    outboxOperationsByEvent,
   ];
   @override
   StreamQueryUpdateRules get streamUpdateRules => const StreamQueryUpdateRules([

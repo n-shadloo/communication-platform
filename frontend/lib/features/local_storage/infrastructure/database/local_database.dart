@@ -458,6 +458,30 @@ class Memberships extends Table {
   Set<Column<Object>> get primaryKey => {conversationId, userId};
 }
 
+/// The one index the timeline is read through.
+///
+/// `conversation_id` is not the primary key, so every lookup by conversation
+/// was a scan of every message this device holds for anybody. The three
+/// ordering columns follow it in the order the timeline sorts by, which makes
+/// the same index answer the `WHERE`, satisfy the `ORDER BY` in both
+/// directions without a temporary B-tree, and cover the keyset cursor probe
+/// outright.
+@TableIndex.sql(
+  'CREATE INDEX IF NOT EXISTS messages_conversation_ordering '
+  'ON messages (conversation_id, ordering_ms, ordering_event_id, message_id)',
+)
+/// Pinned messages, and only pinned messages.
+///
+/// Partial on purpose: a pin is rare, so this index holds a handful of entries
+/// rather than one per message, and an insert that is not pinned writes nothing
+/// to it. The cost of that is that SQLite will only choose it for a query whose
+/// `WHERE` contains the bare term `pinned` — a bound `pinned = ?` proves
+/// nothing at prepare time — which is why the two callers spell the predicate
+/// that way.
+@TableIndex.sql(
+  'CREATE INDEX IF NOT EXISTS messages_pinned_by_conversation '
+  'ON messages (conversation_id, message_id) WHERE pinned',
+)
 class Messages extends Table {
   @override
   String get tableName => 'messages';
@@ -542,6 +566,26 @@ class MessageEvents extends Table {
 }
 
 /// Every authenticated version-1 event fact retained for deterministic rebuilds.
+///
+/// The index is what makes rebuilding one conversation cost that conversation
+/// rather than the whole event log: `_rebuildConversation` asks for the
+/// candidate events of one conversation, and without it that read scans every
+/// event this device has ever stored, for anybody, and grows forever.
+@TableIndex.sql(
+  'CREATE INDEX IF NOT EXISTS application_events_conversation_apply_state '
+  'ON application_events (conversation_id, apply_state)',
+)
+/// The sender-counter uniqueness check, which every applied event runs.
+///
+/// It has no conversation to narrow it — a replayed counter is a fact about a
+/// device, not about a conversation — so without an index it reads every event
+/// this device has ever stored, once per event applied, forever. The table is
+/// append-only and the pair is very nearly unique, so the index costs one entry
+/// per insert and turns the check into a seek that returns one row.
+@TableIndex.sql(
+  'CREATE INDEX IF NOT EXISTS application_events_sender_counter '
+  'ON application_events (sender_device_id, sender_counter)',
+)
 class StoredApplicationEvents extends Table {
   @override
   String get tableName => 'application_events';
@@ -628,6 +672,19 @@ class MessageReactions extends Table {
   Set<Column<Object>> get primaryKey => {messageId, reactingUserId};
 }
 
+/// A message's attachments.
+///
+/// The index is read by the timeline, which asks for the attachments of a whole
+/// page at once — but it is paid for on the write path. `message_id` is a
+/// foreign key into `messages` with `ON DELETE CASCADE` and `PRAGMA
+/// foreign_keys` is on, so every write to a `messages` row makes SQLite prove
+/// that no attachment is orphaned. Without an index on the child key that proof
+/// is a full scan of this table, once per parent row: measured at 96 ms for one
+/// rebuild of a 1200-message conversation, against 27 ms with the index.
+@TableIndex.sql(
+  'CREATE INDEX IF NOT EXISTS attachments_by_message '
+  'ON attachments (message_id)',
+)
 class Attachments extends Table {
   @override
   String get tableName => 'attachments';
@@ -682,6 +739,15 @@ class InboxEnvelopes extends Table {
   Set<Column<Object>> get primaryKey => {envelopeId};
 }
 
+/// The per-recipient ciphertext waiting for the transport.
+///
+/// `event_id` is the second half of no key here — the primary key is the
+/// operation and its recipient device — and it is how transport state is read
+/// back for a message. Without the index that read scans the whole outbox.
+@TableIndex.sql(
+  'CREATE INDEX IF NOT EXISTS outbox_operations_by_event '
+  'ON outbox_operations (event_id)',
+)
 class OutboxOperations extends Table {
   @override
   String get tableName => 'outbox_operations';
@@ -1070,7 +1136,7 @@ final class LocalDatabase extends _$LocalDatabase {
   LocalDatabase(super.executor, {StorageMigrationHooks? migrationHooks})
     : _migrationHooks = migrationHooks ?? const StorageMigrationHooks();
 
-  static const currentSchemaVersion = 16;
+  static const currentSchemaVersion = 17;
   final StorageMigrationHooks _migrationHooks;
 
   @override
@@ -1516,6 +1582,33 @@ final class LocalDatabase extends _$LocalDatabase {
           ).get();
           if (existing.isEmpty) {
             await migrator.createTable(pendingSendPreparations);
+          }
+        }
+        if (from < 17) {
+          // Additively, and only indexes. Nothing is dropped, nothing is
+          // re-keyed and no row is rewritten: `CREATE INDEX` reads the table
+          // once and writes a new B-tree beside it, so an interrupted upgrade
+          // rolls back to a database that is exactly what it was.
+          //
+          // It is not free on a device that already holds history. Each of
+          // these reads its whole table under SQLCipher, where every page read
+          // is a decrypt, and the two on `messages` read the same table twice.
+          // That is a one-time cost at the first open after the update, paid
+          // where the integrity check is already paid.
+          //
+          // `IF NOT EXISTS` is part of each declaration rather than a
+          // convenience here, so that this step and `createAll` are the same
+          // statement and neither can fail against a database that has already
+          // seen the other.
+          for (final index in <Index>[
+            messagesConversationOrdering,
+            messagesPinnedByConversation,
+            applicationEventsConversationApplyState,
+            applicationEventsSenderCounter,
+            attachmentsByMessage,
+            outboxOperationsByEvent,
+          ]) {
+            await migrator.createIndex(index);
           }
         }
         await _migrationHooks.afterUpgrade(from, to);
