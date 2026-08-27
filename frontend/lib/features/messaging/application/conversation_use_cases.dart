@@ -68,6 +68,47 @@ final class SendConversationEvents {
     return _sendMessage(event, resolved, currentUserId, currentDeviceId);
   }
 
+  /// Recovers one message the user was told had failed.
+  ///
+  /// A failed send has a durable operation behind it — either a preparation
+  /// that never produced ciphertext or ciphertext the relay refused — and
+  /// re-arming that operation is what puts the same message back on its way.
+  /// Sending the text again would leave the failed row on screen and add a
+  /// second message beside it, which is what a retry is not.
+  ///
+  /// Falling back to a fresh send covers the one case with nothing to re-arm: a
+  /// message whose operation record has already been pruned. It is the older
+  /// behaviour, kept for the case that is genuinely a new send.
+  Future<Result<void>> retrySend({
+    required String currentUserId,
+    required String currentDeviceId,
+    required ConversationTarget target,
+    required String messageId,
+    required String text,
+    String? replyToMessageId,
+    String? quoteFallback,
+  }) async {
+    final rearmed = await fanout.retryFailedSend('application:$messageId');
+    if (rearmed case FailureResult(failure: final failure)) {
+      return Result.failure(failure);
+    }
+    if ((rearmed as Success<bool>).value) {
+      return const Result.success(null);
+    }
+    final sent = await sendText(
+      currentUserId: currentUserId,
+      currentDeviceId: currentDeviceId,
+      target: target,
+      text: text,
+      replyToMessageId: replyToMessageId,
+      quoteFallback: quoteFallback,
+    );
+    return sent.fold(
+      onSuccess: (_) => const Result.success(null),
+      onFailure: Result.failure,
+    );
+  }
+
   Future<Result<SendMessageOutcome>> sendAttachments({
     required String currentUserId,
     required String currentDeviceId,
@@ -259,16 +300,7 @@ final class SendConversationEvents {
         references: ids,
         body: ReceiptBody(messageIds: ids),
       );
-      final sent = await _send(
-        event,
-        conversation,
-        currentUserId,
-        currentDeviceId,
-      );
-      return sent.fold(
-        onSuccess: (_) => const Result.success(null),
-        onFailure: Result.failure,
-      );
+      return _send(event, conversation, currentUserId, currentDeviceId);
     } on Object {
       return const Result.failure(
         ValidationFailure(ValidationFailureKind.invalidInput),
@@ -342,20 +374,23 @@ final class SendConversationEvents {
       currentDeviceId,
     );
     return sent.fold(
-      onSuccess: (operation) => Result.success(
+      // Preparing, and not queued: at this point nothing has been sealed for
+      // anybody, because who the recipients are is a question for the network
+      // and this call did not ask it. Whether the answer turns out to be a
+      // queue of devices or nobody at all is written to the message by the
+      // cycle that finds out.
+      onSuccess: (_) => Result.success(
         SendMessageOutcome(
           eventId: event.eventId,
           conversationId: event.conversationId,
-          transportState: operation.targetCount == 0
-              ? MessageTransportState.localOnly
-              : MessageTransportState.queued,
+          transportState: MessageTransportState.preparing,
         ),
       ),
       onFailure: Result.failure,
     );
   }
 
-  Future<Result<ApplicationFanoutOutcome>> _send(
+  Future<Result<void>> _send(
     ApplicationEventRecord event,
     _OutboundConversation conversation,
     String currentUserId,
@@ -367,7 +402,7 @@ final class SendConversationEvents {
     }
     final encoded = (encodedResult as Success<Uint8List>).value;
     final eventId = protocolBytesToHex(event.eventId);
-    return fanout.prepareAndQueue(
+    return fanout.commitLocalEcho(
       operationId: 'application:$eventId',
       eventId: eventId,
       currentUserId: currentUserId.toLowerCase(),

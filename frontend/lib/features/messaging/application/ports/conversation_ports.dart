@@ -75,14 +75,14 @@ abstract interface class ApplicationConversationResolverPort implements Port {
   });
 }
 
-final class ApplicationFanoutOutcome {
-  const ApplicationFanoutOutcome({required this.targetCount});
-
-  final int targetCount;
-}
-
 abstract interface class ApplicationFanoutPort implements Port {
-  Future<Result<ApplicationFanoutOutcome>> prepareAndQueue({
+  /// Commits the event locally, and records that its recipients are still owed.
+  ///
+  /// Returning does not mean anything has been encrypted for anybody. It means
+  /// the event is durable, the timeline can see it, and a durable record exists
+  /// of the fan-out the delivery cycle now owes it. Everything that needs the
+  /// network happens against that record.
+  Future<Result<void>> commitLocalEcho({
     required String operationId,
     required String eventId,
     required String currentUserId,
@@ -91,6 +91,9 @@ abstract interface class ApplicationFanoutPort implements Port {
     required Uint8List openedPayload,
     required ApplicationEventCommit applicationEvent,
   });
+
+  /// Re-arms a send that failed, and answers whether there was one to re-arm.
+  Future<Result<bool>> retryFailedSend(String operationId);
 }
 
 abstract interface class VolatileConversationStatePort implements Port {

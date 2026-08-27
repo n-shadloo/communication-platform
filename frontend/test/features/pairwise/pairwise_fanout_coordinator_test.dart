@@ -224,7 +224,7 @@ void main() {
         ),
       );
 
-      final first = await coordinator.prepareAndQueue(
+      final echoed = await coordinator.commitLocalEcho(
         operationId: 'application:$eventId',
         eventId: eventId,
         currentUserId: currentUserId,
@@ -233,27 +233,88 @@ void main() {
         openedOpaquePayload: encoded,
         applicationEvent: commit,
       );
-      final retry = await coordinator.prepareAndQueue(
+      final owed = OwedSendPreparation(
         operationId: 'application:$eventId',
         eventId: eventId,
         currentUserId: currentUserId,
         currentDeviceId: currentDeviceId,
         peerUserId: currentUserId,
-        openedOpaquePayload: encoded,
-        applicationEvent: commit,
       );
+      final first = await coordinator.prepareOwedSend(owed);
+      final retry = await coordinator.prepareOwedSend(owed);
 
-      expect(first, isA<Success<DurablePairwiseOperation>>());
-      expect(retry, isA<Success<DurablePairwiseOperation>>());
-      expect(
-        (first as Success<DurablePairwiseOperation>).value.targets,
-        isEmpty,
-      );
+      expect(echoed, isA<Success<void>>());
+      expect(first, isA<Success<void>>());
+      expect(retry, isA<Success<void>>());
       expect(store.localCommits, hasLength(1));
       expect(store.commits, isEmpty);
+      expect(store.settled, ['application:$eventId', 'application:$eventId']);
       expect(crypto.calls, isEmpty);
     },
   );
+
+  test('an echo reaches storage without resolving a single device', () async {
+    final currentUserId = uuid(currentUserNumber);
+    final currentDeviceId = uuid(currentDeviceNumber);
+    final event = ApplicationEventRecord(
+      version: 1,
+      eventId: bytes(16, 80),
+      conversationId: bytes(32, 81),
+      kindValue: ApplicationEventKind.messageCreate.wireValue,
+      senderUserId: protocolUuidBytes(currentUserId),
+      senderDeviceId: protocolUuidBytes(currentDeviceId),
+      senderCounter: 1,
+      createdMs: 1700000000000,
+      references: const [],
+      body: MessageCreateBody(messageId: bytes(16, 80), text: 'echo'),
+    );
+    final eventId = protocolBytesToHex(event.eventId);
+
+    final echoed = await coordinator.commitLocalEcho(
+      operationId: 'application:$eventId',
+      eventId: eventId,
+      currentUserId: currentUserId,
+      currentDeviceId: currentDeviceId,
+      peerUserId: uuid(peerUserNumber),
+      openedOpaquePayload: bytes(64, 80),
+      applicationEvent: ApplicationEventCommit(
+        event: event,
+        canonicalBytes: bytes(64, 80),
+        currentUserId: currentUserId,
+        currentDeviceId: currentDeviceId,
+        conversationKind: 0,
+        peerUserId: uuid(peerUserNumber),
+        localOrigin: true,
+        authenticatedAt: DateTime.fromMillisecondsSinceEpoch(
+          1700000001000,
+          isUtc: true,
+        ),
+      ),
+    );
+
+    expect(echoed, isA<Success<void>>());
+    expect(store.localCommits, hasLength(1));
+    expect(resolver.calls, isEmpty);
+    expect(claims.calls, isEmpty);
+    expect(crypto.calls, isEmpty);
+    expect(store.commits, isEmpty);
+  });
+
+  test('an owed send whose event has gone is retired, not retried', () async {
+    final owed = OwedSendPreparation(
+      operationId: 'application:missing',
+      eventId: 'missing',
+      currentUserId: uuid(currentUserNumber),
+      currentDeviceId: uuid(currentDeviceNumber),
+      peerUserId: uuid(peerUserNumber),
+    );
+
+    final result = await coordinator.prepareOwedSend(owed);
+
+    expect(result, isA<Success<void>>());
+    expect(store.settled, ['application:missing']);
+    expect(resolver.calls, isEmpty);
+  });
 }
 
 final class FakePairwiseStore implements PairwiseTransportStore {
@@ -261,13 +322,17 @@ final class FakePairwiseStore implements PairwiseTransportStore {
   final Map<String, DurablePairwiseOperation> durable = {};
   final List<PairwiseSendCommit> commits = [];
   final List<ApplicationEventCommit> localCommits = [];
+  final List<String> settled = [];
+  final List<String> rearmed = [];
   final List<(String, Set<String>)> reconciliations = [];
 
   @override
-  Future<Result<void>> commitLocalApplication({
+  Future<Result<void>> commitLocalEcho({
     required String operationId,
     required String eventId,
+    required String currentUserId,
     required String currentDeviceId,
+    required String peerUserId,
     required Uint8List openedLocalPayload,
     required ApplicationEventCommit applicationEvent,
   }) async {
@@ -280,6 +345,18 @@ final class FakePairwiseStore implements PairwiseTransportStore {
       targets: const [],
     );
     return const Result.success(null);
+  }
+
+  @override
+  Future<Result<void>> settleSendPreparation(String operationId) async {
+    settled.add(operationId);
+    return const Result.success(null);
+  }
+
+  @override
+  Future<Result<bool>> rearmFailedSend(String operationId) async {
+    rearmed.add(operationId);
+    return const Result.success(true);
   }
 
   @override

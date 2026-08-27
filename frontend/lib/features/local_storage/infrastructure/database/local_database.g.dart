@@ -19696,6 +19696,609 @@ class PairwiseLocalApplicationsCompanion
   }
 }
 
+class $PendingSendPreparationsTable extends PendingSendPreparations
+    with TableInfo<$PendingSendPreparationsTable, StoredSendPreparationRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $PendingSendPreparationsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _operationIdMeta = const VerificationMeta(
+    'operationId',
+  );
+  @override
+  late final GeneratedColumn<String> operationId = GeneratedColumn<String>(
+    'operation_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _eventIdMeta = const VerificationMeta(
+    'eventId',
+  );
+  @override
+  late final GeneratedColumn<String> eventId = GeneratedColumn<String>(
+    'event_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways('UNIQUE'),
+  );
+  static const VerificationMeta _localUserIdMeta = const VerificationMeta(
+    'localUserId',
+  );
+  @override
+  late final GeneratedColumn<String> localUserId = GeneratedColumn<String>(
+    'local_user_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _localDeviceIdMeta = const VerificationMeta(
+    'localDeviceId',
+  );
+  @override
+  late final GeneratedColumn<String> localDeviceId = GeneratedColumn<String>(
+    'local_device_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _peerUserIdMeta = const VerificationMeta(
+    'peerUserId',
+  );
+  @override
+  late final GeneratedColumn<String> peerUserId = GeneratedColumn<String>(
+    'peer_user_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _stateMeta = const VerificationMeta('state');
+  @override
+  late final GeneratedColumn<int> state = GeneratedColumn<int>(
+    'state',
+    aliasedName,
+    false,
+    check: () => ComparableExpr(state).isBetweenValues(0, 1),
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _attemptCountMeta = const VerificationMeta(
+    'attemptCount',
+  );
+  @override
+  late final GeneratedColumn<int> attemptCount = GeneratedColumn<int>(
+    'attempt_count',
+    aliasedName,
+    false,
+    check: () => ComparableExpr(attemptCount).isBiggerOrEqualValue(0),
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _nextAttemptAtMeta = const VerificationMeta(
+    'nextAttemptAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> nextAttemptAt =
+      GeneratedColumn<DateTime>(
+        'next_attempt_at',
+        aliasedName,
+        true,
+        type: DriftSqlType.dateTime,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    operationId,
+    eventId,
+    localUserId,
+    localDeviceId,
+    peerUserId,
+    state,
+    attemptCount,
+    nextAttemptAt,
+    createdAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'pending_send_preparations';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<StoredSendPreparationRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('operation_id')) {
+      context.handle(
+        _operationIdMeta,
+        operationId.isAcceptableOrUnknown(
+          data['operation_id']!,
+          _operationIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_operationIdMeta);
+    }
+    if (data.containsKey('event_id')) {
+      context.handle(
+        _eventIdMeta,
+        eventId.isAcceptableOrUnknown(data['event_id']!, _eventIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_eventIdMeta);
+    }
+    if (data.containsKey('local_user_id')) {
+      context.handle(
+        _localUserIdMeta,
+        localUserId.isAcceptableOrUnknown(
+          data['local_user_id']!,
+          _localUserIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_localUserIdMeta);
+    }
+    if (data.containsKey('local_device_id')) {
+      context.handle(
+        _localDeviceIdMeta,
+        localDeviceId.isAcceptableOrUnknown(
+          data['local_device_id']!,
+          _localDeviceIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_localDeviceIdMeta);
+    }
+    if (data.containsKey('peer_user_id')) {
+      context.handle(
+        _peerUserIdMeta,
+        peerUserId.isAcceptableOrUnknown(
+          data['peer_user_id']!,
+          _peerUserIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_peerUserIdMeta);
+    }
+    if (data.containsKey('state')) {
+      context.handle(
+        _stateMeta,
+        state.isAcceptableOrUnknown(data['state']!, _stateMeta),
+      );
+    }
+    if (data.containsKey('attempt_count')) {
+      context.handle(
+        _attemptCountMeta,
+        attemptCount.isAcceptableOrUnknown(
+          data['attempt_count']!,
+          _attemptCountMeta,
+        ),
+      );
+    }
+    if (data.containsKey('next_attempt_at')) {
+      context.handle(
+        _nextAttemptAtMeta,
+        nextAttemptAt.isAcceptableOrUnknown(
+          data['next_attempt_at']!,
+          _nextAttemptAtMeta,
+        ),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {operationId};
+  @override
+  StoredSendPreparationRow map(
+    Map<String, dynamic> data, {
+    String? tablePrefix,
+  }) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return StoredSendPreparationRow(
+      operationId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}operation_id'],
+      )!,
+      eventId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}event_id'],
+      )!,
+      localUserId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}local_user_id'],
+      )!,
+      localDeviceId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}local_device_id'],
+      )!,
+      peerUserId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}peer_user_id'],
+      )!,
+      state: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}state'],
+      )!,
+      attemptCount: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}attempt_count'],
+      )!,
+      nextAttemptAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}next_attempt_at'],
+      ),
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+    );
+  }
+
+  @override
+  $PendingSendPreparationsTable createAlias(String alias) {
+    return $PendingSendPreparationsTable(attachedDatabase, alias);
+  }
+}
+
+class StoredSendPreparationRow extends DataClass
+    implements Insertable<StoredSendPreparationRow> {
+  final String operationId;
+  final String eventId;
+  final String localUserId;
+  final String localDeviceId;
+  final String peerUserId;
+
+  /// 0 owed, 1 permanently failed.
+  final int state;
+  final int attemptCount;
+  final DateTime? nextAttemptAt;
+  final DateTime createdAt;
+  const StoredSendPreparationRow({
+    required this.operationId,
+    required this.eventId,
+    required this.localUserId,
+    required this.localDeviceId,
+    required this.peerUserId,
+    required this.state,
+    required this.attemptCount,
+    this.nextAttemptAt,
+    required this.createdAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['operation_id'] = Variable<String>(operationId);
+    map['event_id'] = Variable<String>(eventId);
+    map['local_user_id'] = Variable<String>(localUserId);
+    map['local_device_id'] = Variable<String>(localDeviceId);
+    map['peer_user_id'] = Variable<String>(peerUserId);
+    map['state'] = Variable<int>(state);
+    map['attempt_count'] = Variable<int>(attemptCount);
+    if (!nullToAbsent || nextAttemptAt != null) {
+      map['next_attempt_at'] = Variable<DateTime>(nextAttemptAt);
+    }
+    map['created_at'] = Variable<DateTime>(createdAt);
+    return map;
+  }
+
+  PendingSendPreparationsCompanion toCompanion(bool nullToAbsent) {
+    return PendingSendPreparationsCompanion(
+      operationId: Value(operationId),
+      eventId: Value(eventId),
+      localUserId: Value(localUserId),
+      localDeviceId: Value(localDeviceId),
+      peerUserId: Value(peerUserId),
+      state: Value(state),
+      attemptCount: Value(attemptCount),
+      nextAttemptAt: nextAttemptAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(nextAttemptAt),
+      createdAt: Value(createdAt),
+    );
+  }
+
+  factory StoredSendPreparationRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return StoredSendPreparationRow(
+      operationId: serializer.fromJson<String>(json['operationId']),
+      eventId: serializer.fromJson<String>(json['eventId']),
+      localUserId: serializer.fromJson<String>(json['localUserId']),
+      localDeviceId: serializer.fromJson<String>(json['localDeviceId']),
+      peerUserId: serializer.fromJson<String>(json['peerUserId']),
+      state: serializer.fromJson<int>(json['state']),
+      attemptCount: serializer.fromJson<int>(json['attemptCount']),
+      nextAttemptAt: serializer.fromJson<DateTime?>(json['nextAttemptAt']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'operationId': serializer.toJson<String>(operationId),
+      'eventId': serializer.toJson<String>(eventId),
+      'localUserId': serializer.toJson<String>(localUserId),
+      'localDeviceId': serializer.toJson<String>(localDeviceId),
+      'peerUserId': serializer.toJson<String>(peerUserId),
+      'state': serializer.toJson<int>(state),
+      'attemptCount': serializer.toJson<int>(attemptCount),
+      'nextAttemptAt': serializer.toJson<DateTime?>(nextAttemptAt),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+    };
+  }
+
+  StoredSendPreparationRow copyWith({
+    String? operationId,
+    String? eventId,
+    String? localUserId,
+    String? localDeviceId,
+    String? peerUserId,
+    int? state,
+    int? attemptCount,
+    Value<DateTime?> nextAttemptAt = const Value.absent(),
+    DateTime? createdAt,
+  }) => StoredSendPreparationRow(
+    operationId: operationId ?? this.operationId,
+    eventId: eventId ?? this.eventId,
+    localUserId: localUserId ?? this.localUserId,
+    localDeviceId: localDeviceId ?? this.localDeviceId,
+    peerUserId: peerUserId ?? this.peerUserId,
+    state: state ?? this.state,
+    attemptCount: attemptCount ?? this.attemptCount,
+    nextAttemptAt: nextAttemptAt.present
+        ? nextAttemptAt.value
+        : this.nextAttemptAt,
+    createdAt: createdAt ?? this.createdAt,
+  );
+  StoredSendPreparationRow copyWithCompanion(
+    PendingSendPreparationsCompanion data,
+  ) {
+    return StoredSendPreparationRow(
+      operationId: data.operationId.present
+          ? data.operationId.value
+          : this.operationId,
+      eventId: data.eventId.present ? data.eventId.value : this.eventId,
+      localUserId: data.localUserId.present
+          ? data.localUserId.value
+          : this.localUserId,
+      localDeviceId: data.localDeviceId.present
+          ? data.localDeviceId.value
+          : this.localDeviceId,
+      peerUserId: data.peerUserId.present
+          ? data.peerUserId.value
+          : this.peerUserId,
+      state: data.state.present ? data.state.value : this.state,
+      attemptCount: data.attemptCount.present
+          ? data.attemptCount.value
+          : this.attemptCount,
+      nextAttemptAt: data.nextAttemptAt.present
+          ? data.nextAttemptAt.value
+          : this.nextAttemptAt,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('StoredSendPreparationRow(')
+          ..write('operationId: $operationId, ')
+          ..write('eventId: $eventId, ')
+          ..write('localUserId: $localUserId, ')
+          ..write('localDeviceId: $localDeviceId, ')
+          ..write('peerUserId: $peerUserId, ')
+          ..write('state: $state, ')
+          ..write('attemptCount: $attemptCount, ')
+          ..write('nextAttemptAt: $nextAttemptAt, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    operationId,
+    eventId,
+    localUserId,
+    localDeviceId,
+    peerUserId,
+    state,
+    attemptCount,
+    nextAttemptAt,
+    createdAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is StoredSendPreparationRow &&
+          other.operationId == this.operationId &&
+          other.eventId == this.eventId &&
+          other.localUserId == this.localUserId &&
+          other.localDeviceId == this.localDeviceId &&
+          other.peerUserId == this.peerUserId &&
+          other.state == this.state &&
+          other.attemptCount == this.attemptCount &&
+          other.nextAttemptAt == this.nextAttemptAt &&
+          other.createdAt == this.createdAt);
+}
+
+class PendingSendPreparationsCompanion
+    extends UpdateCompanion<StoredSendPreparationRow> {
+  final Value<String> operationId;
+  final Value<String> eventId;
+  final Value<String> localUserId;
+  final Value<String> localDeviceId;
+  final Value<String> peerUserId;
+  final Value<int> state;
+  final Value<int> attemptCount;
+  final Value<DateTime?> nextAttemptAt;
+  final Value<DateTime> createdAt;
+  final Value<int> rowid;
+  const PendingSendPreparationsCompanion({
+    this.operationId = const Value.absent(),
+    this.eventId = const Value.absent(),
+    this.localUserId = const Value.absent(),
+    this.localDeviceId = const Value.absent(),
+    this.peerUserId = const Value.absent(),
+    this.state = const Value.absent(),
+    this.attemptCount = const Value.absent(),
+    this.nextAttemptAt = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  PendingSendPreparationsCompanion.insert({
+    required String operationId,
+    required String eventId,
+    required String localUserId,
+    required String localDeviceId,
+    required String peerUserId,
+    this.state = const Value.absent(),
+    this.attemptCount = const Value.absent(),
+    this.nextAttemptAt = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : operationId = Value(operationId),
+       eventId = Value(eventId),
+       localUserId = Value(localUserId),
+       localDeviceId = Value(localDeviceId),
+       peerUserId = Value(peerUserId);
+  static Insertable<StoredSendPreparationRow> custom({
+    Expression<String>? operationId,
+    Expression<String>? eventId,
+    Expression<String>? localUserId,
+    Expression<String>? localDeviceId,
+    Expression<String>? peerUserId,
+    Expression<int>? state,
+    Expression<int>? attemptCount,
+    Expression<DateTime>? nextAttemptAt,
+    Expression<DateTime>? createdAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (operationId != null) 'operation_id': operationId,
+      if (eventId != null) 'event_id': eventId,
+      if (localUserId != null) 'local_user_id': localUserId,
+      if (localDeviceId != null) 'local_device_id': localDeviceId,
+      if (peerUserId != null) 'peer_user_id': peerUserId,
+      if (state != null) 'state': state,
+      if (attemptCount != null) 'attempt_count': attemptCount,
+      if (nextAttemptAt != null) 'next_attempt_at': nextAttemptAt,
+      if (createdAt != null) 'created_at': createdAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  PendingSendPreparationsCompanion copyWith({
+    Value<String>? operationId,
+    Value<String>? eventId,
+    Value<String>? localUserId,
+    Value<String>? localDeviceId,
+    Value<String>? peerUserId,
+    Value<int>? state,
+    Value<int>? attemptCount,
+    Value<DateTime?>? nextAttemptAt,
+    Value<DateTime>? createdAt,
+    Value<int>? rowid,
+  }) {
+    return PendingSendPreparationsCompanion(
+      operationId: operationId ?? this.operationId,
+      eventId: eventId ?? this.eventId,
+      localUserId: localUserId ?? this.localUserId,
+      localDeviceId: localDeviceId ?? this.localDeviceId,
+      peerUserId: peerUserId ?? this.peerUserId,
+      state: state ?? this.state,
+      attemptCount: attemptCount ?? this.attemptCount,
+      nextAttemptAt: nextAttemptAt ?? this.nextAttemptAt,
+      createdAt: createdAt ?? this.createdAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (operationId.present) {
+      map['operation_id'] = Variable<String>(operationId.value);
+    }
+    if (eventId.present) {
+      map['event_id'] = Variable<String>(eventId.value);
+    }
+    if (localUserId.present) {
+      map['local_user_id'] = Variable<String>(localUserId.value);
+    }
+    if (localDeviceId.present) {
+      map['local_device_id'] = Variable<String>(localDeviceId.value);
+    }
+    if (peerUserId.present) {
+      map['peer_user_id'] = Variable<String>(peerUserId.value);
+    }
+    if (state.present) {
+      map['state'] = Variable<int>(state.value);
+    }
+    if (attemptCount.present) {
+      map['attempt_count'] = Variable<int>(attemptCount.value);
+    }
+    if (nextAttemptAt.present) {
+      map['next_attempt_at'] = Variable<DateTime>(nextAttemptAt.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('PendingSendPreparationsCompanion(')
+          ..write('operationId: $operationId, ')
+          ..write('eventId: $eventId, ')
+          ..write('localUserId: $localUserId, ')
+          ..write('localDeviceId: $localDeviceId, ')
+          ..write('peerUserId: $peerUserId, ')
+          ..write('state: $state, ')
+          ..write('attemptCount: $attemptCount, ')
+          ..write('nextAttemptAt: $nextAttemptAt, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 class $PairwiseConsumedPrekeysTable extends PairwiseConsumedPrekeys
     with TableInfo<$PairwiseConsumedPrekeysTable, PairwiseConsumedPrekey> {
   @override
@@ -24246,6 +24849,8 @@ abstract class _$LocalDatabase extends GeneratedDatabase {
       $PairwiseOpenedPayloadsTable(this);
   late final $PairwiseLocalApplicationsTable pairwiseLocalApplications =
       $PairwiseLocalApplicationsTable(this);
+  late final $PendingSendPreparationsTable pendingSendPreparations =
+      $PendingSendPreparationsTable(this);
   late final $PairwiseConsumedPrekeysTable pairwiseConsumedPrekeys =
       $PairwiseConsumedPrekeysTable(this);
   late final $StaleDeviceRefreshRequestsTable staleDeviceRefreshRequests =
@@ -24305,6 +24910,7 @@ abstract class _$LocalDatabase extends GeneratedDatabase {
     pairwiseReplayMarkers,
     pairwiseOpenedPayloads,
     pairwiseLocalApplications,
+    pendingSendPreparations,
     pairwiseConsumedPrekeys,
     staleDeviceRefreshRequests,
     receipts,
@@ -36586,6 +37192,313 @@ typedef $$PairwiseLocalApplicationsTableProcessedTableManager =
       PairwiseLocalApplication,
       PrefetchHooks Function()
     >;
+typedef $$PendingSendPreparationsTableCreateCompanionBuilder =
+    PendingSendPreparationsCompanion Function({
+      required String operationId,
+      required String eventId,
+      required String localUserId,
+      required String localDeviceId,
+      required String peerUserId,
+      Value<int> state,
+      Value<int> attemptCount,
+      Value<DateTime?> nextAttemptAt,
+      Value<DateTime> createdAt,
+      Value<int> rowid,
+    });
+typedef $$PendingSendPreparationsTableUpdateCompanionBuilder =
+    PendingSendPreparationsCompanion Function({
+      Value<String> operationId,
+      Value<String> eventId,
+      Value<String> localUserId,
+      Value<String> localDeviceId,
+      Value<String> peerUserId,
+      Value<int> state,
+      Value<int> attemptCount,
+      Value<DateTime?> nextAttemptAt,
+      Value<DateTime> createdAt,
+      Value<int> rowid,
+    });
+
+class $$PendingSendPreparationsTableFilterComposer
+    extends Composer<_$LocalDatabase, $PendingSendPreparationsTable> {
+  $$PendingSendPreparationsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get operationId => $composableBuilder(
+    column: $table.operationId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get eventId => $composableBuilder(
+    column: $table.eventId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get localUserId => $composableBuilder(
+    column: $table.localUserId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get localDeviceId => $composableBuilder(
+    column: $table.localDeviceId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get peerUserId => $composableBuilder(
+    column: $table.peerUserId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get state => $composableBuilder(
+    column: $table.state,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get attemptCount => $composableBuilder(
+    column: $table.attemptCount,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get nextAttemptAt => $composableBuilder(
+    column: $table.nextAttemptAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$PendingSendPreparationsTableOrderingComposer
+    extends Composer<_$LocalDatabase, $PendingSendPreparationsTable> {
+  $$PendingSendPreparationsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get operationId => $composableBuilder(
+    column: $table.operationId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get eventId => $composableBuilder(
+    column: $table.eventId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get localUserId => $composableBuilder(
+    column: $table.localUserId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get localDeviceId => $composableBuilder(
+    column: $table.localDeviceId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get peerUserId => $composableBuilder(
+    column: $table.peerUserId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get state => $composableBuilder(
+    column: $table.state,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get attemptCount => $composableBuilder(
+    column: $table.attemptCount,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get nextAttemptAt => $composableBuilder(
+    column: $table.nextAttemptAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$PendingSendPreparationsTableAnnotationComposer
+    extends Composer<_$LocalDatabase, $PendingSendPreparationsTable> {
+  $$PendingSendPreparationsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get operationId => $composableBuilder(
+    column: $table.operationId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get eventId =>
+      $composableBuilder(column: $table.eventId, builder: (column) => column);
+
+  GeneratedColumn<String> get localUserId => $composableBuilder(
+    column: $table.localUserId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get localDeviceId => $composableBuilder(
+    column: $table.localDeviceId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get peerUserId => $composableBuilder(
+    column: $table.peerUserId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get state =>
+      $composableBuilder(column: $table.state, builder: (column) => column);
+
+  GeneratedColumn<int> get attemptCount => $composableBuilder(
+    column: $table.attemptCount,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get nextAttemptAt => $composableBuilder(
+    column: $table.nextAttemptAt,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+}
+
+class $$PendingSendPreparationsTableTableManager
+    extends
+        RootTableManager<
+          _$LocalDatabase,
+          $PendingSendPreparationsTable,
+          StoredSendPreparationRow,
+          $$PendingSendPreparationsTableFilterComposer,
+          $$PendingSendPreparationsTableOrderingComposer,
+          $$PendingSendPreparationsTableAnnotationComposer,
+          $$PendingSendPreparationsTableCreateCompanionBuilder,
+          $$PendingSendPreparationsTableUpdateCompanionBuilder,
+          (
+            StoredSendPreparationRow,
+            BaseReferences<
+              _$LocalDatabase,
+              $PendingSendPreparationsTable,
+              StoredSendPreparationRow
+            >,
+          ),
+          StoredSendPreparationRow,
+          PrefetchHooks Function()
+        > {
+  $$PendingSendPreparationsTableTableManager(
+    _$LocalDatabase db,
+    $PendingSendPreparationsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$PendingSendPreparationsTableFilterComposer(
+                $db: db,
+                $table: table,
+              ),
+          createOrderingComposer: () =>
+              $$PendingSendPreparationsTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$PendingSendPreparationsTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> operationId = const Value.absent(),
+                Value<String> eventId = const Value.absent(),
+                Value<String> localUserId = const Value.absent(),
+                Value<String> localDeviceId = const Value.absent(),
+                Value<String> peerUserId = const Value.absent(),
+                Value<int> state = const Value.absent(),
+                Value<int> attemptCount = const Value.absent(),
+                Value<DateTime?> nextAttemptAt = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => PendingSendPreparationsCompanion(
+                operationId: operationId,
+                eventId: eventId,
+                localUserId: localUserId,
+                localDeviceId: localDeviceId,
+                peerUserId: peerUserId,
+                state: state,
+                attemptCount: attemptCount,
+                nextAttemptAt: nextAttemptAt,
+                createdAt: createdAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String operationId,
+                required String eventId,
+                required String localUserId,
+                required String localDeviceId,
+                required String peerUserId,
+                Value<int> state = const Value.absent(),
+                Value<int> attemptCount = const Value.absent(),
+                Value<DateTime?> nextAttemptAt = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => PendingSendPreparationsCompanion.insert(
+                operationId: operationId,
+                eventId: eventId,
+                localUserId: localUserId,
+                localDeviceId: localDeviceId,
+                peerUserId: peerUserId,
+                state: state,
+                attemptCount: attemptCount,
+                nextAttemptAt: nextAttemptAt,
+                createdAt: createdAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$PendingSendPreparationsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$LocalDatabase,
+      $PendingSendPreparationsTable,
+      StoredSendPreparationRow,
+      $$PendingSendPreparationsTableFilterComposer,
+      $$PendingSendPreparationsTableOrderingComposer,
+      $$PendingSendPreparationsTableAnnotationComposer,
+      $$PendingSendPreparationsTableCreateCompanionBuilder,
+      $$PendingSendPreparationsTableUpdateCompanionBuilder,
+      (
+        StoredSendPreparationRow,
+        BaseReferences<
+          _$LocalDatabase,
+          $PendingSendPreparationsTable,
+          StoredSendPreparationRow
+        >,
+      ),
+      StoredSendPreparationRow,
+      PrefetchHooks Function()
+    >;
 typedef $$PairwiseConsumedPrekeysTableCreateCompanionBuilder =
     PairwiseConsumedPrekeysCompanion Function({
       required String localDeviceId,
@@ -39552,6 +40465,11 @@ class $LocalDatabaseManager {
       $$PairwiseLocalApplicationsTableTableManager(
         _db,
         _db.pairwiseLocalApplications,
+      );
+  $$PendingSendPreparationsTableTableManager get pendingSendPreparations =>
+      $$PendingSendPreparationsTableTableManager(
+        _db,
+        _db.pendingSendPreparations,
       );
   $$PairwiseConsumedPrekeysTableTableManager get pairwiseConsumedPrekeys =>
       $$PairwiseConsumedPrekeysTableTableManager(

@@ -187,6 +187,9 @@ abstract final class ChatViewModelMapper {
     }
     return switch (message.transportState) {
       MessageTransportState.localOnly => ChatDeliveryViewState.localOnly,
+      // The one state this timeline has always had a word for and never been
+      // able to reach: the message is committed and nothing is sealed yet.
+      MessageTransportState.preparing => ChatDeliveryViewState.encrypting,
       MessageTransportState.queued => ChatDeliveryViewState.queued,
       MessageTransportState.sending => ChatDeliveryViewState.sending,
       MessageTransportState.relayAccepted ||

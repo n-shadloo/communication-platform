@@ -17,16 +17,22 @@ final class DriftPairwiseTransportStore implements PairwiseTransportStore {
     this.maximumOpenedPayloads = 10000,
     this.maximumConsumedPrekeyTombstones = 50000,
     this.maximumLocalApplications = 50000,
+    this.maximumPendingSendPreparations = 10000,
   }) : assert(maximumOutboxTargets > 0),
        assert(maximumReplayMarkers > 0),
        assert(maximumOpenedPayloads > 0),
        assert(maximumConsumedPrekeyTombstones > 0),
-       assert(maximumLocalApplications > 0);
+       assert(maximumLocalApplications > 0),
+       assert(maximumPendingSendPreparations > 0);
 
   static const int maximumSkippedKeysPerSession = 2000;
   static const int maximumSkippedKeysPerAccount = 20000;
   static const Duration replayRetention = Duration(days: 16);
   static const String _deviceStateSecretId = 'current-device-key-state-v1';
+
+  /// The persisted ordinals of `pending_send_preparations.state`.
+  static const int preparationOwedState = 0;
+  static const int preparationFailedState = 1;
 
   // These values are the local prekeys table's v1 role registry.
   static const int _classicalOneTimePrekeyKind = 1;
@@ -38,6 +44,7 @@ final class DriftPairwiseTransportStore implements PairwiseTransportStore {
   final int maximumOpenedPayloads;
   final int maximumConsumedPrekeyTombstones;
   final int maximumLocalApplications;
+  final int maximumPendingSendPreparations;
 
   @override
   Future<Result<PairwisePreparationContext>> readPreparationContext({
@@ -224,19 +231,29 @@ final class DriftPairwiseTransportStore implements PairwiseTransportStore {
             await (database.select(database.pairwiseLocalApplications)
                   ..where((row) => row.operationId.equals(commit.operationId)))
                 .getSingleOrNull();
-        if (existingRows.isNotEmpty || existingLocal != null) {
+        // Already queued. The local application row is not a sufficient test of
+        // that any more: the echo writes it before there is any ciphertext at
+        // all, so a preparation being run for the first time arrives here with
+        // one already present. The outbox rows are the fact that matters.
+        if (existingRows.isNotEmpty) {
           if (!_samePreparedSend(existingRows, existingLocal, commit, sorted)) {
             throw const _PairwiseConflict();
           }
+          await _settlePreparationInTransaction(commit.operationId);
           return;
+        }
+        if (existingLocal != null &&
+            !_sameLocalApplication(existingLocal, commit)) {
+          throw const _PairwiseConflict();
         }
 
         final currentCount = await _outboxCount();
         if (currentCount + sorted.length > maximumOutboxTargets) {
           throw const _PairwiseCapacity();
         }
-        if (await _tableCount(database.pairwiseLocalApplications) >=
-            maximumLocalApplications) {
+        if (existingLocal == null &&
+            await _tableCount(database.pairwiseLocalApplications) >=
+                maximumLocalApplications) {
           throw const _PairwiseCapacity();
         }
         final deviceState =
@@ -257,16 +274,18 @@ final class DriftPairwiseTransportStore implements PairwiseTransportStore {
         if (await _skippedKeyTotal() > maximumSkippedKeysPerAccount) {
           throw const _PairwiseCapacity();
         }
-        await database
-            .into(database.pairwiseLocalApplications)
-            .insert(
-              PairwiseLocalApplicationsCompanion.insert(
-                operationId: commit.operationId,
-                eventId: commit.eventId,
-                localDeviceId: commit.currentDeviceId.toLowerCase(),
-                openedOpaquePayload: commit.openedLocalPayload,
-              ),
-            );
+        if (existingLocal == null) {
+          await database
+              .into(database.pairwiseLocalApplications)
+              .insert(
+                PairwiseLocalApplicationsCompanion.insert(
+                  operationId: commit.operationId,
+                  eventId: commit.eventId,
+                  localDeviceId: commit.currentDeviceId.toLowerCase(),
+                  openedOpaquePayload: commit.openedLocalPayload,
+                ),
+              );
+        }
         for (var index = 0; index < sorted.length; index += 1) {
           final target = sorted[index];
           await database
@@ -283,19 +302,7 @@ final class DriftPairwiseTransportStore implements PairwiseTransportStore {
                 ),
               );
         }
-        final applicationEvent = commit.applicationEvent;
-        if (applicationEvent != null) {
-          await DriftApplicationEventProjector(
-            database,
-          ).applyInsideTransaction(applicationEvent);
-          await (database.update(
-            database.pairwiseLocalApplications,
-          )..where((row) => row.operationId.equals(commit.operationId))).write(
-            const PairwiseLocalApplicationsCompanion(
-              applicationApplied: Value(true),
-            ),
-          );
-        }
+        await _settlePreparationInTransaction(commit.operationId);
       });
       return const Result.success(null);
     } on _PairwiseConflict {
@@ -314,16 +321,20 @@ final class DriftPairwiseTransportStore implements PairwiseTransportStore {
   }
 
   @override
-  Future<Result<void>> commitLocalApplication({
+  Future<Result<void>> commitLocalEcho({
     required String operationId,
     required String eventId,
+    required String currentUserId,
     required String currentDeviceId,
+    required String peerUserId,
     required Uint8List openedLocalPayload,
     required ApplicationEventCommit applicationEvent,
   }) async {
     if (operationId.isEmpty ||
         eventId.isEmpty ||
+        !_isUuid(currentUserId) ||
         !_isUuid(currentDeviceId) ||
+        !_isUuid(peerUserId) ||
         openedLocalPayload.isEmpty ||
         openedLocalPayload.length > 262144 ||
         eventId != protocolBytesToHex(applicationEvent.event.eventId) ||
@@ -341,12 +352,22 @@ final class DriftPairwiseTransportStore implements PairwiseTransportStore {
                   ..where((row) => row.operationId.equals(operationId)))
                 .getSingleOrNull();
         if (existing != null) {
+          // A repeated send of the same event converges rather than writing a
+          // second one. The projector is idempotent on its own account, but a
+          // preparation is not: re-arming one that has already been settled
+          // would put the same message on the wire twice.
           if (existing.eventId != eventId ||
               existing.localDeviceId != currentDeviceId.toLowerCase() ||
               !_bytesEqual(existing.openedOpaquePayload, openedLocalPayload)) {
             throw const _PairwiseConflict();
           }
           return;
+        }
+        if (await _tableCount(database.pairwiseLocalApplications) >=
+                maximumLocalApplications ||
+            await _tableCount(database.pendingSendPreparations) >=
+                maximumPendingSendPreparations) {
+          throw const _PairwiseCapacity();
         }
         await database
             .into(database.pairwiseLocalApplications)
@@ -359,6 +380,21 @@ final class DriftPairwiseTransportStore implements PairwiseTransportStore {
                 applicationApplied: const Value(true),
               ),
             );
+        // Written before the projection, because the projection reads it. A
+        // message whose recipients are still owed is not a message that stayed
+        // on this device, and the row saying so has to exist by the time the
+        // projector decides what to tell the user.
+        await database
+            .into(database.pendingSendPreparations)
+            .insert(
+              PendingSendPreparationsCompanion.insert(
+                operationId: operationId,
+                eventId: eventId,
+                localUserId: currentUserId.toLowerCase(),
+                localDeviceId: currentDeviceId.toLowerCase(),
+                peerUserId: peerUserId.toLowerCase(),
+              ),
+            );
         await DriftApplicationEventProjector(
           database,
         ).applyInsideTransaction(applicationEvent);
@@ -368,11 +404,131 @@ final class DriftPairwiseTransportStore implements PairwiseTransportStore {
       return const Result.failure(
         ValidationFailure(ValidationFailureKind.conflict),
       );
+    } on _PairwiseCapacity {
+      return const Result.failure(
+        StorageFailure(StorageFailureKind.capacityExceeded),
+      );
     } on Object {
       return const Result.failure(
         StorageFailure(StorageFailureKind.unavailable),
       );
     }
+  }
+
+  @override
+  Future<Result<void>> settleSendPreparation(String operationId) async {
+    if (operationId.isEmpty) {
+      return const Result.failure(
+        ValidationFailure(ValidationFailureKind.invalidInput),
+      );
+    }
+    try {
+      await database.writeTransaction(
+        () => _settlePreparationInTransaction(operationId),
+      );
+      return const Result.success(null);
+    } on Object {
+      return const Result.failure(
+        StorageFailure(StorageFailureKind.unavailable),
+      );
+    }
+  }
+
+  @override
+  Future<Result<bool>> rearmFailedSend(String operationId) async {
+    if (operationId.isEmpty) {
+      return const Result.failure(
+        ValidationFailure(ValidationFailureKind.invalidInput),
+      );
+    }
+    try {
+      final rearmed = await database.writeTransaction(() async {
+        final preparation =
+            await (database.select(database.pendingSendPreparations)..where(
+                  (row) =>
+                      row.operationId.equals(operationId) &
+                      row.state.equals(preparationFailedState),
+                ))
+                .getSingleOrNull();
+        if (preparation != null) {
+          await (database.update(
+            database.pendingSendPreparations,
+          )..where((row) => row.operationId.equals(operationId))).write(
+            const PendingSendPreparationsCompanion(
+              state: Value(preparationOwedState),
+              attemptCount: Value(0),
+              nextAttemptAt: Value(null),
+            ),
+          );
+          await DriftApplicationEventProjector(
+            database,
+          ).refreshTransportForEventInsideTransaction(preparation.eventId);
+          return true;
+        }
+        // Nothing was owed, so the failure is on the wire side: ciphertext this
+        // device sealed and the relay refused for good. Re-arming those rows is
+        // the same repair schema 14 applied to every stranded outbox row at
+        // once, asked for one operation at a time by the person whose message
+        // it is.
+        final failed =
+            await (database.select(database.outboxOperations)..where(
+                  (row) =>
+                      row.operationId.equals(operationId) &
+                      row.attemptState.equals(
+                        OutboxAttemptState.permanentlyFailed.index,
+                      ),
+                ))
+                .get();
+        if (failed.isEmpty) {
+          return false;
+        }
+        await (database.update(database.outboxOperations)..where(
+              (row) =>
+                  row.operationId.equals(operationId) &
+                  row.attemptState.equals(
+                    OutboxAttemptState.permanentlyFailed.index,
+                  ),
+            ))
+            .write(
+              OutboxOperationsCompanion(
+                attemptState: Value(OutboxAttemptState.queued.index),
+                attemptCount: const Value(0),
+                nextAttemptAt: const Value(null),
+                terminalAt: const Value(null),
+              ),
+            );
+        await DriftApplicationEventProjector(
+          database,
+        ).refreshTransportForEventInsideTransaction(failed.first.eventId);
+        return true;
+      });
+      return Result.success(rearmed);
+    } on Object {
+      return const Result.failure(
+        StorageFailure(StorageFailureKind.unavailable),
+      );
+    }
+  }
+
+  /// Removes an owed preparation and tells its message it is no longer owed.
+  ///
+  /// Both statements are skipped when nothing was owed, which is every caller
+  /// that never had a preparation: device-log gossip, group envelopes and
+  /// history transfer all queue ciphertext for events this projection knows
+  /// nothing about.
+  Future<void> _settlePreparationInTransaction(String operationId) async {
+    final owed = await (database.select(
+      database.pendingSendPreparations,
+    )..where((row) => row.operationId.equals(operationId))).getSingleOrNull();
+    if (owed == null) {
+      return;
+    }
+    await (database.delete(
+      database.pendingSendPreparations,
+    )..where((row) => row.operationId.equals(operationId))).go();
+    await DriftApplicationEventProjector(
+      database,
+    ).refreshTransportForEventInsideTransaction(owed.eventId);
   }
 
   @override
@@ -906,10 +1062,20 @@ final class DriftPairwiseTransportStore implements PairwiseTransportStore {
                   row.committedAt.isSmallerThanValue(cutoff),
             ))
             .go();
+        // Never the payload of a send that is still owed. Sixteen days of
+        // owing one is pathological — a device that has been offline that long
+        // with a message in hand — but discarding the bytes would leave a
+        // message on screen that nothing can ever seal, and the projection
+        // would settle it as one the user chose to keep locally.
+        final owed = await database
+            .customSelect('SELECT operation_id FROM pending_send_preparations')
+            .map((row) => row.read<String>('operation_id'))
+            .get();
         await (database.delete(database.pairwiseLocalApplications)..where(
               (row) =>
                   row.applicationApplied.equals(true) &
-                  row.committedAt.isSmallerThanValue(cutoff),
+                  row.committedAt.isSmallerThanValue(cutoff) &
+                  row.operationId.isNotIn(owed),
             ))
             .go();
       });
@@ -1391,15 +1557,7 @@ SELECT
         commit.expectedDeviceStateVersion <= 0 ||
         commit.openedLocalPayload.isEmpty ||
         commit.openedLocalPayload.length > 262144 ||
-        (sorted.isEmpty && commit.applicationEvent == null)) {
-      return false;
-    }
-    final applicationEvent = commit.applicationEvent;
-    if (applicationEvent != null &&
-        (commit.eventId != protocolBytesToHex(applicationEvent.event.eventId) ||
-            !applicationEvent.localOrigin ||
-            protocolUuidString(applicationEvent.event.senderDeviceId) !=
-                commit.currentDeviceId.toLowerCase())) {
+        sorted.isEmpty) {
       return false;
     }
     final ids = <String>{};
@@ -1542,6 +1700,14 @@ SELECT
       transition.nextOpaqueState.isNotEmpty &&
       transition.nextOpaqueState.length <= 2 * 1024 * 1024;
 
+  bool _sameLocalApplication(
+    PairwiseLocalApplication local,
+    PairwiseSendCommit commit,
+  ) =>
+      local.eventId == commit.eventId &&
+      local.localDeviceId == commit.currentDeviceId.toLowerCase() &&
+      _bytesEqual(local.openedOpaquePayload, commit.openedLocalPayload);
+
   bool _samePreparedSend(
     List<OutboxOperation> rows,
     PairwiseLocalApplication? local,
@@ -1549,9 +1715,7 @@ SELECT
     List<PreparedPairwiseSendTarget> sorted,
   ) {
     if (local == null ||
-        local.eventId != commit.eventId ||
-        local.localDeviceId != commit.currentDeviceId.toLowerCase() ||
-        !_bytesEqual(local.openedOpaquePayload, commit.openedLocalPayload) ||
+        !_sameLocalApplication(local, commit) ||
         rows.length != sorted.length ||
         rows.any((row) => row.eventId != commit.eventId)) {
       return false;

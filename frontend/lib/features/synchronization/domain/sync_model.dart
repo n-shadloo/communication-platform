@@ -155,6 +155,28 @@ final class OutboxBatch {
   final List<OutboxTarget> targets;
 }
 
+/// One committed send whose per-recipient ciphertext has not been sealed yet.
+///
+/// It carries only what the work needs and nothing the engine could read: the
+/// payload to be sealed stays in local storage, and the engine never sees it.
+final class PendingSendPreparation {
+  const PendingSendPreparation({
+    required this.operationId,
+    required this.eventId,
+    required this.localUserId,
+    required this.localDeviceId,
+    required this.peerUserId,
+    required this.attempt,
+  });
+
+  final String operationId;
+  final String eventId;
+  final String localUserId;
+  final String localDeviceId;
+  final String peerUserId;
+  final int attempt;
+}
+
 final class OutboxAcceptance {
   OutboxAcceptance({
     required this.accepted,
@@ -192,6 +214,15 @@ final class SyncProjection {
   final int highestContiguousAcknowledgedSequence;
   final int prunedThrough;
   final int inboxDepth;
+
+  /// Outbound operations that have not reached the wire, counted once each.
+  ///
+  /// Per operation rather than per recipient device, and inclusive of sends
+  /// still owed their ciphertext, because what reads this is a trigger on the
+  /// depth *growing*. An echoed send that later seals three envelopes has not
+  /// become three new sends, and counting rows would say it had — and a cycle
+  /// asked for on the back of that would arrive to find the work it was told
+  /// about already done, having paid a drain to discover it.
   final int outboxDepth;
   final DateTime? nextRetryAt;
   final DateTime? lastSuccessfulSyncAt;
@@ -227,6 +258,7 @@ final class SyncRunReport {
     required this.deferred,
     this.quarantinedEnvelopes = 0,
     this.failedInspections = 0,
+    this.preparedSends = 0,
   });
 
   const SyncRunReport.alreadyRunning()
@@ -236,7 +268,8 @@ final class SyncRunReport {
       sentTargets = 0,
       deferred = true,
       quarantinedEnvelopes = 0,
-      failedInspections = 0;
+      failedInspections = 0,
+      preparedSends = 0;
 
   final int drainedPages;
   final int inspectedEnvelopes;
@@ -248,6 +281,9 @@ final class SyncRunReport {
   /// deliberately nothing else: which envelope, why, and what was in it are all
   /// identifiers, and none of them may leave the engine.
   final int quarantinedEnvelopes;
+
+  /// How many echoed sends this run turned into sealed per-recipient ciphertext.
+  final int preparedSends;
 
   /// How many envelopes failed inspection and were left for a later run. Also a
   /// count only, for the same reason.

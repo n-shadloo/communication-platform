@@ -600,6 +600,73 @@ void main() {
     );
     await upgraded.close();
   });
+
+  test(
+    'version-fifteen upgrade adds the owed-send queue and nothing else',
+    () async {
+      final current = LocalDatabase(NativeDatabase(databaseFile));
+      await current.customSelect('SELECT 1').getSingle();
+      await current.close();
+
+      final versionFifteen = sqlite3.open(databaseFile.path)
+        ..execute('DROP TABLE pending_send_preparations')
+        ..execute(
+          'INSERT INTO conversations (conversation_id, kind, '
+          'list_projection_ciphertext, sort_key, tombstoned, pinned, '
+          'unread_count) VALUES (?, ?, ?, ?, ?, ?, ?)',
+          <Object?>[
+            'conversation-v15',
+            0,
+            Uint8List.fromList(const [1]),
+            0,
+            0,
+            0,
+            0,
+          ],
+        )
+        ..execute(
+          'INSERT INTO messages (message_id, conversation_id, current_event_id, '
+          'projection_ciphertext, status, revision, created_at, unread) '
+          'VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+          <Object?>[
+            'message-v15',
+            'conversation-v15',
+            'event-v15',
+            Uint8List.fromList(const [2]),
+            3,
+            0,
+            0,
+            0,
+          ],
+        )
+        ..execute('PRAGMA user_version = 15');
+      versionFifteen.close();
+
+      final upgraded = LocalDatabase(NativeDatabase(databaseFile));
+
+      expect(
+        await upgraded.select(upgraded.pendingSendPreparations).get(),
+        isEmpty,
+      );
+      final message = await upgraded
+          .customSelect(
+            "SELECT * FROM messages WHERE message_id = 'message-v15'",
+          )
+          .getSingle();
+      // Nothing is back-filled and nothing is repaired: every message already on
+      // a device either has its outbox rows or has reached a terminal state, so
+      // there is no send this table would have been holding.
+      expect(message.read<int>('status'), 3);
+      expect(
+        await upgraded
+            .customSelect('PRAGMA user_version')
+            .map((row) => row.read<int>('user_version'))
+            .getSingle(),
+        LocalDatabase.currentSchemaVersion,
+      );
+      await upgraded.close();
+    },
+  );
 }
 
 void _dropPieceFourteenSchema(Database database) {

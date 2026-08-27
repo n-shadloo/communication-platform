@@ -57,6 +57,7 @@ void main() {
       'pairwise_replay_markers',
       'pairwise_opened_payloads',
       'pairwise_local_applications',
+      'pending_send_preparations',
       'pairwise_consumed_prekeys',
       'stale_device_refresh_requests',
       'receipts',

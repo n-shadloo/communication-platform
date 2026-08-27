@@ -12,6 +12,17 @@ enum MessageTransportState {
   partiallyAccepted,
   permanentlyFailed,
   received,
+
+  /// Committed on this device, with no per-recipient ciphertext yet.
+  ///
+  /// Appended rather than ordered with the rest, because the ordinal is what is
+  /// written to `messages.status` and every value before it is already on a
+  /// device. It is a real state and not a synonym for [queued]: [queued] says
+  /// sealed bytes are waiting for the transport, while this says the recipient
+  /// set has not been resolved and nothing has been sealed at all. The
+  /// difference is what the user is being told, and it is the one the timeline
+  /// has always had a word for and never been able to reach.
+  preparing,
 }
 
 enum MessageReceiptState { none, delivered, read }

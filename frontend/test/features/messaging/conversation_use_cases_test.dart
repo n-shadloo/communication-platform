@@ -47,13 +47,19 @@ void main() {
         text: 'saved',
       );
 
+      // Both are `preparing`, and neither could honestly be anything else. The
+      // old expectations here — `queued` for a direct send, `localOnly` for
+      // Saved Messages — were each a claim about a recipient set, and a send
+      // that has not been near the network does not have one to claim. What
+      // they distinguish is written to the message later, by the cycle that
+      // finds out.
       expect(
         (direct as Success<SendMessageOutcome>).value.transportState,
-        MessageTransportState.queued,
+        MessageTransportState.preparing,
       );
       expect(
         (saved as Success<SendMessageOutcome>).value.transportState,
-        MessageTransportState.localOnly,
+        MessageTransportState.preparing,
       );
       expect(fanout.events, hasLength(2));
       expect(fanout.events.first.event.body, isA<MessageCreateBody>());
@@ -61,6 +67,41 @@ void main() {
       expect(fanout.events.last.peerUserId, isNull);
     },
   );
+
+  test(
+    'a retry re-arms the failed send rather than writing a second',
+    () async {
+      fanout.hasFailedSend = true;
+
+      final retried = await sender.retrySend(
+        currentUserId: currentUser,
+        currentDeviceId: currentDevice,
+        target: const DirectConversationTarget(peerUser),
+        messageId: 'aabb',
+        text: 'once',
+      );
+
+      expect(retried, isA<Success<void>>());
+      expect(fanout.rearmed, ['application:aabb']);
+      expect(fanout.events, isEmpty);
+    },
+  );
+
+  test('a retry with nothing durable to re-arm sends again', () async {
+    fanout.hasFailedSend = false;
+
+    final retried = await sender.retrySend(
+      currentUserId: currentUser,
+      currentDeviceId: currentDevice,
+      target: const DirectConversationTarget(peerUser),
+      messageId: 'aabb',
+      text: 'once',
+    );
+
+    expect(retried, isA<Success<void>>());
+    expect(fanout.rearmed, ['application:aabb']);
+    expect(fanout.events, hasLength(1));
+  });
 
   test(
     'read receipts require visible-read state and explicit privacy consent',
@@ -370,9 +411,11 @@ final class _Protocol implements ApplicationProtocolPort {
 
 final class _Fanout implements ApplicationFanoutPort {
   final List<ApplicationEventCommit> events = [];
+  final List<String> rearmed = [];
+  bool hasFailedSend = false;
 
   @override
-  Future<Result<ApplicationFanoutOutcome>> prepareAndQueue({
+  Future<Result<void>> commitLocalEcho({
     required String operationId,
     required String eventId,
     required String currentUserId,
@@ -382,14 +425,13 @@ final class _Fanout implements ApplicationFanoutPort {
     required ApplicationEventCommit applicationEvent,
   }) async {
     events.add(applicationEvent);
-    return Result.success(
-      ApplicationFanoutOutcome(
-        targetCount:
-            applicationEvent.conversationKind == ConversationKind.saved.index
-            ? 0
-            : 2,
-      ),
-    );
+    return const Result.success(null);
+  }
+
+  @override
+  Future<Result<bool>> retryFailedSend(String operationId) async {
+    rearmed.add(operationId);
+    return Result.success(hasFailedSend);
   }
 }
 

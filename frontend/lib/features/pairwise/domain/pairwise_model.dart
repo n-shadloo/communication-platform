@@ -179,7 +179,6 @@ final class PairwiseSendCommit {
     required this.expectedDeviceStateVersion,
     required Uint8List openedLocalPayload,
     required List<PreparedPairwiseSendTarget> targets,
-    this.applicationEvent,
   }) : openedLocalPayload = Uint8List.fromList(openedLocalPayload),
        targets = List.unmodifiable(targets);
 
@@ -189,7 +188,23 @@ final class PairwiseSendCommit {
   final int expectedDeviceStateVersion;
   final Uint8List openedLocalPayload;
   final List<PreparedPairwiseSendTarget> targets;
-  final ApplicationEventCommit? applicationEvent;
+}
+
+/// One send whose event is committed and whose recipients are still owed.
+final class OwedSendPreparation {
+  const OwedSendPreparation({
+    required this.operationId,
+    required this.eventId,
+    required this.currentUserId,
+    required this.currentDeviceId,
+    required this.peerUserId,
+  });
+
+  final String operationId;
+  final String eventId;
+  final String currentUserId;
+  final String currentDeviceId;
+  final String peerUserId;
 }
 
 final class PairwiseReceiveCommit {

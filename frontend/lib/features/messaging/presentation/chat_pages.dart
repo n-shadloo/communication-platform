@@ -716,19 +716,16 @@ class _ProjectedConversationPage extends ConsumerWidget {
           messageId: messageId,
         );
       case RetryMessageIntent(:final message):
-        final sent = await sender.sendText(
+        result = await sender.retrySend(
           currentUserId: currentUserId,
           currentDeviceId: deviceId,
           target: savedMessages
               ? const SavedConversationTarget()
               : DirectConversationTarget(peerUserId!),
+          messageId: message.id,
           text: message.text ?? '',
           replyToMessageId: message.replyToMessageId,
           quoteFallback: message.replyQuote,
-        );
-        result = sent.fold(
-          onSuccess: (_) => const Result.success(null),
-          onFailure: Result.failure,
         );
       case ForwardToConversationsIntent(:final message, :final targets):
         if (message.text == null || message.text!.trim().isEmpty) {

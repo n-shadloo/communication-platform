@@ -46,6 +46,153 @@ void main() {
     await database.close();
   });
 
+  group('sealing what the user already sent', () {
+    Future<void> owe(String operationId, String eventId) => database
+        .into(database.pendingSendPreparations)
+        .insert(
+          PendingSendPreparationsCompanion.insert(
+            operationId: operationId,
+            eventId: eventId,
+            localUserId: uuid(1),
+            localDeviceId: uuid(11),
+            peerUserId: uuid(2),
+          ),
+        );
+
+    DurableSyncEngine engineWith(SendPreparationPort preparer) =>
+        DurableSyncEngine(
+          store: store,
+          remote: remote,
+          inspector: inspector,
+          staleDeviceRefresh: staleRefresh,
+          clock: clock,
+          jitter: const ZeroJitter(),
+          standDown: owner,
+          sendPreparation: preparer,
+        );
+
+    test('a send is sealed before anything is sent', () async {
+      await owe('application:aa', 'aa');
+      final preparer = RecordingPreparer(database, remote);
+
+      final report = await engineWith(preparer).synchronize();
+
+      expect(report, isA<Success<SyncRunReport>>());
+      expect((report as Success<SyncRunReport>).value.preparedSends, 1);
+      expect(preparer.prepared.map((work) => work.operationId), [
+        'application:aa',
+      ]);
+      // Nothing had gone to the wire when the fan-out ran, which is the whole
+      // reason the stage sits where it does: the batch this seals is meant to
+      // leave in the same cycle rather than the next one.
+      expect(preparer.sentWhenPrepared, [0]);
+      expect(
+        await database.select(database.pendingSendPreparations).get(),
+        isEmpty,
+      );
+    });
+
+    test('a core that will not seal for this peer retires the send', () async {
+      await owe('application:ff', 'ff');
+      final preparer = FailingPreparer(
+        const SecurityFailure(SecurityFailureKind.unauthenticatedInput),
+      );
+
+      final report = await engineWith(preparer).synchronize();
+
+      // A device set that changed under the claim is a settled answer about
+      // this send, not about this connection.
+      expect(report, isA<Success<SyncRunReport>>());
+      expect(
+        (await database.select(database.pendingSendPreparations).getSingle())
+            .state,
+        1,
+      );
+      expect(preparer.attempts, 1);
+    });
+
+    test('a device out of storage keeps the send owed', () async {
+      await owe('application:gg', 'gg');
+      final preparer = FailingPreparer(
+        const StorageFailure(StorageFailureKind.unavailable),
+      );
+
+      final report = await engineWith(preparer).synchronize();
+
+      // Nothing has been learned about the message, only about the device, so
+      // retiring it here would say a send failed because a disk filled up.
+      expect(report, isA<FailureResult<SyncRunReport>>());
+      expect(
+        (await database.select(database.pendingSendPreparations).getSingle())
+            .state,
+        0,
+      );
+    });
+
+    test('a transport that will not answer leaves the send owed', () async {
+      await owe('application:bb', 'bb');
+      final preparer = FailingPreparer(
+        const TransportFailure(TransportFailureKind.offline),
+      );
+
+      final report = await engineWith(preparer).synchronize();
+
+      expect(report, isA<FailureResult<SyncRunReport>>());
+      final owed = await database
+          .select(database.pendingSendPreparations)
+          .getSingle();
+      expect(owed.state, 0);
+      expect(owed.attemptCount, 1);
+      expect(owed.nextAttemptAt, isA<DateTime>());
+      // One attempt, not thirty-two: a transport that refused this one will
+      // refuse the next, and the rows are durable.
+      expect(preparer.attempts, 1);
+    });
+
+    test('a peer this build can never seal for is retired, and the send behind '
+        'it still goes', () async {
+      await owe('application:cc', 'cc');
+      await owe('application:dd', 'dd');
+      final preparer = SelectivePreparer(
+        database,
+        refuse: 'application:cc',
+        failure: const ValidationFailure(ValidationFailureKind.invalidInput),
+      );
+
+      final report = await engineWith(preparer).synchronize();
+
+      expect(report, isA<Success<SyncRunReport>>());
+      expect((report as Success<SyncRunReport>).value.preparedSends, 1);
+      final rows = await database
+          .select(database.pendingSendPreparations)
+          .get();
+      // Retired rather than retried, and the stage carried on past it — which
+      // is what makes one unsendable message not a stuck queue. The row stays
+      // because it is the only durable record that a message the user can see
+      // has no route to the wire.
+      expect(rows, hasLength(1));
+      expect(rows.single.operationId, 'application:cc');
+      expect(rows.single.state, 1);
+      expect(rows.single.nextAttemptAt, isNull);
+    });
+
+    test(
+      'an engine with no preparer is the engine that was there before',
+      () async {
+        await owe('application:ee', 'ee');
+
+        final report = await engine.synchronize();
+
+        expect(report, isA<Success<SyncRunReport>>());
+        expect((report as Success<SyncRunReport>).value.preparedSends, 0);
+        expect(
+          await database.select(database.pendingSendPreparations).get(),
+          hasLength(1),
+        );
+      },
+    );
+  });
+
   group('giving delivery up between units of work', () {
     test(
       'a cycle displaced mid-drain stops after the envelope it holds',
@@ -819,3 +966,64 @@ String uuid(int value) {
 
 Uint8List blob(int marker) =>
     Uint8List.fromList(List<int>.filled(1024, marker));
+
+/// Stands in for the pairwise commit, and records when it was asked.
+///
+/// Deleting the row is not test convenience: it is the port's contract. The
+/// real implementation retires the request in the same transaction that writes
+/// the ciphertext, which is what stops a send being queued twice.
+final class RecordingPreparer implements SendPreparationPort {
+  RecordingPreparer(this.database, this.remote);
+
+  final LocalDatabase database;
+  final FakeSyncRemote remote;
+  final List<PendingSendPreparation> prepared = [];
+  final List<int> sentWhenPrepared = [];
+
+  @override
+  Future<Result<void>> prepare(PendingSendPreparation preparation) async {
+    prepared.add(preparation);
+    sentWhenPrepared.add(remote.sentBatches.length);
+    await (database.delete(
+      database.pendingSendPreparations,
+    )..where((row) => row.operationId.equals(preparation.operationId))).go();
+    return const Result.success(null);
+  }
+}
+
+/// Refuses exactly one operation, and retires every other.
+final class SelectivePreparer implements SendPreparationPort {
+  SelectivePreparer(
+    this.database, {
+    required this.refuse,
+    required this.failure,
+  });
+
+  final LocalDatabase database;
+  final String refuse;
+  final Failure failure;
+
+  @override
+  Future<Result<void>> prepare(PendingSendPreparation preparation) async {
+    if (preparation.operationId == refuse) {
+      return Result.failure(failure);
+    }
+    await (database.delete(
+      database.pendingSendPreparations,
+    )..where((row) => row.operationId.equals(preparation.operationId))).go();
+    return const Result.success(null);
+  }
+}
+
+final class FailingPreparer implements SendPreparationPort {
+  FailingPreparer(this.failure);
+
+  final Failure failure;
+  int attempts = 0;
+
+  @override
+  Future<Result<void>> prepare(PendingSendPreparation preparation) async {
+    attempts += 1;
+    return Result.failure(failure);
+  }
+}

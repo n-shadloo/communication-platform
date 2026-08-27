@@ -147,32 +147,41 @@ final pairwiseFanoutCoordinatorProvider =
       );
     });
 
+/// Device-log gossip, which is owed to a peer this device sends to.
+///
+/// It is composed here rather than inside the send path because it is no longer
+/// on it: gossip is a fan-out of its own, with its own device lookup and its own
+/// ratchet steps, and it now runs where the rest of the fan-out does.
+final deviceLogGossipCoordinatorProvider =
+    FutureProvider.family<DeviceLogGossipCoordinator, MessagingScope>((
+      ref,
+      scope,
+    ) async {
+      final database = await ref.watch(localDatabaseProvider.future);
+      return DeviceLogGossipCoordinator(
+        database: database,
+        local: DriftLinkedDeviceRepository(database),
+        protocol: ref.watch(applicationProtocolProvider),
+        controlCrypto: ref.watch(deviceControlCryptoProvider),
+        fanout: await ref.watch(
+          pairwiseFanoutCoordinatorProvider(scope).future,
+        ),
+        currentUserId: scope.userId,
+        currentDeviceId: scope.deviceId,
+      );
+    });
+
 final sendConversationEventsProvider =
     FutureProvider.family<SendConversationEvents, MessagingScope>((
       ref,
       scope,
     ) async {
       final database = await ref.watch(localDatabaseProvider.future);
-      final fanout = await ref.watch(
-        pairwiseFanoutCoordinatorProvider(scope).future,
-      );
-      final gossip = DeviceLogGossipCoordinator(
-        database: database,
-        local: DriftLinkedDeviceRepository(database),
-        protocol: ref.watch(applicationProtocolProvider),
-        controlCrypto: ref.watch(deviceControlCryptoProvider),
-        fanout: fanout,
-        currentUserId: scope.userId,
-        currentDeviceId: scope.deviceId,
-      );
       return SendConversationEvents(
         repository: DriftConversationDomainRepository(database),
         protocol: ref.watch(applicationProtocolProvider),
         fanout: PairwiseApplicationFanoutAdapter(
-          fanout,
-          afterSuccessfulQueue: (peerUserId) async {
-            await gossip.queueForUser(peerUserId);
-          },
+          await ref.watch(pairwiseFanoutCoordinatorProvider(scope).future),
         ),
         clock: ref.watch(timeSourceProvider),
       );

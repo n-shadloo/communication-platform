@@ -3,54 +3,34 @@ import 'dart:typed_data';
 import 'package:communication_platform/core/application/ports/time_source.dart';
 import 'package:communication_platform/core/protocol/application_message_model.dart';
 import 'package:communication_platform/core/result/result.dart';
-import 'package:communication_platform/features/messaging/application/ports/conversation_ports.dart';
 import 'package:communication_platform/features/messaging/infrastructure/pairwise_application_fanout_adapter.dart';
 import 'package:communication_platform/features/pairwise/application/pairwise_fanout_coordinator.dart';
 import 'package:communication_platform/features/pairwise/application/ports/pairwise_orchestration_ports.dart';
 import 'package:communication_platform/features/pairwise/application/ports/pairwise_transport_store.dart';
-import 'package:communication_platform/features/pairwise/domain/pairwise_model.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 const _currentUserId = '10000000-0000-4000-8000-000000000001';
 const _currentDeviceId = '10000000-0000-4000-8000-000000000002';
 const _peerUserId = '10000000-0000-4000-8000-000000000003';
-const _peerDeviceId = '10000000-0000-4000-8000-000000000004';
 
 void main() {
-  test('successful ordinary fanout schedules encrypted head gossip', () async {
+  test('an echo commits without resolving a device', () async {
     final eventId = Uint8List.fromList(List<int>.generate(16, (i) => i + 1));
     final eventIdHex = protocolBytesToHex(eventId);
     final payload = Uint8List.fromList([1, 2, 3]);
-    final operation = DurablePairwiseOperation(
-      operationId: 'application:$eventIdHex',
-      eventId: eventIdHex,
-      currentDeviceId: _currentDeviceId,
-      openedLocalPayload: payload,
-      targets: [
-        DurablePairwiseTarget(
-          recipientUserId: _peerUserId,
-          recipientDeviceId: _peerDeviceId,
-          exactCiphertext: Uint8List(1024),
-        ),
-      ],
-    );
-    final coordinator = PairwiseFanoutCoordinator(
-      store: _ExistingOperationStore(operation),
-      liveDevices: _UnusedLiveDevices(),
-      claims: _UnusedClaims(),
-      crypto: _UnusedCrypto(),
-      clock: const _Clock(),
-    );
-    final gossipedUsers = <String>[];
+    final store = _RecordingStore();
     final adapter = PairwiseApplicationFanoutAdapter(
-      coordinator,
-      afterSuccessfulQueue: (peerUserId) async {
-        gossipedUsers.add(peerUserId);
-      },
+      PairwiseFanoutCoordinator(
+        store: store,
+        liveDevices: _UnusedLiveDevices(),
+        claims: _UnusedClaims(),
+        crypto: _UnusedCrypto(),
+        clock: const _Clock(),
+      ),
     );
 
-    final result = await adapter.prepareAndQueue(
-      operationId: operation.operationId,
+    final result = await adapter.commitLocalEcho(
+      operationId: 'application:$eventIdHex',
       eventId: eventIdHex,
       currentUserId: _currentUserId,
       currentDeviceId: _currentDeviceId,
@@ -79,20 +59,55 @@ void main() {
       ),
     );
 
-    expect(result, isA<Success<ApplicationFanoutOutcome>>());
-    expect(gossipedUsers, [_peerUserId]);
+    expect(result, isA<Success<void>>());
+    expect(store.echoes, ['application:$eventIdHex']);
+    expect(store.peers, [_peerUserId]);
+  });
+
+  test('a retry asks for the operation the message already has', () async {
+    final store = _RecordingStore();
+    final adapter = PairwiseApplicationFanoutAdapter(
+      PairwiseFanoutCoordinator(
+        store: store,
+        liveDevices: _UnusedLiveDevices(),
+        claims: _UnusedClaims(),
+        crypto: _UnusedCrypto(),
+        clock: const _Clock(),
+      ),
+    );
+
+    final result = await adapter.retryFailedSend('application:abcd');
+
+    expect((result as Success<bool>).value, isTrue);
+    expect(store.rearmed, ['application:abcd']);
   });
 }
 
-final class _ExistingOperationStore implements PairwiseTransportStore {
-  const _ExistingOperationStore(this.operation);
-
-  final DurablePairwiseOperation operation;
+final class _RecordingStore implements PairwiseTransportStore {
+  final List<String> echoes = [];
+  final List<String> peers = [];
+  final List<String> rearmed = [];
 
   @override
-  Future<Result<DurablePairwiseOperation?>> readPreparedOperation(
-    String operationId,
-  ) async => Result.success(operation);
+  Future<Result<void>> commitLocalEcho({
+    required String operationId,
+    required String eventId,
+    required String currentUserId,
+    required String currentDeviceId,
+    required String peerUserId,
+    required Uint8List openedLocalPayload,
+    required ApplicationEventCommit applicationEvent,
+  }) async {
+    echoes.add(operationId);
+    peers.add(peerUserId);
+    return const Result.success(null);
+  }
+
+  @override
+  Future<Result<bool>> rearmFailedSend(String operationId) async {
+    rearmed.add(operationId);
+    return const Result.success(true);
+  }
 
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);

@@ -78,6 +78,21 @@ abstract interface class DurableSyncStore implements Port {
     required DateTime retryAt,
   });
 
+  /// Hands out the oldest send whose fan-out is due, or null.
+  Future<Result<PendingSendPreparation?>> beginNextSendPreparation({
+    required DateTime now,
+  });
+
+  Future<Result<void>> recordSendPreparationRetry({
+    required PendingSendPreparation preparation,
+    required DateTime retryAt,
+  });
+
+  /// Retires a send that will never seal, and says so on the message.
+  Future<Result<void>> recordSendPreparationFailure({
+    required PendingSendPreparation preparation,
+  });
+
   Future<Result<OutboxBatch?>> beginNextOutboxBatch({required DateTime now});
 
   Future<Result<void>> recordOutboxAcceptance({
@@ -144,6 +159,18 @@ abstract interface class StaleDeviceRefreshPort implements Port {
 /// Best-effort application work triggered only after inbox commits complete.
 abstract interface class PostInboxCommitWorkPort implements Port {
   Future<void> run();
+}
+
+/// Seals one echoed send for its recipients and queues it.
+///
+/// The engine owns when this runs and what a failure costs; it owns none of
+/// what it does. Resolving a peer's live devices, claiming prekeys and running
+/// the ratchet are pairwise concerns, and the transaction that writes the
+/// outbox rows is the same one that retires the request — so a process that
+/// dies anywhere in here comes back to a send that is either owed or queued,
+/// never both and never neither.
+abstract interface class SendPreparationPort implements Port {
+  Future<Result<void>> prepare(PendingSendPreparation preparation);
 }
 
 abstract interface class JitterSource implements Port {

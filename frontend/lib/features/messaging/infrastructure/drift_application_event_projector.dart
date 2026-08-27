@@ -371,17 +371,42 @@ final class DriftApplicationEventProjector {
     );
   }
 
+  /// Writes one message's delivery state, for one event whose transport moved.
+  ///
+  /// This used to rebuild the whole conversation. Every attempt transition of
+  /// every send — queued to sending, sending to accepted, either to retry or to
+  /// failure — re-read every event in the thread, re-projected every message in
+  /// it, and rewrote every row, to change one integer on one of them. The cost
+  /// of telling the user their message reached the relay was therefore set by
+  /// how long they had been talking to that person, and it was paid three times
+  /// per send.
+  ///
+  /// Nothing else a rebuild computes can change because an outbox row changed,
+  /// so nothing else is recomputed. An event that is not a locally originated
+  /// message create — an edit, a reaction, a receipt, a device-log object —
+  /// owns no delivery state at all and leaves without a write.
+  ///
+  /// The message a local create belongs to is the create itself:
+  /// `SendConversationEvents` puts the event id in the body as the message id,
+  /// and the projector records that same id as `ordering_event_id`. Both are
+  /// asserted in the predicate rather than assumed, so an event that somehow
+  /// disagreed would update nothing instead of the wrong row.
   Future<void> refreshTransportForEventInsideTransaction(String eventId) async {
     final event = await (database.select(
       database.storedApplicationEvents,
     )..where((row) => row.eventId.equals(eventId))).getSingleOrNull();
-    if (event == null) {
+    if (event == null ||
+        !event.localOrigin ||
+        event.kind != ApplicationEventKind.messageCreate.wireValue) {
       return;
     }
-    await _rebuildConversation(
-      event.conversationId,
-      currentUserId: event.senderUserId,
-    );
+    final state = await _deriveTransportState(eventId, localOrigin: true);
+    await (database.update(database.messages)..where(
+          (row) =>
+              row.messageId.equals(eventId) &
+              row.orderingEventId.equals(eventId),
+        ))
+        .write(MessagesCompanion(status: Value(state.index)));
   }
 
   Future<void> _insertEvent(
@@ -456,6 +481,7 @@ final class DriftApplicationEventProjector {
         message.messageId: _LocalMessageState(
           deletedForMe: message.deletedForMe,
           unread: message.unread,
+          status: _storedTransportState(message.status),
         ),
     };
 
@@ -666,7 +692,7 @@ final class DriftApplicationEventProjector {
     if (readOnOwnDevice) {
       unread = false;
     }
-    final transport = await _transportState(create);
+    final transport = localState?.status ?? await _transportState(create);
     return _ProjectedMessage(
       messageId: messageId,
       conversationId: conversation.conversationId,
@@ -835,15 +861,39 @@ final class DriftApplicationEventProjector {
     }
   }
 
-  Future<MessageTransportState> _transportState(_EventFact create) async {
-    if (!create.row.localOrigin) {
+  Future<MessageTransportState> _transportState(_EventFact create) =>
+      _deriveTransportState(
+        create.row.eventId,
+        localOrigin: create.row.localOrigin,
+      );
+
+  /// Where the transport state of a locally originated event comes from.
+  ///
+  /// `outbox_operations` remains the authority the moment there is anything in
+  /// it to read: those rows are the sealed per-recipient ciphertext and their
+  /// attempt states are the only record of what the wire has said. Before they
+  /// exist there is a second durable fact to consult — an owed or terminally
+  /// failed preparation — and it is read only in that window, so an attempt
+  /// transition costs the one query it always did.
+  Future<MessageTransportState> _deriveTransportState(
+    String eventId, {
+    required bool localOrigin,
+  }) async {
+    if (!localOrigin) {
       return MessageTransportState.received;
     }
     final targets = await (database.select(
       database.outboxOperations,
-    )..where((row) => row.eventId.equals(create.row.eventId))).get();
+    )..where((row) => row.eventId.equals(eventId))).get();
     if (targets.isEmpty) {
-      return MessageTransportState.localOnly;
+      final preparation = await (database.select(
+        database.pendingSendPreparations,
+      )..where((row) => row.eventId.equals(eventId))).getSingleOrNull();
+      return switch (preparation?.state) {
+        null => MessageTransportState.localOnly,
+        _SendPreparationState.owed => MessageTransportState.preparing,
+        _ => MessageTransportState.permanentlyFailed,
+      };
     }
     final states = targets.map((row) => row.attemptState).toList();
     final hasAccepted = states.contains(OutboxAttemptState.accepted.index);
@@ -988,10 +1038,30 @@ final class _EventFact {
 }
 
 final class _LocalMessageState {
-  const _LocalMessageState({required this.deletedForMe, required this.unread});
+  const _LocalMessageState({
+    required this.deletedForMe,
+    required this.unread,
+    required this.status,
+  });
 
   final bool deletedForMe;
   final bool unread;
+
+  /// What the row already says about delivery, which is newer than anything a
+  /// rebuild can work out.
+  ///
+  /// Transport state is written by whoever last moved the send — the commit
+  /// that sealed the ciphertext, the batch that went to the wire, the response
+  /// that came back — and each of those is a narrow update against this one
+  /// message. A rebuild happens for an unrelated reason, an edit or a reaction
+  /// or somebody else's message arriving, and re-deriving delivery from the
+  /// outbox there would let a stale read overwrite a fresher write. So the
+  /// rebuild carries the existing value through instead, and derives one only
+  /// for a row it is creating. This is the same rule [Messages.alerted],
+  /// [Messages.starred] and [Messages.deliveredReceiptSent] already live by,
+  /// stated where it can be read rather than implied by an omitted companion
+  /// field.
+  final MessageTransportState status;
 }
 
 final class _ProjectedMessage {
@@ -1155,6 +1225,22 @@ Map<String, Object?> _decodeBody(StoredApplicationEvent row) {
           as Map<String, Object?>;
   return decoded;
 }
+
+/// The persisted ordinals of [PendingSendPreparations.state].
+abstract final class _SendPreparationState {
+  static const int owed = 0;
+}
+
+/// A stored `messages.status`, without trusting the column's own bound.
+///
+/// The check constraint on that column admits one ordinal more than the enum
+/// has values, and this runs inside the write transaction that projects an
+/// event: a range error here would not merely fail a read, it would abort the
+/// commit that makes a message exist.
+MessageTransportState _storedTransportState(int value) =>
+    value >= 0 && value < MessageTransportState.values.length
+    ? MessageTransportState.values[value]
+    : MessageTransportState.localOnly;
 
 String? _targetMessageId(ApplicationEventBody body) => switch (body) {
   MessageEditBody() => protocolBytesToHex(body.targetMessageId),

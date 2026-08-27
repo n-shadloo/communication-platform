@@ -24,6 +24,91 @@ final class PairwiseFanoutCoordinator {
   final PairwiseOutboundPreparationPort crypto;
   final TimeSource clock;
 
+  /// Commits a locally originated event and records that its recipients are
+  /// owed, without touching the network.
+  ///
+  /// This is the whole of a send, as far as the person who pressed send is
+  /// concerned. What used to run first — two authenticated device lookups, a
+  /// prekey claim, and one ratchet step per recipient device — is now described
+  /// by a durable row and performed by [prepareOwedSend] against a message the
+  /// timeline is already showing.
+  Future<Result<void>> commitLocalEcho({
+    required String operationId,
+    required String eventId,
+    required String currentUserId,
+    required String currentDeviceId,
+    required String peerUserId,
+    required Uint8List openedOpaquePayload,
+    required ApplicationEventCommit applicationEvent,
+  }) {
+    if (!_isUuid(currentUserId) ||
+        !_isUuid(currentDeviceId) ||
+        !_isUuid(peerUserId) ||
+        eventId != protocolBytesToHex(applicationEvent.event.eventId)) {
+      return Future.value(
+        const Result.failure(
+          ValidationFailure(ValidationFailureKind.invalidInput),
+        ),
+      );
+    }
+    return store.commitLocalEcho(
+      operationId: operationId,
+      eventId: eventId,
+      currentUserId: currentUserId,
+      currentDeviceId: currentDeviceId,
+      peerUserId: peerUserId,
+      openedLocalPayload: openedOpaquePayload,
+      applicationEvent: applicationEvent,
+    );
+  }
+
+  /// Runs the fan-out an echoed send still owes.
+  ///
+  /// Re-entrancy is decided by the outbox rather than by the operation record.
+  /// The echo writes that record, so its mere presence no longer means the work
+  /// was done; sealed ciphertext does, and finding some means a previous
+  /// attempt committed and died before its caller heard about it.
+  Future<Result<void>> prepareOwedSend(OwedSendPreparation owed) async {
+    if (!_isUuid(owed.currentUserId) ||
+        !_isUuid(owed.currentDeviceId) ||
+        !_isUuid(owed.peerUserId)) {
+      return const Result.failure(
+        ValidationFailure(ValidationFailureKind.invalidInput),
+      );
+    }
+    final recordResult = await store.readPreparedOperation(owed.operationId);
+    if (recordResult case FailureResult(failure: final failure)) {
+      return Result.failure(failure);
+    }
+    final record = (recordResult as Success<DurablePairwiseOperation?>).value;
+    if (record == null || record.eventId != owed.eventId) {
+      // The message this preparation belonged to is gone, so nothing is owed to
+      // anybody. Retiring the row is the only way it stops being asked for.
+      return store.settleSendPreparation(owed.operationId);
+    }
+    if (record.targets.isNotEmpty) {
+      return store.settleSendPreparation(owed.operationId);
+    }
+    final prepared = await _prepare(
+      operationId: owed.operationId,
+      eventId: owed.eventId,
+      currentUserId: owed.currentUserId,
+      currentDeviceId: owed.currentDeviceId,
+      peerUserId: owed.peerUserId,
+      openedOpaquePayload: record.openedLocalPayload,
+      // A conversation whose only participant is this device resolves to no
+      // recipient at all, which is a settled send and not a failed one.
+      settleWithoutTargets: true,
+    );
+    return prepared.fold(
+      onSuccess: (_) => const Result.success(null),
+      onFailure: Result.failure,
+    );
+  }
+
+  Future<Result<bool>> retryFailedSend(String operationId) =>
+      store.rearmFailedSend(operationId);
+
   Future<Result<DurablePairwiseOperation>> prepareAndQueue({
     required String operationId,
     required String eventId,
@@ -31,7 +116,6 @@ final class PairwiseFanoutCoordinator {
     required String currentDeviceId,
     required String peerUserId,
     required Uint8List openedOpaquePayload,
-    ApplicationEventCommit? applicationEvent,
 
     /// For device-to-device recovery, restrict the audience to this exact
     /// already-authenticated device.  A null value preserves normal fan-out.
@@ -55,9 +139,6 @@ final class PairwiseFanoutCoordinator {
       if (existing.eventId != eventId ||
           existing.currentDeviceId != currentDeviceId.toLowerCase() ||
           !_bytesEqual(existing.openedLocalPayload, openedOpaquePayload) ||
-          (applicationEvent != null &&
-              existing.eventId !=
-                  protocolBytesToHex(applicationEvent.event.eventId)) ||
           !_matchesRequestedAudience(
             existing,
             currentUserId: currentUserId,
@@ -69,7 +150,29 @@ final class PairwiseFanoutCoordinator {
       }
       return Result.success(existing);
     }
+    return _prepare(
+      operationId: operationId,
+      eventId: eventId,
+      currentUserId: currentUserId,
+      currentDeviceId: currentDeviceId,
+      peerUserId: peerUserId,
+      openedOpaquePayload: openedOpaquePayload,
+      onlyRecipientDeviceId: onlyRecipientDeviceId,
+      includeOwnDevices: includeOwnDevices,
+    );
+  }
 
+  Future<Result<DurablePairwiseOperation>> _prepare({
+    required String operationId,
+    required String eventId,
+    required String currentUserId,
+    required String currentDeviceId,
+    required String peerUserId,
+    required Uint8List openedOpaquePayload,
+    String? onlyRecipientDeviceId,
+    bool includeOwnDevices = true,
+    bool settleWithoutTargets = false,
+  }) async {
     final peerDevicesResult = await liveDevices.resolveVerifiedLiveDevices(
       peerUserId,
     );
@@ -155,26 +258,11 @@ final class PairwiseFanoutCoordinator {
           ValidationFailure(ValidationFailureKind.invalidInput),
         );
       }
-      if (applicationEvent == null) {
-        return Result.success(
-          DurablePairwiseOperation(
-            operationId: operationId,
-            eventId: eventId,
-            currentDeviceId: currentDeviceId.toLowerCase(),
-            openedLocalPayload: openedOpaquePayload,
-            targets: const [],
-          ),
-        );
-      }
-      final localCommit = await store.commitLocalApplication(
-        operationId: operationId,
-        eventId: eventId,
-        currentDeviceId: currentDeviceId,
-        openedLocalPayload: openedOpaquePayload,
-        applicationEvent: applicationEvent,
-      );
-      if (localCommit case FailureResult(failure: final failure)) {
-        return Result.failure(failure);
+      if (settleWithoutTargets) {
+        final settled = await store.settleSendPreparation(operationId);
+        if (settled case FailureResult(failure: final failure)) {
+          return Result.failure(failure);
+        }
       }
       return Result.success(
         DurablePairwiseOperation(
@@ -281,7 +369,6 @@ final class PairwiseFanoutCoordinator {
         expectedDeviceStateVersion: deviceStateVersions.single,
         openedLocalPayload: openedOpaquePayload,
         targets: preparedTargets,
-        applicationEvent: applicationEvent,
       ),
     );
     if (commit case FailureResult(failure: final failure)) {

@@ -80,11 +80,28 @@ void main() {
         localOrigin: true,
         peerUserNumber: 1001,
       );
+      final echoed = await store.commitLocalEcho(
+        operationId: 'pairwise-operation',
+        eventId: protocolBytesToHex(application.event.eventId),
+        currentUserId: uuid(1000),
+        currentDeviceId: uuid(900),
+        peerUserId: uuid(1001),
+        openedLocalPayload: application.canonicalBytes,
+        applicationEvent: application,
+      );
+      expect(echoed, isA<Success<void>>());
+      var message = await database.select(database.messages).getSingle();
+      expect(message.status, MessageTransportState.preparing.index);
+
       final committed = await store.commitPreparedSend(
         sendCommit(targets: [12], applicationEvent: application),
       );
       expect(committed, isA<Success<void>>());
-      var message = await database.select(database.messages).getSingle();
+      expect(
+        await database.select(database.pendingSendPreparations).get(),
+        isEmpty,
+      );
+      message = await database.select(database.messages).getSingle();
       expect(message.status, MessageTransportState.queued.index);
 
       final sync = DriftSyncStore(database);
@@ -105,6 +122,159 @@ void main() {
       expect(await database.select(database.receipts).get(), isEmpty);
     },
   );
+
+  test(
+    'a retry re-arms the message that failed, and writes no second one',
+    () async {
+      final application = applicationCommit(
+        eventNumber: 13,
+        senderUserNumber: 1000,
+        senderDeviceNumber: 900,
+        localOrigin: true,
+        peerUserNumber: 1001,
+      );
+      final eventId = protocolBytesToHex(application.event.eventId);
+      await store.commitLocalEcho(
+        operationId: 'pairwise-operation',
+        eventId: eventId,
+        currentUserId: uuid(1000),
+        currentDeviceId: uuid(900),
+        peerUserId: uuid(1001),
+        openedLocalPayload: application.canonicalBytes,
+        applicationEvent: application,
+      );
+      final sync = DriftSyncStore(database);
+      final owed = (await sync.beginNextSendPreparation(
+        now: DateTime.utc(2026),
+      )).fold(onSuccess: (work) => work, onFailure: (_) => null);
+      await sync.recordSendPreparationFailure(preparation: owed!);
+      expect(
+        (await database.select(database.messages).getSingle()).status,
+        MessageTransportState.permanentlyFailed.index,
+      );
+
+      final rearmed = await store.rearmFailedSend('pairwise-operation');
+
+      expect((rearmed as Success<bool>).value, isTrue);
+      // One message, back in the state that says it is on its way. A retry that
+      // sent the text again would have left the failed row on screen and put a
+      // second bubble beside it.
+      expect(await database.select(database.messages).get(), hasLength(1));
+      expect(
+        (await database.select(database.messages).getSingle()).status,
+        MessageTransportState.preparing.index,
+      );
+      final row = await database
+          .select(database.pendingSendPreparations)
+          .getSingle();
+      expect(row.state, 0);
+      expect(row.attemptCount, 0);
+      expect(row.nextAttemptAt, isNull);
+    },
+  );
+
+  test('a retry re-arms ciphertext the relay refused for good', () async {
+    final application = applicationCommit(
+      eventNumber: 14,
+      senderUserNumber: 1000,
+      senderDeviceNumber: 900,
+      localOrigin: true,
+      peerUserNumber: 1001,
+    );
+    await store.commitLocalEcho(
+      operationId: 'pairwise-operation',
+      eventId: protocolBytesToHex(application.event.eventId),
+      currentUserId: uuid(1000),
+      currentDeviceId: uuid(900),
+      peerUserId: uuid(1001),
+      openedLocalPayload: application.canonicalBytes,
+      applicationEvent: application,
+    );
+    await store.commitPreparedSend(
+      sendCommit(targets: [14], applicationEvent: application),
+    );
+    final sync = DriftSyncStore(database);
+    final batch = (await sync.beginNextOutboxBatch(
+      now: DateTime.utc(2026),
+    )).fold(onSuccess: (batch) => batch, onFailure: (_) => null);
+    await sync.recordOutboxPermanentFailure(
+      batch: batch!,
+      now: DateTime.utc(2026, 1, 2),
+    );
+    expect(
+      (await database.select(database.messages).getSingle()).status,
+      MessageTransportState.permanentlyFailed.index,
+    );
+
+    final rearmed = await store.rearmFailedSend('pairwise-operation');
+
+    expect((rearmed as Success<bool>).value, isTrue);
+    expect(await database.select(database.messages).get(), hasLength(1));
+    expect(
+      (await database.select(database.messages).getSingle()).status,
+      MessageTransportState.queued.index,
+    );
+    final outbox = await database.select(database.outboxOperations).getSingle();
+    expect(outbox.attemptState, OutboxAttemptState.queued.index);
+    expect(outbox.attemptCount, 0);
+    expect(outbox.terminalAt, isNull);
+  });
+
+  test('retention never discards the payload of a send still owed', () async {
+    final owedCommit = applicationCommit(
+      eventNumber: 15,
+      senderUserNumber: 1000,
+      senderDeviceNumber: 900,
+      localOrigin: true,
+      peerUserNumber: 1001,
+    );
+    final settledCommit = applicationCommit(
+      eventNumber: 16,
+      senderUserNumber: 1000,
+      senderDeviceNumber: 900,
+      localOrigin: true,
+      peerUserNumber: 1001,
+    );
+    for (final entry in {
+      'owed-operation': owedCommit,
+      'settled-operation': settledCommit,
+    }.entries) {
+      await store.commitLocalEcho(
+        operationId: entry.key,
+        eventId: protocolBytesToHex(entry.value.event.eventId),
+        currentUserId: uuid(1000),
+        currentDeviceId: uuid(900),
+        peerUserId: uuid(1001),
+        openedLocalPayload: entry.value.canonicalBytes,
+        applicationEvent: entry.value,
+      );
+    }
+    await store.settleSendPreparation('settled-operation');
+    await database.customStatement(
+      "UPDATE pairwise_local_applications SET committed_at = 0",
+    );
+
+    expect(
+      await store.pruneRetainedMetadata(now: DateTime.utc(2026, 7, 29)),
+      isA<Success<void>>(),
+    );
+
+    // The settled one is ordinary retained metadata and goes. The owed one is
+    // the bytes a queued fan-out is going to seal, and a message the user can
+    // already see is waiting for it.
+    final remaining = await database
+        .select(database.pairwiseLocalApplications)
+        .get();
+    expect(remaining.map((row) => row.operationId), ['owed-operation']);
+  });
+
+  test('a retry with nothing failed re-arms nothing', () async {
+    expect(
+      ((await store.rearmFailedSend('pairwise-operation')) as Success<bool>)
+          .value,
+      isFalse,
+    );
+  });
 
   test('send fault rolls back session, local marker, and all targets', () async {
     await database.customStatement(
@@ -812,6 +982,9 @@ PairwiseSendCommit sendCommit({
   eventId: applicationEvent == null
       ? 'pairwise-event'
       : protocolBytesToHex(applicationEvent.event.eventId),
+  // The commit no longer carries the event itself. A locally originated send is
+  // committed and projected by the echo, and what reaches here is only the
+  // ciphertext it owed — matched to that echo by operation id and payload.
   currentDeviceId: uuid(900),
   expectedDeviceStateVersion: 1,
   openedLocalPayload: applicationEvent?.canonicalBytes ?? bytes(16, 4),
@@ -835,7 +1008,6 @@ PairwiseSendCommit sendCommit({
         ),
       ),
   ],
-  applicationEvent: applicationEvent,
 );
 
 PairwiseReceiveCommit receiveCommit({

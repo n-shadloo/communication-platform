@@ -781,6 +781,46 @@ class PairwiseLocalApplications extends Table {
   Set<Column<Object>> get primaryKey => {operationId};
 }
 
+/// One send whose event is committed locally and whose recipients are not yet
+/// sealed.
+///
+/// A row here is the durable request for exactly the work a send used to do on
+/// the user's thread: resolve the peer's live devices, claim what needs
+/// claiming, run the ratchet once per recipient, and write the outbox. The
+/// payload it seals is already in [PairwiseLocalApplications] under the same
+/// `operation_id`, so this table carries only the audience and the schedule.
+///
+/// It is a queue, in the shape [PendingApplicationReceipts] and
+/// [StaleDeviceRefreshRequests] already use: a row exists while work is owed
+/// and is deleted, in the same transaction that writes the outbox rows, when it
+/// is done. The one row that outlives its work is a terminally failed one,
+/// which is kept because it is the only durable record that a message the user
+/// can see has no route to the wire, and the timeline reads it to say so.
+@DataClassName('StoredSendPreparationRow')
+class PendingSendPreparations extends Table {
+  @override
+  String get tableName => 'pending_send_preparations';
+
+  TextColumn get operationId => text()();
+  TextColumn get eventId => text().unique()();
+  TextColumn get localUserId => text()();
+  TextColumn get localDeviceId => text()();
+  TextColumn get peerUserId => text()();
+
+  /// 0 owed, 1 permanently failed.
+  IntColumn get state => integer()
+      .withDefault(const Constant(0))
+      .check(state.isBetweenValues(0, 1))();
+  IntColumn get attemptCount => integer()
+      .withDefault(const Constant(0))
+      .check(attemptCount.isBiggerOrEqualValue(0))();
+  DateTimeColumn get nextAttemptAt => dateTime().nullable()();
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+
+  @override
+  Set<Column<Object>> get primaryKey => {operationId};
+}
+
 /// Tombstones contain no key material and make one-time consumption auditable.
 class PairwiseConsumedPrekeys extends Table {
   @override
@@ -1013,6 +1053,7 @@ class StorageMigrationHooks {
     PairwiseReplayMarkers,
     PairwiseOpenedPayloads,
     PairwiseLocalApplications,
+    PendingSendPreparations,
     PairwiseConsumedPrekeys,
     StaleDeviceRefreshRequests,
     Receipts,
@@ -1029,7 +1070,7 @@ final class LocalDatabase extends _$LocalDatabase {
   LocalDatabase(super.executor, {StorageMigrationHooks? migrationHooks})
     : _migrationHooks = migrationHooks ?? const StorageMigrationHooks();
 
-  static const currentSchemaVersion = 15;
+  static const currentSchemaVersion = 16;
   final StorageMigrationHooks _migrationHooks;
 
   @override
@@ -1454,6 +1495,28 @@ final class LocalDatabase extends _$LocalDatabase {
             'UPDATE messages SET delivered_receipt_sent = 1',
           );
           await customStatement('DELETE FROM pending_application_receipts');
+        }
+        if (from < 16) {
+          // Local echo needs somewhere to record that a committed message is
+          // still owed its per-recipient ciphertext. Nothing is repaired here
+          // and nothing is back-filled: every message already on a device
+          // either has its outbox rows or has reached a terminal state, so
+          // there is no send this table would have been holding.
+          //
+          // Checked rather than assumed, for the same reason the schema-14 and
+          // -15 steps check: a database whose recorded version is behind its
+          // actual shape is a real condition on a device that has taken a
+          // development build, and an upgrade that fails on it leaves the
+          // application unable to open its own storage.
+          final existing = await customSelect(
+            "SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?",
+            variables: [
+              Variable<String>(pendingSendPreparations.actualTableName),
+            ],
+          ).get();
+          if (existing.isEmpty) {
+            await migrator.createTable(pendingSendPreparations);
+          }
         }
         await _migrationHooks.afterUpgrade(from, to);
       });

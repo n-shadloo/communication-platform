@@ -12,6 +12,7 @@ import 'package:communication_platform/features/groups/application/group_pending
 import 'package:communication_platform/features/groups/infrastructure/drift_group_repository.dart';
 import 'package:communication_platform/features/messaging/application/conversation_use_cases.dart';
 import 'package:communication_platform/features/messaging/infrastructure/drift_application_conversation_resolver.dart';
+import 'package:communication_platform/features/messaging/infrastructure/pairwise_send_preparation_adapter.dart';
 import 'package:communication_platform/features/messaging/infrastructure/pending_receipt_post_inbox_work.dart';
 import 'package:communication_platform/features/pairwise/infrastructure/contact_selective_pairwise_claim_adapter.dart';
 import 'package:communication_platform/features/pairwise/infrastructure/drift_pairwise_transport_store.dart';
@@ -120,6 +121,12 @@ final durableSyncEngineProvider =
           localDeviceId: scope.deviceId,
         ),
       );
+      final gossip = await ref.watch(
+        deviceLogGossipCoordinatorProvider((
+          userId: scope.userId,
+          deviceId: scope.deviceId,
+        )).future,
+      );
       return DurableSyncEngine(
         store: store,
         remote: DioSyncRemotePort(ref.watch(authenticatedRestClientProvider)),
@@ -128,6 +135,15 @@ final durableSyncEngineProvider =
         clock: ref.watch(timeSourceProvider),
         jitter: FullJitterSource(),
         standDown: ref.watch(deliveryStandDownProvider),
+        sendPreparation: PairwiseSendPreparationAdapter(
+          await ref.watch(
+            pairwiseFanoutCoordinatorProvider((
+              userId: scope.userId,
+              deviceId: scope.deviceId,
+            )).future,
+          ),
+          afterSuccessfulQueue: gossip.queueForUser,
+        ),
         postInboxCommitWork: _CompositePostInboxWork([
           if (groupKeyPackageMaintenance != null)
             _GroupKeyPackagePostInboxWork(

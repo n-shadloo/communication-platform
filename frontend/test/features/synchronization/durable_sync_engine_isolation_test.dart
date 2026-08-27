@@ -411,6 +411,25 @@ final class CountingStore implements DurableSyncStore {
   }) => _inner.recordAcknowledgementFailure(batch: batch, retryAt: retryAt);
 
   @override
+  Future<Result<PendingSendPreparation?>> beginNextSendPreparation({
+    required DateTime now,
+  }) => _inner.beginNextSendPreparation(now: now);
+
+  @override
+  Future<Result<void>> recordSendPreparationRetry({
+    required PendingSendPreparation preparation,
+    required DateTime retryAt,
+  }) => _inner.recordSendPreparationRetry(
+    preparation: preparation,
+    retryAt: retryAt,
+  );
+
+  @override
+  Future<Result<void>> recordSendPreparationFailure({
+    required PendingSendPreparation preparation,
+  }) => _inner.recordSendPreparationFailure(preparation: preparation);
+
+  @override
   Future<Result<OutboxBatch?>> beginNextOutboxBatch({required DateTime now}) =>
       _inner.beginNextOutboxBatch(now: now);
 

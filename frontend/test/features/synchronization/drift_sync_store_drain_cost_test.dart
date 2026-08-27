@@ -7,6 +7,8 @@ import 'package:drift/drift.dart';
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../../support/counting_interceptor.dart';
+
 /// What one page of an authoritative drain costs when nothing on it is new.
 ///
 /// A server keeps serving an envelope until this device acknowledges it, so a
@@ -144,63 +146,6 @@ void main() {
       expect(await bounded.persistDrainPage(pageOf(3)), isA<Success<void>>());
     },
   );
-}
-
-/// Counts every statement that reaches the database, transactions included.
-final class CountingInterceptor extends QueryInterceptor {
-  int statements = 0;
-
-  void reset() => statements = 0;
-
-  @override
-  Future<List<Map<String, Object?>>> runSelect(
-    QueryExecutor executor,
-    String statement,
-    List<Object?> args,
-  ) {
-    statements += 1;
-    return super.runSelect(executor, statement, args);
-  }
-
-  @override
-  Future<int> runInsert(
-    QueryExecutor executor,
-    String statement,
-    List<Object?> args,
-  ) {
-    statements += 1;
-    return super.runInsert(executor, statement, args);
-  }
-
-  @override
-  Future<int> runUpdate(
-    QueryExecutor executor,
-    String statement,
-    List<Object?> args,
-  ) {
-    statements += 1;
-    return super.runUpdate(executor, statement, args);
-  }
-
-  @override
-  Future<int> runDelete(
-    QueryExecutor executor,
-    String statement,
-    List<Object?> args,
-  ) {
-    statements += 1;
-    return super.runDelete(executor, statement, args);
-  }
-
-  @override
-  Future<void> runCustom(
-    QueryExecutor executor,
-    String statement,
-    List<Object?> args,
-  ) {
-    statements += 1;
-    return super.runCustom(executor, statement, args);
-  }
 }
 
 String uuid(int value) =>

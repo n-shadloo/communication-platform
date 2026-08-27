@@ -12,6 +12,10 @@ import 'package:communication_platform/features/synchronization/application/port
 import 'package:communication_platform/features/synchronization/domain/sync_model.dart';
 import 'package:drift/drift.dart';
 
+/// The persisted ordinals of `pending_send_preparations.state`.
+const int _preparationOwed = 0;
+const int _preparationFailed = 1;
+
 final class DriftSyncStore implements DurableSyncStore {
   const DriftSyncStore(
     this.database, {
@@ -49,13 +53,20 @@ SELECT
   c.reconnect_at,
   c.last_successful_sync_at,
   (SELECT COUNT(*) FROM inbox_envelopes WHERE processing_state != 4) AS inbox_depth,
-  (SELECT COUNT(*) FROM outbox_operations WHERE attempt_state IN (0, 1, 2)) AS outbox_depth,
+  (SELECT COUNT(*) FROM (
+    SELECT operation_id FROM outbox_operations WHERE attempt_state IN (0, 1, 2)
+    UNION
+    SELECT operation_id FROM pending_send_preparations WHERE state = 0
+  )) AS outbox_depth,
   (SELECT MIN(candidate) FROM (
     SELECT next_attempt_at AS candidate FROM inbox_envelopes
       WHERE processing_state IN (0, 1, 2, 3) AND next_attempt_at IS NOT NULL
     UNION ALL
     SELECT next_attempt_at AS candidate FROM outbox_operations
       WHERE attempt_state IN (0, 1, 2) AND next_attempt_at IS NOT NULL
+    UNION ALL
+    SELECT next_attempt_at AS candidate FROM pending_send_preparations
+      WHERE state = 0 AND next_attempt_at IS NOT NULL
     UNION ALL
     SELECT reconnect_at AS candidate FROM sync_checkpoint
       WHERE reconnect_at IS NOT NULL
@@ -67,6 +78,7 @@ WHERE c.singleton_id = 1
         database.syncCheckpoints,
         database.inboxEnvelopes,
         database.outboxOperations,
+        database.pendingSendPreparations,
       },
     );
     yield* _conflated(
@@ -207,13 +219,20 @@ SELECT
   c.reconnect_at,
   c.last_successful_sync_at,
   (SELECT COUNT(*) FROM inbox_envelopes WHERE processing_state != 4) AS inbox_depth,
-  (SELECT COUNT(*) FROM outbox_operations WHERE attempt_state IN (0, 1, 2)) AS outbox_depth,
+  (SELECT COUNT(*) FROM (
+    SELECT operation_id FROM outbox_operations WHERE attempt_state IN (0, 1, 2)
+    UNION
+    SELECT operation_id FROM pending_send_preparations WHERE state = 0
+  )) AS outbox_depth,
   (SELECT MIN(candidate) FROM (
     SELECT next_attempt_at AS candidate FROM inbox_envelopes
       WHERE processing_state IN (0, 1, 2, 3) AND next_attempt_at IS NOT NULL
     UNION ALL
     SELECT next_attempt_at AS candidate FROM outbox_operations
       WHERE attempt_state IN (0, 1, 2) AND next_attempt_at IS NOT NULL
+    UNION ALL
+    SELECT next_attempt_at AS candidate FROM pending_send_preparations
+      WHERE state = 0 AND next_attempt_at IS NOT NULL
     UNION ALL
     SELECT reconnect_at AS candidate FROM sync_checkpoint
       WHERE reconnect_at IS NOT NULL
@@ -967,6 +986,100 @@ WHERE c.singleton_id = 1
         nextAttemptAt: Value(retryAt),
       ),
     );
+  });
+
+  @override
+  Future<Result<PendingSendPreparation?>> beginNextSendPreparation({
+    required DateTime now,
+  }) async {
+    try {
+      final row =
+          await (database.select(database.pendingSendPreparations)
+                ..where(
+                  (item) =>
+                      item.state.equals(_preparationOwed) &
+                      (item.nextAttemptAt.isNull() |
+                          item.nextAttemptAt.isSmallerOrEqualValue(now)),
+                )
+                ..orderBy([
+                  (item) => OrderingTerm.asc(item.createdAt),
+                  (item) => OrderingTerm.asc(item.operationId),
+                ])
+                ..limit(1))
+              .getSingleOrNull();
+      if (row == null) {
+        return const Result.success(null);
+      }
+      return Result.success(
+        PendingSendPreparation(
+          operationId: row.operationId,
+          eventId: row.eventId,
+          localUserId: row.localUserId,
+          localDeviceId: row.localDeviceId,
+          peerUserId: row.peerUserId,
+          attempt: row.attemptCount + 1,
+        ),
+      );
+    } on Object {
+      return const Result.failure(
+        StorageFailure(StorageFailureKind.unavailable),
+      );
+    }
+  }
+
+  /// Nothing is marked in-flight, and nothing needs to be.
+  ///
+  /// An outbox row is marked `sending` because the bytes have left this device
+  /// and the record of that has to survive the answer. A preparation has sent
+  /// nothing: it either commits — in the transaction that also retires it — or
+  /// it does not, and a process that dies mid-attempt comes back to a row that
+  /// is still exactly owed. What stops the same run picking it up twice is the
+  /// due time written here.
+  @override
+  Future<Result<void>> recordSendPreparationRetry({
+    required PendingSendPreparation preparation,
+    required DateTime retryAt,
+  }) => _write(() async {
+    await (database.update(database.pendingSendPreparations)..where(
+          (row) =>
+              row.operationId.equals(preparation.operationId) &
+              row.state.equals(_preparationOwed),
+        ))
+        .write(
+          PendingSendPreparationsCompanion(
+            attemptCount: Value(preparation.attempt),
+            nextAttemptAt: Value(retryAt),
+          ),
+        );
+  });
+
+  @override
+  Future<Result<void>> recordSendPreparationFailure({
+    required PendingSendPreparation preparation,
+  }) => _write(() async {
+    final updated =
+        await (database.update(database.pendingSendPreparations)..where(
+              (row) =>
+                  row.operationId.equals(preparation.operationId) &
+                  row.state.equals(_preparationOwed),
+            ))
+            .write(
+              PendingSendPreparationsCompanion(
+                state: const Value(_preparationFailed),
+                attemptCount: Value(preparation.attempt),
+                nextAttemptAt: const Value(null),
+              ),
+            );
+    if (updated == 0) {
+      return;
+    }
+    // The row outlives its work here, alone among the queues in this file,
+    // because it is the only durable record that a message the user can see has
+    // no route to the wire. Deleting it would make that message read as one
+    // that never left this device on purpose.
+    await DriftApplicationEventProjector(
+      database,
+    ).refreshTransportForEventInsideTransaction(preparation.eventId);
   });
 
   @override

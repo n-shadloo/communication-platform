@@ -15,6 +15,7 @@ final class SyncEngineLimits {
     this.maximumInspectionsPerRun = 1000,
     this.maximumAcknowledgementBatchesPerRun = 100,
     this.maximumOutboxBatchesPerRun = 100,
+    this.maximumSendPreparationsPerRun = 32,
     this.maximumStaleRefreshesPerRun = 32,
     this.maximumInspectionAttempts = 8,
     this.minimumInspectionRetry = const Duration(seconds: 1),
@@ -23,6 +24,7 @@ final class SyncEngineLimits {
        assert(maximumInspectionsPerRun > 0),
        assert(maximumAcknowledgementBatchesPerRun > 0),
        assert(maximumOutboxBatchesPerRun > 0),
+       assert(maximumSendPreparationsPerRun > 0),
        assert(maximumStaleRefreshesPerRun > 0),
        assert(maximumInspectionAttempts > 0);
 
@@ -31,6 +33,14 @@ final class SyncEngineLimits {
   final int maximumInspectionsPerRun;
   final int maximumAcknowledgementBatchesPerRun;
   final int maximumOutboxBatchesPerRun;
+
+  /// How many echoed sends one run will seal.
+  ///
+  /// Lower than the outbox budget because a preparation is the expensive half:
+  /// two authenticated device lookups, possibly a prekey claim, and one ratchet
+  /// step per recipient device, against a batch send that is one request. A run
+  /// that hits this reports itself deferred and the next one continues.
+  final int maximumSendPreparationsPerRun;
   final int maximumStaleRefreshesPerRun;
 
   /// How many times inspecting one envelope may fail for a cause that will not
@@ -101,6 +111,7 @@ final class DurableSyncEngine {
     required TimeSource clock,
     required JitterSource jitter,
     PostInboxCommitWorkPort? postInboxCommitWork,
+    SendPreparationPort? sendPreparation,
     DeliveryStandDownSignal standDown = const NeverStandsDown(),
     this.retryPolicy = const SyncRetryPolicy(),
     this.limits = const SyncEngineLimits(),
@@ -111,6 +122,7 @@ final class DurableSyncEngine {
        _clock = clock,
        _jitter = jitter,
        _postInboxCommitWork = postInboxCommitWork,
+       _sendPreparation = sendPreparation,
        _standDown = standDown;
 
   final DurableSyncStore _store;
@@ -120,6 +132,7 @@ final class DurableSyncEngine {
   final TimeSource _clock;
   final JitterSource _jitter;
   final PostInboxCommitWorkPort? _postInboxCommitWork;
+  final SendPreparationPort? _sendPreparation;
 
   /// Read between units of work, never in the middle of one. A cycle that is
   /// asked to give way finishes the envelope, batch or transaction it is
@@ -177,6 +190,15 @@ final class DurableSyncEngine {
     // who waits for whom. The second pass exists because the inbound half
     // queues rows of its own — delivery receipts, group Commits, eviction
     // fan-out — and they are ready by the time it finishes.
+    // Before the outbox, because a send the user has already made is not in
+    // the outbox yet. Its event is committed and on their screen; what it is
+    // waiting for is the fan-out that seals it, and doing that here means the
+    // same cycle carries it all the way to the wire.
+    final firstPreparation = await _prepareSends(progress);
+    if (firstPreparation case FailureResult(failure: final failure)) {
+      return Result.failure(failure);
+    }
+
     final firstOutbox = await _flushOutbox(progress);
     if (firstOutbox case FailureResult(failure: final failure)) {
       return Result.failure(failure);
@@ -202,6 +224,13 @@ final class DurableSyncEngine {
     // refused one batch will refuse this one, and the rows the inbound half
     // queued are durable — the next cycle sends them.
     if (progress.failure == null) {
+      // The inbound half queues sends of its own — a delivered receipt is an
+      // application event like any other — so the second pass owes them the
+      // same preparation.
+      final finalPreparation = await _prepareSends(progress);
+      if (finalPreparation case FailureResult(failure: final failure)) {
+        return Result.failure(failure);
+      }
       final finalOutbox = await _flushOutbox(progress);
       if (finalOutbox case FailureResult(failure: final failure)) {
         return Result.failure(failure);
@@ -297,6 +326,83 @@ final class DurableSyncEngine {
         progress.deferred = true;
       }
     }
+    return const Result.success(null);
+  }
+
+  /// Seals every echoed send whose fan-out is due.
+  ///
+  /// The shape is the outbox's, and deliberately so: a cause that says this
+  /// device cannot reach the server ends the stage and is carried out through
+  /// [progress], because the next preparation would fail the same way and the
+  /// rows are durable. A cause that is settled — a peer with no device this
+  /// build can encrypt to, a claim the server refused on its contents — is
+  /// retired against that one send, and the stage continues to the next.
+  ///
+  /// A retired send is not silence. It leaves the message on screen in the one
+  /// state the timeline offers a retry from, which is the only honest thing to
+  /// show for bytes that will never be sealed.
+  ///
+  /// The two classes are the ones [_isTransientEnvelopeFailure] already draws.
+  /// The question is the same one: has this device learned anything about the
+  /// work in hand, or only about its own connection? A device that is offline,
+  /// rate limited, out of storage or momentarily out of entropy has learned
+  /// nothing, and retiring a send on that would tell somebody their message
+  /// failed because their train went into a tunnel.
+  ///
+  /// Returns failure only when the store itself could not be written.
+  Future<Result<void>> _prepareSends(_RunProgress progress) async {
+    final preparer = _sendPreparation;
+    if (preparer == null) {
+      return const Result.success(null);
+    }
+    for (
+      var index = 0;
+      index < limits.maximumSendPreparationsPerRun;
+      index += 1
+    ) {
+      if (_standDown.standDownRequested) {
+        progress.deferred = true;
+        return const Result.success(null);
+      }
+      final now = _clock.now();
+      final owedResult = await _store.beginNextSendPreparation(now: now);
+      if (owedResult case FailureResult(failure: final failure)) {
+        return Result.failure(failure);
+      }
+      final owed = (owedResult as Success<PendingSendPreparation?>).value;
+      if (owed == null) {
+        return const Result.success(null);
+      }
+      final prepared = await preparer.prepare(owed);
+      if (prepared case FailureResult(failure: final failure)) {
+        if (!_isTransientEnvelopeFailure(failure)) {
+          final retired = await _store.recordSendPreparationFailure(
+            preparation: owed,
+          );
+          if (retired case FailureResult(failure: final storageFailure)) {
+            return Result.failure(storageFailure);
+          }
+          continue;
+        }
+        final retry = await _store.recordSendPreparationRetry(
+          preparation: owed,
+          retryAt: now.add(
+            retryPolicy.delayFor(
+              attempt: owed.attempt,
+              failure: failure,
+              jitter: _jitter,
+            ),
+          ),
+        );
+        if (retry case FailureResult(failure: final storageFailure)) {
+          return Result.failure(storageFailure);
+        }
+        progress.fail(failure);
+        return const Result.success(null);
+      }
+      progress.prepared += 1;
+    }
+    progress.deferred = true;
     return const Result.success(null);
   }
 
@@ -735,6 +841,7 @@ final class _RunProgress {
   int blocked = 0;
   int acknowledged = 0;
   int sent = 0;
+  int prepared = 0;
   int quarantined = 0;
   int failedInspections = 0;
   bool deferred = false;
@@ -752,5 +859,6 @@ final class _RunProgress {
     deferred: deferred,
     quarantinedEnvelopes: quarantined,
     failedInspections: failedInspections,
+    preparedSends: prepared,
   );
 }
