@@ -117,11 +117,11 @@ final class ChatTimelineViewModel {
     required this.loadingBefore,
     required this.olderLoadFailed,
     required this.typing,
-    required Iterable<String> pinnedMessageIds,
+    required Iterable<ChatMessageViewModel> pinnedMessages,
     required Iterable<ChatMessageViewModel> messages,
     this.errorCode,
     this.highlightedMessageId,
-  }) : pinnedMessageIds = List.unmodifiable(pinnedMessageIds),
+  }) : pinnedMessages = List.unmodifiable(pinnedMessages),
        messages = List.unmodifiable(messages);
 
   final ChatTimelineLoadState state;
@@ -134,7 +134,14 @@ final class ChatTimelineViewModel {
   final bool loadingBefore;
   final bool olderLoadFailed;
   final bool typing;
-  final List<String> pinnedMessageIds;
+
+  /// Every pinned message in the conversation, not only the loaded ones.
+  ///
+  /// Complete rather than page-scoped because the banner counts them and the
+  /// sheet lists them, and a banner reading three above a sheet listing one is
+  /// a wrong answer rather than a narrower one. [messages] is the window;
+  /// this is not a subset of it.
+  final List<ChatMessageViewModel> pinnedMessages;
   final List<ChatMessageViewModel> messages;
   final String? errorCode;
   final String? highlightedMessageId;

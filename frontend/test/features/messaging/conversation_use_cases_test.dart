@@ -539,8 +539,22 @@ final class _Repository implements ConversationRepositoryPort {
       const Stream.empty();
 
   @override
-  Stream<List<ConversationMessage>> watchMessages({
+  Stream<ConversationMessagePage> watchMessages({
     required String currentUserId,
     required String conversationId,
+    required ConversationMessageWindow window,
   }) => const Stream.empty();
+
+  @override
+  Future<Result<ConversationMessageCursor?>> olderMessageCursor({
+    required String conversationId,
+    required ConversationMessageCursor before,
+    required int count,
+  }) async => const Result.success(null);
+
+  @override
+  Future<Result<ConversationMessageCursor?>> messageCursor({
+    required String conversationId,
+    required String messageId,
+  }) async => const Result.success(null);
 }

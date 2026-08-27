@@ -505,7 +505,7 @@ class _GroupChatViewState extends State<GroupChatView> {
       loadingBefore: false,
       olderLoadFailed: false,
       typing: false,
-      pinnedMessageIds: const [],
+      pinnedMessages: const [],
       messages: viewMessages,
     );
     final chat = Column(

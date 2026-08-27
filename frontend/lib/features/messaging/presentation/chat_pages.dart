@@ -528,8 +528,8 @@ class _ProjectedConversationPage extends ConsumerWidget {
             resolved: contact.hasValue || contact.hasError,
           );
     final model = messages.when(
-      data: (items) => ChatTimelineViewModel(
-        state: items.isEmpty
+      data: (timeline) => ChatTimelineViewModel(
+        state: timeline.page.messages.isEmpty
             ? ChatTimelineLoadState.empty
             : ChatTimelineLoadState.data,
         conversationId: conversationId,
@@ -537,13 +537,18 @@ class _ProjectedConversationPage extends ConsumerWidget {
         savedMessages: savedMessages,
         securityGate: securityGate,
         offline: offline,
-        hasMoreBefore: false,
-        loadingBefore: false,
-        olderLoadFailed: false,
+        hasMoreBefore: timeline.page.hasMoreBefore,
+        loadingBefore: timeline.loadingBefore,
+        olderLoadFailed: timeline.olderLoadFailed,
         typing: typing.isNotEmpty,
-        pinnedMessageIds: summary?.pinnedMessageIds ?? const <String>[],
+        pinnedMessages: ChatViewModelMapper.messages(
+          timeline.page.pinned,
+          currentUserId: currentUserId,
+          currentUserName: strings.chatYouAuthor,
+          peerName: peerName,
+        ),
         messages: ChatViewModelMapper.messages(
-          items,
+          timeline.page.messages,
           currentUserId: currentUserId,
           currentUserName: strings.chatYouAuthor,
           peerName: peerName,
@@ -560,7 +565,7 @@ class _ProjectedConversationPage extends ConsumerWidget {
         loadingBefore: false,
         olderLoadFailed: false,
         typing: false,
-        pinnedMessageIds: const [],
+        pinnedMessages: const [],
         messages: const [],
       ),
       error: (_, _) => ChatTimelineViewModel(
@@ -574,7 +579,7 @@ class _ProjectedConversationPage extends ConsumerWidget {
         loadingBefore: false,
         olderLoadFailed: false,
         typing: false,
-        pinnedMessageIds: const [],
+        pinnedMessages: const [],
         messages: const [],
         errorCode: 'local_history_unavailable',
       ),
@@ -638,9 +643,30 @@ class _ProjectedConversationPage extends ConsumerWidget {
       }
       return;
     }
-    if (intent is LoadOlderMessagesIntent ||
-        intent is JumpToMessageIntent ||
-        intent is ReplyToMessageIntent ||
+    if (intent is LoadOlderMessagesIntent) {
+      final window = await ref.read(
+        conversationTimelineWindowProvider((
+          currentUserId: currentUserId,
+          conversationId: conversationId,
+        )).future,
+      );
+      await window.loadOlder();
+      return;
+    }
+    if (intent case JumpToMessageIntent(:final messageId)) {
+      // A jump can name a message older than anything loaded — a search hit, a
+      // reply quote, or the oldest pin in the thread. The window opens far
+      // enough back to contain it, and the timeline jumps when it arrives.
+      final window = await ref.read(
+        conversationTimelineWindowProvider((
+          currentUserId: currentUserId,
+          conversationId: conversationId,
+        )).future,
+      );
+      await window.reveal(messageId);
+      return;
+    }
+    if (intent is ReplyToMessageIntent ||
         intent is BeginEditMessageIntent ||
         intent is ForwardMessageIntent) {
       return;
@@ -833,7 +859,7 @@ class _ChatConversationViewState extends State<ChatConversationView> {
       loadingBefore: widget.model.loadingBefore,
       olderLoadFailed: widget.model.olderLoadFailed,
       typing: widget.model.typing,
-      pinnedMessageIds: widget.model.pinnedMessageIds,
+      pinnedMessages: widget.model.pinnedMessages,
       messages: widget.model.messages,
       errorCode: widget.model.errorCode,
       highlightedMessageId:
@@ -927,11 +953,11 @@ class _ChatConversationViewState extends State<ChatConversationView> {
         ),
         body: Column(
           children: [
-            if (widget.model.pinnedMessageIds.isNotEmpty)
+            if (widget.model.pinnedMessages.isNotEmpty)
               _PinnedBanner(
-                count: widget.model.pinnedMessageIds.length,
+                count: widget.model.pinnedMessages.length,
                 onJump: () => _handleIntent(
-                  JumpToMessageIntent(widget.model.pinnedMessageIds.first),
+                  JumpToMessageIntent(widget.model.pinnedMessages.first.id),
                 ),
                 onExpand: _showPinnedMessages,
               ),
@@ -977,9 +1003,7 @@ class _ChatConversationViewState extends State<ChatConversationView> {
 
   Future<void> _showPinnedMessages() async {
     final strings = AppLocalizations.of(context);
-    final pinned = widget.model.messages
-        .where((message) => widget.model.pinnedMessageIds.contains(message.id))
-        .toList(growable: false);
+    final pinned = widget.model.pinnedMessages;
     await showAppSheet<void>(
       context: context,
       semanticLabel: strings.chatPinnedMessagesTitle,

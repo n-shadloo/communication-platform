@@ -51,10 +51,12 @@ void main() {
   });
 
   test('the whole loaded history is searched, not a recent window', () {
-    // The scope this surface states is "everything stored on this phone for
-    // this conversation". `watchMessages` applies no limit, so the guarantee
-    // reduces to this: the filter reads every element it is given, including
-    // the very first.
+    // The scope this surface states is "everything loaded on this phone for
+    // this conversation". `watchMessages` returns a window (ADR-062), so the
+    // guarantee this filter can make is exactly this one: it reads every
+    // element it is given, including the very first. What it is given is the
+    // window, and a hit outside it is reached by paging back — the filter is
+    // not what narrowed, the list is.
     final long = [
       _message('oldest', 'needle at the very beginning'),
       for (var index = 0; index < 50000; index += 1)

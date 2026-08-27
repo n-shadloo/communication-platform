@@ -969,9 +969,9 @@ ChatTimelineViewModel _model({
     loadingBefore: false,
     olderLoadFailed: false,
     typing: false,
-    pinnedMessageIds: [
+    pinnedMessages: [
       for (final message in list)
-        if (message.pinned) message.id,
+        if (message.pinned) message,
     ],
     messages: list,
   );

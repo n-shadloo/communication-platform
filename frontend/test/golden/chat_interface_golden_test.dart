@@ -88,7 +88,18 @@ ChatTimelineViewModel _model() => ChatTimelineViewModel(
   loadingBefore: false,
   olderLoadFailed: false,
   typing: false,
-  pinnedMessageIds: const ['00000000000000000000000000000002'],
+  // The same message as the pinned one in the window below. It is passed
+  // separately because pins are a complete set for the conversation while the
+  // timeline is a window over it, and the two only coincide here.
+  pinnedMessages: [
+    _message(
+      2,
+      text: 'بله، نسخهٔ رمزنگاری‌شده را همین‌جا بفرست.',
+      delivery: ChatDeliveryViewState.delivered,
+      pinned: true,
+      edited: true,
+    ),
+  ],
   messages: [
     _message(
       1,

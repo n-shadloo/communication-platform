@@ -82,6 +82,7 @@ final class ConversationMessage {
     required this.quoteFallback,
     required this.createdMs,
     required this.orderingMs,
+    this.orderingEventId = '',
     required this.timestampState,
     required this.revision,
     required this.edited,
@@ -106,6 +107,10 @@ final class ConversationMessage {
   final String? quoteFallback;
   final int createdMs;
   final int orderingMs;
+
+  /// The second component of the ordering key, carried so that a message can
+  /// name its own position in the timeline's total order without a second read.
+  final String orderingEventId;
   final MessageTimestampState timestampState;
   final int revision;
   final bool edited;
@@ -117,6 +122,123 @@ final class ConversationMessage {
   final MessageTransportState transportState;
   final MessageReceiptState receiptState;
   final List<MessageReaction> reactions;
+}
+
+/// One message's position in the timeline's total order.
+///
+/// The three columns the timeline sorts by, in that order, which is what makes
+/// a window a range rather than a count. Ordering is by `orderingMs`, then
+/// `orderingEventId`, then `messageId`; the last two are tie-breaks that exist
+/// because two devices can stamp the same millisecond and the order still has
+/// to be the same on both of them.
+final class ConversationMessageCursor
+    implements Comparable<ConversationMessageCursor> {
+  const ConversationMessageCursor({
+    required this.orderingMs,
+    required this.orderingEventId,
+    required this.messageId,
+  });
+
+  final int orderingMs;
+  final String orderingEventId;
+  final String messageId;
+
+  @override
+  int compareTo(ConversationMessageCursor other) {
+    final byTime = orderingMs.compareTo(other.orderingMs);
+    if (byTime != 0) return byTime;
+    final byEvent = orderingEventId.compareTo(other.orderingEventId);
+    if (byEvent != 0) return byEvent;
+    return messageId.compareTo(other.messageId);
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      other is ConversationMessageCursor &&
+      other.orderingMs == orderingMs &&
+      other.orderingEventId == orderingEventId &&
+      other.messageId == messageId;
+
+  @override
+  int get hashCode => Object.hash(orderingMs, orderingEventId, messageId);
+
+  @override
+  String toString() =>
+      'ConversationMessageCursor($orderingMs, $orderingEventId, $messageId)';
+}
+
+/// How much of a conversation the timeline is asking for.
+///
+/// Deliberately not an offset and not a page number. [NewestConversationMessages]
+/// is the first read, before anything is known; every read after it is
+/// [ConversationMessagesFrom], an open-ended range anchored at the oldest
+/// message already on screen. Anchoring at the bottom rather than counting from
+/// the top is what lets a message arriving at the top join the window without
+/// pushing the message the user is reading out of the other end of it.
+sealed class ConversationMessageWindow {
+  const ConversationMessageWindow();
+}
+
+final class NewestConversationMessages extends ConversationMessageWindow {
+  const NewestConversationMessages(this.count);
+
+  final int count;
+
+  @override
+  bool operator ==(Object other) =>
+      other is NewestConversationMessages && other.count == count;
+
+  @override
+  int get hashCode => count.hashCode;
+}
+
+final class ConversationMessagesFrom extends ConversationMessageWindow {
+  const ConversationMessagesFrom(this.oldest);
+
+  final ConversationMessageCursor oldest;
+
+  @override
+  bool operator ==(Object other) =>
+      other is ConversationMessagesFrom && other.oldest == oldest;
+
+  @override
+  int get hashCode => oldest.hashCode;
+}
+
+/// One emission of a windowed conversation.
+///
+/// [messages] is oldest-first, the order the timeline renders in. [pinned] is
+/// not a subset of it: pins are a small, complete set for the whole
+/// conversation, because the surface that lists them counts them too and a
+/// banner that says three while the sheet behind it lists one is not a narrower
+/// answer, it is a wrong one.
+final class ConversationMessagePage {
+  const ConversationMessagePage({
+    required this.messages,
+    required this.pinned,
+    required this.hasMoreBefore,
+  });
+
+  static const empty = ConversationMessagePage(
+    messages: [],
+    pinned: [],
+    hasMoreBefore: false,
+  );
+
+  final List<ConversationMessage> messages;
+  final List<ConversationMessage> pinned;
+
+  /// Whether this conversation holds anything older than [oldest].
+  final bool hasMoreBefore;
+
+  /// The lower bound of this window, or null when it holds nothing.
+  ConversationMessageCursor? get oldest => messages.isEmpty
+      ? null
+      : ConversationMessageCursor(
+          orderingMs: messages.first.orderingMs,
+          orderingEventId: messages.first.orderingEventId,
+          messageId: messages.first.messageId,
+        );
 }
 
 sealed class ConversationTarget {

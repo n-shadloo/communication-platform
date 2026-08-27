@@ -87,6 +87,15 @@ class _ChatTimelineAdapterState extends State<ChatTimelineAdapter> {
   var _loadRequestSent = false;
   _ReadingAnchor? _pendingAnchor;
   _ReadingAnchor? _lastReadingAnchor;
+
+  /// A jump whose target was not loaded when it was asked for.
+  ///
+  /// The application answers a jump by widening the window, which arrives as a
+  /// later build with the same highlighted id. Without this the second build
+  /// takes the "nothing changed" branch and the jump is silently dropped, which
+  /// is exactly how a windowed timeline turns search and the pinned banner into
+  /// taps that do nothing.
+  String? _unresolvedJump;
   var _anchorSnapshotScheduled = false;
   var _dependenciesInitialized = false;
 
@@ -119,10 +128,16 @@ class _ChatTimelineAdapterState extends State<ChatTimelineAdapter> {
     if (!widget.model.loadingBefore) {
       _loadRequestSent = false;
     }
+    final pendingJump = _unresolvedJump;
     if (widget.model.highlightedMessageId !=
         oldWidget.model.highlightedMessageId) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _jumpIfRequested(widget.model.highlightedMessageId);
+      });
+    } else if (pendingJump != null &&
+        widget.model.messages.any((message) => message.id == pendingJump)) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _jumpIfRequested(pendingJump);
       });
     } else {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -251,7 +266,13 @@ class _ChatTimelineAdapterState extends State<ChatTimelineAdapter> {
     final sourceIndex = widget.model.messages.indexWhere(
       (message) => message.id == messageId,
     );
-    if (sourceIndex < 0) return;
+    if (sourceIndex < 0) {
+      // Outside the loaded window. The request is remembered rather than
+      // dropped, and runs again when the page carrying the target arrives.
+      _unresolvedJump = messageId;
+      return;
+    }
+    _unresolvedJump = null;
     final needed = widget.model.messages.length - sourceIndex;
     if (needed > _visibleMessageCount) {
       setState(() => _visibleMessageCount = needed);

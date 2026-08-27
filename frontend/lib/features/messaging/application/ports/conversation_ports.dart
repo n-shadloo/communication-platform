@@ -8,9 +8,36 @@ import 'package:communication_platform/features/messaging/domain/conversation_mo
 abstract interface class ConversationRepositoryPort implements RepositoryPort {
   Stream<List<ConversationSummary>> watchConversations(String currentUserId);
 
-  Stream<List<ConversationMessage>> watchMessages({
+  /// One bounded page of a conversation, re-emitted whenever it changes.
+  ///
+  /// The window is a range and not a count, so a message arriving at the top
+  /// joins the page without displacing the one at the bottom. Every emission
+  /// costs the same number of statements whatever the conversation's length.
+  Stream<ConversationMessagePage> watchMessages({
     required String currentUserId,
     required String conversationId,
+    required ConversationMessageWindow window,
+  });
+
+  /// The key [count] messages older than [before], for the next page.
+  ///
+  /// Null when nothing older exists. This reads [count] keys and stops, which
+  /// is what makes paging backwards cost the page rather than everything
+  /// skipped to reach it.
+  Future<Result<ConversationMessageCursor?>> olderMessageCursor({
+    required String conversationId,
+    required ConversationMessageCursor before,
+    required int count,
+  });
+
+  /// Where [messageId] sits in the conversation's order, or null if it is gone.
+  ///
+  /// This is what makes a jump to something outside the loaded window resolve
+  /// instead of doing nothing: the target's key says how far back the window
+  /// has to open.
+  Future<Result<ConversationMessageCursor?>> messageCursor({
+    required String conversationId,
+    required String messageId,
   });
 
   Future<Result<int>> reserveSenderCounter(String deviceId);

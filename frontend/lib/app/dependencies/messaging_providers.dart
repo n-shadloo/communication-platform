@@ -5,6 +5,7 @@ import 'package:communication_platform/core/protocol/application_message_model.d
 import 'package:communication_platform/core/result/result.dart';
 import 'package:communication_platform/features/devices/infrastructure/device_log_gossip_coordinator.dart';
 import 'package:communication_platform/features/devices/infrastructure/drift_linked_device_repository.dart';
+import 'package:communication_platform/features/messaging/application/conversation_timeline.dart';
 import 'package:communication_platform/features/messaging/application/conversation_use_cases.dart';
 import 'package:communication_platform/features/messaging/application/ports/conversation_ports.dart';
 import 'package:communication_platform/features/messaging/domain/conversation_model.dart';
@@ -71,16 +72,38 @@ final conversationSummariesProvider = StreamProvider.autoDispose
       yield* repository.watchConversations(currentUserId);
     });
 
-final conversationMessagesProvider = StreamProvider.autoDispose
-    .family<List<ConversationMessage>, ConversationMessagesRequest>((
+/// The moving window one open conversation is read through.
+///
+/// Separate from [conversationMessagesProvider] on purpose. The window is
+/// mutable state — which range is loaded — and if it lived in the stream
+/// provider's family key, asking for an older page would change the provider's
+/// identity, dispose the old one, and hand the screen a fresh `loading` state
+/// with the reader's scroll position gone. Keyed by the same request, it is
+/// created once per open conversation and outlives every page.
+final conversationTimelineWindowProvider = FutureProvider.autoDispose
+    .family<ConversationTimelineWindow, ConversationMessagesRequest>((
       ref,
       request,
-    ) async* {
+    ) async {
       final repository = await ref.watch(conversationRepositoryProvider.future);
-      yield* repository.watchMessages(
+      final window = ConversationTimelineWindow(
+        repository: repository,
         currentUserId: request.currentUserId,
         conversationId: request.conversationId,
       );
+      ref.onDispose(window.dispose);
+      return window;
+    });
+
+final conversationMessagesProvider = StreamProvider.autoDispose
+    .family<ConversationTimelineState, ConversationMessagesRequest>((
+      ref,
+      request,
+    ) async* {
+      final window = await ref.watch(
+        conversationTimelineWindowProvider(request).future,
+      );
+      yield* window.states;
     });
 
 /// Which conversation the user is looking at, owned for the life of the

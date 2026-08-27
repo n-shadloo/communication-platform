@@ -107,8 +107,10 @@ void main() {
                   .watchMessages(
                     currentUserId: 'current',
                     conversationId: 'conversation',
+                    window: const NewestConversationMessages(80),
                   )
                   .first)
+              .messages
               .single;
       final attachment = await database
           .select(database.attachments)

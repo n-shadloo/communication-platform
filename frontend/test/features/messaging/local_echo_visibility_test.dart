@@ -88,16 +88,20 @@ void main() {
           .watchMessages(
             currentUserId: localUserId,
             conversationId: conversationId,
+            window: const NewestConversationMessages(80),
           )
           .first;
-      expect(visible, hasLength(1));
-      expect(visible.single.text, 'good morning');
-      expect(visible.single.transportState, MessageTransportState.preparing);
+      expect(visible.messages, hasLength(1));
+      expect(visible.messages.single.text, 'good morning');
+      expect(
+        visible.messages.single.transportState,
+        MessageTransportState.preparing,
+      );
       // And what the chat page would draw for it: the state the timeline has
       // always had a label for and never been given.
       expect(
         ChatDeliveryViewState.encrypting,
-        _deliveryFor(visible.single),
+        _deliveryFor(visible.messages.single),
         reason: 'a message being sealed reads as encrypting',
       );
 
@@ -115,11 +119,12 @@ void main() {
           .watchMessages(
             currentUserId: localUserId,
             conversationId: conversationId,
+            window: const NewestConversationMessages(80),
           )
           .first;
-      expect(duringFanout.single.text, 'good morning');
+      expect(duringFanout.messages.single.text, 'good morning');
       expect(
-        duringFanout.single.transportState,
+        duringFanout.messages.single.transportState,
         MessageTransportState.preparing,
       );
       expect(await database.select(database.outboxOperations).get(), isEmpty);
@@ -131,9 +136,13 @@ void main() {
           .watchMessages(
             currentUserId: localUserId,
             conversationId: conversationId,
+            window: const NewestConversationMessages(80),
           )
           .first;
-      expect(afterFanout.single.transportState, MessageTransportState.queued);
+      expect(
+        afterFanout.messages.single.transportState,
+        MessageTransportState.queued,
+      );
       expect(
         await database.select(database.pendingSendPreparations).get(),
         isEmpty,
