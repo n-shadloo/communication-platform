@@ -71,6 +71,256 @@ is not silently edited out of history.
 | ADR-058 | Accepted | Piece 20's prerequisite becomes seven objectively checkable conditions that fail closed, replacing ADR-044's requirement that somebody make a decision; no exporter is granted and piece 20 stays unstarted (2026-08-25) | The prompt's original condition — piece 19 passing every production gate — is unreachable by this project's own record, since `mls-profile.md` states that gate 2 "cannot be reached by any work inside this project", so as written piece 20 was dead rather than blocked. ADR-044 diagnosed that and re-scoped it to "a decision about which MLS exporter it may derive media keys from", which was right in direction and left the bar unset: whoever wrote the granting ADR would set their own. Two things have also changed underneath it. ADR-055 and ADR-056 landed four days later and made the exporter's availability per-ABI, so on `armeabi-v7a` and `x86_64` the beta MLS stack is withheld entirely and ADR-044's path (b) points at something those devices cannot reach. And the exporter is not reachable as key material on any ABI: `mls_beta.rs` returns SHA-256 over `export_secret` as an epoch-agreement digest and no exporter secret crosses the FFI boundary, so keying media needs a new reviewed native operation nothing had named. The prerequisite is now P1 a granted media-key source named by a dated ADR, in one of exactly two forms; P2 that exporter reachable under its own domain separation and present in the native export allowlist; P3 the same per-ABI permit that governs groups, so voice is never offered where groups are withheld; P4 the frame-encryption contract settled by a recorded decision; P5 an admissible Android wire record under `docs/validation/voice-media/` showing the SFU cannot decrypt; P6 self-hosted LiveKit and TURN with the client package reviewed into the pinned dependency map; P7 a user-facing claim no stronger than the weakest layer underneath. Absence of evidence is refusal, and a partially satisfied list authorizes nothing. This is stricter than what it replaces on every axis: P1(a) preserves the prompt's production condition unchanged, and P2, P3, P4 and P5 are new. Only the four externally blocked registry and ecosystem facts are removed as preconditions for *experimental* voice, and P1(a) keeps every one of them in force for production. No new gate object is added, because voice is neither built nor half-built and a gate with no consumer is decoration; the conditions resolve instead against four mechanisms that already fail closed — the production gate's constructor assertion, `GroupExperimentalGate`'s per-ABI ledger, the native symbol allowlist `build_rust_android.sh` enforces, and the literal dependency map `dependency_policy_test.dart` pins. Also records a conflict rather than resolving it: `voice-and-realtime.md` calls RFC 9605 SFrame the framing contract, `cryptographic-protocol.md` permits LiveKit's own implementation after validation, `backend/SECURITY.md` states audio is SFrame-encrypted, and LiveKit's own documentation names no SFrame anywhere and exposes `EncryptionType` as `kNone`/`kGcm`/`kCustom`. P4 and P5 force that to be answered on evidence. Amends ADR-044's *Piece 20* section, supersedes nothing, opens no production gate, adds no dependency, changes no shipped runtime behaviour, and grants neither exporter path. |
 | ADR-059 | Accepted | The chat page's emoji surface is `emoji_picker_flutter` **4.5.3**, pinned exactly, reached only through one app-owned component, and configured so that it writes nothing to disk; it is at once the newest release and the only one that builds under this project's AGP 9 configuration, it reaches no network and bundles no font, and it brings 7 transitive Dart packages and 40 new Android modules that this decision enumerates rather than leaves to be found later (2026-08-25) | The React row sent a hardcoded `👍` and the composer button inserted a hardcoded `🙂`, in an application whose protocol has carried an arbitrary reaction grapheme since it was written and whose UI specification names an emoji reactor as a required surface — a control presenting itself as more than it is, which §8's own core rules call a defect. Making it real needs a picker, and the picker was evaluated as a dependency rather than as a widget. **The version is not a preference.** 4.5.3's entire changelog entry fixes an Android build failure "on AGP 9 when `android.builtInKotlin=false`", which is exactly what Flutter's own migrator wrote into this project's `gradle.properties` beside `com.android.application` 9.0.1; 4.5.0 is where this package moved its Android plugin *to* built-in Kotlin, so 4.5.0-4.5.2 are exactly the releases that cannot configure here and 4.5.3 restores the legacy path conditionally; 4.4.0 and earlier are superseded rather than tested, so 4.5.3 is both the newest release and the only one in its line that builds, with nothing recent to fall back on (follow-up F2). **It passes the constraint that actually governs**: it ships no asset and no font, every emoji is a Dart string literal compiled into `libapp.so`, glyphs are drawn with the platform emoji face, and its whole `lib/` contains no HTTP, no socket, no image URL and no Google or Firebase reference — its one platform call asks `PaintCompat.hasGlyph` which glyphs this device can draw, through `androidx.core`, already adopted at 1.16.0 under ADR-054. An emoji picker that carried its own Apple/Google/Twitter image sets was rejected on precisely this. **What it costs is on the Android side and is stated in full**: `shared_preferences` arrives to hold recent emoji, and behind it `shared_preferences_android` pulls `androidx.datastore` (with a repackaged protobuf and okio) and `androidx.preference`, which pulls **`androidx.appcompat` 1.1.0 from 2019** and the legacy support-library tree with it — 51 modules on a release runtime classpath become 91, of which 40 artifacts are new, in an application that instantiates no AppCompat class and renders nothing through a `RecyclerView`. That is the largest expansion of the Android set since ADR-054 locked it, it is accepted because the alternative is sourcing and maintaining 1500+ glyphs with per-locale names and skin-tone variants in application code, and it is accepted **enumerated**: the lockfile records every coordinate, `dependency_policy_test.dart` pins the resolved release set as a literal, and `docs/third-party-notices.md` now lists 91 modules instead of 51 and names the protobuf inside the AndroidX wrapper. **The storage half is refused rather than inherited.** The package's two `shared_preferences` features are guarded by `RecentTabBehavior` and `SkinToneConfig.rememberSkinTone`; `AppEmojiPicker` sets the first to `NONE` and leaves the second at its default `false`, so no write is reachable and Android never creates the file, because it creates it on first commit and there is no first commit. Everything else this application knows about a person is in SQLCipher under a Keystore-wrapped key; a plaintext list of the emoji they most recently used would be a durable record of their behaviour outside that boundary, which is the category ADR-057 built the diagnostics export's types to be incapable of holding. Losing recents is a real cost, answered where it matters by a fixed set of common reactions one tap away on the message itself rather than by writing a file. `lib/app/design_system/app_emoji_picker.dart` is the only file naming the package, on ADR-006's rule for Forui, and a new assertion in `design_system_boundary_test.dart` fails if a second one appears — which matters here because the package's defaults turn recents *on*. Adds no permission and no manifest component: both new plugin manifests are empty, and `verify_release_apk.sh --production` passes all seven checks on a built artifact, reading the same permission set and the same five components ADR-054 recorded out of the packaged file; the measured cost is +1.57 MiB on an unsigned production release APK, of which +426 KiB is the Android tree (far less than its own footprint, because almost none of it is reachable) and +1.16 MiB is the emoji data itself - after the wrapper named one locale set instead of letting the package's twelve-way switch keep all of them, which returned exactly 4,096,000 bytes and changes nothing a user sees. It does change the build once: these are the first plugin subprojects here that compile Kotlin, every release build of them failed with "Could not close incremental caches" five times out of five, and `kotlin.incremental=false` is now committed in `android/gradle.properties` with the reasoning beside it, because a release that only builds when somebody remembers a command-line flag is a release process with a hole in it. Also records something the regeneration exposed: `--write-locks` resolves *without* the lock while an ordinary build resolves *with* it, and locking applies the recorded versions as strict constraints, so a regenerated lockfile is not automatically a fixed point — one module the unconstrained graph evicts is kept by the constrained one, and the first regenerated lock was rejected by the next release build (follow-up F4). Opens no production gate, supersedes nothing, and changes no cryptographic construction, protocol, wire format or shipped delivery behaviour. |
 | ADR-060 | Accepted | A delivery cycle sends the user's message before it reads anybody else's, one envelope's failure stays on that envelope, and an envelope this device can never open is retired through a bounded attempt budget into quarantine and acknowledged (2026-08-26) | Measured on real devices: fifteen to twenty seconds to the first `POST /envelopes`, delivery that never arrived, 1.1 MB/min of idle re-download and up to one and a half CPU cores, all of it client-side against a network and backend measured clean. Every stage of a run returned its first failure and the inbound stages ran first, so one unopenable envelope stopped a sealed, durable outbox row from ever leaving the process; nothing retired that envelope, so the server re-served it forever; and a failed cycle scheduled *reconnect* backoff, whose uniform draw was the wait itself. Also: schema 14 repairs the devices already stranded, `cipher_memory_security` is turned off as a defence against a threat the model excludes and could not complete anyway, the socket hint stays a hint because `pruned_through` is how a lost envelope is detected, a response this client refuses now cancels its transfer instead of buffering it whole, and the always-false presence line is withdrawn until `subscribe_presence` exists. |
+| ADR-061 | Accepted | A message is committed and drawn before any network call is made, the fan-out that seals it becomes a durable request the delivery cycle owes, and an outbox attempt transition writes one row instead of re-projecting the conversation (2026-08-27) | Sending a DM rendered its own bubble in over three seconds, and the wait was two authenticated device lookups, a prekey claim and one ratchet step per recipient, all in front of the local commit that makes the message visible. The commit is now first and the fan-out is a row in `pending_send_preparations` (schema 15 -> 16) that the delivery cycle drains before the outbox. Separately, every attempt transition ran `_rebuildConversation`: measured at **195 statements** in a 61-message conversation, three times per send, to move one integer on one message. `messages.status` becomes a column the rebuild carries through rather than re-derives, on the `alerted`/`starred`/`delivered_receipt_sent` precedent, and the transitions now cost **7** and **4** statements. `MessageTransportState.preparing` makes the timeline's existing `encrypting` state reachable, and a retry re-arms the failed operation instead of writing a second message. |
+
+## ADR-061 in full — the message goes on the screen before it goes on the network (2026-08-27)
+
+**Status:** Accepted. Client-side latency and cost decision. Adds one local schema version
+(15 → 16) and one table. Changes no cryptographic construction, no ciphersuite identifier,
+no protocol, no wire format, no transport trust anchor, and no backend file. **Opens no
+production gate.**
+
+### The question
+
+> A direct message takes more than three seconds to render its own bubble. Where does that
+> time go, and what is the smallest set of changes that puts the user's own message on
+> their own screen at the speed of a local write?
+
+Two answers, and they are independent of each other.
+
+**The send is behind the network.** `SendConversationEvents._send` encoded the event and
+called `fanout.prepareAndQueue`, and everything that made the message *exist* was at the
+far end of that call. `PairwiseFanoutCoordinator` resolved the peer's verified live devices
+over HTTPS, resolved this account's own devices over HTTPS again, claimed prekeys for any
+device without a session, ran one ratchet step per recipient device, and only then opened
+the transaction — `commitPreparedSend` — that inserted the stored event and projected the
+message. ADR-060 measured a real round trip from a phone at 107 to 137 ms; two of them plus
+a claim plus the ratchet is the wait, and none of it is work the timeline needs. The bubble
+was waiting on the recipient set.
+
+**And every attempt transition re-projected the conversation.**
+`refreshTransportForEventInsideTransaction` looked up the event and called
+`_rebuildConversation`, which reads every candidate event in the conversation, decodes each
+body, re-projects every message, rewrites every message row, and deletes and re-inserts
+every reaction and receipt — to change one integer on one message. It is called from three
+places in `DriftSyncStore`: claiming a batch (`queued → sending`), recording acceptance, and
+`_updateOutboxBatch` (retry and permanent failure). So the cost of telling somebody their
+message reached the relay was set by how long they had been talking to that person, and it
+was paid twice per send on top of the projection the send itself did.
+
+Measured in `test/features/messaging/local_send_cost_test.dart`, against a conversation of
+61 messages: **one full projection of that conversation is 195 statements**. Against five
+messages it is 27. That is the number each transition was paying.
+
+### D1. The local commit goes first, and the fan-out becomes a durable request
+
+`ApplicationFanoutPort.prepareAndQueue` is replaced by `commitLocalEcho`. It writes, in one
+transaction: the `pairwise_local_applications` row that holds the opaque payload, a row in
+the new `pending_send_preparations` table, and the projection. It touches no network. The
+message is on the timeline when it returns.
+
+The new table is the request. A row in it says: this operation's event is committed, and
+its per-recipient ciphertext is owed to this peer. It carries the operation id, the event
+id, the local user and device, the peer, an attempt count and a due time — and nothing
+else, because the bytes to be sealed are already in `pairwise_local_applications` under the
+same operation id. It is a queue in the shape `pending_application_receipts` and
+`stale_device_refresh_requests` already use: a row exists while work is owed, and is deleted
+in the same transaction that writes the outbox rows.
+
+**Why a table and not a column.** `pairwise_local_applications` could have carried a state
+column, and that was rejected: the row there is a durable payload with an idempotency key,
+and it outlives the work by design — retained metadata, pruned on a sixteen-day cutoff. A
+queue whose depth is `COUNT(*)` and whose empty state means "nothing owed" is a different
+object with a different lifetime, and merging them would have made both harder to reason
+about. The one place they are coupled is now explicit: **retention never discards the
+payload of a send still owed.** Sixteen days of owing one is pathological, but discarding
+those bytes would leave a message on screen that nothing can ever seal.
+
+**Every application event takes this path, not only a message create.** Edits, deletions,
+reactions, pins and receipts are all sends, they all went through the same fan-out, and
+splitting only the message create would have left two paths through one port for no
+benefit. A reaction now appears instantly for the same reason a message does.
+
+### D2. The delivery cycle owes the fan-out, and runs it before the outbox
+
+`DurableSyncEngine` gains one stage, `_prepareSends`, immediately before each of its two
+`_flushOutbox` passes. It asks the store for the oldest due preparation, hands it to a new
+`SendPreparationPort`, and the same cycle carries the resulting ciphertext to the wire.
+
+The port's implementation, `PairwiseSendPreparationAdapter`, calls
+`PairwiseFanoutCoordinator.prepareOwedSend` — which is the same `_prepare` body
+`prepareAndQueue` runs, differing only in how it decides the work is already done and what
+it does with no recipients. **Re-entrancy moves from the operation record to the outbox.**
+It used to be enough that `readPreparedOperation` returned non-null; the echo writes that
+record before any ciphertext exists, so sealed outbox rows are now the test, and finding
+some means an earlier attempt committed and died before its caller heard about it.
+
+Failure handling is the outbox's, deliberately. A transport-shaped failure leaves the row
+owed with a due time and ends the stage — the next preparation would fail the same way and
+the rows are durable. A settled failure (`_isPermanentSendFailure`, or a `SecurityFailure`:
+a device set that changed under the claim, a peer this build cannot encrypt to) retires
+that one row to a terminal state and the stage continues to the next, so one unsendable
+message is not a stuck queue. Nothing is marked in flight, because nothing is: a
+preparation either commits in the transaction that also retires it, or it does not, and a
+process that dies mid-attempt comes back to a row that is exactly owed. `SyncRetryPolicy`
+and the per-run budget are shared with the outbox; the budget is 32 rather than 100 because
+a preparation is two round trips and N ratchet steps against a batch send's one request.
+
+**Device-log gossip moved with it.** `PairwiseApplicationFanoutAdapter.afterSuccessfulQueue`
+awaited `DeviceLogGossipCoordinator.queueForUser` on the send path, and that call is itself
+a full fan-out with its own device lookup and its own ratchet steps. It now runs after a
+successful preparation, in the same background stage. Its failure is swallowed rather than
+reported: gossip is owed to a peer and not to this message, and by the time it runs the
+message's ciphertext is already durable.
+
+### D3. `outbox_depth` counts operations, and counts what is owed
+
+ADR-060 states the rule this depends on: *sending is not a call into the supervisor; a
+composer writes a durable row and returns, and the row is the request.* Local echo changes
+which row that is. If the projection kept counting only `outbox_operations`, an echoed
+message would raise nothing, and nothing would wake the engine.
+
+So the depth is now `COUNT` over the union of non-terminal outbox operation ids and owed
+preparation ids — **per operation, not per row**. The per-operation part is not cosmetic.
+The supervisor triggers on the depth *growing*, and a send that later seals three envelopes
+has not become three new sends; counting rows would have asked for a second cycle that
+arrived to find the work already done, having paid an authoritative drain — a REST round
+trip — to discover it. Counted this way, an echo raises the depth by exactly one, sealing
+it raises it by nothing, and acceptance returns it to zero.
+
+`nextRetryAt` gains the preparation queue for the same reason it already covers the inbox,
+the outbox and the reconnect schedule: a send waiting out a backoff is a *time*, and it is
+the one kind of work nothing else announces.
+
+### D4. `messages.status` is a column the rebuild carries through
+
+This is the answer to the clobber hazard, and it is the codebase's own.
+
+`_rebuildConversation` still runs on the real event path and still writes every message
+row. If something narrower becomes the authority on transport state, a later rebuild must
+not overwrite a fresh value with a stale re-derivation. `messages.alerted`,
+`messages.starred` and `messages.delivered_receipt_sent` already answer exactly this shape
+of problem, by being columns the rebuild does not own.
+
+`status` joins them, with one difference worth stating: those three are preserved by being
+omitted from the upsert companion, while `status` is required at insert. So the rebuild
+reads the existing row's status — it already reads the old rows, for `deleted_for_me` and
+`unread` — and carries it into the projected message. A row it is *creating* still derives
+one. **`outbox_operations` therefore remains the authority**, exactly as it was: it is
+consulted whenever a row is created, and by every narrow update. What changed is that a
+rebuild is no longer one of the things that asks.
+
+This also removes a per-message `SELECT` from every rebuild. `_transportState` ran one
+`SELECT … FROM outbox_operations WHERE event_id = ?` per message per rebuild; it now runs
+only for a message being created.
+
+`refreshTransportForEventInsideTransaction` is narrowed rather than deleted, so its three
+call sites are unchanged and the ordering the stale-device path relies on — the refresh
+after the pairwise-session deletes — is untouched. It reads the stored event, returns
+immediately unless that event is a locally originated message create (an edit, a reaction, a
+receipt or a device-log object owns no delivery state of its own and used to trigger a full
+rebuild for nothing), derives the state, and writes one row. The row is identified by
+`message_id = :eventId AND ordering_event_id = :eventId`: `SendConversationEvents` puts the
+event id in the body as the message id and the projector records that same id as
+`ordering_event_id`, and asserting both in the predicate means an event that somehow
+disagreed updates nothing rather than the wrong row.
+
+### D5. An eighth transport state, because seven cannot say this
+
+`MessageTransportState.preparing` is added, **appended** at ordinal 7 — the ordinal is what
+`messages.status` stores and every value before it is already on a device. The check
+constraint on that column is `0..8` and already admits it, so this needs no column change.
+
+Seven could not express the new window. `queued` means sealed bytes are waiting for the
+transport; the new state means the recipient set has not been resolved and nothing has been
+sealed at all. Calling it `queued` would have been a claim about an audience that had not
+been asked for yet, and `localOnly` — "kept on this device" — would have been worse.
+
+The evidence that this state was always missing is that the timeline already had a word for
+it. `ChatDeliveryViewState.encrypting` exists, `chatStateEncrypting` is translated in both
+locales, `_DeliveryIndicator` and `_deliveryLabel` both handle it, and **nothing could ever
+produce it**: the mapper had no `MessageTransportState` to map onto it. This change makes an
+existing, unreachable UI state reachable, which is the opposite of adding one.
+
+### D6. A retry recovers the message, instead of writing a second one
+
+`RetryMessageIntent` called `sendText` again: a new event id, a new sender counter, a new
+message row beside the failed one. That was tolerable when a failed send left nothing on
+screen. It is not tolerable now, because F1 puts a row there for exactly the failures that
+used to be invisible.
+
+`SendConversationEvents.retrySend` asks the fan-out port to re-arm
+`application:$messageId` first. `rearmFailedSend` finds one of two durable failures and
+repairs it in place: a terminally failed preparation goes back to owed with a zero attempt
+count, or permanently failed outbox rows go back to queued — the same repair schema 14
+applied to every stranded row at once, asked for one operation at a time by the person
+whose message it is. Either way the projection is refreshed narrowly and the depth rises, so
+the supervisor runs a cycle. A fresh `sendText` remains the fallback for the one case with
+nothing to re-arm, a message whose operation record has already been pruned.
+
+The reserved sender counter is untouched by this. It is consumed once, by the send that
+created the event, and a retry that re-arms consumes none — which is strictly better than
+before, where every retry burned another.
+
+### Crash safety
+
+The new window is between two transactions that used to be one, and four assertions in
+`test/features/messaging/local_echo_crash_safety_test.dart` are made against a reopened
+database file rather than against objects an interrupted run left behind:
+
+- A fault on the outbox insert leaves the message visible, the preparation owed, no
+  ciphertext and no ratchet step — the session transitions were in the transaction that
+  aborted — and `beginNextSendPreparation` hands the work straight back.
+- A fault on the preparation delete rolls the outbox rows back with it. **Never both**: the
+  retry cannot queue a second copy.
+- A successful seal leaves no preparation and one operation's rows, and the cycle stops
+  asking.
+- A fault while projecting leaves no message, no event, no local application and no
+  preparation. **Never neither**: a request is only owed for a message that exists.
+
+Determinism is unchanged. The same event log still produces the same projection: the echo
+runs the same `applyInsideTransaction` the atomic commit used to run, and `status` — the one
+value a rebuild now carries through rather than re-derives — is not a function of the event
+log at all. It never was; it is a function of `outbox_operations`, which is local transport
+state that no two devices are expected to agree on.
+
+### What it cost, measured
+
+From `local_send_cost_test.dart`, which asserts the transition costs are *equal* across two
+conversation lengths rather than merely bounded, so a rebuild finding its way back onto this
+path fails loudly:
+
+| | 5 messages | 61 messages |
+|---|---|---|
+| One full projection of the conversation | 27 | **195** |
+| The echo the user waits for | 33 | 201 |
+| Preparation → queued, when the fan-out lands | 15 | **15** |
+| Queued → sending | 7 | **7** |
+| Sending → relay-accepted | 4 | **4** |
+
+Before this change a send cost three full projections — one at commit and one for each of
+the two transport transitions — which at 61 messages is 195 statements each. After it, the
+two transitions cost 7 and 4 regardless of conversation length, and the third projection is
+the echo, which still runs one (see below). The network round trips in front of the visible
+message went from two lookups, a claim and N ratchet steps to **none**.
+
+### What is explicitly left undone
+
+- **F2, incremental projection.** `_rebuildConversation`'s O(N²) fact scanning is untouched,
+  and it is the whole of the echo's 201 statements. The cost test asserts that this number
+  grows with history rather than hiding it. It is the next thing to fix and the reason the
+  echo is not already a handful of statements.
+- **F4, indexes.** No index is created. `outbox_operations.event_id`,
+  `messages.ordering_event_id` and `pending_send_preparations.state` are all unindexed
+  scans, which is why the numbers above are as high as they are for the work they do.
+- **F5**, the `watchMessages`/`watchConversations` N+1 shape and its missing `LIMIT`.
+- **F6**, identity and device-resolution caching. The preparation still resolves both device
+  sets over the network on every send; it is simply no longer in front of the user.
+- **F7**, what device-log gossip does and when it is owed. It moved off the synchronous path
+  as a consequence of the fan-out becoming background work; its semantics are unchanged.
+- **F8-F10**, the view-model mapping window, `_messageKeys` pruning, and the draft debounce.
+- **The send is measured in statements, not on a device.** The figures above are from the
+  suite. No A56 measurement of the tap-to-bubble latency has been taken for this change.
 
 ## ADR-060 in full — what a delivery cycle owes the message the user just sent (2026-08-26)
 

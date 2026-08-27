@@ -47,13 +47,21 @@ Socket events may arrive during drain. Inbox uniqueness and event IDs make order
 
 ## Cycle order
 
-One cycle is: the outbox, then the inbox, then acknowledgements, then the authoritative
-drain loop (which runs the inbox and acknowledgements again per page), then the outbox a
-second time, then stale-device refresh, then the successful-sync and `online` markers.
+One cycle is: owed send preparations, then the outbox, then the inbox, then
+acknowledgements, then the authoritative drain loop (which runs the inbox and
+acknowledgements again per page), then preparations and the outbox a second time, then
+stale-device refresh, then the successful-sync and `online` markers.
 
-The outbox goes first because nothing a queued outbox row needs comes from the inbox: its
-per-recipient ciphertext is sealed and durable before the row exists, so the only thing the
-order decides is who waits for whom. It goes a second time because the inbound half queues
+Preparations go immediately before each outbox pass because a message the user has already
+sent is not in the outbox yet. Its event is committed and on their screen, and what it is
+waiting for is the fan-out that seals it ([ADR-061](decisions.md)); running that here means
+one cycle carries a send from the composer to the wire. The second pass exists for the same
+reason the second outbox pass does — the inbound half commits sends of its own, and a
+delivered receipt is an application event like any other.
+
+The outbox goes before the inbox because nothing a queued outbox row needs comes from the
+inbox: its per-recipient ciphertext is sealed and durable before the row exists, so the only
+thing the order decides is who waits for whom. It goes a second time because the inbound half queues
 rows of its own — delivery receipts, group Commits, eviction fan-out — and skips that
 second pass when the first already found the transport unwilling. [ADR-060](decisions.md)
 records why: with the inbound half first and every stage returning its first failure, one
@@ -62,8 +70,16 @@ leaving the process.
 
 A cycle is asked for by an event — a socket hint, a growing durable outbox, a deferred
 platform wake-up — or by a *time*: the supervisor arms a wake-up on the projection's
-`nextRetryAt`, which is the earliest due time across the inbox, the outbox and the
-reconnect schedule. Reconnect backoff is applied only when a cycle failed for a
+`nextRetryAt`, which is the earliest due time across the inbox, the outbox, owed
+preparations and the reconnect schedule.
+
+"Growing durable outbox" means the projection's `outbox_depth`, which counts **outbound
+operations that have not reached the wire, once each** — owed preparations included, since
+a send that has not been sealed yet has no outbox rows to be counted by. Counting
+operations rather than target rows is what keeps the trigger honest: a send that later seals
+three envelopes has not become three new sends, and reacting to that as growth would ask for
+a cycle that arrives to find the work already done, having paid an authoritative drain to
+discover it. Reconnect backoff is applied only when a cycle failed for a
 transport-shaped reason, so a cycle that failed locally never puts the next send behind a
 random wait.
 
@@ -142,6 +158,29 @@ consumer at all**. Direct messages lost to the retention prune are therefore sil
 absent. [ADR-052](decisions.md) discloses that silence in the deployment disclosure rather
 than papering over it, and surfacing the one-to-one gap is recorded there as follow-up
 work; until it is built, no user-facing text may imply the client will name what was lost.
+
+## Owed send preparations
+
+A send arrives at the engine as a row in `pending_send_preparations`: its event is
+committed and projected, and its per-recipient ciphertext is owed. The engine decides when
+that work runs and what a failure costs; it owns none of what the work does, which is
+resolving the peer's verified live devices, claiming prekeys where a session must be
+started, and running the ratchet once per recipient device.
+
+- The oldest due row is handed out; nothing is marked in flight, because nothing is. A
+  preparation either commits — in the same transaction that deletes the row — or it does
+  not, and a process that dies mid-attempt comes back to a row that is exactly owed.
+- A transport-shaped failure leaves the row owed with a due time from the shared retry
+  policy and ends the stage: the next preparation would fail the same way, and the rows are
+  durable.
+- A settled failure — a validation or security result, a peer this build cannot encrypt to,
+  a device set that changed under the claim — retires that one row to a terminal state and
+  the stage continues. The row is kept rather than deleted, because it is the only durable
+  record that a message the user can see has no route to the wire, and the timeline reads it
+  to offer a retry.
+- A retry re-arms the terminal row in place. It never writes a second message.
+- The per-run budget is lower than the outbox's: a preparation is two authenticated round
+  trips plus N ratchet steps, against a batch send's one request.
 
 ## Outbox
 

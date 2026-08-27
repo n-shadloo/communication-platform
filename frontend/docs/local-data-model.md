@@ -44,11 +44,12 @@ Names are conceptual; migrations may refine physical layout without changing own
 | `group_outbound_objects` | Exact prepared opaque group object and send-readiness state; piece 18 never marks development preview data production-ready |
 | `conversations` | DM/group/saved identity and list projection |
 | `memberships` | Decrypted current group roles/policy projection |
-| `messages` | Current logical message projection and status, plus local-only flags the projector preserves rather than rebuilds: `deleted_for_me`, `pinned`, `starred`, `unread`, and `alerted` (the durable one-shot marker that stops an arrival being announced twice, ADR-048) |
+| `messages` | Current logical message projection, plus the columns the projector preserves rather than rebuilds: `deleted_for_me`, `pinned`, `starred`, `unread`, `alerted` (the durable one-shot marker that stops an arrival being announced twice, ADR-048), `delivered_receipt_sent` ([ADR-060](decisions.md)), and `status` ([ADR-061](decisions.md)) |
 | `message_events` | Immutable create/edit/delete/reaction/control facts |
 | `attachments` | Encrypted descriptor, transfer state, bounded cache handle |
 | `inbox_envelopes` | Backend envelope ID/seq, processing and ack state |
-| `outbox_operations` | Durable logical sends, deterministic <=256-target batches, and per-recipient attempts/ciphertext |
+| `outbox_operations` | Durable logical sends, deterministic <=256-target batches, and per-recipient attempts/ciphertext. Authoritative for a message's transport state |
+| `pending_send_preparations` | Sends whose event is committed and whose per-recipient ciphertext is still owed: audience, attempt count and due time, keyed by the same operation id as the payload in `pairwise_local_applications`. A row exists while the fan-out is owed and is deleted in the transaction that writes the outbox rows; a terminally failed one is kept, because it is the only durable record that a visible message has no route to the wire ([ADR-061](decisions.md)) |
 | `receipts` | Per-message/device/user delivered/read projection |
 | `voice_rooms` | Local room capability, encrypted metadata, live state |
 | `history_transfers` | Device-to-device content transfer manifests, event progress, source completeness |
@@ -71,9 +72,24 @@ Names are conceptual; migrations may refine physical layout without changing own
 
 ### Send
 
-One transaction creates/updates the logical event, optimistic message projection, and
-outbox operation. Encryption/network execution occurs outside the DB
-transaction; its result is committed in a second transaction.
+**Two transactions, and the request between them is what makes that safe.** The first —
+the local echo — writes the logical event, the opaque payload, a `pending_send_preparations`
+row, and the message projection. It touches no network, so the message is on the timeline
+at the speed of a local write. The second, run by the delivery cycle after it has resolved
+the recipient set and sealed one envelope per device, writes the outbox rows and deletes
+the preparation row *in the same transaction*. A process killed anywhere between them comes
+back to a send that is either owed or queued, never both and never neither
+([ADR-061](decisions.md)).
+
+Encryption and network execution still occur outside any database transaction, and the
+result is still committed in a second one; what changed is which side of the first
+transaction the user's message is on.
+
+A message's transport state is derived from `outbox_operations` when it has rows there and
+from `pending_send_preparations` before it does. It is written to `messages.status` at
+projection time and updated narrowly on every attempt transition, and a projection rebuild
+carries the existing value through rather than re-deriving it — the same rule `alerted`,
+`starred` and `delivered_receipt_sent` already follow.
 
 ### Receive
 
@@ -144,9 +160,17 @@ cross-check authorization rather than trusting a server-supplied projection.
   The upgrade marks every existing message as already acknowledged and empties the pending
   queue, so it does not itself send one more round.
 
+- Schema version 16 adds `pending_send_preparations`, the durable request for a fan-out a
+  committed message is still owed ([ADR-061](decisions.md)). Nothing is back-filled and
+  nothing is repaired: every message already on a device either has its outbox rows or has
+  reached a terminal state, so there is no send this table would have been holding.
+
 ## Retention and deletion
 
 - Acked raw envelopes are removed after their logical event and local projection are safe.
+- Retained pairwise metadata is pruned on a sixteen-day cutoff, **except** the opaque
+  payload of a send whose preparation is still owed. Discarding those bytes would leave a
+  message on screen that nothing can ever seal.
 - Ratchet skipped keys and old MLS states obey strict protocol bounds.
 - Decrypted attachment files and thumbnails use bounded LRU caches with explicit expiry.
 - Delete-for-me creates a tombstone before cache cleanup.
