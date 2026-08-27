@@ -132,22 +132,24 @@ final class DriftApplicationEventProjector {
         eventId: eventId,
       );
     }
-    if (currentConversation == null) {
-      await database
-          .into(database.conversations)
-          .insert(
-            ConversationsCompanion.insert(
-              conversationId: conversationId,
-              kind: commit.conversationKind,
-              listProjectionCiphertext: Uint8List(0),
-              sortKey: 0,
-              peerUserId: Value(peerUserId),
-            ),
-          );
-    }
+    // `RETURNING`, so creating the conversation and reading the row the
+    // projection needs are the same statement rather than two.
+    final conversation =
+        currentConversation ??
+        await database
+            .into(database.conversations)
+            .insertReturning(
+              ConversationsCompanion.insert(
+                conversationId: conversationId,
+                kind: commit.conversationKind,
+                listProjectionCiphertext: Uint8List(0),
+                sortKey: 0,
+                peerUserId: Value(peerUserId),
+              ),
+            );
 
     final orderingMs = _orderingTimestamp(event, commit.authenticatedAt);
-    await _insertEvent(
+    final fact = await _insertEvent(
       commit,
       applyState: _stateCandidate,
       orderingMs: orderingMs,
@@ -207,9 +209,26 @@ final class DriftApplicationEventProjector {
       await _quarantine(_quarantineCounterRollback, event.eventId);
     }
 
-    for (final affectedConversation in affectedConversations) {
-      await _rebuildConversation(
-        affectedConversation,
+    // Where the two paths part, and the only place they do.
+    //
+    // A sender-counter rollback retires events that were already folded into
+    // the projection, in this conversation and possibly in others, so what the
+    // projection should now say is not a function of the event that was just
+    // applied. That is the recovery path's question and it gets the recovery
+    // path's answer. Everything else — which is every message received, every
+    // edit, every reaction, every pin and every receipt — is one new fact about
+    // a known set of messages, and costs that set rather than the conversation.
+    if (rollback) {
+      for (final affectedConversation in affectedConversations) {
+        await _rebuildConversation(
+          affectedConversation,
+          currentUserId: commit.currentUserId,
+        );
+      }
+    } else {
+      await _applyFactIncrementally(
+        conversation: conversation,
+        fact: fact,
         currentUserId: commit.currentUserId,
       );
     }
@@ -218,6 +237,274 @@ final class DriftApplicationEventProjector {
           ? ApplicationApplyDisposition.senderCounterRollback
           : ApplicationApplyDisposition.applied,
       eventId: eventId,
+    );
+  }
+
+  /// Re-folds only the messages [fact] is a fact about.
+  ///
+  /// The affected set is derived from the event's own body, and it has two
+  /// shapes because the protocol has two. An edit, a delete, a reaction and a
+  /// pin each name one target; a `messageCreate` names the message it creates;
+  /// a receipt names **many**, and one receipt legitimately covering a batch of
+  /// messages is the ordinary case rather than the pathological one. So the
+  /// unit of work is a set of message ids, and the cost is that set's size —
+  /// one, or the number of ids the receipt actually carries.
+  ///
+  /// Each of those messages is then re-folded from *every* stored fact about
+  /// it, not from the event in hand. That is what makes a mutation arriving
+  /// before its create work: the edit sat in `application_events` with its
+  /// target row beside it, and the create that arrives later re-reads it along
+  /// with everything else aimed at that message id.
+  ///
+  /// A fold that cannot read one of its own facts declines, and the caller
+  /// falls back to the rebuild — which is the same escalation the rebuild
+  /// itself performs, marking the unreadable fact rejected before continuing.
+  Future<void> _applyFactIncrementally({
+    required Conversation conversation,
+    required _EventFact fact,
+    required String currentUserId,
+  }) async {
+    for (final messageId in _affectedMessageIds(fact)) {
+      final facts = await _factsForMessage(
+        conversation.conversationId,
+        messageId,
+      );
+      if (facts == null) {
+        await _rebuildConversation(
+          conversation.conversationId,
+          currentUserId: currentUserId,
+        );
+        return;
+      }
+      await _projectOneMessage(
+        conversation: conversation,
+        messageId: messageId,
+        facts: facts,
+        currentUserId: currentUserId,
+        applied: fact,
+      );
+    }
+    await _refreshConversationAggregates(conversation.conversationId);
+  }
+
+  /// Writes, or removes, the projection of one message.
+  ///
+  /// Removal is explicit here because an incremental apply runs no sweep. The
+  /// rebuild ends with `DELETE ... WHERE message_id NOT IN (everything it
+  /// projected)`, and that single statement is how a message whose create
+  /// collided with another, or was quarantined, or references a reply this
+  /// device cannot verify, stops being on the timeline. With no sweep the same
+  /// three cases have to be recognised one message at a time, and the delete is
+  /// scoped to the conversation as well as the id: a fact in one conversation
+  /// referencing a message id created in another must not be able to delete it.
+  Future<void> _projectOneMessage({
+    required Conversation conversation,
+    required String messageId,
+    required List<_EventFact> facts,
+    required String currentUserId,
+    required _EventFact applied,
+  }) async {
+    final creates = facts
+        .where(
+          (fact) =>
+              fact.row.kind == ApplicationEventKind.messageCreate.wireValue &&
+              fact.body['message_id'] == messageId,
+        )
+        .toList(growable: false);
+    if (creates.length > 1) {
+      for (final collision in creates) {
+        await _quarantine(
+          _quarantineMessageIdCollision,
+          _hexToBytes(collision.row.eventId),
+        );
+      }
+    }
+    if (creates.length != 1 || !_referencesAreValid(creates.single)) {
+      await _removeMessage(conversation.conversationId, messageId);
+      return;
+    }
+    final existing =
+        await (database.select(database.messages)..where(
+              (row) =>
+                  row.messageId.equals(messageId) &
+                  row.conversationId.equals(conversation.conversationId),
+            ))
+            .getSingleOrNull();
+    final localState = existing == null
+        ? null
+        : _LocalMessageState.of(existing);
+    final projected = await _projectMessage(
+      conversation: conversation,
+      create: creates.single,
+      facts: facts,
+      currentUserId: currentUserId.toLowerCase(),
+      localState: localState,
+    );
+    // A child table is rewritten only by an event that could have changed it.
+    // Reactions and receipts are each derived from one kind of fact, so an
+    // edit, a delete or a pin leaves both alone — and a row that did not change
+    // is not deleted and re-inserted. A message being projected for the first
+    // time writes both, because everything already stored for it is arriving at
+    // once.
+    final kind = ApplicationEventKind.fromWireValue(applied.row.kind);
+    await _writeMessage(
+      projected,
+      localState: localState,
+      rewriteReactions:
+          existing == null || kind == ApplicationEventKind.reactionSet,
+      rewriteReceipts:
+          existing == null ||
+          kind == ApplicationEventKind.receiptDelivered ||
+          kind == ApplicationEventKind.receiptRead,
+    );
+  }
+
+  Future<void> _removeMessage(String conversationId, String messageId) async {
+    await (database.delete(database.messages)..where(
+          (row) =>
+              row.messageId.equals(messageId) &
+              row.conversationId.equals(conversationId),
+        ))
+        .go();
+  }
+
+  /// Every candidate fact in [conversationId] that is about [messageId].
+  ///
+  /// Driven from `application_event_targets`, whose primary key leads with the
+  /// message id, so this is a seek into the handful of entries that message has
+  /// and one primary-key lookup into the log for each. Joining back to
+  /// `application_events` is not a convenience: the target table is derived
+  /// state, and the join is what makes a stale entry in it match nothing rather
+  /// than fabricate a fact.
+  ///
+  /// **`CROSS JOIN`, and it is load-bearing.** Written as an ordinary join,
+  /// SQLite picks the order, and with no statistics it picks the other one:
+  /// `SEARCH application_events USING INDEX
+  /// application_events_conversation_apply_state (conversation_id=? AND
+  /// apply_state=?)` and then a probe of the target index for every candidate
+  /// event in the conversation. That is one statement and a linear number of
+  /// rows — the cost this phase exists to remove, hidden from a statement count
+  /// and visible only in `EXPLAIN QUERY PLAN`, which is why
+  /// `local_database_index_plan_test.dart` asserts the order rather than
+  /// trusting it. `CROSS JOIN` is SQLite's documented way to fix a join order,
+  /// and it admits exactly the same rows.
+  ///
+  /// The conversation is part of the predicate for the same reason the rebuild
+  /// reads one conversation's events: a reference is a claim by whoever sent it,
+  /// and a claim about a message id belonging to some other conversation must
+  /// not reach that conversation's projection.
+  ///
+  /// Returns null when a stored body cannot be decoded, which is not a fold this
+  /// path can complete.
+  Future<List<_EventFact>?> _factsForMessage(
+    String conversationId,
+    String messageId,
+  ) async {
+    final rows = await database
+        .customSelect(
+          'SELECT event.* FROM application_event_targets target '
+          'CROSS JOIN application_events event '
+          'ON event.event_id = target.event_id '
+          'WHERE target.message_id = ? AND event.conversation_id = ? '
+          'AND event.apply_state = ?',
+          variables: [
+            Variable<String>(messageId),
+            Variable<String>(conversationId),
+            const Variable<int>(_stateCandidate),
+          ],
+          readsFrom: {
+            database.applicationEventTargets,
+            database.storedApplicationEvents,
+          },
+        )
+        .get();
+    final facts = <_EventFact>[];
+    for (final row in rows) {
+      final event = database.storedApplicationEvents.map(row.data);
+      try {
+        facts.add(_EventFact(row: event, body: _decodeBody(event)));
+      } on Object {
+        return null;
+      }
+    }
+    return facts;
+  }
+
+  /// The messages [fact] is a fact about.
+  ///
+  /// Total over every kind the projector stores, including the ones that name
+  /// no message at all, so that adding a kind to the protocol is a change here
+  /// rather than a silent omission from the index.
+  Set<String> _affectedMessageIds(_EventFact fact) {
+    switch (ApplicationEventKind.fromWireValue(fact.row.kind)) {
+      case ApplicationEventKind.messageCreate:
+        final messageId = fact.body['message_id'];
+        return messageId is String ? {messageId} : const {};
+      case ApplicationEventKind.messageEdit:
+      case ApplicationEventKind.messageDelete:
+      case ApplicationEventKind.reactionSet:
+      case ApplicationEventKind.pinSet:
+        final target = fact.row.targetMessageId;
+        return target == null ? const {} : {target};
+      case ApplicationEventKind.receiptDelivered:
+      case ApplicationEventKind.receiptRead:
+        return {
+          for (final id
+              in fact.body['message_ids'] as List<Object?>? ?? const [])
+            if (id is String) id,
+        };
+      case ApplicationEventKind.typingSet:
+      case null:
+        return const {};
+    }
+  }
+
+  /// The conversation-level aggregates, read back from what was projected.
+  ///
+  /// Both paths call this, which is what makes "identical to what a rebuild
+  /// would produce" true by construction rather than by argument: there is one
+  /// definition of the conversation's preview, ordering key, last activity and
+  /// unread count, and it is a function of the message rows rather than of
+  /// whichever messages the caller happened to touch.
+  ///
+  /// Neither read is a pass over the conversation. The newest message is one
+  /// entry and one row through `messages_conversation_ordering`, whose column
+  /// order is this exact `ORDER BY` ([ADR-062](decisions.md)); the unread count
+  /// reads `messages_unread_by_conversation`, which is partial and therefore
+  /// holds only the rows being counted.
+  Future<void> _refreshConversationAggregates(String conversationId) async {
+    final latest =
+        await (database.select(database.messages)
+              ..where((row) => row.conversationId.equals(conversationId))
+              ..orderBy([
+                (row) => OrderingTerm.desc(row.orderingMs),
+                (row) => OrderingTerm.desc(row.orderingEventId),
+              ])
+              ..limit(1))
+            .getSingleOrNull();
+    // `COUNT(*)` rather than `COUNT(message_id)`, because it needs no column
+    // and the partial index is therefore covering: the count reads index
+    // entries and no message rows at all.
+    final unread = countAll();
+    final counted =
+        await (database.selectOnly(database.messages)
+              ..addColumns([unread])
+              ..where(
+                database.messages.conversationId.equals(conversationId) &
+                    _unreadRows,
+              ))
+            .getSingle();
+    await (database.update(
+      database.conversations,
+    )..where((row) => row.conversationId.equals(conversationId))).write(
+      ConversationsCompanion(
+        listProjectionCiphertext: Value(
+          latest?.projectionCiphertext ?? Uint8List(0),
+        ),
+        sortKey: Value(latest?.orderingMs ?? 0),
+        lastActivityEventId: Value(latest?.orderingEventId),
+        unreadCount: Value(counted.read(unread) ?? 0),
+      ),
     );
   }
 
@@ -409,16 +696,24 @@ final class DriftApplicationEventProjector {
         .write(MessagesCompanion(status: Value(state.index)));
   }
 
-  Future<void> _insertEvent(
+  /// Stores one event and indexes the messages it is a fact about.
+  ///
+  /// The target rows are written here, for every stored event and whatever its
+  /// apply state, so that "an event in the log has its targets beside it" is an
+  /// invariant of the log rather than a property of the path that happened to
+  /// write it. `RETURNING` hands back the row that was written, so the fact the
+  /// projection folds is the row the database holds and not a second
+  /// construction of it.
+  Future<_EventFact> _insertEvent(
     ApplicationEventCommit commit, {
     required int applyState,
     required int orderingMs,
   }) async {
     final event = commit.event;
-    final body = _encodeBody(event.body, event.references);
-    await database
+    final body = _projectionBody(event.body, event.references);
+    final row = await database
         .into(database.storedApplicationEvents)
-        .insert(
+        .insertReturning(
           StoredApplicationEventsCompanion.insert(
             eventId: protocolBytesToHex(event.eventId),
             conversationId: protocolBytesToHex(event.conversationId),
@@ -429,7 +724,7 @@ final class DriftApplicationEventProjector {
             createdMs: event.createdMs,
             orderingMs: orderingMs,
             canonicalEvent: commit.canonicalBytes,
-            bodyProjection: body,
+            bodyProjection: Uint8List.fromList(utf8.encode(jsonEncode(body))),
             applyState: applyState,
             localOrigin: Value(commit.localOrigin),
             localDeviceId: Value(commit.currentDeviceId.toLowerCase()),
@@ -438,7 +733,49 @@ final class DriftApplicationEventProjector {
             authenticatedAt: Value(commit.authenticatedAt),
           ),
         );
+    final fact = _EventFact(row: row, body: body);
+    await _writeEventTargets([fact]);
+    return fact;
   }
+
+  /// Indexes [facts] by the messages they are facts about.
+  ///
+  /// `INSERT OR IGNORE`, because a receipt may name the same message twice and
+  /// because re-presenting an event after a crash has to converge rather than
+  /// collide. One statement per target: a receipt costs the ids it carries,
+  /// which is the size of the work it actually is.
+  Future<void> _writeEventTargets(Iterable<_EventFact> facts) async {
+    for (final fact in facts) {
+      for (final messageId in _affectedMessageIds(fact)) {
+        await database
+            .into(database.applicationEventTargets)
+            .insert(
+              ApplicationEventTargetsCompanion.insert(
+                messageId: messageId,
+                eventId: fact.row.eventId,
+              ),
+              mode: InsertMode.insertOrIgnore,
+            );
+      }
+    }
+  }
+
+  /// Folds one conversation from its complete authenticated fact set.
+  ///
+  /// This is the recovery path, and it is also the definition of a correct
+  /// projection: the incremental apply is an optimisation of this fold, not a
+  /// second set of rules, and where the two disagree this one is right.
+  ///
+  /// It is reached for an event-id conflict, a sender-counter rollback and an
+  /// unsupported-event collision — each of which retires a fact the projection
+  /// already contains, so what the projection should say is no longer a
+  /// function of the event in hand — and it is public so that a fork, a repair,
+  /// or a future change to conversation-level authorisation has a door to it
+  /// rather than a reason to reinvent it.
+  Future<void> rebuildConversationInsideTransaction(
+    String conversationId, {
+    required String currentUserId,
+  }) => _rebuildConversation(conversationId, currentUserId: currentUserId);
 
   Future<void> _rebuildConversation(
     String conversationId, {
@@ -473,18 +810,28 @@ final class DriftApplicationEventProjector {
       }
     }
 
+    // The target index is derived state, so the fold that defines the
+    // projection also repairs it. A rebuild already rewrites every row in the
+    // conversation; making it rewrite the index entries too means the recovery
+    // path recovers everything the normal path depends on, including a back-fill
+    // that was interrupted.
+    await _writeEventTargets(facts);
+
     final oldMessages = await (database.select(
       database.messages,
     )..where((row) => row.conversationId.equals(conversationId))).get();
     final localState = <String, _LocalMessageState>{
       for (final message in oldMessages)
-        message.messageId: _LocalMessageState(
-          deletedForMe: message.deletedForMe,
-          unread: message.unread,
-          status: _storedTransportState(message.status),
-        ),
+        message.messageId: _LocalMessageState.of(message),
     };
 
+    // Every message is folded from the conversation's whole fact set, and
+    // `_projectMessage` selects what it needs out of it. That is the same
+    // quadratic scan it always was, and it stays: this is the fold the
+    // incremental path is measured against, so it must not come to share the
+    // incremental path's idea of which facts belong to which message. An error
+    // in that idea has to be visible here as a disagreement rather than
+    // invisible as an agreement.
     final createsByMessage = <String, List<_EventFact>>{};
     for (final fact in facts.where(
       (fact) => fact.row.kind == ApplicationEventKind.messageCreate.wireValue,
@@ -493,8 +840,6 @@ final class DriftApplicationEventProjector {
       (createsByMessage[messageId] ??= []).add(fact);
     }
 
-    var unreadCount = 0;
-    _ProjectedMessage? latest;
     final projectedMessageIds = <String>{};
     for (final entry in createsByMessage.entries) {
       if (entry.value.length != 1) {
@@ -517,14 +862,8 @@ final class DriftApplicationEventProjector {
         currentUserId: currentUserId.toLowerCase(),
         localState: localState[entry.key],
       );
-      await _writeMessage(projected);
+      await _writeMessage(projected, localState: localState[entry.key]);
       projectedMessageIds.add(projected.messageId);
-      if (projected.unread) {
-        unreadCount += 1;
-      }
-      if (latest == null || _compareProjected(projected, latest) > 0) {
-        latest = projected;
-      }
     }
     final staleMessages = database.delete(database.messages)
       ..where((row) => row.conversationId.equals(conversationId));
@@ -532,22 +871,17 @@ final class DriftApplicationEventProjector {
       staleMessages.where((row) => row.messageId.isNotIn(projectedMessageIds));
     }
     await staleMessages.go();
-    await (database.update(
-      database.conversations,
-    )..where((row) => row.conversationId.equals(conversationId))).write(
-      ConversationsCompanion(
-        listProjectionCiphertext: Value(
-          latest?.displayText == null
-              ? Uint8List(0)
-              : Uint8List.fromList(utf8.encode(latest!.displayText!)),
-        ),
-        sortKey: Value(latest?.orderingMs ?? 0),
-        lastActivityEventId: Value(latest?.orderingEventId),
-        unreadCount: Value(unreadCount),
-      ),
-    );
+    await _refreshConversationAggregates(conversationId);
   }
 
+  /// One message's projection, from the facts about that message.
+  ///
+  /// [facts] is the message's own fact list on both paths — read out of
+  /// `application_event_targets` by an incremental apply, grouped in memory by a
+  /// rebuild — and it is filtered again here rather than trusted, so the result
+  /// is the same for any superset of them. That is the whole of the equivalence
+  /// argument: the two paths differ in where the list comes from and in nothing
+  /// else.
   Future<_ProjectedMessage> _projectMessage({
     required Conversation conversation,
     required _EventFact create,
@@ -557,9 +891,11 @@ final class DriftApplicationEventProjector {
   }) async {
     final messageId = create.body['message_id']! as String;
     final senderUserId = create.row.senderUserId;
-    final mutations = facts.where(
-      (fact) => fact.row.targetMessageId == messageId,
-    );
+    // Materialised, because it is read four times below and a lazy `where` is
+    // four passes rather than one.
+    final mutations = facts
+        .where((fact) => fact.row.targetMessageId == messageId)
+        .toList(growable: false);
     final edits =
         mutations
             .where(
@@ -728,7 +1064,23 @@ final class DriftApplicationEventProjector {
     );
   }
 
-  Future<void> _writeMessage(_ProjectedMessage message) async {
+  /// Writes one projected message and, when they can have changed, its children.
+  ///
+  /// [rewriteReactions] and [rewriteReceipts] are how "a row that did not change
+  /// is not rewritten" is expressed. A reaction is derived from `reactionSet`
+  /// facts and a receipt from receipt facts, so an edit, a delete or a pin
+  /// cannot move either and does not delete and re-insert them to prove it. A
+  /// rebuild passes neither and rewrites both, because it is rebuilding.
+  ///
+  /// Attachments are deliberately not gated: the rebuild resets their transfer
+  /// state and clears their cache handle on every write, and changing when that
+  /// happens would change observable local state rather than only its cost.
+  Future<void> _writeMessage(
+    _ProjectedMessage message, {
+    required _LocalMessageState? localState,
+    bool rewriteReactions = true,
+    bool rewriteReceipts = true,
+  }) async {
     final createdAtMs =
         message.timestampState == MessageTimestampState.plausible
         ? message.createdMs
@@ -787,38 +1139,42 @@ final class DriftApplicationEventProjector {
             );
       }
     }
-    await (database.delete(
-      database.messageReactions,
-    )..where((row) => row.messageId.equals(message.messageId))).go();
-    await (database.delete(
-      database.receipts,
-    )..where((row) => row.messageId.equals(message.messageId))).go();
-    for (final reaction in message.reactions) {
-      await database
-          .into(database.messageReactions)
-          .insert(
-            MessageReactionsCompanion.insert(
-              messageId: message.messageId,
-              reactingUserId: reaction.userId,
-              eventId: reaction.eventId,
-              emojiCiphertext: Value(
-                Uint8List.fromList(utf8.encode(reaction.emoji)),
+    if (rewriteReactions) {
+      await (database.delete(
+        database.messageReactions,
+      )..where((row) => row.messageId.equals(message.messageId))).go();
+      for (final reaction in message.reactions) {
+        await database
+            .into(database.messageReactions)
+            .insert(
+              MessageReactionsCompanion.insert(
+                messageId: message.messageId,
+                reactingUserId: reaction.userId,
+                eventId: reaction.eventId,
+                emojiCiphertext: Value(
+                  Uint8List.fromList(utf8.encode(reaction.emoji)),
+                ),
               ),
-            ),
-          );
+            );
+      }
     }
-    for (final receipt in message.receipts) {
-      await database
-          .into(database.receipts)
-          .insert(
-            ReceiptsCompanion.insert(
-              messageId: message.messageId,
-              userId: receipt.userId,
-              deviceId: receipt.deviceId,
-              receiptState: receipt.state.index,
-              projectionCiphertext: Uint8List(0),
-            ),
-          );
+    if (rewriteReceipts) {
+      await (database.delete(
+        database.receipts,
+      )..where((row) => row.messageId.equals(message.messageId))).go();
+      for (final receipt in message.receipts) {
+        await database
+            .into(database.receipts)
+            .insert(
+              ReceiptsCompanion.insert(
+                messageId: message.messageId,
+                userId: receipt.userId,
+                deviceId: receipt.deviceId,
+                receiptState: receipt.state.index,
+                projectionCiphertext: Uint8List(0),
+              ),
+            );
+      }
     }
     if (message.deletedForEveryone) {
       await (database.update(
@@ -841,11 +1197,13 @@ final class DriftApplicationEventProjector {
       // sustain that indefinitely: measured at roughly seventy to a hundred and
       // eighty envelopes a minute between two idle phones (ADR-060). The column
       // read here is the durable record of what has actually been sent.
-      final existing =
-          await (database.select(database.messages)
-                ..where((row) => row.messageId.equals(message.messageId)))
-              .getSingleOrNull();
-      if (existing != null && !existing.deliveredReceiptSent) {
+      //
+      // It comes from the row that was read before this write rather than from
+      // a fresh `SELECT` of the row just written: the companion omits the
+      // column, so the two are the same value, and one of them is a statement
+      // per message per projection. A message with no prior row has never
+      // acknowledged anything.
+      if (!(localState?.deliveredReceiptSent ?? false)) {
         await database
             .into(database.pendingApplicationReceipts)
             .insert(
@@ -1042,10 +1400,26 @@ final class _LocalMessageState {
     required this.deletedForMe,
     required this.unread,
     required this.status,
+    required this.deliveredReceiptSent,
   });
+
+  /// What the row already says, on either path.
+  ///
+  /// Both the rebuild and an incremental apply read the existing row before
+  /// they write it, and both preserve exactly this set. Naming it once is what
+  /// makes "the same mechanism" checkable rather than asserted.
+  factory _LocalMessageState.of(Message message) => _LocalMessageState(
+    deletedForMe: message.deletedForMe,
+    unread: message.unread,
+    status: _storedTransportState(message.status),
+    deliveredReceiptSent: message.deliveredReceiptSent,
+  );
 
   final bool deletedForMe;
   final bool unread;
+
+  /// Whether this device has already told the sender the message arrived.
+  final bool deliveredReceiptSent;
 
   /// What the row already says about delivery, which is newer than anything a
   /// rebuild can work out.
@@ -1136,13 +1510,6 @@ final class _ProjectedReceipt {
   final MessageReceiptState state;
 }
 
-int _compareProjected(_ProjectedMessage left, _ProjectedMessage right) {
-  final timestamp = left.orderingMs.compareTo(right.orderingMs);
-  return timestamp != 0
-      ? timestamp
-      : left.orderingEventId.compareTo(right.orderingEventId);
-}
-
 int _compareEditFacts(_EventFact left, _EventFact right) {
   final revision = left.row.revision!.compareTo(right.row.revision!);
   if (revision != 0) {
@@ -1156,7 +1523,25 @@ int _compareMutationFacts(_EventFact left, _EventFact right) {
   return counter != 0 ? counter : left.row.eventId.compareTo(right.row.eventId);
 }
 
-Uint8List _encodeBody(ApplicationEventBody body, List<Uint8List> references) {
+/// `unread`, unbound.
+///
+/// `messages_unread_by_conversation` is partial, and SQLite will only choose a
+/// partial index when the query's `WHERE` provably implies the index's. A bound
+/// `unread = ?` does not: the value is unknown when the statement is prepared,
+/// and the planner falls back to the ordering index and a row lookup for every
+/// message in the conversation — which is the linear pass the incremental path
+/// exists to remove, reintroduced in the one query that closes it.
+const _unreadRows = CustomExpression<bool>('unread');
+
+/// The projected body, as the map that is both stored and folded.
+///
+/// The bytes in `application_events.body_projection` are this map encoded. An
+/// event being applied has it in hand already, so nothing writes JSON and reads
+/// it back in the same transaction to find out what it just said.
+Map<String, Object?> _projectionBody(
+  ApplicationEventBody body,
+  List<Uint8List> references,
+) {
   final Map<String, Object?> value = switch (body) {
     MessageCreateBody() => {
       'message_id': protocolBytesToHex(body.messageId),
@@ -1216,7 +1601,7 @@ Uint8List _encodeBody(ApplicationEventBody body, List<Uint8List> references) {
   value['references'] = [
     for (final reference in references) protocolBytesToHex(reference),
   ];
-  return Uint8List.fromList(utf8.encode(jsonEncode(value)));
+  return value;
 }
 
 Map<String, Object?> _decodeBody(StoredApplicationEvent row) {

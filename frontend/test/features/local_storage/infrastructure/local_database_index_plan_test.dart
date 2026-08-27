@@ -202,7 +202,7 @@ void main() {
   });
 
   test(
-    'a rebuild reads its own conversation, not the whole event log',
+    'applying an event seeks the facts about one message, and never scans',
     () async {
       final pairwise = DriftPairwiseTransportStore(database);
       await seedDeviceState(database);
@@ -230,9 +230,115 @@ void main() {
         );
       });
 
+      // The fold. This is the assertion the whole of F2 rests on and the only
+      // place it can be made: written as an ordinary join it is one statement
+      // either way, and SQLite — which has no statistics to go on — drives it
+      // from `application_events_conversation_apply_state` and probes the target
+      // index once per candidate event in the conversation. Same rows, same
+      // statement count, linear in the conversation. `CROSS JOIN` fixes the
+      // order, and only the plan can tell the two apart.
+      expect(
+        plans.any(
+          (plan) =>
+              plan.details.first ==
+                  'SEARCH target USING COVERING INDEX '
+                      'sqlite_autoindex_application_event_targets_1 '
+                      '(message_id=?)' &&
+              plan.details.last ==
+                  'SEARCH event USING INDEX '
+                      'sqlite_autoindex_application_events_1 (event_id=?)',
+        ),
+        isTrue,
+        reason: plans.map((plan) => plan.details.join(' ; ')).join('\n'),
+      );
+      // The conversation's newest message, out of the ordering index in the
+      // direction it already sorts, and its unread count out of a partial index
+      // that holds only unread rows and answers without reading any of them.
+      expect(
+        plans.any(
+          (plan) => plan.details.any(
+            (detail) =>
+                detail ==
+                'SEARCH messages USING INDEX messages_conversation_ordering '
+                    '(conversation_id=?)',
+          ),
+        ),
+        isTrue,
+      );
+      expect(
+        plans.any(
+          (plan) => plan.details.any(
+            (detail) =>
+                detail ==
+                'SEARCH messages USING COVERING INDEX '
+                    'messages_unread_by_conversation (conversation_id=?)',
+          ),
+        ),
+        isTrue,
+        reason:
+            'a bound `unread = ?` would silently fall back to a row lookup '
+            'per message: ${plans.map((plan) => plan.sql).join('\n')}',
+      );
+      // And nothing on this path reads a table it does not seek into. The
+      // candidate-event read is gone from it entirely; it belongs to the
+      // recovery path now.
+      for (final plan in plans) {
+        for (final detail in plan.details) {
+          expect(
+            detail,
+            isNot(
+              anyOf(
+                'SCAN messages',
+                'SCAN application_events',
+                'SCAN application_event_targets',
+                'SCAN attachments',
+                'SCAN outbox_operations',
+              ),
+            ),
+            reason: plan.sql,
+          );
+        }
+        expect(
+          plan.details.any((detail) => detail.contains('USE TEMP B-TREE')),
+          isFalse,
+          reason: plan.sql,
+        );
+      }
+    },
+  );
+
+  test(
+    'a rebuild reads its own conversation, not the whole event log',
+    () async {
+      final pairwise = DriftPairwiseTransportStore(database);
+      await seedDeviceState(database);
+      final commit = localMessageCommit(seed: 41, counter: 1);
+      final eventId = protocolBytesToHex(commit.event.eventId);
+      await pairwise.commitLocalEcho(
+        operationId: 'application:$eventId',
+        eventId: eventId,
+        currentUserId: localUserId,
+        currentDeviceId: localDeviceId,
+        peerUserId: peerUserId,
+        openedLocalPayload: commit.canonicalBytes,
+        applicationEvent: commit,
+      );
+
+      final plans = await plansOf(() async {
+        await database.writeTransaction(
+          () => DriftApplicationEventProjector(database)
+              .rebuildConversationInsideTransaction(
+                protocolBytesToHex(commit.event.conversationId),
+                currentUserId: localUserId,
+              ),
+        );
+      });
+
       // The candidate-event read is the one that used to scan every event this
       // device has ever stored, for anybody, and grow with the database rather
-      // than with the conversation.
+      // than with the conversation. It is the recovery path's read now, and it
+      // still has to be a seek: a fork or a repair is exactly when the device
+      // can least afford to read its whole log.
       expect(
         plans.any(
           (plan) => plan.details.any(

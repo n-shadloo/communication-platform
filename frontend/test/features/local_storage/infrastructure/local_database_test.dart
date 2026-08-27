@@ -46,6 +46,7 @@ void main() {
       'messages',
       'message_events',
       'application_events',
+      'application_event_targets',
       'unsupported_application_events',
       'application_sender_counters',
       'message_reactions',

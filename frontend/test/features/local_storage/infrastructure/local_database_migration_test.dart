@@ -1,7 +1,11 @@
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:communication_platform/core/protocol/application_message_model.dart';
 import 'package:communication_platform/features/local_storage/infrastructure/database/local_database.dart';
+import 'package:communication_platform/features/messaging/infrastructure/drift_application_event_projector.dart';
+import 'package:drift/drift.dart' show Variable;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqlite3/sqlite3.dart';
@@ -746,6 +750,7 @@ void main() {
       expect(indexes, <String>{
         'messages_conversation_ordering on messages',
         'messages_pinned_by_conversation on messages',
+        'messages_unread_by_conversation on messages',
         'application_events_conversation_apply_state on application_events',
         'application_events_sender_counter on application_events',
         'attachments_by_message on attachments',
@@ -802,6 +807,294 @@ void main() {
       await upgraded.close();
     },
   );
+
+  test(
+    'version-seventeen upgrade indexes the history a device already holds',
+    () async {
+      final current = LocalDatabase(NativeDatabase(databaseFile));
+      await current.customSelect('SELECT 1').getSingle();
+      await current.close();
+
+      final versionSeventeen = sqlite3.open(databaseFile.path);
+      _dropPhaseThreeSchema(versionSeventeen);
+      versionSeventeen
+        ..execute(
+          'INSERT INTO conversations (conversation_id, kind, '
+          'list_projection_ciphertext, sort_key, tombstoned, pinned, '
+          'peer_user_id, unread_count) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+          <Object?>[
+            _conversationV17,
+            0,
+            Uint8List.fromList(const [1]),
+            1700000000002,
+            0,
+            0,
+            _peerV17,
+            0,
+          ],
+        )
+        ..execute('PRAGMA user_version = 17');
+      for (var index = 0; index < 3; index += 1) {
+        final messageId = _messageV17(index);
+        versionSeventeen
+          ..execute(
+            'INSERT INTO messages (message_id, conversation_id, '
+            'current_event_id, projection_ciphertext, status, revision, '
+            'created_at, sender_user_id, sender_device_id, ordering_ms, '
+            'ordering_event_id, delivered_receipt_sent) '
+            'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+            <Object?>[
+              messageId,
+              _conversationV17,
+              messageId,
+              Uint8List.fromList('old $index'.codeUnits),
+              5,
+              0,
+              1700000000,
+              _peerV17,
+              _peerDeviceV17,
+              1700000000000 + index,
+              messageId,
+              1,
+            ],
+          )
+          // The create, whose message id lives inside the projected body and
+          // nowhere else. This is the row the back-fill has to decode: without
+          // it, an edit arriving after the upgrade would fold the edit alone
+          // and find no message to edit.
+          ..execute(
+            'INSERT INTO application_events (event_id, conversation_id, kind, '
+            'sender_user_id, sender_device_id, sender_counter, created_ms, '
+            'ordering_ms, canonical_event, body_projection, apply_state, '
+            'local_origin, local_device_id) '
+            'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+            <Object?>[
+              messageId,
+              _conversationV17,
+              1,
+              _peerV17,
+              _peerDeviceV17,
+              index + 1,
+              1700000000000 + index,
+              1700000000000 + index,
+              Uint8List.fromList(const [9]),
+              Uint8List.fromList(
+                utf8.encode(
+                  jsonEncode(<String, Object?>{
+                    'message_id': messageId,
+                    'text': 'old $index',
+                    'content_type': 0,
+                    'attachments': <Object?>[],
+                    'reply_to': null,
+                    'quote': null,
+                    'references': <Object?>[],
+                  }),
+                ),
+              ),
+              0,
+              0,
+              '',
+            ],
+          );
+      }
+      // A pin, whose target is already a column, and a receipt naming all
+      // three, whose targets are a list. The two shapes the back-fill has to
+      // recognise, and the one kind it can read straight out of SQL.
+      versionSeventeen
+        ..execute(
+          'INSERT INTO application_events (event_id, conversation_id, kind, '
+          'sender_user_id, sender_device_id, sender_counter, created_ms, '
+          'ordering_ms, canonical_event, body_projection, apply_state, '
+          'target_message_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+          <Object?>[
+            'pin-v17',
+            _conversationV17,
+            5,
+            _peerV17,
+            _peerDeviceV17,
+            4,
+            1700000000010,
+            1700000000010,
+            Uint8List.fromList(const [9]),
+            Uint8List.fromList(
+              utf8.encode(
+                jsonEncode(<String, Object?>{
+                  'target': _messageV17(0),
+                  'pinned': true,
+                  'references': <Object?>[_messageV17(0)],
+                }),
+              ),
+            ),
+            0,
+            _messageV17(0),
+          ],
+        )
+        ..execute(
+          'INSERT INTO application_events (event_id, conversation_id, kind, '
+          'sender_user_id, sender_device_id, sender_counter, created_ms, '
+          'ordering_ms, canonical_event, body_projection, apply_state) '
+          'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+          <Object?>[
+            'receipt-v17',
+            _conversationV17,
+            7,
+            _localV17,
+            _localDeviceV17,
+            1,
+            1700000000011,
+            1700000000011,
+            Uint8List.fromList(const [9]),
+            Uint8List.fromList(
+              utf8.encode(
+                jsonEncode(<String, Object?>{
+                  'message_ids': [
+                    for (var index = 0; index < 3; index += 1)
+                      _messageV17(index),
+                  ],
+                  'references': [
+                    for (var index = 0; index < 3; index += 1)
+                      _messageV17(index),
+                  ],
+                }),
+              ),
+            ),
+            0,
+          ],
+        );
+      versionSeventeen.close();
+
+      final upgraded = LocalDatabase(NativeDatabase(databaseFile));
+      await upgraded.customSelect('SELECT 1').getSingle();
+
+      // Every stored event now has its targets beside it: one per create, one
+      // for the pin, three for the receipt.
+      final targets = await upgraded
+          .customSelect(
+            'SELECT message_id, event_id FROM application_event_targets '
+            'ORDER BY event_id, message_id',
+          )
+          .map(
+            (row) =>
+                '${row.read<String>('event_id')} -> '
+                '${row.read<String>('message_id')}',
+          )
+          .get();
+      expect(targets, <String>{
+        for (var index = 0; index < 3; index += 1)
+          '${_messageV17(index)} -> ${_messageV17(index)}',
+        'pin-v17 -> ${_messageV17(0)}',
+        for (var index = 0; index < 3; index += 1)
+          'receipt-v17 -> ${_messageV17(index)}',
+      });
+      expect(
+        await upgraded
+            .customSelect(
+              "SELECT name FROM sqlite_master WHERE type = 'index' "
+              "AND name = 'messages_unread_by_conversation'",
+            )
+            .get(),
+        hasLength(1),
+      );
+
+      // And nothing else moved. The step adds a table and an index; it rewrites
+      // no row and it does not project.
+      final messages = await upgraded
+          .customSelect('SELECT * FROM messages ORDER BY ordering_ms ASC')
+          .get();
+      expect(messages, hasLength(3));
+      expect(
+        messages.first.read<Uint8List>('projection_ciphertext'),
+        Uint8List.fromList('old 0'.codeUnits),
+      );
+      expect(messages.first.read<int>('status'), 5);
+      expect(messages.every((row) => row.read<int>('pinned') == 0), isTrue);
+      expect(
+        await upgraded
+            .customSelect('PRAGMA user_version')
+            .map((row) => row.read<int>('user_version'))
+            .getSingle(),
+        LocalDatabase.currentSchemaVersion,
+      );
+      expect(
+        await upgraded.customSelect('PRAGMA quick_check').getSingle(),
+        isNotNull,
+      );
+
+      // The point of the back-fill, end to end: an edit arriving after the
+      // upgrade folds against a create this device stored before it. Without
+      // the index rows the fold would see the edit alone, find no message to
+      // edit, and quietly drop it.
+      await upgraded.writeTransaction(
+        () => DriftApplicationEventProjector(upgraded).applyInsideTransaction(
+          ApplicationEventCommit(
+            event: ApplicationEventRecord(
+              version: ApplicationMessageProtocolV1.version,
+              eventId: _bytesV17('11111111111111111111111111111111'),
+              conversationId: _bytesV17(_conversationV17),
+              kindValue: ApplicationEventKind.messageEdit.wireValue,
+              senderUserId: protocolUuidBytes(_peerV17),
+              senderDeviceId: protocolUuidBytes(_peerDeviceV17),
+              senderCounter: 5,
+              createdMs: 1700000000020,
+              references: [_bytesV17(_messageV17(0))],
+              body: MessageEditBody(
+                targetMessageId: _bytesV17(_messageV17(0)),
+                replacementText: 'edited after the upgrade',
+                revision: 2,
+              ),
+            ),
+            canonicalBytes: Uint8List.fromList(const [7, 7, 7]),
+            currentUserId: _localV17,
+            currentDeviceId: _localDeviceV17,
+            conversationKind: 0,
+            peerUserId: _peerV17,
+            localOrigin: false,
+            authenticatedAt: DateTime.fromMillisecondsSinceEpoch(
+              1700000100000,
+              isUtc: true,
+            ),
+          ),
+        ),
+      );
+      final edited = await upgraded
+          .customSelect(
+            'SELECT projection_ciphertext, pinned FROM messages '
+            'WHERE message_id = ?',
+            variables: [Variable<String>(_messageV17(0))],
+          )
+          .getSingle();
+      expect(
+        utf8.decode(edited.read<Uint8List>('projection_ciphertext')),
+        'edited after the upgrade',
+      );
+      // And the pin stored before the upgrade came back with it, which is the
+      // whole fact set for that message and not only the event just applied.
+      expect(edited.read<int>('pinned'), 1);
+
+      await upgraded.close();
+    },
+  );
+}
+
+const _conversationV17 =
+    '0909090909090909090909090909090909090909090909090909090909090909';
+const _peerV17 = '00000000-0000-0000-0000-000000000002';
+const _peerDeviceV17 = '00000000-0000-0000-0000-000000000022';
+const _localV17 = '00000000-0000-0000-0000-000000000001';
+const _localDeviceV17 = '00000000-0000-0000-0000-000000000011';
+
+String _messageV17(int index) => '0000000${index}a5a5a5a5a5a5a5a5a5a5a5a5';
+
+Uint8List _bytesV17(String hex) => Uint8List.fromList([
+  for (var index = 0; index < hex.length; index += 2)
+    int.parse(hex.substring(index, index + 2), radix: 16),
+]);
+
+/// The table and the index schema 18 adds, as a device at 17 does not have them.
+void _dropPhaseThreeSchema(Database database) {
+  database
+    ..execute('DROP INDEX IF EXISTS messages_unread_by_conversation')
+    ..execute('DROP TABLE IF EXISTS application_event_targets');
 }
 
 void _dropPieceFourteenSchema(Database database) {
@@ -810,6 +1103,7 @@ void _dropPieceFourteenSchema(Database database) {
   // helper reconstructs predates all of them.
   _dropPhaseTwoIndexes(database);
   for (final table in const [
+    'application_event_targets',
     'application_events',
     'unsupported_application_events',
     'application_sender_counters',
@@ -850,6 +1144,7 @@ void _dropPhaseTwoIndexes(Database database) {
   for (final index in const [
     'messages_conversation_ordering',
     'messages_pinned_by_conversation',
+    'messages_unread_by_conversation',
     'application_events_conversation_apply_state',
     'application_events_sender_counter',
     'attachments_by_message',

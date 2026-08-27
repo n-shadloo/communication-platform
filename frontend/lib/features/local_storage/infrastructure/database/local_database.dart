@@ -1,5 +1,7 @@
 // ignore_for_file: recursive_getters
 
+import 'dart:convert';
+
 import 'package:drift/drift.dart';
 
 part 'local_database.g.dart';
@@ -482,6 +484,29 @@ class Memberships extends Table {
   'CREATE INDEX IF NOT EXISTS messages_pinned_by_conversation '
   'ON messages (conversation_id, message_id) WHERE pinned',
 )
+/// Unread messages, and only unread messages.
+///
+/// `conversations.unread_count` is a conversation-level aggregate the projector
+/// has to keep exactly equal to what a full rebuild would compute, and an
+/// incremental apply cannot count what it did not project. Counting the rows
+/// instead is only affordable if the count reads the rows it counts: through
+/// `messages_conversation_ordering` it is one index entry **and one row lookup**
+/// per message in the conversation, read or not. Partial, this holds only the
+/// unread ones, and an insert that is not unread writes nothing to it.
+///
+/// `unread` is a column here as well as the predicate, and that is not
+/// redundant. Without it SQLite keeps the query's own `unread` term as a filter,
+/// needs the column to evaluate it, and visits the row: measured at 614 µs
+/// against 431 µs over twenty thousand unread messages, and the plan says
+/// `USING COVERING INDEX` only in the second form.
+///
+/// Partial carries the same catch as the pinned index: SQLite will only choose
+/// it for a query whose `WHERE` contains the bare term `unread`, so the
+/// projector spells it that way ([ADR-063](decisions.md)).
+@TableIndex.sql(
+  'CREATE INDEX IF NOT EXISTS messages_unread_by_conversation '
+  'ON messages (conversation_id, unread) WHERE unread',
+)
 class Messages extends Table {
   @override
   String get tableName => 'messages';
@@ -615,6 +640,39 @@ class StoredApplicationEvents extends Table {
 
   @override
   Set<Column<Object>> get primaryKey => {eventId};
+}
+
+/// Which logical messages each stored event is a fact about.
+///
+/// Derived state, and only an index: the authoritative fact is the event in
+/// `application_events`, and everything read through here is read by joining
+/// back to it. That is what makes a stale row harmless — it joins to nothing —
+/// while a missing row is not, which is why the row is written in the same
+/// statement sequence as the event and why a full rebuild rewrites the rows for
+/// every fact it folds.
+///
+/// It exists because the projector needs the *other* direction. An event
+/// carries the message it targets, but an incremental apply has to ask which
+/// facts a message has, and the answer decides what that message projects to.
+/// A `messageCreate` names its own message; an edit, delete, reaction or pin
+/// names one target; a receipt names **many**, which is why this is a table and
+/// not a column ([ADR-063](decisions.md)).
+///
+/// The primary key leads with `message_id`, so its implicit index answers the
+/// only question asked of it and no second index is declared. There is
+/// deliberately no foreign key: `event_id` would be an unindexed child key, and
+/// SQLite would then scan this table on every write to `application_events` to
+/// prove nothing was orphaned — the cost `attachments_by_message` exists to
+/// stop ([ADR-062](decisions.md)).
+class ApplicationEventTargets extends Table {
+  @override
+  String get tableName => 'application_event_targets';
+
+  TextColumn get messageId => text()();
+  TextColumn get eventId => text()();
+
+  @override
+  Set<Column<Object>> get primaryKey => {messageId, eventId};
 }
 
 /// Unknown future versions/kinds are retained but never projected.
@@ -1109,6 +1167,7 @@ class StorageMigrationHooks {
     Messages,
     MessageEvents,
     StoredApplicationEvents,
+    ApplicationEventTargets,
     UnsupportedApplicationEvents,
     ApplicationSenderCounters,
     MessageReactions,
@@ -1136,7 +1195,7 @@ final class LocalDatabase extends _$LocalDatabase {
   LocalDatabase(super.executor, {StorageMigrationHooks? migrationHooks})
     : _migrationHooks = migrationHooks ?? const StorageMigrationHooks();
 
-  static const currentSchemaVersion = 17;
+  static const currentSchemaVersion = 18;
   final StorageMigrationHooks _migrationHooks;
 
   @override
@@ -1609,6 +1668,115 @@ final class LocalDatabase extends _$LocalDatabase {
             outboxOperationsByEvent,
           ]) {
             await migrator.createIndex(index);
+          }
+        }
+        if (from < 18) {
+          // The index an incremental projection is read through, and the one
+          // aggregate it cannot derive without one.
+          //
+          // Additive: one new table, one new index, no column added, no table
+          // dropped or re-keyed and no existing row rewritten. Checked rather
+          // than assumed, in the style of the schema-14, -15 and -16 steps.
+          final existing = await customSelect(
+            "SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?",
+            variables: [
+              Variable<String>(applicationEventTargets.actualTableName),
+            ],
+          ).get();
+          if (existing.isEmpty) {
+            await migrator.createTable(applicationEventTargets);
+          }
+          await migrator.createIndex(messagesUnreadByConversation);
+
+          // And the back-fill, which is the whole cost of this step. An empty
+          // target table would not be a slower projection, it would be a wrong
+          // one: an edit landing on a message whose create has no row here
+          // would fold the edit alone and find no message to edit. Every event
+          // this device already holds therefore has to be indexed before the
+          // first incremental apply runs.
+          //
+          // The four single-target kinds are already a column, so they are one
+          // set-based statement that never leaves SQLite. Creates and receipts
+          // carry their message ids inside the projected body, so those are
+          // read, decoded and written back in Dart — SQLite's JSON functions
+          // are not used, because whether the SQLCipher build has them is not
+          // something to discover during a migration on somebody's phone.
+          //
+          // `INSERT OR IGNORE` throughout, so an interrupted upgrade that is
+          // retried cannot collide with itself.
+          await customStatement(
+            'INSERT OR IGNORE INTO application_event_targets '
+            '(message_id, event_id) '
+            'SELECT target_message_id, event_id FROM application_events '
+            'WHERE target_message_id IS NOT NULL',
+          );
+          // Read in keyset pages over the primary key rather than all at once:
+          // this is still one pass over the table, but the bodies of a whole
+          // event log are never in memory together. `OFFSET` would re-scan what
+          // it skipped, which is the shape ADR-062 rejected on the read path.
+          var cursor = '';
+          while (true) {
+            final bodies = await customSelect(
+              'SELECT event_id, kind, body_projection FROM application_events '
+              'WHERE event_id > ? AND kind IN (?, ?, ?) '
+              'ORDER BY event_id LIMIT 512',
+              variables: [
+                Variable<String>(cursor),
+                // messageCreate, receiptDelivered, receiptRead. Spelled as the
+                // wire values they are stored as, because the protocol enum
+                // lives in a layer this file may not import.
+                const Variable<int>(1),
+                const Variable<int>(6),
+                const Variable<int>(7),
+              ],
+            ).get();
+            if (bodies.isEmpty) {
+              break;
+            }
+            cursor = bodies.last.read<String>('event_id');
+            final targets = <ApplicationEventTargetsCompanion>[];
+            for (final row in bodies) {
+              final eventId = row.read<String>('event_id');
+              final Object? body;
+              try {
+                body = jsonDecode(
+                  utf8.decode(
+                    row.read<Uint8List>('body_projection'),
+                    allowMalformed: false,
+                  ),
+                );
+              } on Object {
+                // A body this device cannot read is a fact the projector will
+                // reject the next time it folds the conversation. Skipping it
+                // here leaves that decision where it already lives.
+                continue;
+              }
+              if (body is! Map<String, Object?>) {
+                continue;
+              }
+              final ids = row.read<int>('kind') == 1
+                  ? <Object?>[body['message_id']]
+                  : (body['message_ids'] as List<Object?>? ?? const []);
+              for (final id in ids) {
+                if (id is String && id.isNotEmpty) {
+                  targets.add(
+                    ApplicationEventTargetsCompanion.insert(
+                      messageId: id,
+                      eventId: eventId,
+                    ),
+                  );
+                }
+              }
+            }
+            if (targets.isNotEmpty) {
+              await batch(
+                (batch) => batch.insertAll(
+                  applicationEventTargets,
+                  targets,
+                  mode: InsertMode.insertOrIgnore,
+                ),
+              );
+            }
           }
         }
         await _migrationHooks.afterUpgrade(from, to);

@@ -110,18 +110,17 @@ void main() {
     expect(message.status, MessageTransportState.relayAccepted.index);
 
     // What one of those transitions used to cost: a full projection of this
-    // conversation. Measured through the one caller that still runs one, so the
-    // comparison is between two numbers this suite produced rather than between
-    // a number and an estimate.
+    // conversation. Since [ADR-063](decisions.md) the event path no longer runs
+    // one, so it is measured through the recovery path that still does — which
+    // keeps the comparison between two numbers this suite produced rather than
+    // between a number and an estimate.
     counter.reset();
     await database.writeTransaction(
-      () => DriftApplicationEventProjector(database).applyInsideTransaction(
-        peerReactionCommit(
-          seed: 210,
-          counter: 1,
-          targetMessageId: commit.event.eventId,
-        ),
-      ),
+      () => DriftApplicationEventProjector(database)
+          .rebuildConversationInsideTransaction(
+            protocolBytesToHex(commit.event.conversationId),
+            currentUserId: localUserId,
+          ),
     );
     final rebuild = counter.statements;
 
@@ -157,11 +156,13 @@ void main() {
     expect(longHistory.sending, lessThan(16));
     expect(longHistory.accepted, lessThan(16));
 
-    // And the one cost that is still linear, asserted rather than hidden. The
-    // echo projects the conversation, which is `_rebuildConversation` and is
-    // out of scope here (F2). This is the number that pays for that, recorded
-    // so it is visible when somebody comes to fix it.
-    expect(longHistory.echo, greaterThan(shortHistory.echo));
+    // And the echo itself, which ADR-061 left linear and recorded as linear:
+    // it projected the conversation, so at 61 messages it cost 201 statements
+    // against 33 at five. It applies one event to one message now, so it is
+    // equal across the two lengths like everything else on this path
+    // ([ADR-063](decisions.md)).
+    expect(longHistory.echo, shortHistory.echo);
+    expect(longHistory.echo, lessThan(32));
 
     // And the comparison the whole change is for: each transition is now a
     // small fraction of the projection it used to run, and there were two of

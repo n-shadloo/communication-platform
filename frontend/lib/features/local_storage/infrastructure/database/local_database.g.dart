@@ -14628,6 +14628,231 @@ class StoredApplicationEventsCompanion
   }
 }
 
+class $ApplicationEventTargetsTable extends ApplicationEventTargets
+    with TableInfo<$ApplicationEventTargetsTable, ApplicationEventTarget> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $ApplicationEventTargetsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _messageIdMeta = const VerificationMeta(
+    'messageId',
+  );
+  @override
+  late final GeneratedColumn<String> messageId = GeneratedColumn<String>(
+    'message_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _eventIdMeta = const VerificationMeta(
+    'eventId',
+  );
+  @override
+  late final GeneratedColumn<String> eventId = GeneratedColumn<String>(
+    'event_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [messageId, eventId];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'application_event_targets';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<ApplicationEventTarget> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('message_id')) {
+      context.handle(
+        _messageIdMeta,
+        messageId.isAcceptableOrUnknown(data['message_id']!, _messageIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_messageIdMeta);
+    }
+    if (data.containsKey('event_id')) {
+      context.handle(
+        _eventIdMeta,
+        eventId.isAcceptableOrUnknown(data['event_id']!, _eventIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_eventIdMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {messageId, eventId};
+  @override
+  ApplicationEventTarget map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return ApplicationEventTarget(
+      messageId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}message_id'],
+      )!,
+      eventId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}event_id'],
+      )!,
+    );
+  }
+
+  @override
+  $ApplicationEventTargetsTable createAlias(String alias) {
+    return $ApplicationEventTargetsTable(attachedDatabase, alias);
+  }
+}
+
+class ApplicationEventTarget extends DataClass
+    implements Insertable<ApplicationEventTarget> {
+  final String messageId;
+  final String eventId;
+  const ApplicationEventTarget({
+    required this.messageId,
+    required this.eventId,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['message_id'] = Variable<String>(messageId);
+    map['event_id'] = Variable<String>(eventId);
+    return map;
+  }
+
+  ApplicationEventTargetsCompanion toCompanion(bool nullToAbsent) {
+    return ApplicationEventTargetsCompanion(
+      messageId: Value(messageId),
+      eventId: Value(eventId),
+    );
+  }
+
+  factory ApplicationEventTarget.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return ApplicationEventTarget(
+      messageId: serializer.fromJson<String>(json['messageId']),
+      eventId: serializer.fromJson<String>(json['eventId']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'messageId': serializer.toJson<String>(messageId),
+      'eventId': serializer.toJson<String>(eventId),
+    };
+  }
+
+  ApplicationEventTarget copyWith({String? messageId, String? eventId}) =>
+      ApplicationEventTarget(
+        messageId: messageId ?? this.messageId,
+        eventId: eventId ?? this.eventId,
+      );
+  ApplicationEventTarget copyWithCompanion(
+    ApplicationEventTargetsCompanion data,
+  ) {
+    return ApplicationEventTarget(
+      messageId: data.messageId.present ? data.messageId.value : this.messageId,
+      eventId: data.eventId.present ? data.eventId.value : this.eventId,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ApplicationEventTarget(')
+          ..write('messageId: $messageId, ')
+          ..write('eventId: $eventId')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(messageId, eventId);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is ApplicationEventTarget &&
+          other.messageId == this.messageId &&
+          other.eventId == this.eventId);
+}
+
+class ApplicationEventTargetsCompanion
+    extends UpdateCompanion<ApplicationEventTarget> {
+  final Value<String> messageId;
+  final Value<String> eventId;
+  final Value<int> rowid;
+  const ApplicationEventTargetsCompanion({
+    this.messageId = const Value.absent(),
+    this.eventId = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  ApplicationEventTargetsCompanion.insert({
+    required String messageId,
+    required String eventId,
+    this.rowid = const Value.absent(),
+  }) : messageId = Value(messageId),
+       eventId = Value(eventId);
+  static Insertable<ApplicationEventTarget> custom({
+    Expression<String>? messageId,
+    Expression<String>? eventId,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (messageId != null) 'message_id': messageId,
+      if (eventId != null) 'event_id': eventId,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  ApplicationEventTargetsCompanion copyWith({
+    Value<String>? messageId,
+    Value<String>? eventId,
+    Value<int>? rowid,
+  }) {
+    return ApplicationEventTargetsCompanion(
+      messageId: messageId ?? this.messageId,
+      eventId: eventId ?? this.eventId,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (messageId.present) {
+      map['message_id'] = Variable<String>(messageId.value);
+    }
+    if (eventId.present) {
+      map['event_id'] = Variable<String>(eventId.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ApplicationEventTargetsCompanion(')
+          ..write('messageId: $messageId, ')
+          ..write('eventId: $eventId, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 class $UnsupportedApplicationEventsTable extends UnsupportedApplicationEvents
     with
         TableInfo<
@@ -24829,6 +25054,8 @@ abstract class _$LocalDatabase extends GeneratedDatabase {
   late final $MessageEventsTable messageEvents = $MessageEventsTable(this);
   late final $StoredApplicationEventsTable storedApplicationEvents =
       $StoredApplicationEventsTable(this);
+  late final $ApplicationEventTargetsTable applicationEventTargets =
+      $ApplicationEventTargetsTable(this);
   late final $UnsupportedApplicationEventsTable unsupportedApplicationEvents =
       $UnsupportedApplicationEventsTable(this);
   late final $ApplicationSenderCountersTable applicationSenderCounters =
@@ -24880,6 +25107,10 @@ abstract class _$LocalDatabase extends GeneratedDatabase {
     'messages_pinned_by_conversation',
     'CREATE INDEX IF NOT EXISTS messages_pinned_by_conversation ON messages (conversation_id, message_id) WHERE pinned',
   );
+  late final Index messagesUnreadByConversation = Index(
+    'messages_unread_by_conversation',
+    'CREATE INDEX IF NOT EXISTS messages_unread_by_conversation ON messages (conversation_id, unread) WHERE unread',
+  );
   late final Index applicationEventsConversationApplyState = Index(
     'application_events_conversation_apply_state',
     'CREATE INDEX IF NOT EXISTS application_events_conversation_apply_state ON application_events (conversation_id, apply_state)',
@@ -24924,6 +25155,7 @@ abstract class _$LocalDatabase extends GeneratedDatabase {
     messages,
     messageEvents,
     storedApplicationEvents,
+    applicationEventTargets,
     unsupportedApplicationEvents,
     applicationSenderCounters,
     messageReactions,
@@ -24947,6 +25179,7 @@ abstract class _$LocalDatabase extends GeneratedDatabase {
     quarantineRecords,
     messagesConversationOrdering,
     messagesPinnedByConversation,
+    messagesUnreadByConversation,
     applicationEventsConversationApplyState,
     applicationEventsSenderCounter,
     attachmentsByMessage,
@@ -34366,6 +34599,168 @@ typedef $$StoredApplicationEventsTableProcessedTableManager =
       StoredApplicationEvent,
       PrefetchHooks Function()
     >;
+typedef $$ApplicationEventTargetsTableCreateCompanionBuilder =
+    ApplicationEventTargetsCompanion Function({
+      required String messageId,
+      required String eventId,
+      Value<int> rowid,
+    });
+typedef $$ApplicationEventTargetsTableUpdateCompanionBuilder =
+    ApplicationEventTargetsCompanion Function({
+      Value<String> messageId,
+      Value<String> eventId,
+      Value<int> rowid,
+    });
+
+class $$ApplicationEventTargetsTableFilterComposer
+    extends Composer<_$LocalDatabase, $ApplicationEventTargetsTable> {
+  $$ApplicationEventTargetsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get messageId => $composableBuilder(
+    column: $table.messageId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get eventId => $composableBuilder(
+    column: $table.eventId,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$ApplicationEventTargetsTableOrderingComposer
+    extends Composer<_$LocalDatabase, $ApplicationEventTargetsTable> {
+  $$ApplicationEventTargetsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get messageId => $composableBuilder(
+    column: $table.messageId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get eventId => $composableBuilder(
+    column: $table.eventId,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$ApplicationEventTargetsTableAnnotationComposer
+    extends Composer<_$LocalDatabase, $ApplicationEventTargetsTable> {
+  $$ApplicationEventTargetsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get messageId =>
+      $composableBuilder(column: $table.messageId, builder: (column) => column);
+
+  GeneratedColumn<String> get eventId =>
+      $composableBuilder(column: $table.eventId, builder: (column) => column);
+}
+
+class $$ApplicationEventTargetsTableTableManager
+    extends
+        RootTableManager<
+          _$LocalDatabase,
+          $ApplicationEventTargetsTable,
+          ApplicationEventTarget,
+          $$ApplicationEventTargetsTableFilterComposer,
+          $$ApplicationEventTargetsTableOrderingComposer,
+          $$ApplicationEventTargetsTableAnnotationComposer,
+          $$ApplicationEventTargetsTableCreateCompanionBuilder,
+          $$ApplicationEventTargetsTableUpdateCompanionBuilder,
+          (
+            ApplicationEventTarget,
+            BaseReferences<
+              _$LocalDatabase,
+              $ApplicationEventTargetsTable,
+              ApplicationEventTarget
+            >,
+          ),
+          ApplicationEventTarget,
+          PrefetchHooks Function()
+        > {
+  $$ApplicationEventTargetsTableTableManager(
+    _$LocalDatabase db,
+    $ApplicationEventTargetsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$ApplicationEventTargetsTableFilterComposer(
+                $db: db,
+                $table: table,
+              ),
+          createOrderingComposer: () =>
+              $$ApplicationEventTargetsTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$ApplicationEventTargetsTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> messageId = const Value.absent(),
+                Value<String> eventId = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => ApplicationEventTargetsCompanion(
+                messageId: messageId,
+                eventId: eventId,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String messageId,
+                required String eventId,
+                Value<int> rowid = const Value.absent(),
+              }) => ApplicationEventTargetsCompanion.insert(
+                messageId: messageId,
+                eventId: eventId,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$ApplicationEventTargetsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$LocalDatabase,
+      $ApplicationEventTargetsTable,
+      ApplicationEventTarget,
+      $$ApplicationEventTargetsTableFilterComposer,
+      $$ApplicationEventTargetsTableOrderingComposer,
+      $$ApplicationEventTargetsTableAnnotationComposer,
+      $$ApplicationEventTargetsTableCreateCompanionBuilder,
+      $$ApplicationEventTargetsTableUpdateCompanionBuilder,
+      (
+        ApplicationEventTarget,
+        BaseReferences<
+          _$LocalDatabase,
+          $ApplicationEventTargetsTable,
+          ApplicationEventTarget
+        >,
+      ),
+      ApplicationEventTarget,
+      PrefetchHooks Function()
+    >;
 typedef $$UnsupportedApplicationEventsTableCreateCompanionBuilder =
     UnsupportedApplicationEventsCompanion Function({
       required String recordKey,
@@ -40459,6 +40854,11 @@ class $LocalDatabaseManager {
       $$StoredApplicationEventsTableTableManager(
         _db,
         _db.storedApplicationEvents,
+      );
+  $$ApplicationEventTargetsTableTableManager get applicationEventTargets =>
+      $$ApplicationEventTargetsTableTableManager(
+        _db,
+        _db.applicationEventTargets,
       );
   $$UnsupportedApplicationEventsTableTableManager
   get unsupportedApplicationEvents =>
