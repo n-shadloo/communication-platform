@@ -73,6 +73,362 @@ is not silently edited out of history.
 | ADR-060 | Accepted | A delivery cycle sends the user's message before it reads anybody else's, one envelope's failure stays on that envelope, and an envelope this device can never open is retired through a bounded attempt budget into quarantine and acknowledged (2026-08-26) | Measured on real devices: fifteen to twenty seconds to the first `POST /envelopes`, delivery that never arrived, 1.1 MB/min of idle re-download and up to one and a half CPU cores, all of it client-side against a network and backend measured clean. Every stage of a run returned its first failure and the inbound stages ran first, so one unopenable envelope stopped a sealed, durable outbox row from ever leaving the process; nothing retired that envelope, so the server re-served it forever; and a failed cycle scheduled *reconnect* backoff, whose uniform draw was the wait itself. Also: schema 14 repairs the devices already stranded, `cipher_memory_security` is turned off as a defence against a threat the model excludes and could not complete anyway, the socket hint stays a hint because `pruned_through` is how a lost envelope is detected, a response this client refuses now cancels its transfer instead of buffering it whole, and the always-false presence line is withdrawn until `subscribe_presence` exists. |
 | ADR-061 | Accepted | A message is committed and drawn before any network call is made, the fan-out that seals it becomes a durable request the delivery cycle owes, and an outbox attempt transition writes one row instead of re-projecting the conversation (2026-08-27) | Sending a DM rendered its own bubble in over three seconds, and the wait was two authenticated device lookups, a prekey claim and one ratchet step per recipient, all in front of the local commit that makes the message visible. The commit is now first and the fan-out is a row in `pending_send_preparations` (schema 15 -> 16) that the delivery cycle drains before the outbox. Separately, every attempt transition ran `_rebuildConversation`: measured at **195 statements** in a 61-message conversation, three times per send, to move one integer on one message. `messages.status` becomes a column the rebuild carries through rather than re-derives, on the `alerted`/`starred`/`delivered_receipt_sent` precedent, and the transitions now cost **7** and **4** statements. `MessageTransportState.preparing` makes the timeline's existing `encrypting` state reachable, and a retry re-arms the failed operation instead of writing a second message. |
 | ADR-062 | Accepted | The conversation timeline reads a bounded, cursor-anchored window instead of its whole history, its three per-message queries become three set-based ones, and the schema gains its first six indexes (2026-08-27) | Opening a conversation cost what had been said in it. `watchMessages` had no `LIMIT` and ran a reactions, a receipts and an attachments query for **every** message on **every** emission: measured at **3601 statements** for one emission of a 1200-message conversation, against **6** now, equal at eight messages and at twelve hundred. `watchConversations` had the same shape one level up and is now two statements rather than one per conversation. The window is a keyset range anchored at the oldest loaded message rather than a count from the newest, so a message arriving cannot push the line the reader is on out of the other end, and `OFFSET` is rejected because it re-scans what it skips. Separately, the schema declared 43 tables and **zero** indexes, so every lookup by a non-leading key column was a full scan under SQLCipher: six indexes (schema 16 -> 17, additive, no table dropped or re-keyed) chosen from `EXPLAIN QUERY PLAN` and asserted against the planner, including a partial index for pins that only works because both callers spell the predicate unbound, and a foreign-key child index on `attachments` that takes one rebuild of a 1200-message conversation from 96 ms to 27 ms. `LoadOlderMessagesIntent` and the three hardcoded pagination fields become real, and a jump to a message outside the window loads it instead of doing nothing. |
+| ADR-063 | Accepted | Applying an application event re-folds only the messages that event is a fact about, and the full rebuild becomes the recovery path it always was (2026-08-27) | The last and largest term ADR-061 and ADR-062 left behind: every authenticated event re-projected its whole conversation from the whole event log, so the cost of *receiving* anything was set by how long the conversation was — worst for an inbound receipt, which is one event per batch of messages. Measured end to end, one such rebuild of a 1200-message conversation is **6556 statements and 283 ms**; applying one event now costs **14-16 statements and about 1.1 ms**, equal at 48 messages and at 1200, and a receipt covering thirty-two messages costs thirty-two folds rather than twelve hundred. A new derived-state table, `application_event_targets` (schema 17 -> 18, additive, back-filled), gives the projector the direction the log lacks: which facts a message has. The fold is spelled `CROSS JOIN` because the ordinary form is the same statement count and a linear number of rows, visible only in `EXPLAIN QUERY PLAN`. Conversation aggregates get one definition both paths call, plus a covering partial index for the unread count. The rebuild is kept, made publicly reachable, and deliberately left folding each message against the whole fact set, because it is the oracle a differential equivalence test compares against and it must not come to share the incremental path's idea of which facts belong to which message. |
+
+## ADR-063 in full — an event costs the message it is about, not the conversation it is in (2026-08-27)
+
+**Status:** Accepted. Client-side cost decision. Adds one local schema version (17 → 18),
+one derived-state table and one index. Creates no user-facing table, drops no table, re-keys
+no table and rewrites no existing row. Changes no cryptographic construction, no ciphersuite
+identifier, no protocol, no wire format, no canonical event encoding, no transport trust
+anchor, and no backend file. **Opens no production gate.**
+
+### The question
+
+> ADR-061 made the write path cheap and ADR-062 made the read path cheap. Both left the same
+> term untouched, and it is the largest one: every authenticated application event re-projects
+> its whole conversation from the whole event log. What does applying one event cost, and what
+> is the smallest set of changes that makes that cost a property of the event rather than of
+> how long two people have been talking?
+
+`_rebuildConversation` reads every candidate event in the conversation, decodes every body,
+and then, for each message, folds it against the **whole** fact set — five separate passes,
+four of them re-evaluating the same lazy `where` over every event in the thread and the fifth
+a list scan nested inside a scan for receipts — before rewriting every message row, deleting
+and re-inserting every reaction and every receipt, whether or not anything about that message
+changed.
+
+That ran on every message received, every edit, every reaction, every pin, and every inbound
+receipt — which is the worst of them, because a receipt is one event per *batch* of messages,
+so the cheapest thing the protocol carries paid the dearest price. ADR-062 measured one such
+rebuild at 27 ms after indexing and 96 ms before it. Measured here, end to end and including
+the fold rather than only the row rewriting, a 1200-message conversation is **6556 statements
+and 283 ms**.
+
+### D1. The affected set is a set, because the protocol has two shapes
+
+An event names the messages it is a fact about, and it does so in two different ways:
+
+- a `messageCreate` names the message it creates, in `body.message_id`;
+- a `messageEdit`, `messageDelete`, `reactionSet` or `pinSet` names one target, which is
+  already the `target_message_id` column;
+- a `receiptDelivered` or `receiptRead` names **many**, as a `message_ids` list in the body,
+  and one receipt covering a batch is the ordinary case rather than the pathological one.
+
+`_affectedMessageIds` is total over every kind the projector stores — including the ones that
+name nothing — so adding a kind to the protocol is a change there rather than a silent
+omission. Applying an event re-folds exactly that set, and the cost is that set's size: one,
+or the number of ids the receipt actually carries.
+
+### D2. The unit of projection did not change; where its facts come from did
+
+`_projectMessage` already took "a message's create, and a list of facts" and returned that
+message's projection. It filtered the list itself. So F2 changes what is handed to it, and
+nothing else:
+
+- **the rebuild** hands it the conversation's whole candidate fact set, exactly as before;
+- **an incremental apply** hands it the facts about that one message, read out of a new index.
+
+Everything downstream — the edit winner, the delete authority, the pin, the reaction per
+user, the receipt state per device, the preserved local-only columns — is the same code
+reaching the same answer. That is what makes the equivalence test in §Correctness a
+statement about one function and two inputs rather than about two implementations.
+
+### D3. `application_event_targets`, and why it is a table
+
+The projector needs the direction the log does not have. An event carries the message it
+targets; an incremental apply has to ask which facts a message has. `application_event_targets`
+is one row per (message, event) pair, written in the same statement sequence as the event
+itself, for every stored event whatever its apply state.
+
+**It is derived state and only an index.** The authoritative fact is the event, and everything
+read through here joins back to `application_events`. That is what makes a *stale* row
+harmless — it joins to nothing — while a missing one is not, which is why a full rebuild
+rewrites the rows for every fact it folds and why the migration back-fills.
+
+**A table rather than a column,** because a receipt names many messages and SQLite has no
+array. The obvious alternative — extend `target_message_id` to mean "the message this event is
+about", set it on creates too, and keep a second table only for receipts — was rejected: it
+changes the meaning of a populated column, needs the same back-fill anyway, and leaves the
+fold reading a union of two shapes instead of one.
+
+**The primary key leads with `message_id`,** so its implicit index answers the only question
+asked of it and no second index is declared. There is deliberately **no foreign key**:
+`event_id` would be an unindexed child key and SQLite would scan this table on every write to
+`application_events` to prove nothing was orphaned — precisely the cost `attachments_by_message`
+exists to remove (ADR-062).
+
+### D4. `CROSS JOIN`, and why the plan test is the only thing that could catch it
+
+The fold reads
+
+```sql
+SELECT event.* FROM application_event_targets target
+CROSS JOIN application_events event ON event.event_id = target.event_id
+WHERE target.message_id = ? AND event.conversation_id = ? AND event.apply_state = ?
+```
+
+Written as an ordinary join it is one statement either way and the statement count is
+identical — and SQLite, which has no statistics to go on, picks the other order:
+`SEARCH application_events USING INDEX application_events_conversation_apply_state
+(conversation_id=? AND apply_state=?)`, then a probe of the target index for **every candidate
+event in the conversation**. Same rows, same statement count, linear in the conversation. The
+cost this phase exists to remove, invisible to a counting interceptor and visible only in
+`EXPLAIN QUERY PLAN`. `CROSS JOIN` is SQLite's documented way to fix a join order, and
+`local_database_index_plan_test.dart` asserts the resulting plan rather than trusting it.
+
+The conversation is in the predicate for the same reason the rebuild reads one conversation's
+events: a reference is a claim by whoever sent it, and a claim about a message id belonging to
+some other conversation must not reach that conversation's projection.
+
+### D5. The conversation's aggregates have one definition, and both paths call it
+
+`unreadCount`, `sortKey`, `listProjectionCiphertext` and `lastActivityEventId` are read back
+out of the message rows by `_refreshConversationAggregates`, which the rebuild now calls too.
+"Identical to what a rebuild would produce" is therefore true by construction rather than by
+argument, and the rebuild's in-memory running totals are gone.
+
+- **The newest message** is `ORDER BY ordering_ms DESC, ordering_event_id DESC LIMIT 1`, which
+  is the column order of `messages_conversation_ordering` (ADR-062) read backwards: one index
+  entry and one row. It carries all three of the preview, the ordering key and the last
+  activity, because `messages.projection_ciphertext` is already exactly what the conversation
+  wants — a message deleted for everyone stores an empty blob, which is what
+  `displayText == null` produced.
+- **The unread count** is `COUNT(*) ... WHERE conversation_id = ? AND unread`, served by a new
+  partial index.
+
+**`messages_unread_by_conversation` on `(conversation_id, unread) WHERE unread`.** Partial, so
+it holds only unread rows and an insert that is not unread writes nothing to it. `unread` is a
+column as well as the predicate, and that is not redundant: without it SQLite keeps the query's
+own `unread` term as a filter, needs the column to evaluate it, and visits the row —
+614 µs against **431 µs** over twenty thousand unread messages, and the plan says
+`USING COVERING INDEX` only in the second form. It carries the same catch as ADR-062's pinned
+index: SQLite will only choose a partial index for a query whose `WHERE` contains the bare term
+`unread`, so the projector spells it unbound and the plan test is the only thing that can catch
+a regression to `unread = ?`.
+
+**The residual term, stated rather than buried.** The count is O(u) in the number of *unread*
+messages, not O(1): 93 µs at a hundred, 105 µs at two thousand, 431 µs at twenty thousand,
+against a whole apply of about 1100 µs. It is not a pass over the conversation — opening the
+conversation empties the index and the count becomes one probe — and no index shape measured
+makes it constant. The alternative is a delta (`unread_count = unread_count + Δ`), which is
+O(1) and was rejected: it gives the two paths two definitions of the same number, and a delta
+is only correct if every writer of `messages.unread` maintains it, which is exactly the class
+of drift ADR-060 and ADR-061 were about. The existing `_refreshUnreadCountForMessage` in the
+repository counts the same rows with a *bound* predicate, so it does not even reach the index;
+this is strictly cheaper than the precedent it follows.
+
+### D6. Where the boundary sits
+
+**Incremental** is the `applied` disposition: one new fact about a known set of messages.
+
+**The rebuild** keeps every case where a fact the projection already contains is *retired*, so
+that what the projection should now say is no longer a function of the event in hand:
+
+| Case | Site |
+|---|---|
+| an event id presented twice with different canonical bytes | `applyInsideTransaction` |
+| a sender counter replayed, in every conversation it touches | `applyInsideTransaction` |
+| an unsupported event colliding with a stored event id | `retainUnsupportedInsideTransaction` |
+| an unsupported event replaying a sender counter | `retainUnsupportedInsideTransaction` |
+| a stored body that cannot be decoded | the incremental fold declines and escalates |
+| a fork, a repair, or a future change to conversation-level authorisation | `rebuildConversationInsideTransaction` |
+
+The last row is new. `_rebuildConversation` was private and reachable only through a conflict;
+it is now also a public entry point, because requirement four of this phase is that the
+recovery path stay *reachable*, and because the answer to hard case five below needs a door to
+it rather than a reason to reinvent it.
+
+The escalation is the design's safety valve: **the incremental path may decline at any point
+and delegate**, and correctness is then the rebuild's. Today it declines for exactly one
+reason — a stored body it cannot read, which is storage corruption — and the rebuild marks
+that fact rejected and re-derives the conversation, which is what it already did.
+
+`refreshTransportForEventInsideTransaction` is untouched. ADR-061 narrowed it to one row and
+it stays that way.
+
+### The seven hard cases
+
+1. **Receipts are one-to-many.** `_targetMessageId` is non-null only for edit, delete, reaction
+   and pin; a receipt carries a `message_ids` list instead. The affected-set derivation covers
+   both shapes (D1), the index table stores one row per (message, event) so both shapes fit
+   one lookup (D3), and the cost of a receipt is the ids it carries — measured at 245
+   statements for thirty-two ids against 16 for one, equal at 48 messages and at 1200.
+2. **Mutations arrive before their create.** The target row is written for *every* stored
+   event, including one whose message does not exist yet, so it is sitting in the index when
+   the create lands. Applying a `messageCreate` re-folds from every stored fact targeting that
+   message id, not from the create it was handed. The equivalence generator forces this rather
+   than leaving it to the shuffle: one message's whole fact set is delivered before its create,
+   every seed.
+3. **Apply-state transitions change the fold input.** Every transition to `eventIdConflict`,
+   `counterConflict` or `conversationRejected` happens on a path that keeps the full rebuild —
+   verified, and asserted in `projection_recovery_path_test.dart` by tampering with an
+   *unrelated* message first: a value no fold produces is written straight into `messages`, and
+   only a whole-conversation re-derivation puts it back. The one transition inside the
+   incremental path (a body that will not decode) escalates rather than proceeding.
+4. **A message can stop being projectable.** The rebuild's terminal `DELETE ... WHERE
+   message_id NOT IN (…)` is gone from the event path, so removal is explicit: a create that
+   collided with another, a create whose references do not carry its reply target, and a
+   message id with no create at all each delete the row. Scoped to the conversation as well as
+   the id, because a fact in one conversation referencing a message id created in another must
+   not be able to delete it.
+5. **Authorization is conversation state.** `_authorizedPin` and `_isConversationParticipant`
+   read `conversations.kind` and `conversations.peer_user_id`; `_authorizedGroupModerator`
+   returns false unconditionally until group role projection exists. Those two columns are
+   written once, when the conversation row is created, and an event disagreeing with them is
+   rejected rather than applied — so **no already-applied event's authorization can change
+   today**, and the incremental path needs no answer. When group roles land, the answer is a
+   targeted rebuild on membership change, and `rebuildConversationInsideTransaction` exists so
+   that it is one call rather than a second projector.
+6. **Idempotency and re-entry.** A re-presented event returns `duplicate` before anything is
+   inserted, so no incremental work runs at all. The whole apply is inside the caller's
+   transaction, so a crash rolls back to a state from which re-presenting converges — asserted
+   against a **reopened database file** in `incremental_apply_crash_safety_test.dart`, for a
+   fault on the message write, a fault on the index write, and a fault between two of the
+   messages one receipt names. `unread_count` is recomputed rather than incremented, so it
+   cannot double-count; reactions and receipts are rewritten as a set, so they cannot
+   double-insert; and the index insert is `INSERT OR IGNORE`, because a receipt may name the
+   same message twice.
+7. **Local-only columns.** `deleted_for_me`, `pinned`, `starred`, `unread`, `alerted`,
+   `delivered_receipt_sent` and `status` are preserved by the same mechanism as before —
+   companions that omit them, plus the existing row read into `_LocalMessageState`, which now
+   has a named constructor both paths use so "the same mechanism" is checkable rather than
+   asserted. `delivered_receipt_sent` moves *into* that record, which removes a `SELECT` per
+   message per projection: the companion omits the column, so the row read before the write and
+   the row read after it carry the same value.
+
+### Correctness
+
+**The differential equivalence test is the phase's argument, and it was written first.**
+`projection_equivalence_test.dart` builds a deliberately hostile log — competing edits at the
+same revision from the same sender, an edit from somebody who did not write the message, an
+edit whose references do not carry its target, a delete over the top of an edit, a delete of
+somebody else's message, a reaction replaced twice and then cleared, a reaction on a message
+that has not arrived, a pin set and cleared, a receipt naming every message in the
+conversation, a receipt from this account's other device, a receipt naming a message that does
+not exist, a second create claiming a message id that already has one, and a duplicate
+re-presentation — shuffles its delivery with a printable seed, and runs it twenty-four times.
+
+Three databases, because two comparisons catch different mistakes:
+
+- **Step by step.** A second database applies the same event and then runs the recovery path
+  over it. If the incremental apply is right the rebuild is a no-op and the two agree; if it is
+  wrong in anything a rebuild re-derives, they diverge on the event that did it.
+- **From nothing.** A third throws its projection away at the end and rebuilds from the log
+  alone. That is the only comparison that says anything about the *preserved* columns, because
+  a rebuild over an existing row carries those through and would carry a mistake through with
+  them.
+
+The snapshot is every column of `messages`, every reaction, every receipt, every attachment,
+every conversation aggregate, and every event's apply state.
+
+**The oracle is kept independent, deliberately.** The rebuild still folds each message against
+the conversation's whole fact set — the quadratic scan §3 of the brief describes — rather than
+against a grouping computed from `_affectedMessageIds`. Grouping it would have been a free
+speed-up for the recovery path and was rejected: it would make the oracle share the incremental
+path's idea of which facts belong to which message, and an error in that idea would then show
+up as agreement. Mutation-tested: breaking the receipt fan-out, dropping the removal of a
+message that stopped being projectable, and folding only the event in hand each fail all
+twenty-four seeds. With the shared grouping in place, the first of those failed none of them.
+
+The conversation aggregates get a third opinion for the same reason — both paths now share one
+SQL definition, so the harness recomputes all four in Dart from the rows that are there.
+
+### What it cost, measured
+
+From `local_apply_cost_test.dart`, which asserts the statement counts are *equal* across the
+two conversation lengths rather than merely bounded. Microseconds are the mean of twelve
+applies of each kind against the same database; the 1200-message run is the warm one and is
+what the wall-clock column quotes.
+
+| Applying one … | 48 messages | 1200 messages | 1200, wall clock |
+|---|---|---|---|
+| `messageCreate` | 16 | **16** | 1061 µs |
+| `messageEdit` | 14 | **14** | 1066 µs |
+| `reactionSet` | 16 | **16** | 1244 µs |
+| `pinSet` | 14 | **14** | 1106 µs |
+| `messageDelete` | 15 | **15** | 1177 µs |
+| `receiptDelivered`, 1 id | 16 | **16** | 1105 µs |
+| `receiptRead`, 32 ids | 245 | **245** | 16 786 µs |
+| one full rebuild | 796 | **6556** | 282 749 µs |
+
+So applying one event to a 1200-message conversation went from 6556 statements to **14–16**,
+and from 283 ms to **about 1.1 ms** — a factor of about 260 — while a receipt covering
+thirty-two messages costs thirty-two folds and not twelve hundred. Every number in the
+right-hand column is the same as at 48 messages; before this change none of them were.
+
+**Against ADR-062's 27 ms.** That figure measured *rewriting every row* of a 1200-message
+conversation with the attachments index in place. The 283 ms here is the whole of
+`_rebuildConversation` on the same in-memory SQLite: reading every candidate event, decoding
+every body, and folding each message against the whole fact set, which the row-rewrite
+measurement did not include. The two are consistent, and the second is what the event path was
+actually paying.
+
+`local_send_cost_test.dart` records the other end of it. ADR-061 left the echo linear and said
+so — 201 statements at 61 messages against 33 at five, and the test asserted that it *grew*.
+It is now equal across the two lengths, and that assertion is inverted.
+
+### The migration
+
+Schema 17 → 18. One new table, one new index, no column added, no table dropped or re-keyed,
+and no existing row rewritten. The step sits inside the existing `transaction()` wrapper with
+`StorageMigrationHooks` around it, in the stepwise `if (from < N)` style, and checks for the
+table before creating it in the style of the schema-14, -15 and -16 steps — a database whose
+recorded version is behind its actual shape is a real condition on a device that has taken a
+development build.
+
+**The back-fill is the whole cost, and it is not optional.** An empty target table would not be
+a slower projection, it would be a wrong one: an edit landing on a message whose create has no
+row there would fold the edit alone and find no message to edit. So every event a device
+already holds has to be indexed before the first incremental apply runs.
+
+- The four single-target kinds are already a column, so they are **one set-based statement**
+  that never leaves SQLite.
+- Creates and receipts carry their message ids inside the projected body, so those are read in
+  keyset pages over the primary key, decoded and written back in batches — the same single pass
+  over `application_events` that `CREATE INDEX` costs, with a JSON decode on top of it, and
+  never the bodies of a whole event log in memory together. `OFFSET` would re-scan what it
+  skipped, which is the shape ADR-062 rejected on the read path. SQLite's JSON functions were
+  not used: their availability under the SQLCipher build is not something to discover during a
+  migration on somebody's phone.
+- `INSERT OR IGNORE` throughout, so an upgrade that is interrupted and retried cannot collide
+  with itself. A body that cannot be decoded is skipped rather than failing the upgrade; the
+  projector already rejects such a fact the next time it folds that conversation.
+
+`local_database_migration_test.dart` runs it against a populated version-17 database and
+asserts the exact set of index rows — one per create, one for the pin, three for the receipt —
+that no message row moved, that the new index exists, and then, end to end, that an edit
+arriving *after* the upgrade folds against a create stored before it and brings the pin stored
+before it along too.
+
+A rebuild also rewrites the index rows for every fact it folds, so the recovery path repairs an
+interrupted back-fill as well as an interrupted projection.
+
+### What is explicitly left undone
+
+- **F6**, identity and device-resolution caching. A send still resolves both device sets over
+  the network; ADR-061 moved that off the path the user waits on and it has not moved again.
+- **F8**, `ChatViewModelMapper.messages` mapping the whole loaded window on every emission.
+- **F9**, `_messageKeys` pruning and the anchor walk.
+- **F10**, draft debounce.
+- **The rebuild is still O(N²) in the conversation**, on purpose (see Correctness). It is the
+  recovery path, it runs on conflicts and repairs, and its cost is now a cost of recovering
+  rather than a cost of receiving. Making it linear means giving it the incremental path's
+  grouping, which is the one thing the oracle must not share.
+- **Attachments are still deleted and re-inserted whenever the message they belong to is
+  written**, which resets `transfer_state` to queued and clears `bounded_cache_handle_ciphertext`
+  — so a downloaded attachment loses its cache handle. That is pre-existing behaviour, it is
+  O(1) in conversation length, and F2 makes it *far* rarer (it now happens only when an event
+  about that message is applied, rather than on every event in the conversation). Gating it the
+  way reactions and receipts are gated would change observable local state and is a separate
+  change.
+- **`unsupported_application_events` is still scanned** for the sender-counter check, as
+  ADR-062 decided: the table is empty on a client at the current protocol version.
+- **The unread count is O(u), not O(1)**, as measured and argued in D5.
+- **Measured in statements and microseconds, not on a device.** The figures are from the suite,
+  on an in-memory SQLite with no SQLCipher underneath it, so they understate the win rather
+  than overstate it. No A56 measurement of receiving into a long conversation has been taken
+  for this change.
 
 ## ADR-062 in full — the timeline reads a window, and the database has indexes (2026-08-27)
 

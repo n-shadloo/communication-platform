@@ -46,6 +46,7 @@ Names are conceptual; migrations may refine physical layout without changing own
 | `memberships` | Decrypted current group roles/policy projection |
 | `messages` | Current logical message projection, plus the columns the projector preserves rather than rebuilds: `deleted_for_me`, `pinned`, `starred`, `unread`, `alerted` (the durable one-shot marker that stops an arrival being announced twice, ADR-048), `delivered_receipt_sent` ([ADR-060](decisions.md)), and `status` ([ADR-061](decisions.md)) |
 | `message_events` | Immutable create/edit/delete/reaction/control facts |
+| `application_event_targets` | Which logical messages each stored event is a fact about: one row per (message, event) pair, one for a create or a mutation and one per named id for a receipt. Derived state and only an index — the authoritative fact is the event, and every read joins back to it, so a stale row matches nothing. It is what lets an apply re-fold the messages an event touches instead of the conversation it is in ([ADR-063](decisions.md)) |
 | `attachments` | Encrypted descriptor, transfer state, bounded cache handle |
 | `inbox_envelopes` | Backend envelope ID/seq, processing and ack state |
 | `outbox_operations` | Durable logical sends, deterministic <=256-target batches, and per-recipient attempts/ciphertext. Authoritative for a message's transport state |
@@ -61,22 +62,30 @@ Names are conceptual; migrations may refine physical layout without changing own
 
 The schema declared no indexes at all until version 17, so every lookup by a column that was
 not the leading component of a primary key was a full table scan — under SQLCipher, where each
-page read is a decrypt. These six are chosen from `EXPLAIN QUERY PLAN` against a seeded
-database and asserted against the planner in
+page read is a decrypt. Each is chosen from `EXPLAIN QUERY PLAN` against a seeded database and
+asserted against the planner in
 `test/features/local_storage/infrastructure/local_database_index_plan_test.dart`, because an
-index the planner never chooses is write cost with no read benefit ([ADR-062](decisions.md)).
+index the planner never chooses is write cost with no read benefit ([ADR-062](decisions.md)) —
+and because on a join the planner also chooses the *order*, which changes the cost by a factor
+of the conversation's length while changing neither the statement count nor the rows returned
+([ADR-063](decisions.md)).
 
 | Index | Columns | What it answers |
 |---|---|---|
 | `messages_conversation_ordering` | `messages (conversation_id, ordering_ms, ordering_event_id, message_id)` | Every read of one conversation. Column order follows the timeline's own ordering key, so the same index answers the `WHERE`, satisfies the `ORDER BY` in both directions without a temporary B-tree, and covers the keyset cursor probe |
 | `messages_pinned_by_conversation` | `messages (conversation_id, message_id) WHERE pinned` | The conversation's pins, and every conversation's pins in one query. Partial, so it holds a handful of entries; SQLite will only choose it for a query whose `WHERE` contains the bare term `pinned`, so both callers spell it unbound and neither sorts in SQL |
 | `attachments_by_message` | `attachments (message_id)` | A page's attachments — and, on the write path, the `ON DELETE CASCADE` foreign-key check SQLite runs on **every** write to a `messages` row. Without it that check is a full scan of `attachments` per parent row |
-| `application_events_conversation_apply_state` | `application_events (conversation_id, apply_state)` | The candidate events of one conversation, for a projection rebuild |
+| `application_events_conversation_apply_state` | `application_events (conversation_id, apply_state)` | The candidate events of one conversation, for a **projection rebuild**. Since [ADR-063](decisions.md) that is the recovery path — an event-id conflict, a sender-counter rollback, an unsupported-event collision, a fork or a repair — and not the event path, which reads `application_event_targets` instead. It stays indexed because a fork is exactly when a device can least afford to read its whole log |
 | `application_events_sender_counter` | `application_events (sender_device_id, sender_counter)` | The sender-counter uniqueness check every applied event runs. It has no conversation to narrow it: a replayed counter is a fact about a device |
 | `outbox_operations_by_event` | `outbox_operations (event_id)` | A message's transport state |
+| `messages_unread_by_conversation` | `messages (conversation_id, unread) WHERE unread` | `conversations.unread_count`, which both projection paths recompute from the message rows so that the incremental one cannot disagree with a rebuild. Partial, so it holds only unread rows; `unread` is a column as well as the predicate, which is what makes it covering — without it SQLite keeps the query's own `unread` term as a filter and visits every row to evaluate it. Like the pinned index it is only chosen for a query whose `WHERE` spells the bare term ([ADR-063](decisions.md)) |
 
 `message_reactions` and `receipts` are keyed by `(message_id, ...)`, so their implicit primary-key
 index already serves a lookup by message and no index is added for them.
+`application_event_targets` is keyed by `(message_id, event_id)` for the same reason: its
+implicit index answers the only question asked of it, and no foreign key is declared, because
+`event_id` would then be an unindexed child key and SQLite would scan the table on every write
+to `application_events`.
 `unsupported_application_events` runs the same sender-counter check and is empty on a client at
 the current protocol version, so it is deliberately left unindexed.
 
@@ -139,6 +148,16 @@ One transaction records the envelope, applies a verified event, updates projecti
 creates receipts, advances the contiguous sequence checkpoint when allowed, and marks
 the envelope ready to acknowledge. The ack is
 sent only after commit. A crash before ack causes a safe duplicate.
+
+Applying a verified event re-folds **only the messages that event is a fact about** — one for a
+create, an edit, a delete, a reaction or a pin, and one per named id for a receipt — reading
+each message's own facts out of `application_event_targets` and writing back through the same
+projection function a rebuild uses. The full rebuild remains the definition of a correct
+projection and remains the path for an event-id conflict, a sender-counter rollback, an
+unsupported-event collision, and any fork or repair; where the two disagree the incremental one
+is wrong ([ADR-063](decisions.md)). Both are inside the same write transaction as the event
+insert they belong to, so a process killed mid-apply rolls back to a state from which
+re-presenting the event converges.
 
 ### Device enrollment
 
@@ -207,7 +226,7 @@ cross-check authorization rather than trusting a server-supplied projection.
   nothing is repaired: every message already on a device either has its outbox rows or has
   reached a terminal state, so there is no send this table would have been holding.
 
-- Schema version 17 creates the six indexes above and does nothing else
+- Schema version 17 creates the first six indexes above and does nothing else
   ([ADR-062](decisions.md)). It is additive: no table is created, dropped, re-keyed or
   rewritten, and no row moves. Each declaration carries `IF NOT EXISTS`, so the same statement
   serves `createAll` on a fresh install and the upgrade step on an existing one. It is **not
@@ -216,6 +235,22 @@ cross-check authorization rather than trusting a server-supplied projection.
   `outbox_operations`, under SQLCipher where every page read is a decrypt. It is paid once, at
   the first open after the update, alongside the `PRAGMA quick_check` already run at every
   open, and the database file grows by roughly 18%.
+
+- Schema version 18 adds `application_event_targets` and
+  `messages_unread_by_conversation`, and **back-fills the first from the events already
+  stored** ([ADR-063](decisions.md)). The back-fill is not an optimisation: an empty target
+  table would not be a slower projection but a wrong one, because an edit landing on a message
+  whose create has no row there would fold the edit alone and find no message to edit. The four
+  single-target kinds are one set-based statement; creates and receipts carry their message ids
+  inside the projected body, so those are read in keyset pages over the primary key, decoded
+  and written back in batches — one pass over `application_events`, of the same order as the
+  `CREATE INDEX` statements schema 17 already paid, with a JSON decode on top, and never the
+  bodies of a whole event log in memory at once. SQLite's JSON functions are not used: whether
+  the SQLCipher build has them is not something to discover during a migration on a phone. Every insert is `INSERT OR IGNORE`, so an
+  interrupted upgrade that is retried cannot collide with itself, and a body that cannot be
+  decoded is skipped rather than failing the upgrade. No column is added, no table is dropped
+  or re-keyed, and no existing row is rewritten. A projection rebuild also rewrites the index
+  rows for every fact it folds, so the recovery path repairs an interrupted back-fill.
 
 ## Retention and deletion
 

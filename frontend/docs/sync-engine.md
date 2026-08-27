@@ -104,6 +104,14 @@ For each envelope:
    never uploaded to a history API.
 7. Ack via WebSocket or REST only after the transaction commits.
 
+Step 5 costs the event, not the conversation. Applying re-folds only the messages the event is
+a fact about — one for a create, an edit, a delete, a reaction or a pin, and one per named id
+for a receipt — so receiving into a long conversation costs what it costs into a short one. A
+full projection rebuild still exists and is still the definition of a correct projection; it is
+reached when a fact the projection already holds is *retired*, which is an event-id conflict, a
+sender-counter rollback or an unsupported-event collision, and it is the same transaction and
+the same dispositions either way ([ADR-063](decisions.md)).
+
 An envelope that will not open is retired rather than retried forever. Causes are split in
 two: a transient one — offline, rate limited, out of storage, momentarily out of entropy —
 retries and spends no budget, because it says nothing about the bytes in hand. A settled
