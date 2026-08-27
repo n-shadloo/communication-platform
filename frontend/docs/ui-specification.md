@@ -408,13 +408,14 @@ state its own scope; borrowing the other's is a false promise ([ADR-052](decisio
   message only**. It does not read history. Its hint and its empty state say so, and point
   the user at the in-conversation search for anything older.
 - **In-conversation search (§8, §9, §14).** One surface, opened from the overflow of
-  every conversation kind — direct, saved and group. It reads **that conversation's
-  entire local history** — the message stream carries no limit — and a matching result
-  scrolls the timeline to the message. Its notice says the search covers only messages
-  stored on this phone, and that the server never sees them or the query. It shows at
-  most 30 matches at a time and **says so** when it is showing that many, because a
-  silently capped result set misdescribes the scope the notice just promised
-  ([ADR-057](decisions.md)).
+  every conversation kind — direct, saved and group. It reads **that conversation's loaded
+  local history** — the message stream carries a window since [ADR-062](decisions.md), and
+  what is loaded grows as the reader pages backwards — and a matching result scrolls the
+  timeline to the message, loading it first if it sits outside the window. Its notice says
+  the search covers only messages stored on this phone, and that the server never sees them
+  or the query. It shows at most 30 matches at a time and **says so** when it is showing
+  that many, because a silently capped result set misdescribes the scope the notice just
+  promised ([ADR-057](decisions.md)).
 - **States.** Empty query, no results, the match count, the truncation notice, and the
   scope note belonging to that surface.
 
@@ -508,7 +509,13 @@ long-press.
   already received and decrypted.
 
 **States.**
-- *Loading* — history loads locally; older messages page in on scroll-up.
+- *Loading* — history loads locally; older messages page in on scroll-up. The timeline holds
+  a window rather than the whole conversation ([ADR-062](decisions.md)): reaching the top of
+  what is drawn widens the drawn range first and then asks local storage for an older page,
+  the marker at the top shows loading and offers a retry when that page fails, and a message
+  arriving joins the timeline without moving the line being read. A jump — from the pinned
+  banner, a reply quote or a search result — loads its target when it is older than anything
+  loaded.
 - *Empty* — new-conversation placeholder.
 - *Sending / queued* — pending state; **offline** sends queue locally and flush on the
   next active connection or background poll; there is no foreign push.

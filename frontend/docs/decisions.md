@@ -72,6 +72,294 @@ is not silently edited out of history.
 | ADR-059 | Accepted | The chat page's emoji surface is `emoji_picker_flutter` **4.5.3**, pinned exactly, reached only through one app-owned component, and configured so that it writes nothing to disk; it is at once the newest release and the only one that builds under this project's AGP 9 configuration, it reaches no network and bundles no font, and it brings 7 transitive Dart packages and 40 new Android modules that this decision enumerates rather than leaves to be found later (2026-08-25) | The React row sent a hardcoded `👍` and the composer button inserted a hardcoded `🙂`, in an application whose protocol has carried an arbitrary reaction grapheme since it was written and whose UI specification names an emoji reactor as a required surface — a control presenting itself as more than it is, which §8's own core rules call a defect. Making it real needs a picker, and the picker was evaluated as a dependency rather than as a widget. **The version is not a preference.** 4.5.3's entire changelog entry fixes an Android build failure "on AGP 9 when `android.builtInKotlin=false`", which is exactly what Flutter's own migrator wrote into this project's `gradle.properties` beside `com.android.application` 9.0.1; 4.5.0 is where this package moved its Android plugin *to* built-in Kotlin, so 4.5.0-4.5.2 are exactly the releases that cannot configure here and 4.5.3 restores the legacy path conditionally; 4.4.0 and earlier are superseded rather than tested, so 4.5.3 is both the newest release and the only one in its line that builds, with nothing recent to fall back on (follow-up F2). **It passes the constraint that actually governs**: it ships no asset and no font, every emoji is a Dart string literal compiled into `libapp.so`, glyphs are drawn with the platform emoji face, and its whole `lib/` contains no HTTP, no socket, no image URL and no Google or Firebase reference — its one platform call asks `PaintCompat.hasGlyph` which glyphs this device can draw, through `androidx.core`, already adopted at 1.16.0 under ADR-054. An emoji picker that carried its own Apple/Google/Twitter image sets was rejected on precisely this. **What it costs is on the Android side and is stated in full**: `shared_preferences` arrives to hold recent emoji, and behind it `shared_preferences_android` pulls `androidx.datastore` (with a repackaged protobuf and okio) and `androidx.preference`, which pulls **`androidx.appcompat` 1.1.0 from 2019** and the legacy support-library tree with it — 51 modules on a release runtime classpath become 91, of which 40 artifacts are new, in an application that instantiates no AppCompat class and renders nothing through a `RecyclerView`. That is the largest expansion of the Android set since ADR-054 locked it, it is accepted because the alternative is sourcing and maintaining 1500+ glyphs with per-locale names and skin-tone variants in application code, and it is accepted **enumerated**: the lockfile records every coordinate, `dependency_policy_test.dart` pins the resolved release set as a literal, and `docs/third-party-notices.md` now lists 91 modules instead of 51 and names the protobuf inside the AndroidX wrapper. **The storage half is refused rather than inherited.** The package's two `shared_preferences` features are guarded by `RecentTabBehavior` and `SkinToneConfig.rememberSkinTone`; `AppEmojiPicker` sets the first to `NONE` and leaves the second at its default `false`, so no write is reachable and Android never creates the file, because it creates it on first commit and there is no first commit. Everything else this application knows about a person is in SQLCipher under a Keystore-wrapped key; a plaintext list of the emoji they most recently used would be a durable record of their behaviour outside that boundary, which is the category ADR-057 built the diagnostics export's types to be incapable of holding. Losing recents is a real cost, answered where it matters by a fixed set of common reactions one tap away on the message itself rather than by writing a file. `lib/app/design_system/app_emoji_picker.dart` is the only file naming the package, on ADR-006's rule for Forui, and a new assertion in `design_system_boundary_test.dart` fails if a second one appears — which matters here because the package's defaults turn recents *on*. Adds no permission and no manifest component: both new plugin manifests are empty, and `verify_release_apk.sh --production` passes all seven checks on a built artifact, reading the same permission set and the same five components ADR-054 recorded out of the packaged file; the measured cost is +1.57 MiB on an unsigned production release APK, of which +426 KiB is the Android tree (far less than its own footprint, because almost none of it is reachable) and +1.16 MiB is the emoji data itself - after the wrapper named one locale set instead of letting the package's twelve-way switch keep all of them, which returned exactly 4,096,000 bytes and changes nothing a user sees. It does change the build once: these are the first plugin subprojects here that compile Kotlin, every release build of them failed with "Could not close incremental caches" five times out of five, and `kotlin.incremental=false` is now committed in `android/gradle.properties` with the reasoning beside it, because a release that only builds when somebody remembers a command-line flag is a release process with a hole in it. Also records something the regeneration exposed: `--write-locks` resolves *without* the lock while an ordinary build resolves *with* it, and locking applies the recorded versions as strict constraints, so a regenerated lockfile is not automatically a fixed point — one module the unconstrained graph evicts is kept by the constrained one, and the first regenerated lock was rejected by the next release build (follow-up F4). Opens no production gate, supersedes nothing, and changes no cryptographic construction, protocol, wire format or shipped delivery behaviour. |
 | ADR-060 | Accepted | A delivery cycle sends the user's message before it reads anybody else's, one envelope's failure stays on that envelope, and an envelope this device can never open is retired through a bounded attempt budget into quarantine and acknowledged (2026-08-26) | Measured on real devices: fifteen to twenty seconds to the first `POST /envelopes`, delivery that never arrived, 1.1 MB/min of idle re-download and up to one and a half CPU cores, all of it client-side against a network and backend measured clean. Every stage of a run returned its first failure and the inbound stages ran first, so one unopenable envelope stopped a sealed, durable outbox row from ever leaving the process; nothing retired that envelope, so the server re-served it forever; and a failed cycle scheduled *reconnect* backoff, whose uniform draw was the wait itself. Also: schema 14 repairs the devices already stranded, `cipher_memory_security` is turned off as a defence against a threat the model excludes and could not complete anyway, the socket hint stays a hint because `pruned_through` is how a lost envelope is detected, a response this client refuses now cancels its transfer instead of buffering it whole, and the always-false presence line is withdrawn until `subscribe_presence` exists. |
 | ADR-061 | Accepted | A message is committed and drawn before any network call is made, the fan-out that seals it becomes a durable request the delivery cycle owes, and an outbox attempt transition writes one row instead of re-projecting the conversation (2026-08-27) | Sending a DM rendered its own bubble in over three seconds, and the wait was two authenticated device lookups, a prekey claim and one ratchet step per recipient, all in front of the local commit that makes the message visible. The commit is now first and the fan-out is a row in `pending_send_preparations` (schema 15 -> 16) that the delivery cycle drains before the outbox. Separately, every attempt transition ran `_rebuildConversation`: measured at **195 statements** in a 61-message conversation, three times per send, to move one integer on one message. `messages.status` becomes a column the rebuild carries through rather than re-derives, on the `alerted`/`starred`/`delivered_receipt_sent` precedent, and the transitions now cost **7** and **4** statements. `MessageTransportState.preparing` makes the timeline's existing `encrypting` state reachable, and a retry re-arms the failed operation instead of writing a second message. |
+| ADR-062 | Accepted | The conversation timeline reads a bounded, cursor-anchored window instead of its whole history, its three per-message queries become three set-based ones, and the schema gains its first six indexes (2026-08-27) | Opening a conversation cost what had been said in it. `watchMessages` had no `LIMIT` and ran a reactions, a receipts and an attachments query for **every** message on **every** emission: measured at **3601 statements** for one emission of a 1200-message conversation, against **6** now, equal at eight messages and at twelve hundred. `watchConversations` had the same shape one level up and is now two statements rather than one per conversation. The window is a keyset range anchored at the oldest loaded message rather than a count from the newest, so a message arriving cannot push the line the reader is on out of the other end, and `OFFSET` is rejected because it re-scans what it skips. Separately, the schema declared 43 tables and **zero** indexes, so every lookup by a non-leading key column was a full scan under SQLCipher: six indexes (schema 16 -> 17, additive, no table dropped or re-keyed) chosen from `EXPLAIN QUERY PLAN` and asserted against the planner, including a partial index for pins that only works because both callers spell the predicate unbound, and a foreign-key child index on `attachments` that takes one rebuild of a 1200-message conversation from 96 ms to 27 ms. `LoadOlderMessagesIntent` and the three hardcoded pagination fields become real, and a jump to a message outside the window loads it instead of doing nothing. |
+
+## ADR-062 in full — the timeline reads a window, and the database has indexes (2026-08-27)
+
+**Status:** Accepted. Client-side cost decision. Adds one local schema version (16 → 17) and
+six indexes. Creates no table, drops no table, re-keys no table and rewrites no row. Changes
+no cryptographic construction, no ciphersuite identifier, no protocol, no wire format, no
+transport trust anchor, and no backend file. **Opens no production gate.**
+
+### The question
+
+> ADR-061 fixed the write path: a message is committed and drawn before any network call, and
+> a transport transition costs 7 statements instead of 195. The read path was not touched.
+> What does opening a conversation cost, and what is the smallest set of changes that makes
+> that cost a property of the screen rather than of how long two people have been talking?
+
+Two answers, and like ADR-061's they are independent.
+
+**The timeline had no `LIMIT` and an N+1 on top of it.**
+`DriftConversationDomainRepository.watchMessages` selected every message in the conversation
+and then, inside `asyncMap`, ran one reactions query, one receipts query and one attachments
+query *per row*. Every emission. So one emission cost `3N + 1` statements, and an emission
+happens whenever anything in `messages` changes — a receipt landing, a draft being saved, a
+transport transition, the user's own keystroke echoing. Measured in
+`test/features/messaging/local_read_cost_test.dart`, against 1200 messages: **3601
+statements**. Against eight: 25. `watchConversations` had the same shape one level up, one
+`SELECT` over `messages` per conversation in the list, each of them a full scan.
+
+**And the schema declared 43 tables and zero indexes.** Every lookup by a column that was not
+the leading component of a primary key was a full table scan — under SQLCipher, where each
+page read is a decrypt. `messages` is keyed by `message_id`, so `WHERE conversation_id = ?`
+scanned every message on the device for everybody. `application_events` is keyed by
+`event_id`, so a projection rebuild scanned every event ever stored. `outbox_operations` is
+keyed by `(operation_id, recipient_device_id)`, so reading a message's transport state
+scanned the whole outbox.
+
+### D1. The window is a cursor range, not a count
+
+`watchMessages` takes a `ConversationMessageWindow` and returns a `ConversationMessagePage`.
+The window has two shapes and both are ranges over the timeline's own ordering key
+`(ordering_ms, ordering_event_id, message_id)`:
+
+- `NewestConversationMessages(n)` — the first read, before anything is known. Ordered
+  descending with `LIMIT n`, reversed once in memory.
+- `ConversationMessagesFrom(cursor)` — every read after it. An **open-ended range anchored at
+  the oldest message already on screen**.
+
+Anchoring at the bottom rather than counting from the top is the whole design, and it is not
+cosmetic. A window defined as "the newest 240" slides: a message arriving at the top pushes
+the oldest loaded message out of the other end, and the line the reader is looking at moves
+every time anybody says anything. A window defined as "everything at or after this key" only
+ever grows at the top. `test/widget/chat_pagination_test.dart` asserts exactly that — a
+message arriving while the reader is two pages back leaves the oldest loaded message where it
+was.
+
+**`OFFSET` was rejected.** It re-scans everything it skips, so paging backwards would get
+slower the further back you went, which is the failure being fixed rather than a milder form
+of it. `olderMessageCursor` asks for the key `n` rows below the current bound instead: three
+columns, a limit, and the ordering index covers it outright, so it reads the page and nothing
+before it.
+
+**The keyset predicate carries a redundant term on purpose.** Written as one nested `OR`, the
+comparison is a filter SQLite applies after choosing an access path, and the scan starts at
+the conversation's newest message every time. Written as `ordering_ms >= :ms AND (ordering_ms
+> :ms OR ...)`, the leading term is a range constraint on the second column of the index and
+the scan starts at the boundary. Same rows, and the plan says
+`(conversation_id=? AND ordering_ms>?)` rather than `(conversation_id=?)`.
+
+### D2. The three per-row queries become three set-based ones, joined on the same range
+
+Reactions, receipts and attachments are read once each for the whole page, by joining the
+child table to `messages` under the *same* window predicate the page used — named once, in
+`_windowOf`, so the four statements cannot disagree about what the window contains. They are
+grouped in memory. Statement count per emission becomes O(1) in conversation length:
+
+| | 8 messages | 1200 messages |
+|---|---|---|
+| One emission, before | 25 | **3601** |
+| One emission, after | **6** | **6** |
+| One emission, window anchored two pages back (240 loaded) | 6 | **6** |
+| Resolving the next page back | 1 | **1** |
+| One emission of the conversation list | 2 | **2** |
+
+The six are: the page, whether anything older exists, the page's reactions, its receipts, its
+attachments, and the conversation's pins. `local_read_cost_test.dart` asserts these as
+*equalities across the two conversation lengths*, in the discipline ADR-061 established, so an
+N+1 finding its way back onto this path fails loudly rather than gradually.
+
+Reactions are sorted in Dart rather than in SQL. An `ORDER BY` on the reaction would have made
+SQLite sort the joined result through a temporary B-tree to settle the order of the two or
+three reactions each message has.
+
+### D3. `pinnedMessageIds` is not page-scoped, because a banner counts them
+
+The pinned banner may target the oldest message in the thread, and the sheet behind it lists
+every pin with its text. A window makes "the pins that happen to be loaded" the common answer,
+and a banner reading three above a sheet listing one is a wrong answer rather than a narrower
+one. So the page carries the conversation's **complete** pinned set beside its window — one
+extra statement per emission, bounded by how many pins exist, and it is what the chat page now
+reads for the count, the jump target and the sheet. `ChatTimelineViewModel.pinnedMessageIds`
+became `pinnedMessages` for the same reason: the surface needs their text.
+
+### D4. A jump reveals what it names
+
+Four entry points can name a message older than anything loaded: search, the pinned banner,
+reply-quote navigation, and `JumpToMessageIntent`. `_jumpIfRequested` resolved its target with
+`indexWhere` over the loaded list and returned silently when it was absent, which a window
+turns from an edge case into the common case — a working feature into a dead tap.
+
+`ConversationTimelineWindow.reveal` looks the target's key up (`messageCursor`, a primary-key
+lookup), and if it is below the current bound, opens the window to a page's worth of context
+*below* it so the target does not land against the top edge. The widget remembers a jump it
+could not resolve and runs it again when the page carrying the target arrives; without that,
+the second build takes `didUpdateWidget`'s "nothing changed" branch and the jump is dropped
+after the work to load it has already been done.
+
+### D5. The window lives in a controller, not in a provider key
+
+`ConversationTimelineWindow` is an application-layer object holding the current range, a
+`loadingBefore` flag and an `olderLoadFailed` flag, and owning the database subscription. The
+provider that the screen watches is keyed by `(currentUserId, conversationId)` — unchanged —
+and the window is created once per open conversation behind it.
+
+This is the point of the whole arrangement. If the cursor were part of the family key, asking
+for an older page would change the provider's identity: `autoDispose` would dispose the old
+one, the screen would be handed a fresh `loading` state, `ChatTimelineAdapter`'s `State` would
+be rebuilt from nothing, and the reader's scroll position — the thing paging backwards exists
+to preserve — would be gone. Retargeting instead swaps the inner subscription and leaves every
+widget in place.
+
+An anchored window that comes back empty resets itself to the newest page. That happens when
+the anchor is deleted for this device out from under the bound; leaving it would show an empty
+conversation that is not empty.
+
+**The two windows compose rather than compete.** `ChatTimelineAdapter` still widens what it
+draws first (80, then 60 at a time) and only asks the application when it has drawn everything
+loaded. That handshake in `_loadOlder` is untouched; the database page (120) is simply what
+"more" now means.
+
+### D6. Six indexes, each with a plan behind it
+
+Derived from `EXPLAIN QUERY PLAN` against a seeded database — 25 conversations, 4800 messages,
+4800 attachments — not from the RCA's list, which predates ADR-061.
+`test/features/local_storage/infrastructure/local_database_index_plan_test.dart` captures the
+statements the production code really issues, through an interceptor, and asserts the plan for
+each; an index that exists and is never chosen is write cost with no read benefit, and only the
+planner can tell the two apart.
+
+| Query | Before | After |
+|---|---|---|
+| the page | `SCAN messages` + `USE TEMP B-TREE FOR ORDER BY` | `SEARCH messages USING INDEX messages_conversation_ordering (conversation_id=?)` |
+| is anything older | `SCAN messages` | `SEARCH messages USING COVERING INDEX messages_conversation_ordering (conversation_id=? AND ordering_ms<?)` |
+| the next page's cursor | `SCAN messages` + `USE TEMP B-TREE FOR ORDER BY` | `SEARCH messages USING COVERING INDEX messages_conversation_ordering (conversation_id=? AND ordering_ms<?)` |
+| the page's reactions | `SCAN messages` + `SEARCH message_reactions USING INDEX sqlite_autoindex_message_reactions_1 (message_id=?)` | `SEARCH messages USING COVERING INDEX messages_conversation_ordering (conversation_id=? AND ordering_ms>?)` + the same reaction seek |
+| the page's receipts | `SCAN messages` + `SEARCH receipts USING INDEX sqlite_autoindex_receipts_1 (message_id=?)` | the same covering seek + the same receipt seek |
+| the page's attachments | `SCAN attachments` + `SEARCH messages USING INDEX sqlite_autoindex_messages_1 (message_id=?)` | the same covering seek + `SEARCH attachments USING INDEX attachments_by_message (message_id=?)` |
+| this conversation's pins | `SCAN messages` | `SEARCH messages USING INDEX messages_pinned_by_conversation (conversation_id=?)` |
+| every conversation's pins | `SCAN messages` | `SEARCH messages USING INDEX messages_pinned_by_conversation (conversation_id=?)` |
+| candidate events for a rebuild | `SCAN application_events` | `SEARCH application_events USING INDEX application_events_conversation_apply_state (conversation_id=? AND apply_state=?)` |
+| sender-counter uniqueness check | `SCAN application_events` | `SEARCH application_events USING INDEX application_events_sender_counter (sender_device_id=? AND sender_counter=?)` |
+| transport state for one event | `SCAN outbox_operations` | `SEARCH outbox_operations USING INDEX outbox_operations_by_event (event_id=?)` |
+
+**`messages_conversation_ordering` on `(conversation_id, ordering_ms, ordering_event_id,
+message_id)`.** The one the timeline is read through. Column order follows the query's leading
+column *and* its ordering, so the same index answers the `WHERE`, satisfies the `ORDER BY` in
+both directions with no temporary B-tree, and is covering for the cursor probe. It also serves
+every other `WHERE conversation_id = ?` on `messages`: the unread count, mark-as-read,
+mark-as-unread, delete-conversation-for-me, and the rebuild's read of the old rows.
+**Write cost, measured:** rewriting every row of a 1200-message conversation — what
+`_rebuildConversation` does on the real event path, and F2 leaves in place — costs **+3.0%**
+with this index (27 442 µs → 28 270 µs, measured with only the attachments index for a
+baseline). **Read win, measured:** one whole emission of the newest-120 window on that
+conversation, 4676–5722 µs without the `messages`/`attachments` indexes against 2712–2911 µs
+with them, on an in-memory database where a page read costs nothing. Under SQLCipher the ratio
+is larger, because the pages the scan reads and the index does not are each a decrypt.
+
+**`messages_pinned_by_conversation` on `(conversation_id, message_id) WHERE pinned`.** Partial,
+so it holds a handful of entries rather than one per message and an insert that is not pinned
+writes nothing to it. The catch is that SQLite will only choose a partial index when the
+query's `WHERE` *provably* implies the index's, and a bound `pinned = ?` proves nothing at
+prepare time: with the bound form the planner silently picks the ordering index and does a row
+lookup for every message in the conversation to find the few that are pinned — measured
+*worse* than the scan it replaced (287 µs → 453 µs). Both callers therefore spell the predicate
+as the bare column, and the pins are sorted in Dart, because an `ORDER BY` on the ordering
+columns is by itself enough to make SQLite prefer the index that sorts over the index that
+answers. The plan test is the only thing that can catch either regression.
+
+**`attachments_by_message` on `(message_id)`.** Read by the timeline, but **paid for on the
+write path**, which is the opposite of what an index usually does here. `attachments.message_id`
+is a foreign key into `messages` with `ON DELETE CASCADE`, and `PRAGMA foreign_keys` is on, so
+every write to a `messages` row makes SQLite prove no attachment is orphaned. Without an index
+on the child key that proof is a full scan of `attachments`, once per parent row. Measured on a
+1200-message rewrite: **96 234 µs without it, 27 442 µs with it** — a 71% reduction in the cost
+of the rebuild this change does not otherwise touch. On the larger seed (4800 attachments) the
+whole index set takes that rewrite from 594 078 µs to 83 008 µs.
+
+**`application_events_conversation_apply_state` on `(conversation_id, apply_state)`** and
+**`application_events_sender_counter` on `(sender_device_id, sender_counter)`.** Both are on the
+projector's path, not the timeline's, and both scan the entire event log — the second has no
+conversation to narrow it at all, because a replayed counter is a fact about a device. The
+justification is that their cost is a function of the database rather than of the work, which
+is what the scaling measurement shows (same seeder, only the total event count varying, one
+200-event conversation read):
+
+| Total stored events | candidate events | sender-counter check |
+|---|---|---|
+| 1 000 | 778 µs → 649 µs | 129 µs → 86 µs |
+| 5 000 | 768 µs → 636 µs | 367 µs → 148 µs |
+| 20 000 | 1 207 µs → 613 µs | 1 238 µs → 369 µs |
+| 50 000 | 6 342 µs → 1 494 µs | 9 891 µs → 1 947 µs |
+
+Indexed, both stay flat; unindexed, both grow with everything the device has ever stored. The
+table is append-only, so the write cost is one entry per insert each.
+
+**`outbox_operations_by_event` on `(event_id)`.** Read whenever a message's transport state is
+derived. ADR-061 narrowed this to messages being *created* rather than every message in a
+rebuild, so it is no longer per-row-per-rebuild; it is still a whole-outbox scan each time it
+runs, and the table is small and written a handful of times per send.
+
+**What was measured and deliberately not indexed.** `unsupported_application_events` carries the
+same sender-counter check, and is empty on a client at the current protocol version, so the
+scan it does is free and an index there would be write cost with no measured read benefit.
+`nextEditRevision`'s `MAX(revision)` over `application_events` runs once per edit and measured
+~300 µs; it is not on a hot path. `pending_send_preparations.state`, which ADR-061 listed, is a
+queue whose depth is the number of unsent messages — normally zero to three — so an index on it
+would never pay for itself. The conversation list's own `SCAN conversations` +
+`USE TEMP B-TREE FOR ORDER BY` is left alone: it reads every conversation by construction, and
+sorting a few dozen rows is not what made opening the list slow.
+
+### The migration
+
+Schema 16 → 17, additive and index-only. No table is created, dropped, re-keyed or rewritten.
+The step sits inside the existing `transaction()` wrapper with `StorageMigrationHooks` around
+it, in the stepwise `if (from < N)` style the rest of the file uses, so a fault-injected failure
+still rolls back to exactly the database that was there —
+`local_database_migration_test.dart` covers that on a populated database and asserts that all
+six indexes land and that every row is the row it was.
+
+Each declaration carries `IF NOT EXISTS`, so the same statement serves `createAll` on a fresh
+install and the upgrade step on an existing one, and neither can fail against a database that
+has already seen the other.
+
+**Expected cost on a populated database, stated rather than discovered on a phone.**
+`CREATE INDEX` reads its whole table once. Six of them means two passes over `messages`, two
+over `application_events`, and one each over `attachments` and `outbox_operations` — under
+SQLCipher, where every page read is a decrypt. On the 4800-message seed the three largest took
+1.9 ms, 0.35 ms and 1.1 ms; on a phone with real history the whole step is of the same order as
+the `PRAGMA quick_check` already run at every open, and it is paid once, at the first open after
+the update. The file grows: 1472 → 1731 pages on that seed, **about 18%**.
+
+### What is page-scoped now, and said so
+
+- **In-conversation search** reads the loaded window rather than the whole of the conversation's
+  local history. The filter did not narrow; the list it is given did. A hit outside the window is
+  reached by paging back, and the pinned banner, reply quotes and search results all still jump
+  to a target outside it because `reveal` loads it first. Restoring whole-history search means a
+  repository-side search rather than a filter over a decrypted list, and that is not this change.
+- **The unread divider** is inserted before the first unread message in what is drawn. Unread
+  messages are the newest, so they are in the first page by construction.
+- **`ConversationSummary.pinnedMessageIds`** stays on the summary and is now computed for every
+  conversation in one query rather than one per conversation. The chat page no longer reads it —
+  it reads the page's complete pinned messages, because it needs their text as well as their ids
+  — which leaves the summary field with no production consumer. Removing it would delete the
+  pinned read from `watchConversations` and `readConversation` entirely; it is left in place here
+  because it is part of the summary's contract and this change is already the read path's shape.
+
+### What is explicitly left undone
+
+- **F2, incremental projection.** `_rebuildConversation` still scans facts O(N²) and rewrites
+  every message row in the conversation on the real event path. It is why the echo is still
+  linear, and it is now the largest remaining cost on either path. The `messages` index is paid
+  on every one of those rewrites, measured at +3%; `attachments_by_message` gives back far more
+  than that.
+- **F6**, identity and device-resolution caching.
+- **F8**, `ChatViewModelMapper.messages` mapping the whole list. It now maps the window rather
+  than the history, which is a smaller list for the same code, but it is still every loaded
+  message on every emission.
+- **F9**, `_messageKeys` pruning and the anchor walk. `_messageKeys` still grows for the life of
+  the screen, and now grows a page at a time.
+- **F10**, draft debounce.
+- **The stream still subscribes to `messages` alone.** A change to a reaction, receipt or
+  attachment row that does not also touch a message row does not re-emit. That was true before
+  this change and stays true: on the real event path a rebuild rewrites the message row anyway.
+  Widening the subscription without losing drift's result de-duplication is a separate change.
+- **The window is measured in statements and microseconds, not on a device.** No A56 measurement
+  of opening a long conversation has been taken for this change, and the microsecond figures
+  above are from an in-memory SQLite with no SQLCipher underneath it, so they understate the
+  win rather than overstate it.
 
 ## ADR-061 in full — the message goes on the screen before it goes on the network (2026-08-27)
 

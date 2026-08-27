@@ -57,6 +57,48 @@ Names are conceptual; migrations may refine physical layout without changing own
 | `local_preferences` | Theme and language (`appearance.theme.v1`, `appearance.language.v1`), mute, pin, star, preview policy, the accepted disclosure revision, and whether the notification permission prompt has ever been shown. Client-only display values live here rather than in a plain file so that the logout wipe, which destroys the database key, destroys them too |
 | `quarantine` | Bounded metadata about rejected input; never plaintext or raw secrets |
 
+## Indexes
+
+The schema declared no indexes at all until version 17, so every lookup by a column that was
+not the leading component of a primary key was a full table scan — under SQLCipher, where each
+page read is a decrypt. These six are chosen from `EXPLAIN QUERY PLAN` against a seeded
+database and asserted against the planner in
+`test/features/local_storage/infrastructure/local_database_index_plan_test.dart`, because an
+index the planner never chooses is write cost with no read benefit ([ADR-062](decisions.md)).
+
+| Index | Columns | What it answers |
+|---|---|---|
+| `messages_conversation_ordering` | `messages (conversation_id, ordering_ms, ordering_event_id, message_id)` | Every read of one conversation. Column order follows the timeline's own ordering key, so the same index answers the `WHERE`, satisfies the `ORDER BY` in both directions without a temporary B-tree, and covers the keyset cursor probe |
+| `messages_pinned_by_conversation` | `messages (conversation_id, message_id) WHERE pinned` | The conversation's pins, and every conversation's pins in one query. Partial, so it holds a handful of entries; SQLite will only choose it for a query whose `WHERE` contains the bare term `pinned`, so both callers spell it unbound and neither sorts in SQL |
+| `attachments_by_message` | `attachments (message_id)` | A page's attachments — and, on the write path, the `ON DELETE CASCADE` foreign-key check SQLite runs on **every** write to a `messages` row. Without it that check is a full scan of `attachments` per parent row |
+| `application_events_conversation_apply_state` | `application_events (conversation_id, apply_state)` | The candidate events of one conversation, for a projection rebuild |
+| `application_events_sender_counter` | `application_events (sender_device_id, sender_counter)` | The sender-counter uniqueness check every applied event runs. It has no conversation to narrow it: a replayed counter is a fact about a device |
+| `outbox_operations_by_event` | `outbox_operations (event_id)` | A message's transport state |
+
+`message_reactions` and `receipts` are keyed by `(message_id, ...)`, so their implicit primary-key
+index already serves a lookup by message and no index is added for them.
+`unsupported_application_events` runs the same sender-counter check and is empty on a client at
+the current protocol version, so it is deliberately left unindexed.
+
+## The conversation window
+
+`ConversationRepositoryPort.watchMessages` returns a **bounded page**, not the conversation.
+
+- The window is a range over `(ordering_ms, ordering_event_id, message_id)`: the newest *n*
+  for the first read, and an open-ended range anchored at the oldest loaded message for every
+  read after it. Anchoring at the bottom is what lets a message arriving at the top join the
+  window without displacing the message at the other end of it.
+- Paging backwards resolves the next lower bound by key (`olderMessageCursor`), which reads
+  that page and nothing before it. `OFFSET` is not used: it re-scans what it skips.
+- One emission is a fixed six statements whatever the conversation's length — the page,
+  whether anything older exists, the page's reactions, receipts and attachments as three
+  set-based reads, and the conversation's pins. `test/features/messaging/local_read_cost_test.dart`
+  asserts these as equalities across two conversation lengths.
+- The pins on the page are **complete for the conversation**, not page-scoped, because the
+  surface that lists them also counts them.
+- A jump to a message outside the window (`messageCursor`, then `reveal`) opens the window far
+  enough back to contain it, with a page of context below it.
+
 ## Identity and uniqueness
 
 - `event_id` and logical `message_id` are globally unique random IDs.
@@ -165,6 +207,16 @@ cross-check authorization rather than trusting a server-supplied projection.
   nothing is repaired: every message already on a device either has its outbox rows or has
   reached a terminal state, so there is no send this table would have been holding.
 
+- Schema version 17 creates the six indexes above and does nothing else
+  ([ADR-062](decisions.md)). It is additive: no table is created, dropped, re-keyed or
+  rewritten, and no row moves. Each declaration carries `IF NOT EXISTS`, so the same statement
+  serves `createAll` on a fresh install and the upgrade step on an existing one. It is **not
+  free on a populated database**: `CREATE INDEX` reads its whole table once, so this is two
+  passes over `messages`, two over `application_events` and one each over `attachments` and
+  `outbox_operations`, under SQLCipher where every page read is a decrypt. It is paid once, at
+  the first open after the update, alongside the `PRAGMA quick_check` already run at every
+  open, and the database file grows by roughly 18%.
+
 ## Retention and deletion
 
 - Acked raw envelopes are removed after their logical event and local projection are safe.
@@ -181,8 +233,11 @@ cross-check authorization rather than trusting a server-supplied projection.
 
 The encrypted database **is** the index. `messages` holds the decrypted message
 projection inside SQLCipher, under the Keystore-wrapped key, and a search is a filter
-over rows that are already there; a conversation's stream carries no limit, so an
-in-conversation search covers the whole of that conversation's local history. No separate
+over rows that are already there. Since [ADR-062](decisions.md) a conversation's stream
+carries a window, so an in-conversation search covers that conversation's **loaded** local
+history: the filter still reads every row it is given, and what it is given grows as the user
+pages backwards. A result outside the window is still reachable, because a jump to a message
+loads it first. No separate
 index structure is built: it would hold a second copy of every message body, enlarge what
 a wipe has to reach, and buy nothing at this scale ([ADR-057](decisions.md)). A future Web
 build uses an in-memory index from decrypted session content. Search input and results
