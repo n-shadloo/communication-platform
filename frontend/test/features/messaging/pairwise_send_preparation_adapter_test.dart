@@ -4,6 +4,7 @@ import 'package:communication_platform/core/application/ports/time_source.dart';
 import 'package:communication_platform/core/protocol/application_message_model.dart';
 import 'package:communication_platform/core/result/failure.dart';
 import 'package:communication_platform/core/result/result.dart';
+import 'package:communication_platform/features/devices/application/owed_device_log_gossip.dart';
 import 'package:communication_platform/features/messaging/infrastructure/pairwise_send_preparation_adapter.dart';
 import 'package:communication_platform/features/pairwise/application/pairwise_fanout_coordinator.dart';
 import 'package:communication_platform/features/pairwise/application/ports/pairwise_orchestration_ports.dart';
@@ -33,9 +34,8 @@ void main() {
 
   PairwiseSendPreparationAdapter adapterOver(
     PairwiseTransportStore store,
-    List<String> gossiped, {
-    bool gossipThrows = false,
-  }) => PairwiseSendPreparationAdapter(
+    OwedDeviceLogGossip owed,
+  ) => PairwiseSendPreparationAdapter(
     PairwiseFanoutCoordinator(
       store: store,
       liveDevices: _UnusedLiveDevices(),
@@ -43,15 +43,24 @@ void main() {
       crypto: _UnusedCrypto(),
       clock: const _Clock(),
     ),
-    afterSuccessfulQueue: (peerUserId) async {
+    onPreparedForPeer: owed.owe,
+  );
+
+  OwedDeviceLogGossip ledgerOver(
+    List<String> gossiped, {
+    bool gossipThrows = false,
+  }) => OwedDeviceLogGossip(
+    advertise: (peerUserId) async {
       gossiped.add(peerUserId);
       if (gossipThrows) {
         throw StateError('gossip');
       }
+      return const Result.success(null);
     },
+    clock: const _Clock(),
   );
 
-  test('an already queued send settles and still gossips', () async {
+  test('an already queued send settles and still owes gossip', () async {
     final store = _ExistingOperationStore(
       DurablePairwiseOperation(
         operationId: 'application:$eventIdHex',
@@ -68,12 +77,54 @@ void main() {
       ),
     );
     final gossiped = <String>[];
+    final ledger = ledgerOver(gossiped);
 
-    final result = await adapterOver(store, gossiped).prepare(owed());
+    final result = await adapterOver(store, ledger).prepare(owed());
 
+    // The debt is recorded and nothing more. Awaiting the round here is what
+    // used to put a second fan-out between a sealed envelope and its POST.
     expect(result, isA<Success<void>>());
     expect(store.settled, ['application:$eventIdHex']);
+    expect(gossiped, isEmpty);
+    expect(ledger.owed, {_peerUserId});
+
+    await ledger.settle();
+
     expect(gossiped, [_peerUserId]);
+    expect(ledger.owed, isEmpty);
+  });
+
+  test('the envelope is postable before gossip runs', () async {
+    final store = _ExistingOperationStore(
+      DurablePairwiseOperation(
+        operationId: 'application:$eventIdHex',
+        eventId: eventIdHex,
+        currentDeviceId: _currentDeviceId,
+        openedLocalPayload: payload,
+        targets: [
+          DurablePairwiseTarget(
+            recipientUserId: _peerUserId,
+            recipientDeviceId: _peerDeviceId,
+            exactCiphertext: Uint8List(1024),
+          ),
+        ],
+      ),
+    );
+    final order = <String>[];
+    final ledger = OwedDeviceLogGossip(
+      advertise: (peerUserId) async {
+        await Future<void>.delayed(Duration.zero);
+        order.add('gossip');
+        return const Result.success(null);
+      },
+      clock: const _Clock(),
+    );
+
+    await adapterOver(store, ledger).prepare(owed());
+    order.add('prepared');
+    await ledger.settle();
+
+    expect(order, ['prepared', 'gossip']);
   });
 
   test('gossip failing is never the send failing', () async {
@@ -93,22 +144,27 @@ void main() {
       ),
     );
 
-    final result = await adapterOver(
-      store,
-      <String>[],
-      gossipThrows: true,
-    ).prepare(owed());
+    final ledger = ledgerOver(<String>[], gossipThrows: true);
 
+    final result = await adapterOver(store, ledger).prepare(owed());
+    await ledger.settle();
+
+    // Structurally, not by a swallowed catch on the send path: `prepare` has
+    // already returned by the time anything gossips, and there is no value for
+    // it to have observed.
     expect(result, isA<Success<void>>());
+    expect(ledger.owed, isEmpty);
   });
 
-  test('a preparation that fails never reaches gossip', () async {
+  test('a preparation that fails owes nothing', () async {
     final gossiped = <String>[];
+    final ledger = ledgerOver(gossiped);
 
     final result = await adapterOver(
       _UnreadableStore(),
-      gossiped,
+      ledger,
     ).prepare(owed());
+    await ledger.settle();
 
     expect(result, isA<FailureResult<void>>());
     expect(gossiped, isEmpty);

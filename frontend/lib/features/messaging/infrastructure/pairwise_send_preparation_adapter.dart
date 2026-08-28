@@ -11,22 +11,32 @@ import 'package:communication_platform/features/synchronization/domain/sync_mode
 /// claim when a session had to be started, and one ratchet step per recipient
 /// device. None of it is faster now — it simply no longer happens while
 /// somebody is waiting for a bubble to appear.
+///
+/// What it no longer does is anything after that. This returns the moment the
+/// send's own ciphertext is durable, so the outbox pass that follows carries it
+/// to the wire without a second fan-out in front of it.
 final class PairwiseSendPreparationAdapter implements SendPreparationPort {
   const PairwiseSendPreparationAdapter(
     this.coordinator, {
-    this.afterSuccessfulQueue,
+    this.onPreparedForPeer,
   });
 
   final PairwiseFanoutCoordinator coordinator;
 
-  /// Device-log gossip, which the send path used to await.
+  /// Records that this peer is now owed device-log gossip.
   ///
-  /// It moved here with the rest of the fan-out rather than being dropped: it
-  /// is owed to the peer whenever this device sends to them, and it is a fan-out
-  /// of its own, with its own device lookup and its own ratchet steps. A failure
-  /// is not the send's failure — the message is sealed and queued by the time
-  /// this runs, and gossip is caught up by the next send to the same peer.
-  final Future<void> Function(String peerUserId)? afterSuccessfulQueue;
+  /// It used to be `Future<void> Function(String)`, and it used to be awaited
+  /// here — which meant a whole second fan-out, with its own device lookups and
+  /// its own ratchet steps, ran between a sealed envelope and its `POST`.
+  /// Gossip is owed to a peer, not to this message, and ADR-060's rule is that
+  /// a delivery cycle sends the user's message before it does anything on
+  /// anybody else's behalf.
+  ///
+  /// The return type is the guarantee. There is no future to await, no result
+  /// to inspect and no path from a gossip failure back to a preparation whose
+  /// ciphertext is already durable, so what a swallowed `try`/`catch` and a
+  /// comment used to promise is now a property of the signature.
+  final void Function(String peerUserId)? onPreparedForPeer;
 
   @override
   Future<Result<void>> prepare(PendingSendPreparation preparation) async {
@@ -42,13 +52,7 @@ final class PairwiseSendPreparationAdapter implements SendPreparationPort {
     if (prepared case FailureResult(failure: final failure)) {
       return Result.failure(failure);
     }
-    try {
-      await afterSuccessfulQueue?.call(preparation.peerUserId);
-    } on Object {
-      // Deliberately swallowed, and deliberately not retried here. Gossip is
-      // owed to a peer, not to this message, and reporting it would retire or
-      // re-arm a preparation whose ciphertext is already durable.
-    }
+    onPreparedForPeer?.call(preparation.peerUserId);
     return const Result.success(null);
   }
 }

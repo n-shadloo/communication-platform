@@ -6,10 +6,12 @@ import 'package:communication_platform/core/protocol/application_message_model.d
 import 'package:communication_platform/core/protocol/device_control_model.dart';
 import 'package:communication_platform/core/result/failure.dart';
 import 'package:communication_platform/core/result/result.dart';
+import 'package:communication_platform/features/devices/application/owed_device_log_gossip.dart';
 import 'package:communication_platform/features/devices/application/ports/linked_device_ports.dart';
 import 'package:communication_platform/features/devices/domain/linked_device_model.dart';
 import 'package:communication_platform/features/local_storage/infrastructure/database/local_database.dart';
 import 'package:communication_platform/features/pairwise/application/pairwise_fanout_coordinator.dart';
+import 'package:communication_platform/features/synchronization/application/ports/sync_ports.dart';
 import 'package:drift/drift.dart';
 
 /// Sends authenticated device-log heads inside ordinary hybrid pairwise
@@ -96,4 +98,29 @@ LIMIT 32
       onFailure: Result.failure,
     );
   }
+}
+
+/// Pays the device-log advertisements this cycle's sends owed.
+///
+/// It runs where the delivery cycle already runs work it owes rather than work
+/// somebody is waiting for, and that position is load-bearing twice over.
+///
+/// It is **after the first outbox pass**, which is the rule ADR-060 states: a
+/// cycle sends the user's message before it does anything on anybody else's
+/// behalf. Gossip used to sit in front of that, awaited by the preparation that
+/// discovered the debt.
+///
+/// It is also **after the inbox has committed**, which makes the advertisement
+/// better rather than merely later. The inbound half of a cycle is exactly what
+/// can advance a device-log head, so gossip run here advertises the heads this
+/// cycle just learned instead of the ones it started with. The rows it queues
+/// are sealed by the second preparation pass and leave on the second outbox
+/// pass, in the same cycle.
+final class DeviceLogGossipPostInboxWork implements PostInboxCommitWorkPort {
+  const DeviceLogGossipPostInboxWork(this.owed);
+
+  final OwedDeviceLogGossip owed;
+
+  @override
+  Future<void> run() => owed.settle();
 }

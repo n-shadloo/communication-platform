@@ -5,6 +5,8 @@ import 'package:communication_platform/app/dependencies/group_providers.dart';
 import 'package:communication_platform/app/dependencies/linked_device_providers.dart';
 import 'package:communication_platform/app/dependencies/local_storage_providers.dart';
 import 'package:communication_platform/app/dependencies/messaging_providers.dart';
+import 'package:communication_platform/features/devices/application/owed_device_log_gossip.dart';
+import 'package:communication_platform/features/devices/infrastructure/device_log_gossip_coordinator.dart';
 import 'package:communication_platform/features/groups/application/group_key_package_maintenance_service.dart';
 import 'package:communication_platform/features/groups/application/group_mls_inbound_coordinator.dart';
 import 'package:communication_platform/features/groups/application/group_outbound_dispatcher.dart';
@@ -127,6 +129,13 @@ final durableSyncEngineProvider =
           deviceId: scope.deviceId,
         )).future,
       );
+      // What the cycle owes its peers, kept apart from what it owes this
+      // device's own messages. A preparation records a debt here and returns;
+      // the debt is paid below, after the outbox pass that carried the message.
+      final owedGossip = OwedDeviceLogGossip(
+        advertise: gossip.queueForUser,
+        clock: ref.watch(timeSourceProvider),
+      );
       return DurableSyncEngine(
         store: store,
         remote: DioSyncRemotePort(ref.watch(authenticatedRestClientProvider)),
@@ -142,7 +151,7 @@ final durableSyncEngineProvider =
               deviceId: scope.deviceId,
             )).future,
           ),
-          afterSuccessfulQueue: gossip.queueForUser,
+          onPreparedForPeer: owedGossip.owe,
         ),
         postInboxCommitWork: _CompositePostInboxWork([
           if (groupKeyPackageMaintenance != null)
@@ -181,6 +190,9 @@ final durableSyncEngineProvider =
             ),
           ),
           HistoryTransferPostInboxWork(historyTransfer),
+          // Last, so that nothing this device owes somebody else can stand in
+          // front of work it owes itself.
+          DeviceLogGossipPostInboxWork(owedGossip),
         ]),
       );
     });

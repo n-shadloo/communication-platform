@@ -3,6 +3,7 @@ import 'package:communication_platform/app/dependencies/core_providers.dart';
 import 'package:communication_platform/app/dependencies/local_storage_providers.dart';
 import 'package:communication_platform/features/contacts/application/client_authentication_service.dart';
 import 'package:communication_platform/features/contacts/application/contact_services.dart';
+import 'package:communication_platform/features/contacts/application/peer_resolution_cache.dart';
 import 'package:communication_platform/features/contacts/application/ports/contact_ports.dart';
 import 'package:communication_platform/features/contacts/domain/contact_model.dart';
 import 'package:communication_platform/features/contacts/infrastructure/dio_contact_repository.dart';
@@ -83,13 +84,32 @@ final directoryServiceProvider = FutureProvider<DirectoryService>((ref) async {
   );
 });
 
+/// One short-lived, process-local memory of what the server said about a peer.
+///
+/// It is a `Provider` on the root container, so every resolver in the composed
+/// application — the send fan-out, the prekey claim, device-log gossip — asks
+/// through the same instance and a delivery cycle stops paying for the same
+/// answer two to four times. It holds nothing durable, on purpose: a cache that
+/// outlives the process is a cache that can outlive a revocation it never saw.
+final peerResolutionCacheProvider = Provider<PeerIdentityRoundTripCache>(
+  (ref) => PeerIdentityRoundTripCache(
+    remote: ref.watch(contactRemoteProvider),
+    clock: ref.watch(timeSourceProvider),
+  ),
+);
+
 final peerAuthenticationServiceProvider =
     FutureProvider<ClientAuthenticationService>((ref) async {
       final local = await ref.watch(contactLocalProvider.future);
+      final cache = ref.watch(peerResolutionCacheProvider);
       return ClientAuthenticationService(
-        remote: ref.watch(contactRemoteProvider),
+        // The cache decorates the remote port rather than the service, so the
+        // service's verification is in front of every answer it is handed and
+        // a hit is a shorter path to the same verdict, never a way past one.
+        remote: cache,
         local: local,
         crypto: ref.watch(identityCryptoProvider),
+        resolutionCache: cache,
       );
     });
 

@@ -20,21 +20,40 @@ final class ClientAuthenticationService
     required this.remote,
     required this.local,
     required this.crypto,
+    this.resolutionCache = const NoPeerResolutionCache(),
   });
 
   final PeerIdentityRemotePort remote;
   final ContactLocalPort local;
   final IdentityCryptoPort crypto;
 
+  /// Which of this service's entry points may be served a remembered server
+  /// answer, decided here because this is where that is known.
+  ///
+  /// [refreshPeer] and [confirmOutOfBand] may not. Both exist to answer the
+  /// question *is this device's idea of that peer still right* — one is asked
+  /// by a person looking at a safety number, the other by the delivery cycle
+  /// acting on a `stale_devices` response — and a cache is the one thing that
+  /// cannot answer it. They run under [PeerResolutionCachePort.live], which
+  /// forgets the peer and keeps it forgotten for the whole resolution.
+  ///
+  /// [resolveLiveDevices] and [refreshPeerForDevices] may, because they are the
+  /// fan-out asking the same question of the same peer two to four times inside
+  /// one cycle. Nothing they verify is skipped by a hit; only the round trip is.
+  final PeerResolutionCachePort resolutionCache;
+
   @override
   Future<Result<AuthenticatedPeer>> refreshPeer({
     required String userId,
     required bool requirePrekeys,
-  }) => _refresh(
-    userId: userId,
-    requirePrekeys: requirePrekeys,
-    claimDeviceIds: null,
-    allowMasterReplacement: false,
+  }) => resolutionCache.live(
+    userId,
+    () => _refresh(
+      userId: userId,
+      requirePrekeys: requirePrekeys,
+      claimDeviceIds: null,
+      allowMasterReplacement: false,
+    ),
   );
 
   @override
@@ -398,6 +417,15 @@ final class ClientAuthenticationService
 
   @override
   Future<Result<ContactTrustRecord>> confirmOutOfBand({
+    required String userId,
+    required Uint8List exactMasterPublic,
+  }) => resolutionCache.live(
+    userId,
+    () =>
+        _confirmOutOfBand(userId: userId, exactMasterPublic: exactMasterPublic),
+  );
+
+  Future<Result<ContactTrustRecord>> _confirmOutOfBand({
     required String userId,
     required Uint8List exactMasterPublic,
   }) async {
