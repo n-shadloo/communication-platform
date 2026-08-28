@@ -379,7 +379,9 @@ rooms pinned at top. The primary hub.
 - Last-message preview (decrypted locally).
 - Timestamp of last activity.
 - Unread count badge.
-- Mute icon if muted.
+- Mute icon if muted. A mute that expires while the list is on screen clears the icon at the
+  moment it expires ([ADR-064](decisions.md)) — the row is not left claiming a mute that has
+  ended until something else happens to redraw it.
 - Pin marker if pinned.
 - Optional delivery/read state on the last outgoing message.
 
@@ -485,6 +487,14 @@ second copy of every message body ([ADR-057](decisions.md)).
      of it).
    - When replying/editing, a **context strip** above the input shows the quoted/edited
      message with a cancel (×).
+   - **Draft.** An unsent draft is kept per conversation and restored when it is reopened.
+     It is written down on a short trailing pause rather than on every character
+     ([ADR-064](decisions.md)), and it is written down *immediately* on every way out of the
+     composer: losing focus, leaving the screen, the application leaving the foreground, and
+     sending. So a draft is never lost by backgrounding or by leaving, and sending never
+     leaves the sent text behind as a draft. What is on screen is always the draft; the
+     debounce is about when storage catches up, and nothing the user can do reads the stored
+     copy back over what they are typing.
 
 **Message interactions.** A **single tap** or a right-click opens the context menu with the
 **reaction selector** floating above it, anchored to the message. A **double tap** sets 👍

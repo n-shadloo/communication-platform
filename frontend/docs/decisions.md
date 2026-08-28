@@ -74,6 +74,279 @@ is not silently edited out of history.
 | ADR-061 | Accepted | A message is committed and drawn before any network call is made, the fan-out that seals it becomes a durable request the delivery cycle owes, and an outbox attempt transition writes one row instead of re-projecting the conversation (2026-08-27) | Sending a DM rendered its own bubble in over three seconds, and the wait was two authenticated device lookups, a prekey claim and one ratchet step per recipient, all in front of the local commit that makes the message visible. The commit is now first and the fan-out is a row in `pending_send_preparations` (schema 15 -> 16) that the delivery cycle drains before the outbox. Separately, every attempt transition ran `_rebuildConversation`: measured at **195 statements** in a 61-message conversation, three times per send, to move one integer on one message. `messages.status` becomes a column the rebuild carries through rather than re-derives, on the `alerted`/`starred`/`delivered_receipt_sent` precedent, and the transitions now cost **7** and **4** statements. `MessageTransportState.preparing` makes the timeline's existing `encrypting` state reachable, and a retry re-arms the failed operation instead of writing a second message. |
 | ADR-062 | Accepted | The conversation timeline reads a bounded, cursor-anchored window instead of its whole history, its three per-message queries become three set-based ones, and the schema gains its first six indexes (2026-08-27) | Opening a conversation cost what had been said in it. `watchMessages` had no `LIMIT` and ran a reactions, a receipts and an attachments query for **every** message on **every** emission: measured at **3601 statements** for one emission of a 1200-message conversation, against **6** now, equal at eight messages and at twelve hundred. `watchConversations` had the same shape one level up and is now two statements rather than one per conversation. The window is a keyset range anchored at the oldest loaded message rather than a count from the newest, so a message arriving cannot push the line the reader is on out of the other end, and `OFFSET` is rejected because it re-scans what it skips. Separately, the schema declared 43 tables and **zero** indexes, so every lookup by a non-leading key column was a full scan under SQLCipher: six indexes (schema 16 -> 17, additive, no table dropped or re-keyed) chosen from `EXPLAIN QUERY PLAN` and asserted against the planner, including a partial index for pins that only works because both callers spell the predicate unbound, and a foreign-key child index on `attachments` that takes one rebuild of a 1200-message conversation from 96 ms to 27 ms. `LoadOlderMessagesIntent` and the three hardcoded pagination fields become real, and a jump to a message outside the window loads it instead of doing nothing. |
 | ADR-063 | Accepted | Applying an application event re-folds only the messages that event is a fact about, and the full rebuild becomes the recovery path it always was (2026-08-27) | The last and largest term ADR-061 and ADR-062 left behind: every authenticated event re-projected its whole conversation from the whole event log, so the cost of *receiving* anything was set by how long the conversation was — worst for an inbound receipt, which is one event per batch of messages. Measured end to end, one such rebuild of a 1200-message conversation is **6556 statements and 283 ms**; applying one event now costs **14-16 statements and about 1.1 ms**, equal at 48 messages and at 1200, and a receipt covering thirty-two messages costs thirty-two folds rather than twelve hundred. A new derived-state table, `application_event_targets` (schema 17 -> 18, additive, back-filled), gives the projector the direction the log lacks: which facts a message has. The fold is spelled `CROSS JOIN` because the ordinary form is the same statement count and a linear number of rows, visible only in `EXPLAIN QUERY PLAN`. Conversation aggregates get one definition both paths call, plus a covering partial index for the unread count. The rebuild is kept, made publicly reachable, and deliberately left folding each message against the whole fact set, because it is the oracle a differential equivalence test compares against and it must not come to share the incremental path's idea of which facts belong to which message. |
+| ADR-064 | Accepted | A rebuild re-derives the messages that changed and redraws the rows that changed, the reading anchor comes from the rows that are mounted, and a keystroke costs a timer instead of a database write and a page rebuild (2026-08-28) | The last three terms ADR-061, ADR-062 and ADR-063 left behind, all of them on the main isolate. Measured on the A56 in a 219-message conversation with the whole thing drawn: typing goes from **5.25 ms median / 8.13 p90 / 9.89 worst** of build time per frame to **2.33 / 3.76 / 6.57**, and produces 38 frames for thirty characters where it produced 55, because the page is no longer one of the things that rebuild; a message arriving goes from **1.77 / 5.02 / 7.49** to **0.82 / 3.23 / 5.97**. On the host, where a long conversation could be driven, the frame that draws an arrival went from 36.7 ms median at 1200 messages (19.7 at 48) to 10.9 (13.7 at 48), and a keystroke from 32.7 (16.8 at 48) to 4.0 (5.1 at 48) — before, both roughly doubled with conversation length; after, neither grows. `ChatMessageProjection` returns the identical view model for every message whose row cannot have changed, keyed on the whole `ConversationMessage` plus the positional inputs grouping and reply quotes actually depend on, so one arrival derives **2** elements and one reaction **1**, equal at a 48-message window and a 240-message one, against the whole window on every emission before; the timeline retains the built row behind it, so `Element.updateChild` skips it outright, and every row is keyed with a `findChildIndexCallback` so an arrival relocates elements instead of re-parenting a `GlobalKey` per row. `_messageKeys` becomes a registry of *mounted* rows — bounded by construction, and always the only set an anchor could come from — and the anchor is captured in `didUpdateWidget`, in `didChangeDependencies` and at scroll end, rather than additionally on every build and every scroll tick. The draft is debounced 500 ms and flushed on blur, route pop, leaving `resumed`, dispose and send, and the cascade that made a keystroke rebuild the page is cut in the provider layer — the draft becomes a one-shot read, typing narrows to a boolean through `select`, and the forward targets become a callback — because the draft must keep living in the `conversations` row. Also: `DateTime.now()` leaves `build` for a clock refreshed exactly when the earliest mute on screen expires, a jump no longer has its own scroll cancelled by the reading anchor it was leaving, and a jump to a target already inside the drawn range asks for the frame nothing else was going to schedule. Schema stays at 18; no repository, projector, outbox, sync-engine or backend file is touched. |
+
+## ADR-064 in full — the chat screen costs what changed on it (2026-08-28)
+
+**Status:** Accepted. Client-side cost decision, entirely in the presentation and provider
+layers. **The local schema stays at 18**: no migration, no table, no column, no index. Changes
+no repository, no projector, no outbox, no delivery cycle, no cryptographic construction, no
+protocol, no wire format and no backend file. **Opens no production gate.**
+
+### The question
+
+> ADR-061 made the write path cheap, ADR-062 made the read path cheap, and ADR-063 made
+> applying an event cost the event rather than the conversation. Every term those three left
+> is on the main isolate, in the widget layer. What does one thing happening — a message
+> arriving, a reaction landing, a character typed — cost the screen, and what is the smallest
+> set of changes that makes that cost a property of the change rather than of the conversation
+> it happened in?
+
+Three of them, named F8, F9 and F10 by the original RCA:
+
+- **F8.** `ChatViewModelMapper.messages` re-derived the *whole loaded window* on every
+  rebuild, twice — once for the timeline and once for the pins — and handed back a freshly
+  allocated view model for every message whether or not anything about it had changed. The
+  timeline follows the identity of those objects, so one receipt landing cost the window
+  twice: once to derive it and once to redraw it. `ChatViewModelMapper.summaries` was called
+  again on every build of the *chat* page, over every conversation on the device, to fill a
+  forward sheet almost every build never opens — with `DateTime.now()` read inside `build`.
+- **F9.** `_messageKeys` held a `GlobalKey` for every message ever drawn and was never pruned,
+  and `_captureReadingAnchor` walked all of it, calling `findRenderObject()` and
+  `localToGlobal()` per entry — synchronously in `didUpdateWidget`, in
+  `didChangeDependencies`, at the top of every `_timeline()` build, and once per frame for as
+  long as anybody was scrolling.
+- **F10.** Every keystroke called `setState` and dispatched `SaveDraftIntent`, which wrote the
+  `conversations` row, which invalidated `conversationSummariesProvider`, which the chat page
+  watched, which rebuilt the page, which re-ran both of F8's mapper calls. Typing twenty
+  characters did that twenty times.
+
+### D1. The page is re-derived where it changed, and nowhere else
+
+`ChatMessageProjection` holds the last page it mapped and returns the **same view model
+instance** for every message whose projection cannot have changed. It is owned by
+`_ProjectedConversationPageState` — one for the window, one for the pins — so it lives exactly
+as long as the open conversation, which is what makes it worth anything: the page it is handed
+on the next emission is mostly the page it was handed on this one.
+
+**Mapping bound to the widget's sub-window was rejected.** It would have inverted the layering
+— the page would have to know `_visibleMessageCount`, which the widget owns and grows through
+the `_loadOlder` handshake — and it would have saved the smaller half of the cost. The
+expensive half is not the derivation, it is the *identity churn*: `Element.updateChild` skips a
+child whose new widget is the one it already holds, so a stable view model is the difference
+between rebuilding two rows and rebuilding every row on screen.
+
+**The memo key is "is this the same row", not "does the view model read this".**
+`_sameMessage` compares every field of `ConversationMessage`, including the ones the view model
+does not read today, because the question it answers stays true when somebody adds a field and
+starts drawing it. Positional inputs are compared separately and exactly:
+`groupedWithPrevious`, `groupedWithNext`, and the reply target's author and text — grouping is
+`_grouped(previous, message)`, so a message whose *neighbour* changed must be re-derived, and a
+quote is re-read from its target, so an edit to the target must invalidate the quote that shows
+it. Getting this wrong in the permissive direction is the one failure that would be silent, so
+attachments, whose descriptors have no value equality, are compared by capability and a list
+that cannot be matched that way is reported as **changed** rather than as equal.
+
+The cache is bounded by construction: an entry exists only for a message the page still names.
+Pruning is a rebuild of the map, and it runs only when the entry count no longer matches the
+page's — so the ordinary emission, one more message at the newest end, does not pay for it.
+
+### D2. The timeline reuses the row, not just the view model
+
+A stable view model is only worth something if the widget built from it is stable too, so
+`_rowWidget` retains the built row and hands the identical instance back when neither the
+message nor its highlight moved. Two generations of that cache are live at once and the older
+is dropped whole, because rows are built during **layout** as well as during build — a scroll
+materialises children without the adapter rebuilding at all — so the generation rolls on size
+rather than on frames.
+
+Every row now carries a key, and the list is given a `findChildIndexCallback`. This is what
+makes an arrival cheap in a reversed viewport: a message at the newest end shifts every index
+by one, and without the callback every keyed child whose index moved would be discarded and
+rebuilt. That relocation is exactly what the `GlobalKey` per message used to buy, at the price
+of a re-parent per row per arrival — which is why the keys could go and the behaviour could
+stay. Date headings are keyed by the message they sit above rather than by the day they name,
+because a skewed timestamp can put the same day on both sides of another one and two rows
+sharing a key is a crash rather than a wrong heading.
+
+Two smaller terms went with it. The drawn range's rows are rebuilt only when that range
+actually changed, decided by a walk of object identities rather than by re-deriving separators
+and days for a window that may hold the whole conversation; and the day a message belongs to is
+compared as an integer, so a `DateTime` — and the timezone conversion inside it — is
+constructed once per heading instead of once per message.
+
+### D3. The chat page stops subscribing to what it does not draw
+
+- **The draft is read once.** `conversationDraftProvider` is a one-shot read of the
+  conversation row, not a slice of the summaries stream. A draft is an *initial value for a
+  field the user is about to own*, and the field is what writes it — subscribing put the
+  composer's own keystrokes on a path back to the page around it. The composer adopts a draft
+  that lands after its first build, but only into a field that is still untouched and still
+  empty, which is what makes the one-shot read safe and also closes a hole that was already
+  there: before this, a stored draft that arrived after the composer's `initState` was simply
+  never restored.
+- **Typing is narrowed to a boolean.** `typingProjectionsProvider` is watched through a
+  `select` for whether *anybody* is typing, which is all the header draws. The list is rebuilt
+  on every heartbeat and its identity changes with it; the answer does not.
+- **The forward targets are a callback.** They are resolved when the sheet opens. The summaries
+  stream is still subscribed — through `listenManual`, so the sheet is instant — but it is no
+  longer *watched*, so a draft write cannot rebuild the page. That distinction is the whole of
+  F10's cascade: `watchConversations` re-emits on a draft write and `watchMessages` does not,
+  which `chat_render_cost_test.dart` asserts directly.
+- **`DateTime.now()` leaves `build`.** The conversation list holds its reading of the clock in
+  its `State` and refreshes it on a schedule it can state: exactly when the earliest mute on
+  screen expires, and never otherwise. A list with nothing muted holds no timer at all. The
+  forward sheet reads the clock when it opens, which is not a build.
+
+The conversation list's search field went the same way as the Send button: the query lives in
+the controller and only the results listen to it, so typing in it no longer re-maps every
+conversation on the device to filter a list that has not changed.
+
+### D4. The anchor comes from the rows that exist
+
+`_messageKeys` is replaced by a registry of **mounted** rows. A row registers itself for as
+long as its element lives, which bounds the set by what the viewport and its cache extent hold
+— and it was always the only set an anchor could have come from, because an unmounted row has
+no render object to measure. The jump path, which read the same map and is not obvious from its
+name, is unchanged in behaviour for the same reason: a row that is not mounted had no
+`currentContext` either.
+
+**The anchor is captured when it is about to be used.** The build-time capture is gone. The
+per-scroll-tick capture is gone: the standing anchor exists for one consumer — a row that
+changes size after the fact, which arrives as a notification once the new layout has already
+happened and so cannot capture its own "before" — and while the reader is scrolling, the
+position is theirs and a correction computed against a reading taken before the gesture would
+fight them. So the standing anchor is dropped on `ScrollStartNotification` and taken again on
+`ScrollEndNotification`, and never while the viewport is moving.
+
+Two behaviours were found and fixed while proving this. A jump now **drops** the anchor rather
+than restoring it: the anchor captured a moment earlier describes a line the reader has just
+asked to leave, and a row materialising during the scroll reports its size, and the correction
+answering that report cancelled the jump. And `_jumpIfRequested` now asks for the frame it
+needs — a jump to a target that is already loaded and already inside the drawn range changes no
+state at all, so nothing scheduled the frame its scroll was waiting for, and the tap did
+nothing. Its landing estimate is the drawn range's own average row height rather than a
+constant `88.0`, and the `ensureVisible` that finishes the job runs once the scroll has
+settled rather than while it is still running.
+
+### D5. A keystroke costs a timer
+
+`_onTextChanged` cancels and re-arms a 500 ms timer. Nothing else. The Send button follows the
+text through a `ValueListenableBuilder` on the controller, so the only thing that rebuilds when
+a character lands is the button.
+
+**The flush contract is the dangerous half, and it is explicit.** A draft written half a second
+late is fine; a draft whose last four characters are lost because the user switched
+applications is worse than the writes the debounce removed. So the draft is written down
+immediately on **every** exit from the composer:
+
+| Trigger | Where |
+|---|---|
+| The composer loses focus | a listener on the `FocusNode` |
+| The route pops | `PopScope.onPopInvokedWithResult`, on the `didPop` branch |
+| The application leaves `resumed` | `WidgetsBindingObserver.didChangeAppLifecycleState` |
+| The composer is disposed | `dispose`, before the controller goes |
+| The message is sent | `_submit`, after the field is cleared |
+
+A flush with nothing new to say writes nothing — the composer remembers what storage is holding
+— which is what makes it safe to call from five places that all happen at once when somebody
+swipes back out of a conversation. Sending flushes rather than waiting, because a conversation
+reopened inside that half second would have shown the sent message back as an unsent draft.
+
+The draft still lives in the `conversations` row. Nothing below the presentation layer moved.
+
+### What it cost, measured
+
+**On the A56 (SM-A566B, Android 16), in a Saved Messages conversation of 219 messages with the
+whole conversation drawn.** Build 19 is the tree before this change and build 20 the tree
+after, both instrumented with a temporary `FrameTiming` logger and otherwise identical signed
+beta artifacts; the instrumentation is not in the committed tree. Milliseconds, from
+`FrameTiming.buildDuration` and `rasterDuration`. Frame budget is 16.7 ms.
+
+| | frames | build p50 | build p90 | build worst | raster p50 | raster p90 | raster worst |
+|---|---|---|---|---|---|---|---|
+| Scrolling, before | 1950 | 0.58 | 2.02 | 3.69 | 2.39 | 2.90 | 21.94 |
+| Scrolling, after | 1910 | 0.57 | 2.05 | 4.45 | 2.26 | 2.87 | 23.25 |
+| Typing, before | 55 | 5.25 | 8.13 | 9.89 | 2.14 | 5.17 | 8.42 |
+| Typing, after | 38 | **2.33** | **3.76** | **6.57** | 4.18 | 7.97 | 10.43 |
+| A message arriving, before | 186 | 1.77 | 5.02 | 7.49 | 1.51 | 3.17 | 11.71 |
+| A message arriving, after | 169 | **0.82** | **3.23** | **5.97** | 1.56 | 3.21 | 9.12 |
+
+Typing thirty characters costs less than half the build time it did, and produces 38 frames
+where it produced 55 — the page is no longer among the things that rebuild. A message arriving
+halves again. **Scrolling is unchanged**, and that is the honest result: at 219 messages the
+anchor walk was already small, so F9's saving is structural rather than visible at this length,
+and the worst raster frame (~22 ms, one frame in nineteen hundred) is the same in both builds
+and is not attributable to this change. Raster while typing reads *higher* after, which is
+noise from different content being on screen in the two runs — the widget tree a row paints is
+untouched by this decision.
+
+**On the host**, from a temporary harness under `flutter test` (JIT, and with no rasterizer, so
+these are build-plus-layout-plus-paint wall times and not device figures), timing the frame
+that draws the change in a conversation whose whole window is drawn:
+
+| | 48 messages | 1200 messages |
+|---|---|---|
+| A message arriving, before | 19.68 median / 27.90 worst | 36.71 / **46.88** |
+| A message arriving, after | 13.71 / 18.18 | **10.93** / 18.78 |
+| A keystroke, before | 16.84 / 24.72 | 32.72 / **34.86** |
+| A keystroke, after | 5.08 / 13.04 | **3.95** / 6.46 |
+
+Before, both roughly doubled between 48 messages and 1200. After, neither grows — the 1200
+column is *faster* than the 48 column, which is JIT warm-up rather than a real ordering. That
+is the property this phase existed to establish: the frame is a cost of the change, not of the
+conversation. Deriving the same 1200-message page fell from 0.25 ms to 0.03 ms.
+
+`chat_render_cost_test.dart` asserts the shape of it rather than the timings, as *equalities
+across two window sizes* in the discipline ADR-061, ADR-062 and ADR-063 established:
+
+| Applying one … | 48-message window | 240-message window |
+|---|---|---|
+| message arriving — elements derived | 2 | **2** |
+| message arriving — page rebuilds | 1 | **1** |
+| reaction — elements derived | 1 | **1** |
+| keystroke — elements derived | 0 | **0** |
+| keystroke — page rebuilds | 0 | **0** |
+| *(control)* one emission with nothing to compare against | 48 | **240** |
+
+The control row is what this page did on every emission before.
+
+### Correctness
+
+Four new obligations, beyond the existing suites staying green with their goldens unchanged:
+
+- **`chat_render_cost_test.dart`** drives the real repository, the real window and the real
+  conversation view against a real database, and asserts the counts above — plus, at the
+  provider level, that a draft write re-emits the conversation list and does **not** re-emit
+  the open conversation. That is the cascade named exactly: it is why the page may subscribe to
+  the summaries and may not watch them.
+- **`chat_draft_durability_test.dart`** drives every flush trigger in the table above, proves a
+  burst of typing is one write rather than one per character, proves a settled draft is not
+  written again for having been looked at, and proves that a draft arriving late is adopted
+  into an untouched field and refused by a field the user has since typed into.
+- **`chat_pagination_test.dart`** gains a bound — the anchor registry and the retained rows
+  stay small while a 300-message conversation is scrolled end to end — and proves a jump still
+  resolves a target whose rows have been evicted.
+- **The reading line** is now asserted for both directions it can move: an older page arriving
+  (which it already covered) and a message arriving at the newest end while the reader is
+  paged back, which in a reversed viewport moves everything older by the height of the new
+  bubble.
+
+The goldens are the guard against the memoization silently breaking grouping or separators, and
+they are byte-identical: nothing this decision changed is visible in a still frame.
+
+### What is explicitly left undone
+
+- **F6**, identity and device-resolution caching, and **F7**, the dio client. Untouched, as
+  they were before.
+- **The conversation list still re-maps every conversation when a summary changes.** It is
+  bounded by how many conversations exist rather than by how long any of them is, and the
+  screen it feeds draws all of them; the same memoization would apply, and there is no
+  measurement saying it needs to.
+- **`ChatConversationView` still rebuilds its whole scaffold on every emission** — app bar,
+  pinned banner and composer included. It is O(1) in the conversation, it is the dominant term
+  in what is left of an arrival frame on the host, and splitting it would mean moving the model
+  into the widgets that read parts of it, which is a larger change than this phase.
+- **F9's saving is not visible on a 219-message conversation.** The anchor walk was bounded by
+  what had been *rendered*, so it grows with a session rather than with a conversation, and
+  proving it on a device would mean a longer conversation and a longer session than were
+  available. The bound is asserted in a widget test instead.
+- **The A56 measurement is of a Saved Messages conversation**, seeded to 219 messages for this
+  purpose. It is one device, one conversation and one text size, and the raster column moves
+  with what happens to be on screen.
+- **Jump-to-message still lands by estimate first and corrects afterwards.** The estimate is
+  now measured rather than assumed, but a conversation with wildly uneven bubble heights will
+  still need the `ensureVisible` correction to finish the job.
 
 ## ADR-063 in full — an event costs the message it is about, not the conversation it is in (2026-08-27)
 
