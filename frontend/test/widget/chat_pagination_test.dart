@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:communication_platform/app/design_system/app_theme.dart';
 import 'package:communication_platform/features/local_storage/infrastructure/database/local_database.dart';
@@ -93,6 +94,81 @@ void main() {
     // resolved the jump it could not resolve when it was asked.
     expect(_loaded(tester), 300);
     expect(find.byKey(ValueKey('message-$target')), findsOneWidget);
+  });
+
+  testWidgets('a message arriving leaves the reader on the same line', (
+    tester,
+  ) async {
+    await _pump(tester, window);
+    // Somewhere into the loaded history, so there is a line to keep. A reader
+    // sitting at the newest end has none, and being pushed along by an
+    // arrival is what they want.
+    await tester.drag(
+      find.byKey(const PageStorageKey('chat-timeline')),
+      const Offset(0, 700),
+    );
+    await tester.pumpAndSettle();
+
+    final anchor = find.byKey(ValueKey('message-${_topmostVisible(tester)}'));
+    final before = tester.getTopLeft(anchor).dy;
+
+    await appendConversationMessage(
+      database,
+      conversationId: _conversationId,
+      index: 300,
+    );
+    await tester.pumpAndSettle();
+
+    // The arrival went in at the newest end, which in a reversed viewport
+    // moves everything older than it by the height of the new bubble. The
+    // anchor is what takes that back out again.
+    expect(anchor, findsOneWidget);
+    expect((tester.getTopLeft(anchor).dy - before).abs(), lessThan(1.1));
+  });
+
+  testWidgets('the anchor registry stays bounded while the reader scrolls', (
+    tester,
+  ) async {
+    final state = await _pump(tester, window);
+    // The whole conversation, loaded and drawn: a jump to the oldest message
+    // opens the window to all three hundred and widens what the widget draws
+    // to match, which is the largest this screen ever gets.
+    final oldest = conversationMessageId(_conversationId, 0);
+    state.jumpTo(oldest);
+    await tester.pumpAndSettle();
+    expect(_loaded(tester), 300);
+
+    final adapter = tester.state<ChatTimelineAdapterState>(
+      find.byType(ChatTimelineAdapter),
+    );
+    var highWater = adapter.anchoredRowCount;
+    var retainedHighWater = adapter.retainedRowCount;
+    for (var step = 0; step < 14; step++) {
+      await tester.drag(
+        find.byKey(const PageStorageKey('chat-timeline')),
+        const Offset(0, -900),
+      );
+      await tester.pumpAndSettle();
+      highWater = math.max(highWater, adapter.anchoredRowCount);
+      retainedHighWater = math.max(retainedHighWater, adapter.retainedRowCount);
+    }
+
+    // Three hundred messages have been on screen. What is registered for
+    // anchoring is what is mounted, and what is retained for reuse is two
+    // frames of that — neither is a function of how far anybody scrolled.
+    expect(highWater, lessThan(60));
+    expect(retainedHighWater, lessThan(140));
+    expect(adapter.anchoredRowCount, lessThan(60));
+
+    // Back at the newest end, so nothing near the far end is mounted any more
+    // and every row that was registered for it has been dropped. A jump still
+    // finds its target, which is the call site the key map was quietly also
+    // serving.
+    final evicted = conversationMessageId(_conversationId, 250);
+    expect(find.byKey(ValueKey('message-$evicted')), findsNothing);
+    state.jumpTo(evicted);
+    await tester.pumpAndSettle();
+    expect(find.byKey(ValueKey('message-$evicted')), findsOneWidget);
   });
 
   testWidgets('a message arriving appears while the reader is paged back', (

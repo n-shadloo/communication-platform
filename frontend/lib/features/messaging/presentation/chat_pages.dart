@@ -45,11 +45,50 @@ class _ChatsListPageState extends State<ChatsListPage> {
   final TextEditingController _search = TextEditingController();
   final FocusNode _searchFocus = FocusNode();
 
+  /// The reading of the clock the muted state is decided against.
+  ///
+  /// `DateTime.now()` inside `build` made every conversation's view model
+  /// depend on the frame it happened to be built in, which is not something a
+  /// mapper that has to be idempotent may do. Held here instead, and refreshed
+  /// on a schedule the list can state: exactly when the earliest mute on
+  /// screen expires, and never otherwise.
+  DateTime _mutedAsOf = DateTime.now();
+  DateTime? _scheduledMuteExpiry;
+  Timer? _muteExpiry;
+
   @override
   void dispose() {
+    _muteExpiry?.cancel();
     _search.dispose();
     _searchFocus.dispose();
     super.dispose();
+  }
+
+  /// Schedules the one refresh the mute clock owes, and no others.
+  ///
+  /// Idempotent, so calling it from `build` costs a walk of the list and
+  /// nothing else when the answer has not moved. A list with nothing muted
+  /// holds no timer at all.
+  void _trackMuteExpiry(List<ConversationSummary> summaries) {
+    DateTime? earliest;
+    for (final summary in summaries) {
+      final until = summary.mutedUntil;
+      if (until == null || !until.isAfter(_mutedAsOf)) continue;
+      if (earliest == null || until.isBefore(earliest)) earliest = until;
+    }
+    if (earliest == _scheduledMuteExpiry) return;
+    _scheduledMuteExpiry = earliest;
+    _muteExpiry?.cancel();
+    _muteExpiry = null;
+    if (earliest == null) return;
+    final wait = earliest.difference(DateTime.now());
+    _muteExpiry = Timer(wait.isNegative ? Duration.zero : wait, () {
+      if (!mounted) return;
+      setState(() {
+        _mutedAsOf = DateTime.now();
+        _scheduledMuteExpiry = null;
+      });
+    });
   }
 
   @override
@@ -90,6 +129,7 @@ class _ChatsListPageState extends State<ChatsListPage> {
       );
     }
     final summaries = ref.watch(conversationSummariesProvider(currentUserId));
+    _trackMuteExpiry(summaries.value ?? const <ConversationSummary>[]);
     final contacts = ref.watch(contactListProvider(currentUserId));
     // A jammed engine and a slow network used to look identical from here,
     // because nothing in this application read the phase the engine has been
@@ -106,7 +146,7 @@ class _ChatsListPageState extends State<ChatsListPage> {
       data: (items) => ChatListViewModel(
         items: ChatViewModelMapper.summaries(
           items,
-          now: DateTime.now(),
+          now: _mutedAsOf,
           savedMessagesTitle: strings.savedMessagesTitle,
           peerTitle: (id) => names[id] ?? _shortIdentity(id),
         ),
@@ -139,15 +179,6 @@ class _ChatsListPageState extends State<ChatsListPage> {
     WidgetRef? ref,
   }) {
     final strings = AppLocalizations.of(context);
-    final query = _search.text.trim().toLowerCase();
-    final items = model.items
-        .where(
-          (item) =>
-              query.isEmpty ||
-              item.title.toLowerCase().contains(query) ||
-              item.preview.toLowerCase().contains(query),
-        )
-        .toList(growable: false);
     final body = Column(
       children: [
         if (model.offline)
@@ -162,103 +193,25 @@ class _ChatsListPageState extends State<ChatsListPage> {
             label: label,
             kind: AppStatusKind.neutral,
           ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(
-            AppSpacing.x4,
-            AppSpacing.x3,
-            AppSpacing.x4,
-            AppSpacing.x2,
-          ),
-          child: TextField(
-            key: const ValueKey('chats-search-field'),
-            controller: _search,
-            focusNode: _searchFocus,
-            textInputAction: TextInputAction.search,
-            onChanged: (_) => setState(() {}),
-            decoration: InputDecoration(
-              hintText: strings.chatsSearchHint,
-              prefixIcon: Padding(
-                padding: const EdgeInsets.all(AppSpacing.x3),
-                child: AppIcon(AppIcons.search),
-              ),
-              suffixIcon: query.isEmpty
-                  ? null
-                  : AppIconButton(
-                      icon: AppIcons.close,
-                      semanticLabel: strings.chatsClearSearchAction,
-                      onPressed: () {
-                        _search.clear();
-                        setState(() {});
-                      },
-                      kind: AppButtonKind.ghost,
-                    ),
-              filled: true,
-              fillColor: context.tokens.colors.surfaceRaised,
-              border: const OutlineInputBorder(
-                borderRadius: AppRadii.control,
-                borderSide: BorderSide.none,
-              ),
-            ),
-          ),
+        // The query belongs to the field. Rebuilding the page for it re-mapped
+        // every conversation summary on every keystroke, to filter a list that
+        // had not changed.
+        ValueListenableBuilder<TextEditingValue>(
+          valueListenable: _search,
+          builder: (context, value, _) =>
+              _searchField(context, strings, value.text.trim()),
         ),
         Expanded(
-          child: switch ((model.loading, model.failed, items.isEmpty, query)) {
-            (true, _, _, _) => AppStatePanel.loading(
-              title: strings.chatsLoadingTitle,
+          child: ValueListenableBuilder<TextEditingValue>(
+            valueListenable: _search,
+            builder: (context, value, _) => _results(
+              context,
+              model,
+              strings,
+              value.text.trim().toLowerCase(),
+              ref,
             ),
-            (_, true, _, _) => AppStatePanel.error(
-              title: strings.chatsErrorTitle,
-              message: strings.chatsErrorMessage,
-              actionLabel: strings.retryAction,
-              onAction: () {
-                final userId = ref
-                    ?.read(authenticationControllerProvider)
-                    .userId;
-                if (userId != null) {
-                  ref?.invalidate(conversationSummariesProvider(userId));
-                }
-              },
-            ),
-            (_, _, true, '') => AppStatePanel.empty(
-              title: strings.chatsEmptyTitle,
-              message: strings.chatsEmptyMessage,
-              actionLabel: strings.chatsStartAction,
-              onAction: () => context.go('/chats/new'),
-            ),
-            // This list filters on title and last-message preview and nothing
-            // else, so it says so. Borrowing the in-conversation notice here
-            // promised a search of this device's history that the list has
-            // never performed (ADR-052).
-            (_, _, true, _) => AppStatePanel.empty(
-              title: strings.chatsNoSearchResultsTitle,
-              message: strings.chatsListSearchScopeNotice,
-            ),
-            _ => ListView.builder(
-              key: const PageStorageKey('chats-list'),
-              itemCount: items.length + (query.isEmpty ? 0 : 1),
-              itemBuilder: (context, index) {
-                if (index == items.length) {
-                  return Padding(
-                    padding: const EdgeInsets.all(AppSpacing.x4),
-                    child: Text(
-                      strings.chatsListSearchScopeNotice,
-                      textAlign: TextAlign.center,
-                      style: context.tokens.typography.label.copyWith(
-                        color: context.tokens.colors.textMuted,
-                      ),
-                    ),
-                  );
-                }
-                final item = items[index];
-                return _ConversationRow(
-                  item: item,
-                  onTap: () => _open(item),
-                  onAction: (action) =>
-                      _handleConversationAction(item, action, ref),
-                );
-              },
-            ),
-          },
+          ),
         ),
       ],
     );
@@ -278,6 +231,117 @@ class _ChatsListPageState extends State<ChatsListPage> {
       ),
       body: body,
     );
+  }
+
+  Widget _searchField(
+    BuildContext context,
+    AppLocalizations strings,
+    String query,
+  ) => Padding(
+    padding: const EdgeInsets.fromLTRB(
+      AppSpacing.x4,
+      AppSpacing.x3,
+      AppSpacing.x4,
+      AppSpacing.x2,
+    ),
+    child: TextField(
+      key: const ValueKey('chats-search-field'),
+      controller: _search,
+      focusNode: _searchFocus,
+      textInputAction: TextInputAction.search,
+      decoration: InputDecoration(
+        hintText: strings.chatsSearchHint,
+        prefixIcon: Padding(
+          padding: const EdgeInsets.all(AppSpacing.x3),
+          child: AppIcon(AppIcons.search),
+        ),
+        suffixIcon: query.isEmpty
+            ? null
+            : AppIconButton(
+                icon: AppIcons.close,
+                semanticLabel: strings.chatsClearSearchAction,
+                onPressed: _search.clear,
+                kind: AppButtonKind.ghost,
+              ),
+        filled: true,
+        fillColor: context.tokens.colors.surfaceRaised,
+        border: const OutlineInputBorder(
+          borderRadius: AppRadii.control,
+          borderSide: BorderSide.none,
+        ),
+      ),
+    ),
+  );
+
+  Widget _results(
+    BuildContext context,
+    ChatListViewModel model,
+    AppLocalizations strings,
+    String query,
+    WidgetRef? ref,
+  ) {
+    final items = model.items
+        .where(
+          (item) =>
+              query.isEmpty ||
+              item.title.toLowerCase().contains(query) ||
+              item.preview.toLowerCase().contains(query),
+        )
+        .toList(growable: false);
+    return switch ((model.loading, model.failed, items.isEmpty, query)) {
+      (true, _, _, _) => AppStatePanel.loading(
+        title: strings.chatsLoadingTitle,
+      ),
+      (_, true, _, _) => AppStatePanel.error(
+        title: strings.chatsErrorTitle,
+        message: strings.chatsErrorMessage,
+        actionLabel: strings.retryAction,
+        onAction: () {
+          final userId = ref?.read(authenticationControllerProvider).userId;
+          if (userId != null) {
+            ref?.invalidate(conversationSummariesProvider(userId));
+          }
+        },
+      ),
+      (_, _, true, '') => AppStatePanel.empty(
+        title: strings.chatsEmptyTitle,
+        message: strings.chatsEmptyMessage,
+        actionLabel: strings.chatsStartAction,
+        onAction: () => context.go('/chats/new'),
+      ),
+      // This list filters on title and last-message preview and nothing
+      // else, so it says so. Borrowing the in-conversation notice here
+      // promised a search of this device's history that the list has
+      // never performed (ADR-052).
+      (_, _, true, _) => AppStatePanel.empty(
+        title: strings.chatsNoSearchResultsTitle,
+        message: strings.chatsListSearchScopeNotice,
+      ),
+      _ => ListView.builder(
+        key: const PageStorageKey('chats-list'),
+        itemCount: items.length + (query.isEmpty ? 0 : 1),
+        itemBuilder: (context, index) {
+          if (index == items.length) {
+            return Padding(
+              padding: const EdgeInsets.all(AppSpacing.x4),
+              child: Text(
+                strings.chatsListSearchScopeNotice,
+                textAlign: TextAlign.center,
+                style: context.tokens.typography.label.copyWith(
+                  color: context.tokens.colors.textMuted,
+                ),
+              ),
+            );
+          }
+          final item = items[index];
+          return _ConversationRow(
+            item: item,
+            onTap: () => _open(item),
+            onAction: (action) => _handleConversationAction(item, action, ref),
+          );
+        },
+      ),
+    };
   }
 
   void _open(ChatListItemViewModel item) {
@@ -452,7 +516,7 @@ class _ConversationBoundary extends ConsumerWidget {
   }
 }
 
-class _ProjectedConversationPage extends ConsumerWidget {
+class _ProjectedConversationPage extends ConsumerStatefulWidget {
   const _ProjectedConversationPage({
     required this.currentUserId,
     required this.conversationId,
@@ -468,54 +532,65 @@ class _ProjectedConversationPage extends ConsumerWidget {
   final bool offline;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_ProjectedConversationPage> createState() =>
+      _ProjectedConversationPageState();
+}
+
+class _ProjectedConversationPageState
+    extends ConsumerState<_ProjectedConversationPage> {
+  /// The two projections this page draws through, one per list.
+  ///
+  /// They live for as long as the conversation is open, which is what makes
+  /// them worth anything: the page they are handed on the next emission is
+  /// mostly the page they were handed on this one, and what they return for
+  /// the unchanged part of it is the same objects, which is what stops the
+  /// timeline redrawing rows nothing happened to.
+  final ChatMessageProjection _timelineProjection = ChatMessageProjection();
+  final ChatMessageProjection _pinnedProjection = ChatMessageProjection();
+
+  @override
+  void initState() {
+    super.initState();
+    // Subscribed, and deliberately not watched. The forward sheet is the only
+    // thing on this screen that reads the conversation list, it reads it at
+    // the moment it opens, and watching it here is what put a draft write —
+    // which touches the `conversations` row — on a path back to a rebuild of
+    // this page and a re-derivation of the whole window.
+    ref.listenManual(
+      conversationSummariesProvider(widget.currentUserId),
+      (_, _) {},
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final strings = AppLocalizations.of(context);
+    final peerUserId = widget.peerUserId;
+    final conversationId = widget.conversationId;
+    final savedMessages = widget.savedMessages;
     final contact = peerUserId == null
         ? const AsyncValue<ContactProjection?>.data(null)
-        : ref.watch(contactProvider(peerUserId!));
+        : ref.watch(contactProvider(peerUserId));
     final peerName =
         contact.value?.presentationName ??
         (peerUserId == null
             ? strings.savedMessagesTitle
-            : _shortIdentity(peerUserId!));
+            : _shortIdentity(peerUserId));
     final messages = ref.watch(
       conversationMessagesProvider((
-        currentUserId: currentUserId,
+        currentUserId: widget.currentUserId,
         conversationId: conversationId,
       )),
     );
-    final summaries =
-        ref.watch(conversationSummariesProvider(currentUserId)).value ??
-        const <ConversationSummary>[];
-    final summary = summaries
-        .where((item) => item.conversationId == conversationId)
-        .firstOrNull;
-    final forwardTargets = ChatViewModelMapper.summaries(
-      summaries,
-      now: DateTime.now(),
-      savedMessagesTitle: strings.savedMessagesTitle,
-      peerTitle: _shortIdentity,
-    ).where((item) => item.conversationId != conversationId).toList();
-    if (!savedMessages &&
-        !forwardTargets.any((target) => target.savedMessages)) {
-      forwardTargets.insert(
-        0,
-        ChatListItemViewModel(
-          conversationId: '',
-          title: strings.savedMessagesTitle,
-          preview: '',
-          timestamp: DateTime.fromMillisecondsSinceEpoch(0),
-          unreadCount: 0,
-          muted: false,
-          pinned: false,
-          savedMessages: true,
-          peerUserId: null,
-        ),
-      );
-    }
-    final typing =
-        ref.watch(typingProjectionsProvider(conversationId)).value ??
-        const <TypingProjection>[];
+    // Narrowed to the one bit of it the header draws. The projection list is
+    // rebuilt on every typing heartbeat and its identity changes with it;
+    // whether anybody is typing does not.
+    final typing = ref.watch(
+      typingProjectionsProvider(
+        conversationId,
+      ).select((projections) => projections.value?.isNotEmpty ?? false),
+    );
+    final draft = ref.watch(conversationDraftProvider(conversationId)).value;
     // One gate for every load state. The projection is only allowed to speak
     // about trust once it has an answer to give: a first read that is still in
     // flight has neither a value nor an error, and reading that as "unverified"
@@ -536,20 +611,20 @@ class _ProjectedConversationPage extends ConsumerWidget {
         title: savedMessages ? strings.savedMessagesTitle : peerName,
         savedMessages: savedMessages,
         securityGate: securityGate,
-        offline: offline,
+        offline: widget.offline,
         hasMoreBefore: timeline.page.hasMoreBefore,
         loadingBefore: timeline.loadingBefore,
         olderLoadFailed: timeline.olderLoadFailed,
-        typing: typing.isNotEmpty,
-        pinnedMessages: ChatViewModelMapper.messages(
+        typing: typing,
+        pinnedMessages: _pinnedProjection.map(
           timeline.page.pinned,
-          currentUserId: currentUserId,
+          currentUserId: widget.currentUserId,
           currentUserName: strings.chatYouAuthor,
           peerName: peerName,
         ),
-        messages: ChatViewModelMapper.messages(
+        messages: _timelineProjection.map(
           timeline.page.messages,
-          currentUserId: currentUserId,
+          currentUserId: widget.currentUserId,
           currentUserName: strings.chatYouAuthor,
           peerName: peerName,
         ),
@@ -560,7 +635,7 @@ class _ProjectedConversationPage extends ConsumerWidget {
         title: savedMessages ? strings.savedMessagesTitle : peerName,
         savedMessages: savedMessages,
         securityGate: securityGate,
-        offline: offline,
+        offline: widget.offline,
         hasMoreBefore: false,
         loadingBefore: false,
         olderLoadFailed: false,
@@ -574,7 +649,7 @@ class _ProjectedConversationPage extends ConsumerWidget {
         title: savedMessages ? strings.savedMessagesTitle : peerName,
         savedMessages: savedMessages,
         securityGate: securityGate,
-        offline: offline,
+        offline: widget.offline,
         hasMoreBefore: false,
         loadingBefore: false,
         olderLoadFailed: false,
@@ -595,26 +670,53 @@ class _ProjectedConversationPage extends ConsumerWidget {
       child: ChatConversationView(
         model: model,
         peerUserId: peerUserId,
-        initialDraft: summary?.draft,
-        forwardTargets: forwardTargets,
-        onIntent: (intent) => _dispatch(
-          context,
-          ref,
-          intent,
-          model: model,
-          currentUserId: currentUserId,
-        ),
+        initialDraft: draft,
+        forwardTargets: () => _forwardTargets(strings),
+        onIntent: (intent) => _dispatch(context, intent),
       ),
     );
   }
 
-  Future<void> _dispatch(
-    BuildContext context,
-    WidgetRef ref,
-    ChatIntent intent, {
-    required ChatTimelineViewModel model,
-    required String currentUserId,
-  }) async {
+  /// Where a message may be forwarded to, resolved when the sheet asks.
+  ///
+  /// It was a list mapped and re-identified on every build of this page, for a
+  /// sheet almost every build never opens — every conversation on the device
+  /// mapped again to draw one conversation's timeline.
+  List<ChatListItemViewModel> _forwardTargets(AppLocalizations strings) {
+    final summaries =
+        ref.read(conversationSummariesProvider(widget.currentUserId)).value ??
+        const <ConversationSummary>[];
+    final targets = ChatViewModelMapper.summaries(
+      summaries,
+      now: DateTime.now(),
+      savedMessagesTitle: strings.savedMessagesTitle,
+      peerTitle: _shortIdentity,
+    ).where((item) => item.conversationId != widget.conversationId).toList();
+    if (!widget.savedMessages &&
+        !targets.any((target) => target.savedMessages)) {
+      targets.insert(
+        0,
+        ChatListItemViewModel(
+          conversationId: '',
+          title: strings.savedMessagesTitle,
+          preview: '',
+          timestamp: DateTime.fromMillisecondsSinceEpoch(0),
+          unreadCount: 0,
+          muted: false,
+          pinned: false,
+          savedMessages: true,
+          peerUserId: null,
+        ),
+      );
+    }
+    return targets;
+  }
+
+  Future<void> _dispatch(BuildContext context, ChatIntent intent) async {
+    final conversationId = widget.conversationId;
+    final currentUserId = widget.currentUserId;
+    final savedMessages = widget.savedMessages;
+    final peerUserId = widget.peerUserId;
     if (intent case CopyMessageIntent(:final text)) {
       await Clipboard.setData(ClipboardData(text: text));
       return;
@@ -805,7 +907,7 @@ class ChatConversationView extends StatefulWidget {
     required this.onIntent,
     this.peerUserId,
     this.initialDraft,
-    this.forwardTargets = const [],
+    this.forwardTargets,
     super.key,
   });
 
@@ -813,7 +915,13 @@ class ChatConversationView extends StatefulWidget {
   final ChatIntentCallback onIntent;
   final String? peerUserId;
   final String? initialDraft;
-  final List<ChatListItemViewModel> forwardTargets;
+
+  /// Where a forward may go, resolved when the sheet opens.
+  ///
+  /// A callback rather than a list because that is when it is needed. As a
+  /// field it was a whole conversation list mapped into view models on every
+  /// build of a screen that draws none of them.
+  final ValueGetter<List<ChatListItemViewModel>>? forwardTargets;
 
   @override
   State<ChatConversationView> createState() => _ChatConversationViewState();
@@ -1052,6 +1160,9 @@ class _ChatConversationViewState extends State<ChatConversationView> {
   Future<void> _showForwardPicker(ChatMessageViewModel message) async {
     final strings = AppLocalizations.of(context);
     final selected = <String>{};
+    // Resolved here, once, because here is where it is wanted.
+    final forwardTargets =
+        widget.forwardTargets?.call() ?? const <ChatListItemViewModel>[];
     await showAppSheet<void>(
       context: context,
       semanticLabel: strings.chatForwardAction,
@@ -1067,15 +1178,15 @@ class _ChatConversationViewState extends State<ChatConversationView> {
               ),
               const SizedBox(height: AppSpacing.x2),
               Expanded(
-                child: widget.forwardTargets.isEmpty
+                child: forwardTargets.isEmpty
                     ? AppStatePanel.empty(
                         title: strings.chatsEmptyTitle,
                         message: strings.chatsEmptyMessage,
                       )
                     : ListView.builder(
-                        itemCount: widget.forwardTargets.length,
+                        itemCount: forwardTargets.length,
                         itemBuilder: (context, index) {
-                          final target = widget.forwardTargets[index];
+                          final target = forwardTargets[index];
                           final selectionKey = target.savedMessages
                               ? 'saved'
                               : target.conversationId;
@@ -1107,7 +1218,7 @@ class _ChatConversationViewState extends State<ChatConversationView> {
                 onPressed: selected.isEmpty
                     ? null
                     : () {
-                        final targets = widget.forwardTargets.where((target) {
+                        final targets = forwardTargets.where((target) {
                           final key = target.savedMessages
                               ? 'saved'
                               : target.conversationId;

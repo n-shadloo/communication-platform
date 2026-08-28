@@ -76,13 +76,41 @@ class ChatTimelineAdapter extends StatefulWidget {
   final int pageSize;
 
   @override
-  State<ChatTimelineAdapter> createState() => _ChatTimelineAdapterState();
+  State<ChatTimelineAdapter> createState() => ChatTimelineAdapterState();
 }
 
-class _ChatTimelineAdapterState extends State<ChatTimelineAdapter> {
+class ChatTimelineAdapterState extends State<ChatTimelineAdapter> {
   final ScrollController _scrollController = ScrollController();
   final ValueNotifier<double> _distanceFromBottom = ValueNotifier(0);
-  final Map<String, GlobalKey> _messageKeys = {};
+
+  /// The rows that are mounted right now, and nothing else.
+  ///
+  /// This replaces a `Map<String, GlobalKey>` that was written to for every
+  /// message ever drawn and read from for every one of them on every anchor
+  /// capture, and was never pruned — so both its size and the cost of using it
+  /// were set by how long the reader had been scrolling. A row registers
+  /// itself while it is mounted and takes itself out when it is not, which
+  /// bounds this by what the viewport and its cache extent hold. It is also
+  /// the only set an anchor could ever have come from: an unmounted row has no
+  /// render object to measure.
+  final Map<String, _AnchoredRowState> _anchoredRows = {};
+
+  /// The rows most recently built, so that a rebuild which changes one message
+  /// hands every other row back the identical widget instance.
+  ///
+  /// `Element.updateChild` skips a child whose new widget is the one it
+  /// already holds, so an unchanged row is not merely cheap to rebuild — it is
+  /// not rebuilt at all. Two generations rather than one so that a generation
+  /// filling up does not throw away the rows on screen; the older one is
+  /// dropped whole, which is what keeps this from becoming a second unbounded
+  /// map of everything ever drawn.
+  var _renderedRows = <Key, _RenderedRow>{};
+  var _previousRenderedRows = <Key, _RenderedRow>{};
+
+  _TimelineRows? _rows;
+  List<ChatMessageViewModel>? _rowsSource;
+  var _rowsStart = -1;
+
   var _visibleMessageCount = 0;
   var _loadRequestSent = false;
   _ReadingAnchor? _pendingAnchor;
@@ -98,6 +126,15 @@ class _ChatTimelineAdapterState extends State<ChatTimelineAdapter> {
   String? _unresolvedJump;
   var _anchorSnapshotScheduled = false;
   var _dependenciesInitialized = false;
+
+  /// How many rows are registered for anchoring, for the bounding test.
+  @visibleForTesting
+  int get anchoredRowCount => _anchoredRows.length;
+
+  /// How many row widgets are being held for reuse, for the bounding test.
+  @visibleForTesting
+  int get retainedRowCount =>
+      {..._renderedRows.keys, ..._previousRenderedRows.keys}.length;
 
   @override
   void initState() {
@@ -117,6 +154,13 @@ class _ChatTimelineAdapterState extends State<ChatTimelineAdapter> {
   void didUpdateWidget(covariant ChatTimelineAdapter oldWidget) {
     _pendingAnchor = _captureReadingAnchor();
     super.didUpdateWidget(oldWidget);
+    // Every retained row holds the callback it was built with. A new one is a
+    // different destination for the same tap, so nothing built against the old
+    // one may be handed back.
+    if (oldWidget.onIntent != widget.onIntent) {
+      _renderedRows = {};
+      _previousRenderedRows = {};
+    }
     final delta =
         widget.model.messages.length - oldWidget.model.messages.length;
     if (delta > 0 && _visibleMessageCount >= oldWidget.model.messages.length) {
@@ -131,11 +175,13 @@ class _ChatTimelineAdapterState extends State<ChatTimelineAdapter> {
     final pendingJump = _unresolvedJump;
     if (widget.model.highlightedMessageId !=
         oldWidget.model.highlightedMessageId) {
+      _dropReadingAnchor();
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _jumpIfRequested(widget.model.highlightedMessageId);
       });
     } else if (pendingJump != null &&
         widget.model.messages.any((message) => message.id == pendingJump)) {
+      _dropReadingAnchor();
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _jumpIfRequested(pendingJump);
       });
@@ -171,8 +217,40 @@ class _ChatTimelineAdapterState extends State<ChatTimelineAdapter> {
   void _updateDistanceFromBottom() {
     if (_scrollController.hasClients) {
       _distanceFromBottom.value = _scrollController.position.pixels;
+    }
+  }
+
+  /// Forgets where the reader was, because they asked to be somewhere else.
+  ///
+  /// A jump decides the position outright. An anchor captured a moment before
+  /// it — in `didUpdateWidget`, or standing from the last scroll — describes a
+  /// line the reader has just left, and restoring it mid-jump takes the
+  /// position back: a row materialising during the scroll reports its size,
+  /// and the correction that answers that report cancels the animation.
+  void _dropReadingAnchor() {
+    _pendingAnchor = null;
+    _lastReadingAnchor = null;
+  }
+
+  /// Keeps a standing anchor only for as long as it is worth anything.
+  ///
+  /// The standing anchor exists for one consumer: a row that changes size
+  /// after the fact, which arrives as a notification once the new layout has
+  /// already happened and so cannot capture its own "before". Everything else
+  /// captures at the moment it needs one.
+  ///
+  /// While the reader is scrolling, the position is theirs and a correction
+  /// computed against a reading captured before the gesture would fight them —
+  /// so the standing anchor is dropped when a scroll starts and taken again
+  /// when it ends. That is the whole of the per-tick capture this replaces.
+  bool _onScrollNotification(ScrollNotification notification) {
+    if (notification.depth != 0) return false;
+    if (notification is ScrollStartNotification) {
+      _lastReadingAnchor = null;
+    } else if (notification is ScrollEndNotification) {
       _scheduleAnchorSnapshot();
     }
+    return false;
   }
 
   void _scheduleAnchorSnapshot() {
@@ -180,9 +258,15 @@ class _ChatTimelineAdapterState extends State<ChatTimelineAdapter> {
     _anchorSnapshotScheduled = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _anchorSnapshotScheduled = false;
-      if (mounted) {
-        _lastReadingAnchor = _captureReadingAnchor();
+      if (!mounted) return;
+      // Never while the viewport is moving. A reading captured mid-scroll
+      // describes a line that is already somewhere else, and correcting
+      // towards it stops the scroll dead.
+      if (_scrollController.hasClients &&
+          _scrollController.position.isScrollingNotifier.value) {
+        return;
       }
+      _lastReadingAnchor = _captureReadingAnchor();
     });
   }
 
@@ -226,9 +310,9 @@ class _ChatTimelineAdapterState extends State<ChatTimelineAdapter> {
     final viewportTop = viewport.localToGlobal(Offset.zero).dy;
     final viewportBottom = viewportTop + viewport.size.height;
     _ReadingAnchor? best;
-    for (final entry in _messageKeys.entries) {
-      final render = entry.value.currentContext?.findRenderObject();
-      if (render is! RenderBox || !render.attached) continue;
+    for (final entry in _anchoredRows.entries) {
+      final render = entry.value.anchorBox;
+      if (render == null) continue;
       final top = render.localToGlobal(Offset.zero).dy;
       final bottom = top + render.size.height;
       if (bottom <= viewportTop || top >= viewportBottom) continue;
@@ -243,9 +327,8 @@ class _ChatTimelineAdapterState extends State<ChatTimelineAdapter> {
     final anchor = _pendingAnchor;
     _pendingAnchor = null;
     if (anchor == null || !_scrollController.hasClients) return;
-    final render = _messageKeys[anchor.messageId]?.currentContext
-        ?.findRenderObject();
-    if (render is! RenderBox || !render.attached) return;
+    final render = _anchoredRows[anchor.messageId]?.anchorBox;
+    if (render == null) return;
     final newTop = render.localToGlobal(Offset.zero).dy;
     final delta = newTop - anchor.globalTop;
     if (delta.abs() < .5) return;
@@ -277,38 +360,52 @@ class _ChatTimelineAdapterState extends State<ChatTimelineAdapter> {
     if (needed > _visibleMessageCount) {
       setState(() => _visibleMessageCount = needed);
     }
+    // The scroll runs a frame later, after any widening above has been laid
+    // out and the extent it can be clamped to is real. Nothing else asks for
+    // that frame: a jump to a target that is already drawn and already inside
+    // the drawn range changes no state at all, and the tap did nothing.
+    WidgetsBinding.instance.scheduleFrame();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || !_scrollController.hasClients) return;
+      final position = _scrollController.position;
       final reverseIndex = widget.model.messages.length - 1 - sourceIndex;
-      final target = (reverseIndex * 88.0).clamp(
+      // The drawn range's own average row height, rather than a constant that
+      // is only right for one text size and one bubble. A constant wrong by a
+      // fifth lands a jump a screen away from its target — and the correction
+      // below can only run on a target the estimate got close enough to build.
+      final perRow =
+          (position.maxScrollExtent + position.viewportDimension) /
+          math.max(1, _visibleMessageCount);
+      final target = (reverseIndex * perRow).clamp(
         0.0,
-        _scrollController.position.maxScrollExtent,
+        position.maxScrollExtent,
       );
-      if (animate && !MediaQuery.disableAnimationsOf(context)) {
-        unawaited(
-          _scrollController.animateTo(
-            target,
-            duration: AppMotion.route,
-            curve: AppMotion.enter,
-          ),
-        );
-      } else {
-        _scrollController.jumpTo(target);
-      }
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        final targetContext = _messageKeys[messageId]?.currentContext;
-        if (targetContext != null) {
+      final reducedMotion = MediaQuery.disableAnimationsOf(context);
+      final settled = animate && !reducedMotion
+          ? _scrollController.animateTo(
+              target,
+              duration: AppMotion.route,
+              curve: AppMotion.enter,
+            )
+          : Future<void>.sync(() => _scrollController.jumpTo(target));
+      unawaited(
+        settled.then((_) {
+          if (!mounted) return;
+          // The registry answers this exactly as the key map did: a row that
+          // is not mounted has no context either way. Asked once the scroll
+          // has settled rather than while it is still running, so the target
+          // has been built by the time it is looked for.
+          final targetContext = _anchoredRows[messageId]?.context;
+          if (targetContext == null || !targetContext.mounted) return;
           unawaited(
             Scrollable.ensureVisible(
               targetContext,
               alignment: 0.5,
-              duration: MediaQuery.disableAnimationsOf(context)
-                  ? Duration.zero
-                  : AppMotion.state,
+              duration: reducedMotion ? Duration.zero : AppMotion.state,
             ),
           );
-        }
-      });
+        }),
+      );
     });
   }
 
@@ -338,13 +435,11 @@ class _ChatTimelineAdapterState extends State<ChatTimelineAdapter> {
   }
 
   Widget _timeline(BuildContext context) {
-    _scheduleAnchorSnapshot();
     final start = math.max(
       0,
       widget.model.messages.length - _visibleMessageCount,
     );
-    final messages = widget.model.messages.sublist(start);
-    final rows = _buildRows(messages);
+    final rows = _rowsFor(widget.model.messages, start);
     final strings = AppLocalizations.of(context);
     return Stack(
       children: [
@@ -361,48 +456,44 @@ class _ChatTimelineAdapterState extends State<ChatTimelineAdapter> {
               });
               return false;
             },
-            child: ListView.builder(
-              key: const PageStorageKey('chat-timeline'),
-              controller: _scrollController,
-              reverse: true,
-              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-              padding: const EdgeInsets.fromLTRB(
-                AppSpacing.x3,
-                AppSpacing.x8,
-                AppSpacing.x3,
-                AppSpacing.x4,
-              ),
-              itemCount: rows.length + 1,
-              itemBuilder: (context, reverseIndex) {
-                if (reverseIndex == rows.length) {
-                  return _PaginationMarker(
-                    hasMore: start > 0 || widget.model.hasMoreBefore,
-                    loading: widget.model.loadingBefore,
-                    failed: widget.model.olderLoadFailed,
-                    onLoad: _loadOlder,
+            child: NotificationListener<ScrollNotification>(
+              onNotification: _onScrollNotification,
+              child: ListView.builder(
+                key: const PageStorageKey('chat-timeline'),
+                controller: _scrollController,
+                reverse: true,
+                keyboardDismissBehavior:
+                    ScrollViewKeyboardDismissBehavior.onDrag,
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.x3,
+                  AppSpacing.x8,
+                  AppSpacing.x3,
+                  AppSpacing.x4,
+                ),
+                itemCount: rows.rows.length + 1,
+                // Every row carries a key of its own, so a message arriving at
+                // the newest end shifts every index without invalidating a
+                // single element: the sliver looks each key up here and moves
+                // its element to the new slot. Without it, keyed children whose
+                // index changed would all be discarded and rebuilt — which is
+                // what the `GlobalKey` per message used to prevent, at the
+                // price of a re-parent per row per arrival.
+                findChildIndexCallback: (key) => rows.indexOf(key),
+                itemBuilder: (context, reverseIndex) {
+                  if (reverseIndex == rows.rows.length) {
+                    return _PaginationMarker(
+                      key: _paginationRowKey,
+                      hasMore: start > 0 || widget.model.hasMoreBefore,
+                      loading: widget.model.loadingBefore,
+                      failed: widget.model.olderLoadFailed,
+                      onLoad: _loadOlder,
+                    );
+                  }
+                  return _rowWidget(
+                    rows.rows[rows.rows.length - 1 - reverseIndex],
                   );
-                }
-                final row = rows[rows.length - 1 - reverseIndex];
-                return switch (row) {
-                  _MessageRow(:final message) => SizeChangedLayoutNotifier(
-                    child: KeyedSubtree(
-                      key: _messageKeys.putIfAbsent(message.id, GlobalKey.new),
-                      child: ChatMessageBuilder(
-                        message: message,
-                        highlighted:
-                            widget.model.highlightedMessageId == message.id,
-                        onIntent: widget.onIntent,
-                        onJumpToReply: (id) {
-                          widget.onIntent(JumpToMessageIntent(id));
-                          _jumpIfRequested(id);
-                        },
-                      ),
-                    ),
-                  ),
-                  _DateRow(:final date) => _DateSeparator(date: date),
-                  _UnreadRow() => const _UnreadDivider(),
-                };
-              },
+                },
+              ),
             ),
           ),
         ),
@@ -434,48 +525,248 @@ class _ChatTimelineAdapterState extends State<ChatTimelineAdapter> {
     );
   }
 
-  List<_TimelineRow> _buildRows(List<ChatMessageViewModel> messages) {
+  /// The drawn range's rows, rebuilt only when that range changed.
+  ///
+  /// The projection behind the model hands back the identical view model for
+  /// every message it did not re-derive, so "did this range change" is a walk
+  /// of object identities rather than a re-derivation of separators, days and
+  /// the unread line for a window that may hold the whole conversation.
+  _TimelineRows _rowsFor(List<ChatMessageViewModel> messages, int start) {
+    final cached = _rows;
+    if (cached != null &&
+        _rowsStart == start &&
+        _sameDrawnRange(messages, start)) {
+      return cached;
+    }
     final rows = <_TimelineRow>[];
-    DateTime? previousDay;
+    int? previousDay;
     var unreadInserted = false;
-    for (final message in messages) {
-      final day = DateTime(
-        message.timestamp.year,
-        message.timestamp.month,
-        message.timestamp.day,
-      );
+    for (var index = start; index < messages.length; index++) {
+      final message = messages[index];
+      final at = message.timestamp;
+      // Compared as an integer and only built into a `DateTime` on the days
+      // that get a heading. Constructing one per message means a timezone
+      // conversion per message, for an answer that changes about once a
+      // hundred rows.
+      final day = at.year * 10000 + at.month * 100 + at.day;
       if (day != previousDay) {
-        rows.add(_DateRow(day));
+        rows.add(_DateRow(DateTime(at.year, at.month, at.day), message.id));
         previousDay = day;
       }
       if (!unreadInserted && message.unread) {
-        rows.add(const _UnreadRow());
+        rows.add(_UnreadRow(message.id));
         unreadInserted = true;
       }
       rows.add(_MessageRow(message));
     }
-    return rows;
+    final built = _TimelineRows(rows);
+    _rows = built;
+    _rowsSource = messages;
+    _rowsStart = start;
+    return built;
+  }
+
+  bool _sameDrawnRange(List<ChatMessageViewModel> messages, int start) {
+    final previous = _rowsSource;
+    if (previous == null) return false;
+    if (identical(previous, messages)) return true;
+    if (previous.length != messages.length) return false;
+    for (var index = start; index < messages.length; index++) {
+      if (!identical(previous[index], messages[index])) return false;
+    }
+    return true;
+  }
+
+  /// One row's widget, reused verbatim when nothing about that row moved.
+  ///
+  /// Rows are built during layout as well as during build — a scroll
+  /// materialises children without the adapter rebuilding at all — so the
+  /// generation rolls on size rather than on frames. A viewport and its cache
+  /// extent are a few dozen rows; a generation that has taken more than
+  /// [_rowGenerationLimit] has certainly moved on from the ones it started
+  /// with.
+  Widget _rowWidget(_TimelineRow row) {
+    if (_renderedRows.length >= _rowGenerationLimit) {
+      _previousRenderedRows = _renderedRows;
+      _renderedRows = {};
+    }
+    final highlighted =
+        row is _MessageRow &&
+        widget.model.highlightedMessageId == row.message.id;
+    final key = row.key;
+    final retained = _renderedRows[key] ?? _previousRenderedRows[key];
+    if (retained != null && retained.draws(row, highlighted: highlighted)) {
+      _renderedRows[key] = retained;
+      return retained.widget;
+    }
+    final built = switch (row) {
+      _MessageRow(:final message) => _AnchoredRow(
+        key: key,
+        messageId: message.id,
+        rows: _anchoredRows,
+        child: SizeChangedLayoutNotifier(
+          child: ChatMessageBuilder(
+            message: message,
+            highlighted: highlighted,
+            onIntent: widget.onIntent,
+            onJumpToReply: (id) {
+              widget.onIntent(JumpToMessageIntent(id));
+              _jumpIfRequested(id);
+            },
+          ),
+        ),
+      ),
+      _DateRow(:final date) => _DateSeparator(key: key, date: date),
+      _UnreadRow() => _UnreadDivider(key: key),
+    };
+    _renderedRows[key] = _RenderedRow(
+      row: row,
+      highlighted: highlighted,
+      widget: built,
+    );
+    return built;
+  }
+}
+
+const _paginationRowKey = ValueKey('timeline-pagination');
+
+/// How many rows one generation of the reuse cache takes before it rolls.
+const _rowGenerationLimit = 64;
+
+/// The drawn rows, and the index each of their keys sits at.
+final class _TimelineRows {
+  _TimelineRows(this.rows);
+
+  final List<_TimelineRow> rows;
+
+  /// Built on the first relocation and not before. A rebuild that leaves every
+  /// index where it was never asks, and paying for the index then would be a
+  /// walk of the whole drawn range for nothing.
+  late final Map<Key, int> _indexByKey = {
+    for (var index = 0; index < rows.length; index++) rows[index].key: index,
+  };
+
+  /// Where the sliver should now look for the child that carries [key].
+  ///
+  /// The list is drawn reversed, so the row at the end of [rows] is the child
+  /// at index zero.
+  int? indexOf(Key key) {
+    if (key == _paginationRowKey) return rows.length;
+    final index = _indexByKey[key];
+    return index == null ? null : rows.length - 1 - index;
+  }
+}
+
+/// A row widget that is still good, and what it was drawn from.
+final class _RenderedRow {
+  const _RenderedRow({
+    required this.row,
+    required this.highlighted,
+    required this.widget,
+  });
+
+  final _TimelineRow row;
+  final bool highlighted;
+  final Widget widget;
+
+  bool draws(_TimelineRow other, {required bool highlighted}) {
+    if (this.highlighted != highlighted) return false;
+    return switch ((row, other)) {
+      (_MessageRow(message: final mine), _MessageRow(message: final theirs)) =>
+        identical(mine, theirs),
+      (_DateRow(date: final mine), _DateRow(date: final theirs)) =>
+        mine == theirs,
+      (_UnreadRow(), _UnreadRow()) => true,
+      _ => false,
+    };
   }
 }
 
 sealed class _TimelineRow {
   const _TimelineRow();
+
+  /// This row's identity in the list, so the sliver can follow it when an
+  /// arrival at the newest end shifts every index by one.
+  Key get key;
 }
 
 final class _MessageRow extends _TimelineRow {
-  const _MessageRow(this.message);
+  _MessageRow(this.message) : key = ValueKey('timeline-message-${message.id}');
 
   final ChatMessageViewModel message;
+
+  @override
+  final Key key;
 }
 
+/// A day heading, identified by the message it sits above.
+///
+/// Not by the day it names: a skewed timestamp can put the same day on both
+/// sides of another one, and two rows sharing a key is a crash rather than a
+/// wrong heading. The message below it is unique and does not move when an
+/// older page is prepended.
 final class _DateRow extends _TimelineRow {
-  const _DateRow(this.date);
+  _DateRow(this.date, String anchorMessageId)
+    : key = ValueKey('timeline-date-$anchorMessageId');
 
   final DateTime date;
+
+  @override
+  final Key key;
 }
 
 final class _UnreadRow extends _TimelineRow {
-  const _UnreadRow();
+  _UnreadRow(String anchorMessageId)
+    : key = ValueKey('timeline-unread-$anchorMessageId');
+
+  @override
+  final Key key;
+}
+
+/// One drawn message, registered for as long as it is on screen.
+///
+/// The registration is the anchor mechanism: the reading line is the topmost
+/// row the viewport is showing, and only a mounted row has a box to measure.
+/// Because the entry lives exactly as long as the element does, the set cannot
+/// outgrow what the list has materialised.
+class _AnchoredRow extends StatefulWidget {
+  const _AnchoredRow({
+    required this.messageId,
+    required this.rows,
+    required this.child,
+    super.key,
+  });
+
+  final String messageId;
+  final Map<String, _AnchoredRowState> rows;
+  final Widget child;
+
+  @override
+  State<_AnchoredRow> createState() => _AnchoredRowState();
+}
+
+class _AnchoredRowState extends State<_AnchoredRow> {
+  RenderBox? get anchorBox {
+    final render = context.findRenderObject();
+    return render is RenderBox && render.attached ? render : null;
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    widget.rows[widget.messageId] = this;
+  }
+
+  @override
+  void dispose() {
+    if (identical(widget.rows[widget.messageId], this)) {
+      widget.rows.remove(widget.messageId);
+    }
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
 }
 
 final class _ReadingAnchor {
@@ -1066,27 +1357,104 @@ class ChatComposerBuilder extends StatefulWidget {
   State<ChatComposerBuilder> createState() => ChatComposerBuilderState();
 }
 
-class ChatComposerBuilderState extends State<ChatComposerBuilder> {
+class ChatComposerBuilderState extends State<ChatComposerBuilder>
+    with WidgetsBindingObserver {
+  /// How long the composer waits before writing a draft down.
+  ///
+  /// Long enough that an ordinary run of typing is one write rather than one
+  /// per character, short enough that a pause is already saved before the user
+  /// has decided to leave. It bounds how stale the stored draft can be only
+  /// while the field is being typed into: every way out of the composer
+  /// flushes first, so the debounce never decides what survives.
+  static const draftDebounce = Duration(milliseconds: 500);
+
   late final TextEditingController _controller;
   final FocusNode _focusNode = FocusNode();
   ChatComposerMode _mode = ChatComposerMode.compose;
   ChatMessageViewModel? _contextMessage;
   bool _emojiPanelOpen = false;
+  Timer? _draftTimer;
+
+  /// The draft local storage is known to be holding.
+  ///
+  /// Kept so that a flush with nothing new to say writes nothing, which is
+  /// what makes the flush safe to call from five places that can all happen at
+  /// once — a blur, a pop and a lifecycle change arrive together when somebody
+  /// swipes back out of a conversation.
+  String? _persistedDraft;
 
   @override
   void initState() {
     super.initState();
+    _persistedDraft = _draftOf(widget.initialDraft);
     _controller = TextEditingController(text: widget.initialDraft)
       ..addListener(_onTextChanged);
+    _focusNode.addListener(_onFocusChanged);
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void didUpdateWidget(covariant ChatComposerBuilder oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // The stored draft is read once and can land a frame after the composer
+    // has been built. Adopting it then is what lets that read be a one-shot
+    // rather than a subscription the composer would be feeding its own
+    // keystrokes back into; adopting it only into an untouched empty field is
+    // what stops it overwriting anything typed since.
+    if (widget.initialDraft != oldWidget.initialDraft &&
+        oldWidget.initialDraft == null &&
+        _controller.text.isEmpty) {
+      _persistedDraft = _draftOf(widget.initialDraft);
+      _controller.value = TextEditingValue(
+        text: widget.initialDraft ?? '',
+        selection: TextSelection.collapsed(
+          offset: widget.initialDraft?.length ?? 0,
+        ),
+      );
+    }
   }
 
   @override
   void dispose() {
+    // Before the controller goes, because its text is what is being saved.
+    _flushDraft();
+    WidgetsBinding.instance.removeObserver(this);
     _controller
       ..removeListener(_onTextChanged)
       ..dispose();
-    _focusNode.dispose();
+    _focusNode
+      ..removeListener(_onFocusChanged)
+      ..dispose();
     super.dispose();
+  }
+
+  /// The draft a field holds, or null when it holds nothing worth keeping.
+  static String? _draftOf(String? text) =>
+      text == null || text.trim().isEmpty ? null : text;
+
+  /// Writes the draft down now, if it differs from what is already stored.
+  ///
+  /// Every exit from the composer runs through here: losing focus, the route
+  /// popping, the application leaving the foreground, the widget being
+  /// disposed, and sending. A debounce that dropped the last few characters
+  /// when somebody backgrounded the application would be a worse bug than the
+  /// writes it was introduced to remove.
+  void _flushDraft() {
+    _draftTimer?.cancel();
+    _draftTimer = null;
+    final draft = _draftOf(_controller.text);
+    if (draft == _persistedDraft) return;
+    _persistedDraft = draft;
+    widget.onIntent(SaveDraftIntent(draft));
+  }
+
+  void _onFocusChanged() {
+    if (!_focusNode.hasFocus) _flushDraft();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed) _flushDraft();
   }
 
   void handleIntent(ChatIntent intent) {
@@ -1114,13 +1482,17 @@ class ChatComposerBuilderState extends State<ChatComposerBuilder> {
     }
   }
 
+  /// A keystroke costs a timer, and nothing else.
+  ///
+  /// It used to cost a `setState` and a write to the `conversations` row —
+  /// which invalidated the conversation list, which rebuilt the page around
+  /// this composer, which re-derived the whole loaded window. Typing twenty
+  /// characters did that twenty times. The Send button's appearance is the
+  /// only thing on this screen that follows the text, and it listens to the
+  /// controller itself.
   void _onTextChanged() {
-    if (mounted) setState(() {});
-    widget.onIntent(
-      SaveDraftIntent(
-        _controller.text.trim().isEmpty ? null : _controller.text,
-      ),
-    );
+    _draftTimer?.cancel();
+    _draftTimer = Timer(draftDebounce, _flushDraft);
   }
 
   void _cancelContext() {
@@ -1181,6 +1553,10 @@ class ChatComposerBuilderState extends State<ChatComposerBuilder> {
       _contextMessage = null;
       _emojiPanelOpen = false;
     });
+    // The message has left; the draft it used to be must not outlive it by
+    // half a second, or a conversation reopened inside that window shows the
+    // text back as though it had never been sent.
+    _flushDraft();
   }
 
   @override
@@ -1200,7 +1576,11 @@ class ChatComposerBuilderState extends State<ChatComposerBuilder> {
       // dismisses a keyboard rather than the screen behind one.
       canPop: !_emojiPanelOpen,
       onPopInvokedWithResult: (didPop, _) {
-        if (!didPop) _closeEmojiPanel();
+        if (!didPop) {
+          _closeEmojiPanel();
+          return;
+        }
+        _flushDraft();
       },
       child: Material(
         color: context.tokens.colors.surface,
@@ -1311,17 +1691,30 @@ class ChatComposerBuilderState extends State<ChatComposerBuilder> {
                         onPressed: ready ? _toggleEmojiPanel : null,
                         kind: AppButtonKind.ghost,
                       ),
-                      if (_controller.text.trim().isNotEmpty) ...[
-                        const SizedBox(width: AppSpacing.x1),
-                        AppIconButton(
-                          icon: AppIcons.send,
-                          semanticLabel: _mode == ChatComposerMode.edit
-                              ? strings.chatSaveEditAction
-                              : strings.chatSendAction,
-                          onPressed: ready ? _submit : null,
-                          kind: AppButtonKind.primary,
-                        ),
-                      ],
+                      // Send follows the text without the composer following
+                      // it. The controller is a listenable, so the button is
+                      // the only thing that rebuilds when a character lands.
+                      ValueListenableBuilder<TextEditingValue>(
+                        valueListenable: _controller,
+                        builder: (context, value, _) =>
+                            value.text.trim().isEmpty
+                            ? const SizedBox.shrink()
+                            : Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const SizedBox(width: AppSpacing.x1),
+                                  AppIconButton(
+                                    icon: AppIcons.send,
+                                    semanticLabel:
+                                        _mode == ChatComposerMode.edit
+                                        ? strings.chatSaveEditAction
+                                        : strings.chatSendAction,
+                                    onPressed: ready ? _submit : null,
+                                    kind: AppButtonKind.primary,
+                                  ),
+                                ],
+                              ),
+                      ),
                     ],
                   ),
                 ),
@@ -1666,7 +2059,7 @@ class _DeliveryIndicator extends StatelessWidget {
 }
 
 class _DateSeparator extends StatelessWidget {
-  const _DateSeparator({required this.date});
+  const _DateSeparator({required this.date, super.key});
 
   final DateTime date;
 
@@ -1695,7 +2088,7 @@ class _DateSeparator extends StatelessWidget {
 }
 
 class _UnreadDivider extends StatelessWidget {
-  const _UnreadDivider();
+  const _UnreadDivider({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -1733,6 +2126,7 @@ class _PaginationMarker extends StatelessWidget {
     required this.loading,
     required this.failed,
     required this.onLoad,
+    super.key,
   });
 
   final bool hasMore;

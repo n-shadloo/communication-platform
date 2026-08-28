@@ -72,6 +72,29 @@ final conversationSummariesProvider = StreamProvider.autoDispose
       yield* repository.watchConversations(currentUserId);
     });
 
+/// The draft one conversation was left with, read once.
+///
+/// Deliberately not a slice of [conversationSummariesProvider]. A draft is an
+/// initial value for a text field the user is about to own, not a stream the
+/// field should follow — and the field is what writes it, so subscribing puts
+/// the composer's own keystrokes on a path back to the page around it. That
+/// path is the one this phase exists to cut: a draft write touches the
+/// `conversations` row, which is what the conversation list watches.
+///
+/// One read, at the moment the conversation opens. `autoDispose` is what makes
+/// it happen again the next time it is opened.
+final conversationDraftProvider = FutureProvider.autoDispose
+    .family<String?, String>((ref, conversationId) async {
+      final repository = await ref.watch(conversationRepositoryProvider.future);
+      final result = await repository.readConversation(conversationId);
+      return switch (result) {
+        Success(:final value) => value?.draft,
+        // A conversation that cannot be read has no draft to restore, and the
+        // timeline beside it reports the failure the user can act on.
+        FailureResult() => null,
+      };
+    });
+
 /// The moving window one open conversation is read through.
 ///
 /// Separate from [conversationMessagesProvider] on purpose. The window is

@@ -585,31 +585,39 @@ void main() {
     tester,
   ) async {
     final intents = <ChatIntent>[];
+    var resolvedTargets = 0;
     await _pump(
       tester,
       ChatConversationView(
         model: _model(),
-        forwardTargets: [
-          ChatListItemViewModel(
-            conversationId: '',
-            title: 'Saved Messages',
-            preview: '',
-            timestamp: DateTime.fromMillisecondsSinceEpoch(0),
-            unreadCount: 0,
-            muted: false,
-            pinned: false,
-            savedMessages: true,
-            peerUserId: null,
-          ),
-        ],
+        forwardTargets: () {
+          resolvedTargets += 1;
+          return [
+            ChatListItemViewModel(
+              conversationId: '',
+              title: 'Saved Messages',
+              preview: '',
+              timestamp: DateTime.fromMillisecondsSinceEpoch(0),
+              unreadCount: 0,
+              muted: false,
+              pinned: false,
+              savedMessages: true,
+              peerUserId: null,
+            ),
+          ];
+        },
         onIntent: intents.add,
       ),
     );
     intents.clear();
+    // Showing a conversation does not cost a list of everywhere a message
+    // could be forwarded to.
+    expect(resolvedTargets, 0);
 
     await _openMessageSurface(tester, find.text('message-5'));
     await tester.tap(find.text('Forward').last);
     await tester.pumpAndSettle();
+    expect(resolvedTargets, 1);
     await tester.tap(find.text('Saved Messages').last);
     await tester.pump();
     await tester.tap(find.text('Forward').last);
