@@ -1,5 +1,51 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Android 13 (API 33) and above gate every non-exempt notification behind
+         this runtime permission, and notifications are off by default on a
+         fresh install. It is requested at the point of use - the first time a
+         message is waiting that cannot be announced - and a refusal is a stated
+         outcome, not a retry loop. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Read by the delivery supervisor to know when the operating system says
+         there is no network at all, so a cycle is not started against one and a
+         held socket is given up rather than believed. It arrives in the merged
+         manifest from connectivity_plus either way (ADR-054); it is declared
+         here so that every permission in the artifact is stated and justified in
+         the file a reviewer reads, rather than only in a package's. Normal
+         protection level: granted at install with no prompt, and it reports the
+         transport and its capabilities, never an address, an operator or a
+         payload. -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- The message alert channel enables vibration, which is what reaches a
+         phone in a pocket or on silent. Normal protection level: it is granted
+         at install with no prompt and exposes nothing about the device or its
+         owner. -->
+    <uses-permission android:name="android.permission.VIBRATE" />
+    <!-- Required by JobInfo.Builder.setPersisted(true), which is what makes the
+         deferred catch-up survive a restart without this application declaring
+         a boot receiver of its own. Normal protection level: granted at install
+         with no prompt, and it grants no data, no network and no location. The
+         job still cannot run before the first unlock, because the database key
+         is credential-encrypted and this application is not direct-boot aware. -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <!-- Sustained delivery only (ADR-051), and nothing runs under either of
+         these until the user turns that capability on. Both are normal
+         protection level: they are granted at install with no prompt, they
+         grant no data, no network and no location, and declaring them changes
+         nothing about a build nobody has enabled the capability in. What they
+         permit is a foreground service of the `specialUse` type, whose truthful
+         justification is the <property> on the service below. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <!-- Required in order to show the system's own battery-optimization
+         exemption dialog. Holding it grants nothing by itself: the exemption is
+         the user's to give in that dialog and theirs to withdraw afterwards,
+         and this application reads the answer back from
+         PowerManager.isIgnoringBatteryOptimizations() rather than assuming it.
+         Android's own acceptable-use table sanctions asking for exactly this
+         case - a chat application that cannot use FCM. -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
     <application
         android:allowBackup="false"
@@ -30,6 +76,58 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
+        <!-- The deferred catch-up (ADR-049). A plain service, never a foreground
+             one: it shows no notification, holds no connection and asks for no
+             exemption. BIND_JOB_SERVICE is what makes the job scheduler the
+             only thing that can start it, and exported="false" is what keeps
+             every other application off it. -->
+        <service
+            android:name=".DeferredDeliveryJobService"
+            android:exported="false"
+            android:permission="android.permission.BIND_JOB_SERVICE" />
+        <!-- Sustained delivery (ADR-051). Off by default and started only by
+             this application, after a Dart isolate has read the user's durable
+             choice out of the encrypted database; a build nobody enabled it in
+             never starts it, shows nothing and holds nothing.
+
+             `specialUse` because holding an authenticated connection to this
+             application's own self-hosted server is none of the other declared
+             types: `dataSync` would overstate it and is capped at six hours a
+             day and forbidden from a boot receiver, `remoteMessaging` means
+             device-to-device message continuity, and `systemExempted` is gated
+             on roles this application does not have. The subtype property below
+             is written to be true, not to be accepted; this artifact is never
+             submitted to Google Play, where such values are reviewed. -->
+        <service
+            android:name=".SustainedDeliveryService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Keeps this application's process out of the cached state so that its authenticated connection to the user's own self-hosted messaging server survives, and end-to-end encrypted messages can be received while the application is not in use. No push transport is reachable in this deployment, so there is no messaging service to be woken by instead. Started only after the user explicitly turns the capability on, and stopped as soon as they turn it off." />
+        </service>
+        <!-- Refused, not inherited (ADR-054). androidx.profileinstaller
+             arrives transitively behind androidx.core and the Flutter
+             embedding, and its manifest contributes an *exported* receiver with
+             four intent filters that this application never asks for. Nothing
+             here starts it, nothing here would have declared it, and the
+             baseline profile is still written on first run by
+             ProfileInstallerInitializer, which calls ProfileInstaller.writeProfile
+             directly and never references this receiver. What is lost is the
+             shell- and store-triggered profile operations, neither of which
+             exists in a privately handed-over artifact. -->
+        <receiver
+            android:name="androidx.profileinstaller.ProfileInstallReceiver"
+            tools:node="remove" />
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.attachments"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data

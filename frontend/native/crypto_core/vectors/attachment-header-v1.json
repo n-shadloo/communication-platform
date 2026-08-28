@@ -1,0 +1,10 @@
+{
+  "format": "CPAFV001",
+  "version": 1,
+  "chunk_size": 65536,
+  "plaintext_size": 15,
+  "stream_size": 32,
+  "bucket_size": 65536,
+  "metadata_utf8": "meta",
+  "header_hex": "4350414656303031010000010000000000000000000f000000000000002000010000ea3bd73e2b506e00527232b3ed743c066da83a8e3066f62a71e75eb9b4aa1db6"
+}

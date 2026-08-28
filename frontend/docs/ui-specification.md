@@ -54,16 +54,31 @@ These recur across screens. They are stated here so the individual screens can s
 - **Presence, typing, and read/delivery receipts are private, encrypted signals.** They
   travel inside the encrypted channel. Accepted tradeoff: they may **lag slightly** vs. a
   normal chat app. Design for a small delay; don't treat them as instant.
-- **Search is client-side only.** The server never indexes or helps search. Search covers
-  only history stored and decrypted on **this device**.
+- **Search is client-side only.** The server never indexes or helps search, and never sees
+  the query. Search covers only history stored and decrypted on **this device** — and each
+  search surface states its own narrower scope, because the chat list matches names and one
+  preview line while in-conversation search reads that conversation's whole local history
+  (§6.5).
 - **Foreground delivery uses the app's own server; Android background delivery is
-  best-effort polling — never Google/Apple push.** Do not offer FCM/APNs-style options.
+  best-effort — never Google/Apple push.** By default that is deferred polling; a user may
+  additionally turn on keeping the app connected while it is closed (§15), which is faster
+  and still not a guarantee. Do not offer FCM/APNs-style options.
   Uncollected envelopes expire after seven days; a detected queue gap becomes a visible
   group-rejoin state.
 - **Honesty over false comfort.** Several actions are **best-effort, not guarantees**, and
   the UI must say so plainly (detailed at each spot): *Delete for everyone*, voice-room
   *ephemeral* text, and history recovery. Never word a dialog to imply a stronger promise
   than the system can keep.
+- **Two maturity labels, and they only read down.** A surface may be badged
+  **Experimental** (it really transmits, nothing about it is reviewed or standardised,
+  and its state is disposable) or **Not built yet** (routed and visible, nothing behind
+  it). There is no badge meaning supported, stable, verified or audited, and none may be
+  added: an unbadged surface is covered by the application-level label and by nothing
+  stronger. Both words come from `SurfaceMaturity`; a screen that invents its own
+  maturity wording is a defect ([ADR-045](decisions.md)).
+- **A feature that does not work does not offer itself.** Where an action cannot
+  succeed - no adapter is composed, no picker exists - the screen says so and disables
+  the action. It never presents a control that fails into a generic error.
 - **Two separate secrets, never conflated.** A **login password** authenticates to the
   server; a **recovery secret** protects cross-signing private identity material. Neither
   recovers message history from the server because the server stores none.
@@ -280,22 +295,67 @@ section must not be softened or omitted.
 
 **Layout (top → bottom).**
 1. Title, e.g. "What this app protects — and what it doesn't".
-2. **What it DOES protect** — the content of messages, files, and voice audio is
-   unreadable to the server, to anyone watching the network, and to anyone who seizes the
-   server.
-3. **What it does NOT protect** — stated plainly:
-   - the **fact and timing** that a device connected to the server (a network operator can
-     see *that* you connected, and when, even though not *what* you said);
-   - **traffic-analysis metadata** — timing, IP addresses, connection patterns;
-   - the **social graph from a live hostile server operator** — the operator can observe
-     which authenticated connection writes to which device queues and infer group fan-out;
-   - first contact before users compare SAS/QR master-key fingerprints out of band;
-   - a **compromised or seized device** — encryption can't protect messages already
-     decrypted on a phone in someone else's hands.
+2. **What it DOES protect** — what the user writes is encrypted on the device before it
+   leaves it, and is unreadable to the server, to anyone watching the network, and to
+   anyone who seizes the server. **It must name no feature.** This section is permanent
+   and outlives any feature list, so an enumeration goes stale by default: until
+   [ADR-052](decisions.md) it promised "messages, files, and voice audio" in an artifact
+   that could send no file and carry no audio, and a test now forbids feature words here.
+3. **What it does NOT protect** — stated plainly, and **in the reader's vocabulary rather
+   than the project's**:
+   - **when** the user connects, **from where**, **how much** they send, and **who they
+     talk to** — whoever runs the server sees all of it, even though not *what* was said;
+   - that a new contact is really who they say they are, until the two of them compare the
+     **safety number** — by the name the app's own screen uses for it (§10), not "SAS",
+     "fingerprint" or "out of band";
+   - messages **already open on a phone somebody else has taken or broken into**.
    Wording must not imply the app makes communication "safe from the government"; it makes
-   **content** unreadable — the rest is the user's informed risk.
-4. In onboarding: an **"I understand"** button (required to proceed). From Settings: a
-   plain **Close/Back**.
+   **content** unreadable — the rest is the user's informed risk. A limitation the reader
+   cannot decode is a limitation that has not been disclosed (ADR-052).
+4. **What this build is** — the deployment disclosure required by
+   [ADR-045](decisions.md), whose exact points and order are
+   `DeploymentDisclosure.privateExperimental`. Present **only** in a build that is
+   distributed to someone. At revision 7 that is eight short facts, ordered by
+   consequence — no independent review; how and when messages arrive while the app is
+   closed, including the opt-in tier and its cost; that messages left waiting on the
+   server are deleted unread and never arrive; history stored only on this device;
+   recovery restores identity and never messages; group chats use experimental encryption
+   that can be reset, and are switched off entirely on a processor it has not been tested
+   on (ADR-055 moved this point to "switched off" when no group stack was reachable at all;
+   ADR-056 restored the first half once one ABI was measured, and kept the second, because
+   the point now has to be true for a reader on either kind of phone);
+   parts of the interface are not built; who the build is and is not for.
+   **[PRIVACY]** No cryptographic identifiers, draft names, or registry state here — they
+   are true and unreadable, and they would bury the facts that matter. Sections 2 and 3
+   are permanent and stay true in a production release; this section must be absent from
+   one.
+5. In onboarding: an **"I understand"** button (required to proceed). From Settings: a
+   plain **Close/Back**. In the re-presentation (below): the same **"I understand"**.
+
+**One notice, three entry points.** The onboarding step, the Settings entry (§15) and
+the pre-login links (§2, §3) render the same sections in the same order. A shorter or
+differently-titled variant at any entry point is a defect: a user re-reading what they
+acknowledged must find the statement they acknowledged.
+
+**Not repeated.** Acknowledgement happens once per device, in onboarding. The notice is
+never re-shown on a schedule or after an ordinary update; ADR-045 records the measured
+evidence that repetition destroys a warning and degrades the app's other blocking
+security states. Re-acknowledgement is triggered only by the disclosure content
+changing.
+
+**Shown again, once, when the content does change.** The revision the user accepted is
+recorded on the device, so a build whose disclosure revision is higher re-presents the
+statement on the first launch after the update ([ADR-052](decisions.md)). It is a
+**full screen**, not a banner and not a notification: the app posts message alerts (§15)
+and can post a permanent service notice, and habituation to routine notifications
+transfers to warnings that resemble them. It renders **the same sections in the same
+order** as every other entry point, adds a heading saying the statement has changed, and
+marks the points that moved with a **labelled badge** — never colour alone, because the
+mark is the reason the screen exists and a screen reader must reach it. A reader with no
+recorded revision is shown the whole statement with **nothing** marked: marking every
+point marks none of them, and no record means the app does not know what they saw. It is
+never shown before enrollment completes, and never shown at all if the record cannot be
+read — an honesty mechanism must not lock somebody out of their messages.
 
 ---
 
@@ -319,7 +379,9 @@ rooms pinned at top. The primary hub.
 - Last-message preview (decrypted locally).
 - Timestamp of last activity.
 - Unread count badge.
-- Mute icon if muted.
+- Mute icon if muted. A mute that expires while the list is on screen clears the icon at the
+  moment it expires ([ADR-064](decisions.md)) — the row is not left claiming a mute that has
+  ended until something else happens to redraw it.
 - Pin marker if pinned.
 - Optional delivery/read state on the last outgoing message.
 
@@ -338,15 +400,35 @@ rooms pinned at top. The primary hub.
   readable (content is stored and decrypted locally). New sends queue (§8 states).
 
 ### 6.5 Search (client-side only)
-**Purpose.** Search the user's own chats. **[PRIVACY] The server never indexes or assists —
-search covers only history stored and decrypted on this device.**
+**Purpose.** Find the user's own conversations and messages. **[PRIVACY] The server never
+indexes or assists — nothing searchable ever leaves the device, and neither does the query.**
 
-- **Layout.** Search input at top; results grouped into **Chats** (matching titles),
-  **Messages** (matching text in the local store), optionally **Contacts**.
-- **Interactions.** Tapping a message result opens that chat scrolled to the message;
-  tapping a chat/contact opens it.
-- **States.** Empty query, no results, and a note that search covers only this device's
-  stored history.
+Search is built, and it is **two separate surfaces with two different scopes**. Each must
+state its own scope; borrowing the other's is a false promise ([ADR-052](decisions.md)).
+
+- **The chat-list box (this screen).** Filters the conversation list on **name and latest
+  message only**. It does not read history. Its hint and its empty state say so, and point
+  the user at the in-conversation search for anything older.
+- **In-conversation search (§8, §9, §14).** One surface, opened from the overflow of
+  every conversation kind — direct, saved and group. It reads **that conversation's loaded
+  local history** — the message stream carries a window since [ADR-062](decisions.md), and
+  what is loaded grows as the reader pages backwards — and a matching result scrolls the
+  timeline to the message, loading it first if it sits outside the window. Its notice says
+  the search covers only messages stored on this phone, and that the server never sees them
+  or the query. It shows at most 30 matches at a time and **says so** when it is showing
+  that many, because a silently capped result set misdescribes the scope the notice just
+  promised ([ADR-057](decisions.md)).
+- **States.** Empty query, no results, the match count, the truncation notice, and the
+  scope note belonging to that surface.
+
+A single merged results screen grouping **Chats** / **Messages** / **Contacts** is not
+built. Nothing in the app offers it, and the disclosure does not imply it. Contacts are
+filtered where they are listed (§7), which is the third and last search surface.
+
+**[PRIVACY]** There is no separate search index. The encrypted database is the index:
+the decrypted message projection lives inside it, under the Keystore-wrapped key, and a
+search is a filter over rows that are already there. A second structure would hold a
+second copy of every message body ([ADR-057](decisions.md)).
 
 ---
 
@@ -399,15 +481,33 @@ search covers only history stored and decrypted on this device.**
 3. **Input bar (bottom):**
    - **Attachment** button → attachment sheet (§8.2).
    - Text input (multiline, grows).
-   - **Emoji** access.
-   - **Send** (appears when text present).
+   - **Emoji** — always present; opens the full emoji picker and inserts the chosen
+     glyph at the caret. Dismissing the picker leaves the draft untouched.
+   - **Send** (appears when text present, beside the emoji button rather than in place
+     of it).
    - When replying/editing, a **context strip** above the input shows the quoted/edited
      message with a cancel (×).
+   - **Draft.** An unsent draft is kept per conversation and restored when it is reopened.
+     It is written down on a short trailing pause rather than on every character
+     ([ADR-064](decisions.md)), and it is written down *immediately* on every way out of the
+     composer: losing focus, leaving the screen, the application leaving the foreground, and
+     sending. So a draft is never lost by backgrounding or by leaving, and sending never
+     leaves the sent text behind as a draft. What is on screen is always the draft; the
+     debounce is about when storage catches up, and nothing the user can do reads the stored
+     copy back over what they are typing.
 
-**Message interactions (long-press / right-click → context menu):**
+**Message interactions.** A **single tap** or a right-click opens the context menu with the
+**reaction selector** floating above it, anchored to the message. A **double tap** sets 👍
+straight away, or removes it when it is already this user's, and opens nothing. There is no
+long-press.
+
+- **React** — the floating selector: twenty-four common reactions in one horizontally
+  scrollable row, the current user's marked as selected, tapping it again removes it, and
+  an expand control at the trailing edge that opens the full emoji picker. Reactions are a
+  set operation per `(message, user)`, so choosing a second one replaces the first.
+  **[PRIVACY]** the reaction is encrypted, and the server never sees the emoji. No control
+  anywhere sends a fixed emoji ([ADR-059](decisions.md)).
 - **Reply** — sets the reply strip.
-- **React** — emoji reactor; **[PRIVACY]** reaction is encrypted, server never sees the
-  emoji.
 - **Edit** (own messages) — loads the message into the input with an edit strip.
 - **Forward** — Forward target picker (§8.4).
 - **Copy** — local clipboard.
@@ -419,7 +519,13 @@ search covers only history stored and decrypted on this device.**
   already received and decrypted.
 
 **States.**
-- *Loading* — history loads locally; older messages page in on scroll-up.
+- *Loading* — history loads locally; older messages page in on scroll-up. The timeline holds
+  a window rather than the whole conversation ([ADR-062](decisions.md)): reaching the top of
+  what is drawn widens the drawn range first and then asks local storage for an older page,
+  the marker at the top shows loading and offers a retry when that page fails, and a message
+  arriving joins the timeline without moving the line being read. A jump — from the pinned
+  banner, a reply quote or a search result — loads its target when it is older than anything
+  loaded.
 - *Empty* — new-conversation placeholder.
 - *Sending / queued* — pending state; **offline** sends queue locally and flush on the
   next active connection or background poll; there is no foreign push.
@@ -654,17 +760,44 @@ appear pinned in the Chats list.
 2. **Saved Messages** → §14.
 3. **Linked Devices** → §16.
 4. **Security & recovery** → Security settings (§15.2).
-5. **Notifications** — global notification/mute preferences (a client-side preference).
+5. **Notifications** — what the operating system will actually do, read from the operating
+   system rather than from a stored preference (ADR-048). Three states: **on**, with a line
+   stating that an alert says only that something arrived, never who sent it or what it
+   says, and that it can only reach the user while the app is running; **off**, with one
+   action that asks Android and falls through to this app's system notification settings
+   when asking changes nothing, because a second refusal is permanent and the app can no
+   longer prompt; and **not available in this build**, on any target with no alert
+   implementation behind it.
    **[PRIVACY]** Active-app delivery uses the self-hosted connection and Android
-   background delivery is best-effort polling, **not** Google/Apple push. Do not offer
-   push-service or always-instant options.
+   background delivery is best-effort, **not** Google/Apple push. Do not offer
+   push-service or always-instant options, and do not offer a decrypted-preview switch
+   without the reviewed bilingual lock-screen warning that has to accompany it. Per-
+   conversation mute already lives on the conversation, not here.
+5b. **Receiving while closed** — the opt-in capability that keeps the app connected while
+   it is not in use (ADR-051). A row stating the current state, and one screen behind it.
+   The screen states, in this order and before any switch: what it does; what it costs —
+   more battery, and a permanent notice anyone who unlocks the phone can see, which stays
+   until it is turned off; what it cannot promise — the phone may stop it at any time
+   without saying so, and a force-stop or a "restricted" battery setting ends it entirely.
+   Then the three things the phone needs: notifications, the battery-optimization
+   exemption, and, on Samsung and Xiaomi, exclusion from the manufacturer's own
+   app-sleeping — the last stated plainly as something **only the user can do and this app
+   cannot check**, with one button that opens the phone's own screen and reports nothing
+   back. Every degraded state has a sentence of its own: notifications withheld, exemption
+   withdrawn (which can happen by itself after a phone update), not running, not available
+   in this build. **Off is the default and a complete state**: nothing runs, nothing is
+   requested, nothing appears anywhere, and the row says so. This surface is reached only
+   from Settings and is never suggested, prompted or advertised elsewhere.
 6. **Appearance** — client-only display preferences (the option *set* is your call; no
    styling prescribed here).
 7. **Security notice** — re-open the honest boundary screen (§5).
 8. **Log out** → confirm. **[PRIVACY]** The confirm clearly states whether local
    history/keys are wiped. The recovery secret can recover cross-signing identity, not
    messages; history returns only from another device that still has it.
-9. **About** — app/version info (all local; no external calls).
+9. **About** — app/version info (all local; no external calls): the build's own name,
+   the packaged version, which build it is, and the revision of the statement this
+   build carries. It states that nothing on it was fetched. Behind it sits
+   **Diagnostics** (§15.3).
 
 ### 15.1 Edit Profile
 - Set display name and avatar. State clearly what is visible to contacts. (Keep personal
@@ -676,8 +809,41 @@ appear pinned in the Chats list.
   rewrap the same cross-signing identity material, upload a higher backup version, show
   the new secret once, and invalidate the old secret. Honest note: the server holds only
   an **unreadable identity backup** and no message history.
-- **Safety numbers** — a shortcut to review verified contacts (§11.1).
+- **Safety numbers** — a shortcut to review verified contacts (§11.1): every known
+  contact with the trust state the conversation screens gate on, tapping through to that
+  contact's Safety Number screen. An unverified row never renders cached profile
+  identity.
 - **Security notice** link (§5).
+
+**Replacement flow states.** *Explain* (what it does, what it costs, and that a recovery
+secret restores identity and never history) → *working* → *shown once* → *done*, with a
+single *failed* state. Screen capture is blocked for as long as the screen is open, and a
+copy goes through the clipboard path that expires; a build without that path says copying
+is unavailable rather than using a clipboard that never clears. **The new secret is shown
+only after the server has accepted the higher backup version.** Every failure says the
+current secret still works, because it does ([ADR-057](decisions.md)).
+
+### 15.3 Diagnostics
+
+**Purpose.** A short technical report the user can copy and hand to whoever runs their
+server. Reached from About and from nowhere else.
+
+**[PRIVACY]** The report cannot contain a message, a name, an address, a key, a token or
+any identifier — not by review but by construction: its values are booleans,
+enumerations, order-of-magnitude counts and compile-time constants, and there is no way
+to put text into one. Counts are bucketed and the timestamp is an hour, because an exact
+description of one person's usage is a needlessly precise thing to put in a document they
+may pass on.
+
+**Layout.** The explanation, a statement that the application sends it nowhere, the
+**complete report text exactly as it will be copied**, and a Copy action. What is on the
+screen and what reaches the clipboard are the same bytes; showing a summary and copying
+something larger would ask a person to share a document they have not read. The report
+itself is locale-independent ASCII — its recipient may not read the sender's language —
+while the chrome around it is translated.
+
+**States.** *Reading this device*, *report*, *copied*, *clipboard refused*, and a re-read
+action.
 
 ---
 
@@ -690,9 +856,14 @@ transfer locally held history.
 **Layout (top → bottom).**
 1. **Top bar:** back; title "Linked Devices".
 2. **This device** row — current device, marked.
-3. **Other devices** list — each row: device label, last-active (as available), and
-   **Remove device** (→ confirm). Removing revokes it.
-4. **Add device** → Add Device flow (§16.1).
+3. **Other devices** list — each row: device label, last-active (as available, at the
+   day-level coarseness the backend reports and **not** shifted into local time), and
+   **Remove device** (→ confirm). Removing revokes it. Removing *this* device is a
+   distinct confirmation, because it also erases everything on this phone.
+4. **Add device** — an explanation, not a button. The flow in §16.1 starts on the *other*
+   device, so this screen has nothing to start; what it says is what the other device
+   needs, and that this one should stay online afterwards so it can send its history
+   across, because the server has none to send ([ADR-057](decisions.md)).
 
 ### 16.1 Add Device flow
 - **Purpose.** Bring a new device online, recover/cross-sign identity, then optionally
@@ -723,7 +894,9 @@ The recurring modal surfaces and their contents:
 - **Confirm dialogs** — Leave group, Remove member, Remove device, Clear history, Log out:
   each states the consequence plainly, including irreversibility where true.
 - **Mute options sheet** — durations / until toggled.
-- **Emoji reactor** — for reactions.
+- **Emoji reactor** (§8) — the floating reaction selector, which opens with the message
+  context menu and is drawn above it, plus the full emoji picker its expand control opens.
+  The same picker serves the composer's emoji button ([ADR-059](decisions.md)).
 - **Attachment sheet** (§8.2).
 - **Context menus** — message long-press menu (§8/§9) and conversation-list item menu (§6).
 - **Forward target picker** (§8.4).
@@ -768,6 +941,11 @@ Every dialog that performs an irreversible or best-effort action must carry hone
 29. Settings home (§15)
 30. Edit Profile (§15.1)
 31. Security settings (§15.2)
-32. Linked Devices (§16)
-33. Add Device (§16.1)
-34. Global dialogs/sheets/menus (§17)
+32. Appearance (§15, item 6)
+33. Recovery-secret replacement (§15.2)
+34. Safety-number review (§15.2)
+35. About (§15, item 9)
+36. Diagnostics (§15.3)
+37. Linked Devices (§16)
+38. Add Device (§16.1)
+39. Global dialogs/sheets/menus (§17)

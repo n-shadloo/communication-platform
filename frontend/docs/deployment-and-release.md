@@ -1,14 +1,53 @@
 # Deployment and release
 
+What the initial deployment *is* - its audience, its maturity tiers, what may be
+claimed about it, and what must be disclosed - is decided by
+[ADR-044](decisions.md), and what it *says* to the people who receive it - the
+maturity vocabulary, the disclosure, and the one acknowledgement - is decided by
+[ADR-045](decisions.md). Release signing, key custody, and upgrade-continuity
+verification are specified separately in
+[Beta release signing and key continuity](release-signing.md) and decided by
+ADR-042. Those two are authoritative for the deployment definition and for
+anything concerning signing keys, release artifacts, and their verification; this
+document covers the surrounding release process.
+
 ## Environments
 
-Use compile-time flavors with separate visible identity and trust configuration:
+Use compile-time flavors with separate visible identity and trust configuration.
+There are exactly three; each has one Dart entry point and reads one provisioning
+prefix:
 
-| Flavor | Purpose | Trust |
-|---|---|---|
-| development | Local engineering | local origin/CA; debug banner |
-| staging | Production-like integration | staging origin/CA/pins; staging accounts |
-| production | User release | production origin/private CA/primary+backup pins only |
+| Flavor | Entry point | Purpose | Trust |
+|---|---|---|---|
+| development | `lib/main_development.dart` | Local engineering | local origin/CA; debug banner |
+| beta | `lib/main_beta.dart` | The Private Experimental deployment (ADR-044) | beta origin/CA/pins; persistent Beta signing identity |
+| production | `lib/main_production.dart` | Future public release | production origin/private CA/primary+backup pins only |
+
+There is deliberately no staging flavor. A fourth environment would need a fourth
+application ID, a fourth provisioning prefix, and its own trust material, and
+nothing in the current release process needs one: production-like integration is
+rehearsed against the beta origin. Adding one is an ADR decision, not a build
+edit.
+
+Every non-production flavor carries a persistent configuration banner, on the
+blocking Connection screen and inside the application shell, that names its own
+build: development reads "Development configuration" and beta reads "Private
+experimental build". Under ADR-044 that banner deliberately does not say "beta" -
+the word overstates an unreviewed stack - even though the frozen application ID
+keeps its `.beta` suffix. A beta build is installed by external testers and must
+never present itself as development. Production shows no banner at all.
+
+The banner, the Android launcher label, and the window title Android shows in the
+task switcher name the same build. Before ADR-045 the title branched on production
+alone, so the Private Experimental artifact called itself "Communication Platform
+(Development)" beside a launcher icon reading "(Experimental)".
+`AppEnvironmentBanner` now owns both strings, and the Gradle flavor owns the
+launcher label they must match.
+
+The beta and production flavors are separate, coexisting Android applications
+with different application IDs and different signing identities. Neither
+upgrades into the other. The production release build is deliberately unsigned
+so it keeps building and stays verifiable without being installable.
 
 No runtime text field changes the production server. Secrets are never compiled into the
 client; only public origins, CA certificates, SPKI hashes, and protocol capabilities are
@@ -18,7 +57,9 @@ configuration.
 
 Track independently:
 
-- human application version;
+- human application version, which `BuildIdentity.version` mirrors from `pubspec.yaml`
+  so that the About screen and the diagnostics export name the artifact the user
+  actually installed; an architecture test fails if the two drift apart;
 - monotonically increasing Android version code;
 - future Web artifact/build ID (post-v1);
 - local database schema version;
@@ -32,12 +73,25 @@ by contract tests and conservative client behavior, not runtime version guessing
 ## Dependency and toolchain control
 
 - Pin Flutter and Dart SDKs for the team/CI.
-- Commit Flutter/Dart/Rust lockfiles and checksum external artifacts.
+- Commit Flutter/Dart/Rust/Gradle lockfiles and checksum external artifacts. All four
+  exist as of [ADR-054](decisions.md): `pubspec.lock` enforced by
+  `flutter pub get --enforce-lockfile`, `native/crypto_core/Cargo.lock`, and
+  `android/app/gradle.lockfile` in `LockMode.STRICT` over the six configurations a built
+  artifact resolves. Every direct Dart dependency is one exact version, never a range.
 - Mirror/cache all build dependencies so a clean release can build without international
   internet.
 - Produce a version-1 SBOM covering Dart, Android/Gradle, Rust, fonts, and native
-  libraries. Add Rust/Wasm and browser-worker artifacts only when Web is reopened.
-- Review licenses, especially crypto libraries, before acceptance.
+  libraries. Add Rust/Wasm and browser-worker artifacts only when Web is reopened. The
+  Dart and Android/Gradle halves are the two lockfiles above plus
+  [third-party-notices.md](third-party-notices.md); the Rust, font and native halves are
+  not yet aggregated anywhere (ADR-054 follow-up F3).
+- Review licenses, especially crypto libraries, before acceptance. What a distributed
+  artifact carries, and the notices each licence requires, are recorded in
+  [third-party-notices.md](third-party-notices.md).
+- Never let a plugin upgrade move an Android pin as a side effect. `connectivity_plus`
+  7.1.0 and later would carry `androidx.core` from 1.16.0 to 1.18.0, and with it the
+  required `compileSdk`; the Gradle lock is what turns that into a failed build instead of
+  a changed artifact.
 - Disable crypto debug/log features and remove unused architectures/resources only after
   verifying packaging rules.
 
@@ -48,12 +102,83 @@ by contract tests and conservative client behavior, not runtime version guessing
    rehearsal.
 3. Produce deterministic release APK artifacts where the toolchain permits.
 4. Sign with an offline-controlled application signing key; keep backup/recovery process
-   separate from source control.
+   separate from source control. The Private Experimental Beta already does this
+   through `tool/build_beta_release.sh`; production keeps a distinct key that is
+   not created until an explicit production release decision.
 5. Generate SHA-256 artifact hashes and signed update metadata.
 6. Verify install, upgrade with real encrypted migration fixtures, rollback behavior, and
-   private-CA connectivity on representative devices.
+   private-CA connectivity on representative devices. Upgrade continuity is proved
+   by `tool/verify_upgrade_continuity.sh` plus the manual product-state tier in
+   [release-signing.md](release-signing.md); a successful build is never
+   sufficient evidence on its own.
 7. Publish APK, hash, version notes, and minimum protocol compatibility through the
    self-hosted/local distribution channel.
+8. For the Private Experimental deployment, deliver the written disclosure with the
+   artifact. This is release-blocking, not a courtesy.
+
+   It carries **the same points, in the same order, as `DeploymentDisclosure.privateExperimental`**,
+   and it is written from that list rather than from this paragraph, so the two cannot
+   drift apart the way they had by revision 4 — this step previously claimed "the same
+   seven facts" and then listed six of them, omitted the unbuilt surfaces entirely, and
+   never mentioned the opt-in tier ADR-051 added ([ADR-052](decisions.md)). At revision 7
+   ([ADR-055](decisions.md) switched the group point from a caution about experimental
+   groups to a statement that they are off; [ADR-056](decisions.md) reopened them on the
+   one measured ABI and the point now carries both halves) that is eight points:
+
+   1. no part of the cryptography has been independently reviewed, and one person wrote
+      and tested all of it;
+   2. messages arrive immediately while the app is open, and while it is closed only when
+      the phone gets round to checking — fifteen minutes apart at best, usually far less
+      often, and not at all while the phone is saving battery, while Data Saver is on over
+      mobile data, once the app has gone unopened for several days, or after a force-stop;
+      that Settings carries an opt-in that does better on most phones at the cost of
+      battery and a permanent notice; and that none of it is guaranteed;
+   3. a message waits on the server only until the phone collects it, after which the
+      operator's retention timer deletes it unread and it never arrives, with no
+      indication of which messages were lost;
+   4. history exists only on the device and uninstalling destroys it permanently;
+   5. a recovery secret restores identity on a new device and never restores messages;
+   6. group messaging uses experimental encryption that is unfinished, non-standard
+      and unreviewed, and an update can reset a group and delete everything in it; on a
+      phone whose processor it has not been tested on it is switched off instead, and
+      direct messages are unaffected either way (ADR-055, ADR-056);
+   7. voice rooms and file attachments do nothing, and the display name and photo are not
+      published — contacts see the registered username;
+   8. the build is for evaluation among people who already trust each other, and is not
+      appropriate for anyone whose safety depends on the confidentiality of their
+      messages.
+
+   The written delivery is not replaced by the in-application disclosure and stays
+   release-blocking: it reaches a recipient before they install, and it is the only copy
+   a person who declines to install ever sees.
+
+9. If `DeploymentDisclosure.revision` in
+   `lib/app/config/deployment_disclosure.dart` differs from the revision carried by the
+   previously distributed artifact, re-deliver the written disclosure to **every**
+   existing recipient, not only to new ones. The revision moves when and only when what
+   the build promises moves, so a changed revision is exactly the case where a person who
+   already enrolled has been told something that is no longer true.
+
+   Since [ADR-052](decisions.md) their install also re-presents the statement once, on the
+   first launch after the update, marking the points that moved — the accepted revision is
+   recorded on the device, so the application can tell. That mechanism reaches only people
+   who install the update, which is why this step is still release-blocking: somebody who
+   stays on an older artifact, or who never installs again, is reached by the written
+   delivery or by nothing.
+
+   The revision cannot be raised by hand and cannot be skipped: it is the highest
+   `DisclosurePoint.since` among the points, and `test/architecture/deployment_disclosure_test.dart`
+   fails on any edit to a pinned string until that point's `since` is raised with it.
+
+10. Deliver [third-party-notices.md](third-party-notices.md) with the artifact, in the
+    same handover as the written disclosure. Apache-2.0 §4 and the BSD 3-Clause licence
+    both require that whoever receives the binary receives the licence text and the
+    attribution notices, and a private handover is still distribution
+    ([ADR-054](decisions.md)). The machine-generated half for the Dart packages and the
+    engine is inside the APK at `assets/flutter_assets/NOTICES.Z`; nothing in the
+    application displays it, so this document is currently the only copy a recipient can
+    read. Unlike the step above this one is not release-blocking on a disclosure
+    revision: it changes when the dependency set does.
 
 Updates are explicit user/admin actions. The app may check only the self-hosted signed
 metadata endpoint. It never fetches executable code or dependencies dynamically.
@@ -136,6 +261,14 @@ downgrade.
 - [ ] Database and crypto-state migrations pass from all supported Android versions.
 - [ ] Backend contract and multi-device E2E suites pass.
 - [ ] Accessibility, RTL, performance, battery, and voice gates pass.
-- [ ] No forbidden network calls or sensitive logs/artifacts detected.
+- [ ] Sustained delivery: either every mandatory cell of the matrix in
+  [sustained-delivery-validation.md](sustained-delivery-validation.md) has an admissible
+  record in `SustainedDeliveryGate.releaseAssertion`, or the capability is still withheld.
+  **Currently withheld; the gate is CLOSED and no cell has been run.** A partially
+  satisfied matrix opens nothing, and an emulator record can never satisfy a cell.
+- [ ] No forbidden network calls or sensitive logs/artifacts detected. This now includes
+  the user-initiated diagnostics export (§15.3): the report a recipient can be asked for
+  is inspected on a real device with real content behind it, as well as by the
+  adversarial host test that stuffs a canary into every table it reads.
 - [ ] SBOM, hashes, signatures, update metadata, and rollback plan archived.
 - [ ] Staging rehearsal and isolated-network production rehearsal completed.

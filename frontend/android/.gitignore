@@ -13,3 +13,10 @@ GeneratedPluginRegistrant.java
 key.properties
 **/*.keystore
 **/*.jks
+
+# Private Beta release signing material. Only the public frozen identity in
+# beta-release-identity.properties belongs in source control.
+beta-signing.properties
+*.p12
+*.pfx
+/signing/

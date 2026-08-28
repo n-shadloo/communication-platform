@@ -11,30 +11,99 @@ import 'package:communication_platform/features/contacts/domain/contact_model.da
 ///
 /// Backend listings are treated as untrusted inputs. A successful result chains exact
 /// response bytes through master, self-signing, device, prekey, and device-log checks.
-final class ClientAuthenticationService implements PeerAuthenticationService {
+final class ClientAuthenticationService
+    implements
+        PeerAuthenticationService,
+        SelectivePeerPrekeyClaimPort,
+        VerifiedLiveDeviceResolverPort {
   const ClientAuthenticationService({
     required this.remote,
     required this.local,
     required this.crypto,
+    this.resolutionCache = const NoPeerResolutionCache(),
   });
 
   final PeerIdentityRemotePort remote;
   final ContactLocalPort local;
   final IdentityCryptoPort crypto;
 
+  /// Which of this service's entry points may be served a remembered server
+  /// answer, decided here because this is where that is known.
+  ///
+  /// [refreshPeer] and [confirmOutOfBand] may not. Both exist to answer the
+  /// question *is this device's idea of that peer still right* — one is asked
+  /// by a person looking at a safety number, the other by the delivery cycle
+  /// acting on a `stale_devices` response — and a cache is the one thing that
+  /// cannot answer it. They run under [PeerResolutionCachePort.live], which
+  /// forgets the peer and keeps it forgotten for the whole resolution.
+  ///
+  /// [resolveLiveDevices] and [refreshPeerForDevices] may, because they are the
+  /// fan-out asking the same question of the same peer two to four times inside
+  /// one cycle. Nothing they verify is skipped by a hit; only the round trip is.
+  final PeerResolutionCachePort resolutionCache;
+
   @override
   Future<Result<AuthenticatedPeer>> refreshPeer({
     required String userId,
     required bool requirePrekeys,
-  }) => _refresh(
-    userId: userId,
-    requirePrekeys: requirePrekeys,
-    allowMasterReplacement: false,
+  }) => resolutionCache.live(
+    userId,
+    () => _refresh(
+      userId: userId,
+      requirePrekeys: requirePrekeys,
+      claimDeviceIds: null,
+      allowMasterReplacement: false,
+    ),
   );
+
+  @override
+  Future<Result<AuthenticatedPeer>> refreshPeerForDevices({
+    required String userId,
+    required List<String> deviceIds,
+  }) {
+    if (deviceIds.isEmpty ||
+        deviceIds.length > 100 ||
+        deviceIds.toSet().length != deviceIds.length ||
+        deviceIds.any((value) => _uuidBytes(value) == null)) {
+      return Future.value(
+        const Result.failure(
+          SecurityFailure(SecurityFailureKind.policyBlocked),
+        ),
+      );
+    }
+    return _refresh(
+      userId: userId,
+      requirePrekeys: true,
+      claimDeviceIds: List.unmodifiable(deviceIds),
+      allowMasterReplacement: false,
+    );
+  }
+
+  @override
+  Future<Result<AuthenticatedPeer>> resolveLiveDevices({
+    required String userId,
+  }) async {
+    final globalFork = await local.hasAnyDeviceLogFork();
+    if (globalFork case FailureResult(failure: final failure)) {
+      return Result.failure(failure);
+    }
+    if ((globalFork as Success<bool>).value) {
+      return const Result.failure(
+        SecurityFailure(SecurityFailureKind.policyBlocked),
+      );
+    }
+    return _refresh(
+      userId: userId,
+      requirePrekeys: false,
+      claimDeviceIds: null,
+      allowMasterReplacement: false,
+    );
+  }
 
   Future<Result<AuthenticatedPeer>> _refresh({
     required String userId,
     required bool requirePrekeys,
+    required List<String>? claimDeviceIds,
     required bool allowMasterReplacement,
   }) async {
     if (requirePrekeys) {
@@ -54,6 +123,12 @@ final class ClientAuthenticationService implements PeerAuthenticationService {
         SecurityFailure(SecurityFailureKind.malformedServerResponse),
       );
     }
+    final localIdentityResult = await local.readLocalIdentity();
+    if (localIdentityResult case FailureResult(failure: final failure)) {
+      return Result.failure(failure);
+    }
+    final localIdentity =
+        (localIdentityResult as Success<LocalAccountIdentity>).value;
     final previousResult = await local.readTrust(userId);
     if (previousResult case FailureResult(failure: final failure)) {
       return Result.failure(failure);
@@ -81,6 +156,27 @@ final class ClientAuthenticationService implements PeerAuthenticationService {
         identity: identity,
       );
       return Result.failure(failure);
+    }
+    if (localIdentity.userId == userId &&
+        (!_same(
+              localIdentity.identityPackage.masterPub,
+              identity.masterPublic,
+            ) ||
+            !_same(
+              localIdentity.identityPackage.selfSigningPub,
+              identity.selfSigningPublic,
+            ) ||
+            !_same(
+              localIdentity.identityPackage.userSigningPub,
+              identity.userSigningPublic,
+            ) ||
+            !_same(
+              localIdentity.identityPackage.masterSig,
+              identity.masterSignature,
+            ))) {
+      return const Result.failure(
+        SecurityFailure(SecurityFailureKind.unauthenticatedInput),
+      );
     }
     final confirmedMaster = previous?.confirmedMasterPublic;
     if (confirmedMaster != null &&
@@ -140,9 +236,20 @@ final class ClientAuthenticationService implements PeerAuthenticationService {
     }
     if (advertisedHead == null ||
         (previous?.logHeadSequence != null &&
-            advertisedHead < previous!.logHeadSequence!) ||
-        (listChanged && advertisedHead == previous?.logHeadSequence)) {
+            advertisedHead < previous!.logHeadSequence!)) {
       return _fork(previous, userId, identity, etag);
+    }
+    if (!_isValidDeviceTransition(cachedDevices, devices)) {
+      return _invalidDevice(previous, userId, identity, etag);
+    }
+    if (listChanged && advertisedHead == previous?.logHeadSequence) {
+      // Device registration, revocation, and prekey rotation are separate
+      // server mutations from the signed append. A same-head device-set change
+      // is therefore a bounded pending window, not fork evidence. The list is
+      // never exposed as authenticated until the extending record arrives.
+      return const Result.failure(
+        SecurityFailure(SecurityFailureKind.policyBlocked),
+      );
     }
 
     var expectedPrevious = previous?.logHeadHash ?? Uint8List(32);
@@ -213,18 +320,30 @@ final class ClientAuthenticationService implements PeerAuthenticationService {
 
     var claimed = const <ClaimedPrekeyBundle>[];
     if (requirePrekeys) {
+      final requestedDeviceIds =
+          claimDeviceIds ??
+          devices.map((device) => device.deviceId).toList(growable: false);
+      final liveDeviceIds = devices.map((device) => device.deviceId).toSet();
+      if (requestedDeviceIds.any(
+        (deviceId) => !liveDeviceIds.contains(deviceId),
+      )) {
+        return _invalidDevice(previous, userId, identity, etag);
+      }
       final claimResult = await remote.claimPrekeyBundles(
         userId: userId,
-        deviceIds: devices.map((device) => device.deviceId).toList(),
+        deviceIds: requestedDeviceIds,
       );
       if (claimResult case FailureResult(failure: final failure)) {
         return Result.failure(failure);
       }
       claimed = (claimResult as Success<List<ClaimedPrekeyBundle>>).value;
-      if (claimed.length != devices.length) {
+      if (claimed.length != requestedDeviceIds.length) {
         return _invalidDevice(previous, userId, identity, etag);
       }
-      for (final device in devices) {
+      for (final deviceId in requestedDeviceIds) {
+        final device = devices.singleWhere(
+          (candidate) => candidate.deviceId == deviceId,
+        );
         final matches = claimed
             .where((bundle) => bundle.deviceId == device.deviceId)
             .toList(growable: false);
@@ -243,16 +362,8 @@ final class ClientAuthenticationService implements PeerAuthenticationService {
           return _invalidDevice(previous, userId, identity, etag);
         }
       }
-    } else if (listChanged && previous?.state == ContactTrustState.verified) {
-      return _invalidDevice(previous, userId, identity, etag);
     }
 
-    final localIdentityResult = await local.readLocalIdentity();
-    if (localIdentityResult case FailureResult(failure: final failure)) {
-      return Result.failure(failure);
-    }
-    final localIdentity =
-        (localIdentityResult as Success<LocalAccountIdentity>).value;
     var nextState = ContactTrustState.unverified;
     if (confirmedMaster != null &&
         _same(confirmedMaster, identity.masterPublic) &&
@@ -308,10 +419,20 @@ final class ClientAuthenticationService implements PeerAuthenticationService {
   Future<Result<ContactTrustRecord>> confirmOutOfBand({
     required String userId,
     required Uint8List exactMasterPublic,
+  }) => resolutionCache.live(
+    userId,
+    () =>
+        _confirmOutOfBand(userId: userId, exactMasterPublic: exactMasterPublic),
+  );
+
+  Future<Result<ContactTrustRecord>> _confirmOutOfBand({
+    required String userId,
+    required Uint8List exactMasterPublic,
   }) async {
     final refreshed = await _refresh(
       userId: userId,
-      requirePrekeys: true,
+      requirePrekeys: false,
+      claimDeviceIds: null,
       allowMasterReplacement: true,
     );
     if (refreshed case FailureResult(failure: final failure)) {
@@ -457,6 +578,37 @@ final class ClientAuthenticationService implements PeerAuthenticationService {
           a[index].bundleVersion != b[index].bundleVersion ||
           !_same(a[index].identityPublic, b[index].identityPublic) ||
           !_nullableSame(a[index].crossSignature, b[index].crossSignature)) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  bool _isValidDeviceTransition(
+    List<PeerPublicDevice> previous,
+    List<PeerPublicDevice> current,
+  ) {
+    final oldById = {for (final device in previous) device.deviceId: device};
+    for (final device in current) {
+      final old = oldById[device.deviceId];
+      if (old == null) {
+        continue;
+      }
+      if (old.registrationId != device.registrationId ||
+          !_same(old.identityPublic, device.identityPublic)) {
+        return false;
+      }
+      final signatureChanged = !_nullableSame(
+        old.crossSignature,
+        device.crossSignature,
+      );
+      final versionChanged = old.bundleVersion != device.bundleVersion;
+      if (signatureChanged != versionChanged) {
+        return false;
+      }
+      if (signatureChanged &&
+          (old.bundleVersion == null ||
+              device.bundleVersion != old.bundleVersion! + 1)) {
         return false;
       }
     }

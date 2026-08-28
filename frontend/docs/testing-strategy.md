@@ -21,6 +21,11 @@
   reuse with a different event ID, stale revision, clock skew, and unknown-version
   behavior.
 - Error-code mapping and localized honest wording selection.
+- Structural redaction of anything the user can export: the diagnostics report's value
+  type is proved to admit no runtime text, and the collector is run against a database
+  whose every readable column holds a canary.
+- Recovery-secret replacement: the new secret is produced only after the server accepted
+  a higher backup version, and every refusal leaves the current secret working.
 - Riverpod use cases with in-memory/fake ports; no widget is required to test domain
   behavior.
 
@@ -46,9 +51,31 @@ not a version-1 target or release gate.
   MLS implementations.
 - Property tests for encode/decode, encrypt/decrypt, state serialization, replay, skipped
   messages, and epoch transitions.
-- Coverage-guided fuzzing of all untrusted binary parsers and state restoration.
+- Fuzzing of all untrusted binary parsers and state restoration. The closed-beta PQ
+  MLS input boundaries are covered by the in-crate harness described in
+  `native/crypto_core/fuzz/README.md`; it is structure-aware and mutational, not
+  coverage-guided, because the pinned stable toolchain and the offline/pinned-
+  dependency rules exclude `cargo-fuzz`, libFuzzer, AFL++, ASan, and Miri.
+  Coverage-guided instrumentation and a sanitizer build remain outstanding and need
+  an approved toolchain decision. The pairwise transport, application-message, and
+  attachment parsers are not fuzzed yet.
 - Negative vectors for altered headers, signatures, associated data, padding, counters,
   final tags, credentials, and group commits.
+
+### Device validation
+
+Some questions no test in this repository can answer, because they are questions about
+what a manufacturer's Android build does to this application over hours and days. Those
+are measured on hardware, against criteria fixed before the measurement, and recorded as
+evidence that a release gate reads. The first such gate is sustained delivery
+([sustained-delivery-validation.md](sustained-delivery-validation.md), ADR-053): its
+criteria, its seven-cell matrix, its instrument (`tool/measure_sustained_delivery.sh`)
+and its current state — **closed, no cell run** — live there.
+
+A green test suite says nothing about such a matrix, and the two are never reported as
+one result. Nothing is added to the application to make this measurable: the instrument
+reads the platform's own debug surfaces over adb, so the device under test runs exactly
+the artifact a user would run.
 
 ### Database tests
 
@@ -92,7 +119,9 @@ Contract fixtures MUST fail when backend documentation and behavior diverge.
   maximum text scale, own/peer/group messages, and all delivery/security states.
 - Semantics, keyboard order, focus restoration, shortcuts, context menus, and reduced
   motion.
-- Flyer Chat pagination, anchoring, media resolution, jump-to-message, and builder output.
+- Timeline-adapter pagination, anchoring, dynamic media/row sizing,
+  jump-to-message, and app-owned builder output. Re-run the same suite against any
+  package adapter before a future swap; none is declared as of ADR-054.
 
 ### End-to-end tests
 
@@ -110,7 +139,19 @@ Use at least two accounts and multiple Android devices for version 1:
 - device-to-device full/partial history transfer, no source online, wrong/lost recovery
   secret, identity recovered without history, and mailbox-gap fresh-Welcome recovery;
 - voice create/invite/join/reconnect/remove with encrypted media validation;
-- logout, remote revocation, local wipe, deep links, and hidden notifications.
+- logout, remote revocation, local wipe, deep links, and hidden notifications. The alert
+  policy is decided entirely in Dart and is covered by host tests; what a device actually
+  renders - lock screen, status-bar icon, heads-up, channel vibration, and the permission
+  dialog across Android 13 to 16 - is a release gate that has not been run (ADR-048);
+- deferred background catch-up (ADR-049). Everything that decides *when* the platform is
+  asked for something, *when* it is told the wake-up is over, and *what a run refuses to
+  start* is decided in Dart and covered by host tests. What is not, and is a release gate
+  that has not been run: that the job runs at all on a device; that a headless
+  `FlutterEngine` starts the `backgroundDelivery` entry point from the release AOT
+  snapshot; the Doze, standby-bucket, eight-day restricted-bucket, reboot, force-stop,
+  Data-Saver and vendor-battery matrix on Samsung, Xiaomi and an AOSP image across Android
+  11 to 16; and whether a persisted job survives an in-place upgrade, which the platform
+  documentation does not specify.
 
 Patrol may drive Android native flows. Browser E2E is post-v1 and is not required for the
 Android release.
@@ -143,8 +184,8 @@ Version-1 release budgets are measured on representative low/mid Android devices
 
 - Static analysis, dependency/license audit, SBOM, secret scan, and release-config audit.
 - Confirm no foreign DNS/network attempt in an isolated-network rehearsal.
-- Inspect logs, notifications, crash paths, backups, screenshots, clipboard, and temporary
-  files for forbidden data.
+- Inspect logs, notifications, crash paths, backups, screenshots, clipboard, temporary
+  files, and the user-initiated diagnostics export for forbidden data.
 - Independent security assessment and remediation sign-off.
 
 ## Merge and release gates

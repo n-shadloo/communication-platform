@@ -45,7 +45,7 @@ REST / WebSocket / user action
        app-owned UI widgets
              |
              +--> Forui shell/components
-             +--> Flyer timeline builders
+             +--> app-owned timeline adapter and builders
 ```
 
 Widgets never merge optimistic, REST, and socket lists. A send first creates the logical
@@ -129,13 +129,23 @@ architecture boundaries and the recognized layer names inside every feature.
 ## UI boundary
 
 Forui supplies tokens and application-shell primitives behind app-owned components.
-Flyer Chat supplies the virtualized message surface. Custom builders own the exclusive
-visual design for bubbles, grouping, replies, status, attachments, system events, and
-composer.
+The virtualized message surface is supplied only through the timeline adapter, whatever
+implements it. Custom builders own the exclusive visual design for bubbles, grouping,
+replies, status, attachments, system events, and composer.
 
-Flyer models/controllers are adapters, not domain models or the source of truth. If the
-required pagination, anchoring, RTL, accessibility, or media performance spike fails,
-only the timeline adapter is replaced with a custom sliver implementation.
+A package's models and controllers may only ever be adapters, never domain models or the
+source of truth. If the required pagination, anchoring, RTL, accessibility, or media
+performance spike fails, only the timeline adapter is replaced with a custom sliver
+implementation.
+
+Piece 15 exercised that replacement clause: the then-pinned Flyer 2.11.1 update path
+requires a mutable `ChatController`, so the production `ChatTimelineAdapter` is an
+app-owned reversed sliver with explicit reading-anchor restoration. Drift-backed
+projections remain the source of truth. **ADR-054 (2026-08-24) finished that decision**:
+`flutter_chat_core` and `flutter_chat_ui` were still declared in `pubspec.yaml` and
+imported by no file in `lib/`, so they were removed and ADR-007 is superseded. The
+boundary itself is unchanged, and is what would make a future adapter swap possible. The adapter and all builders receive immutable view models
+and emit typed intents; they cannot reach cryptography, APIs, Drift, or synchronization.
 
 ## Platform boundary
 
@@ -170,3 +180,5 @@ No platform-specific conditional is allowed inside domain or protocol logic.
 - [Clean Architecture dependency rule](https://blog.cleancoder.com/uncle-bob/2012/08/13/the-clean-architecture.html)
 - [Riverpod ProviderScope/ProviderContainer](https://riverpod.dev/docs/concepts2/containers)
 - [Flyer Chat customization](https://flyer.chat/docs/flutter/getting-started/customisation/)
+  — retained as the reference for the boundary the timeline adapter preserves; the
+  packages themselves are no longer declared (ADR-054).

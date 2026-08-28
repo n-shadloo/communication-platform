@@ -34,6 +34,13 @@ enum TransportFailureKind {
   connectionRejected,
   responseTooLarge,
   requestTooLarge,
+
+  /// The transport refused to trust the peer: the chain did not terminate at
+  /// the provisioned authority, or hostname verification failed.
+  ///
+  /// Distinct from [offline] on purpose. A rejected certificate is a security
+  /// result and must never be retried or presented as a network outage.
+  trustRejected,
 }
 
 final class AuthenticationFailure extends Failure {

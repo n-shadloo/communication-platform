@@ -66,9 +66,21 @@ abstract final class ApiContractLimits {
     maximumRequestBytes: 1500 * 1024,
     maximumResponseBytes: 1500 * 1024,
   );
+  static const prekeyJson = PayloadLimits(
+    maximumRequestBytes: 256 * 1024,
+    maximumResponseBytes: 64 * 1024,
+  );
+  static const keyPackageJson = PayloadLimits(
+    maximumRequestBytes: 3 * 1024 * 1024,
+    maximumResponseBytes: 3 * 1024 * 1024,
+  );
   static const envelopeBatchJson = PayloadLimits(
     maximumRequestBytes: 90 * 1024 * 1024,
     maximumResponseBytes: 64 * 1024,
+  );
+  static const envelopeDrainJson = PayloadLimits(
+    maximumRequestBytes: 0,
+    maximumResponseBytes: 40 * 1024 * 1024,
   );
 }
 
@@ -86,6 +98,7 @@ final class ApiRequest<T> {
     this.headers = const {},
     this.body,
     this.timeouts = const NetworkTimeouts(),
+    this.decodeWithHeaders,
   }) {
     if (!path.startsWith('/api/v1/') || Uri.parse(path).hasQuery) {
       throw ArgumentError.value(path, 'path', 'must be an /api/v1/ path');
@@ -116,6 +129,8 @@ final class ApiRequest<T> {
   final Map<String, String> headers;
   final Object? body;
   final NetworkTimeouts timeouts;
+  final T Function(Object? json, Map<String, List<String>> headers)?
+  decodeWithHeaders;
 
   bool get canReplay => replaySafety != ReplaySafety.never;
 }

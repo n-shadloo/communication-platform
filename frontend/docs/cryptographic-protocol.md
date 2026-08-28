@@ -62,7 +62,7 @@ Android-only completion is not a protocol downgrade or an alternate suite.
 | Backup AEAD | XChaCha20-Poly1305 with random 192-bit nonces |
 | Password/recovery KDF | Argon2id v1: 64 MiB, 3 iterations, parallelism 4, 16-byte salt, 32-byte output |
 | File streaming | libsodium `secretstream_xchacha20poly1305` |
-| Media framing | RFC 9605 SFrame or the LiveKit E2EE implementation after wire-level validation |
+| Media framing | **Undecided.** RFC 9605 SFrame or the LiveKit E2EE implementation, on a recorded decision standing on an Android wire measurement. LiveKit's own documentation names no SFrame and exposes `EncryptionType` as `kNone`/`kGcm`/`kCustom`, so this row is not settled by the SDK either; see [ADR-058](decisions.md) P4/P5 and [voice-and-realtime.md](voice-and-realtime.md) |
 
 Every KDF and signature input uses the exact domain label defined by its binding
 contract. Labels are constants in the shared crypto core and covered by test vectors;
@@ -217,6 +217,12 @@ envelope. Each recipient transport ciphertext binds, as associated data, the pro
 version, recipient device ID, ratchet header, and fixed `pairwise-transport-v1` domain
 purpose. The event kind remains encrypted. The server does not
 learn the sender or conversation ID.
+
+The exact Android version-1 transcript, KDF/AEAD choices, sender-hidden initial header,
+ratchet encoding, replay/repair behavior, simultaneous-initiation rule, and transactional
+state boundaries are frozen in [Pairwise transport version 1](pairwise-transport-v1.md).
+That profile always mixes the signed PQ prekey; the backend's unsigned PQ one-time key is
+only an additional contribution and can never replace the authenticated PQ layer.
 
 ## Groups
 

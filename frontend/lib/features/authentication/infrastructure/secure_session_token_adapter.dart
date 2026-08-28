@@ -27,6 +27,26 @@ final class SecureSessionTokenAdapter implements SessionTokenStore {
     if (memory != null) {
       return memory;
     }
+    final restored = await _readDurableRow();
+    if (restored != null) {
+      _memoryTokens = restored;
+    }
+    return restored;
+  }
+
+  /// The durable row, never this adapter's memory.
+  ///
+  /// [read] answers from `_memoryTokens` so an ordinary request does not pay a
+  /// SQLCipher round trip for a value this isolate already has. That cache is
+  /// per-isolate and the row behind it is shared with every other delivery
+  /// owner in this process, so a decision that could *end a session* is made
+  /// against this instead (ADR-050). It deliberately does not disturb the
+  /// cache: the cached access token is still this owner's, and it is the only
+  /// copy of it — the durable row never holds one.
+  @override
+  Future<SessionTokens?> readDurable() => _readDurableRow();
+
+  Future<SessionTokens?> _readDurableRow() async {
     final database = await _database();
     if (database == null) {
       return null;
@@ -67,7 +87,6 @@ final class SecureSessionTokenAdapter implements SessionTokenStore {
         deviceId: deviceId,
         username: username,
       );
-      _memoryTokens = restored;
       return restored;
     } on Object {
       await _deleteSession(database);
@@ -145,6 +164,13 @@ final class SecureSessionTokenAdapter implements SessionTokenStore {
         .into(database.accountSessions)
         .insertOnConflictUpdate(
           AccountSessionsCompanion.insert(
+            // Stated rather than left to the column default. `singleton_id` is
+            // the sole INTEGER PRIMARY KEY of a rowid table, so SQLite treats
+            // it as an alias for the rowid and assigns `max(rowid) + 1` when an
+            // insert omits it — the `DEFAULT 1` is never reached. Omitting it
+            // therefore works exactly once per database and fails the
+            // `singleton_id = 1` check on every write after that.
+            singletonId: const Value(1),
             userIdCiphertext: Uint8List.fromList(utf8.encode(userId)),
             deviceIdCiphertext: Value(
               Uint8List.fromList(utf8.encode(deviceId)),
@@ -250,12 +276,22 @@ final class SecureSessionTokenAdapter implements SessionTokenStore {
     if (database == null) {
       return false;
     }
+    final userId = (await read())?.userId;
+    if (userId == null) {
+      return false;
+    }
     final identity = await database
         .select(database.accountIdentities)
         .getSingleOrNull();
-    final enrollment = await database
-        .select(database.enrollmentIntents)
-        .getSingleOrNull();
+    // Scoped to this session's user, like every other reader of this table.
+    // `enrollment_intent` is keyed by user id and holds one row per account
+    // that has enrolled on this install, so an unscoped `getSingleOrNull`
+    // throws `Bad state: Too many elements` the moment a second account has
+    // ever reached enrollment — and a leftover row belonging to a *different*
+    // account is not evidence about this one either way.
+    final enrollment = await (database.select(
+      database.enrollmentIntents,
+    )..where((entry) => entry.userId.equals(userId))).getSingleOrNull();
     return identity?.recoveryStatus == 4 && enrollment == null;
   }
 

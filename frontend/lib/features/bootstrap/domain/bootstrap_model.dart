@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 /// The only client platforms supported by this repository.
 enum BootstrapPlatform {
   android,
@@ -45,10 +47,19 @@ final class AndroidTrustMaterial extends PlatformTrustMaterial {
     required super.privateCaSha256,
     required this.primarySpkiSha256,
     required this.backupSpkiSha256,
+    required this.certificateAuthority,
   });
 
   final String primarySpkiSha256;
   final String backupSpkiSha256;
+
+  /// The provisioned private authority, PEM encoded.
+  ///
+  /// The fingerprint above identifies it for an operator; these bytes are what
+  /// the transport actually verifies against. `dart:io` does not read Android's
+  /// network security configuration, so the authority has to reach the client
+  /// through configuration rather than through a packaged Android resource.
+  final Uint8List certificateAuthority;
 }
 
 /// Browsers cannot install a CA or enforce application-level SPKI pins.
@@ -76,6 +87,7 @@ enum ConfigurationFailureKind {
   invalidPrimaryPin,
   invalidBackupPin,
   duplicatePins,
+  invalidPrivateCaCertificate,
   platformMismatch,
 }
 

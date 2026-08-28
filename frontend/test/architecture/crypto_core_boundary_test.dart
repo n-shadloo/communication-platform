@@ -13,6 +13,9 @@ void main() {
     final enrollmentBindings = File(
       'lib/shared/infrastructure/crypto/native/enrollment_crypto_ffi.dart',
     ).readAsStringSync();
+    final pairwiseBindings = File(
+      'lib/shared/infrastructure/crypto/native/pairwise_crypto_ffi.dart',
+    ).readAsStringSync();
     final androidBuild = File('tool/build_rust_android.sh').readAsStringSync();
 
     expect(port, contains('capabilities()'));
@@ -37,6 +40,8 @@ void main() {
     ]) {
       expect(bindings, contains("'$symbol'"));
     }
+    expect(pairwiseBindings, contains("'cp_crypto_v1_pairwise_operation'"));
+    expect(androidBuild, contains('cp_crypto_v1_pairwise_operation'));
     for (final symbol in const [
       'cp_crypto_v1_prepare_device',
       'cp_crypto_v1_prepare_first_identity',

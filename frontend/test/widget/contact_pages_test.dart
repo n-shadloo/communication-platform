@@ -1,5 +1,9 @@
 import 'dart:typed_data';
 
+import 'package:communication_platform/app/config/app_environment.dart';
+import 'package:communication_platform/app/config/group_production_gate.dart';
+import 'package:communication_platform/app/dependencies/contact_providers.dart';
+import 'package:communication_platform/app/dependencies/core_providers.dart';
 import 'package:communication_platform/app/design_system/app_components.dart';
 import 'package:communication_platform/app/design_system/app_theme.dart';
 import 'package:communication_platform/core/protocol/identity_protocol_model.dart';
@@ -16,6 +20,68 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
 void main() {
+  testWidgets('the New Group entry states what this device gets', (
+    tester,
+  ) async {
+    // ADR-055 made this row conditional: it used to be unconditional, so a
+    // build with no reachable group stack still advertised group creation and
+    // answered the tap with a refusal page. ADR-056 made the condition
+    // per-ABI, so the same artifact offers it on the processor the core was
+    // measured on and withholds it on the ones it was not.
+    final service = DirectoryService(
+      remote: const _OfflineDirectory(),
+      local: const _UnusedLocal(),
+    );
+    Future<void> pumpContacts(
+      AppEnvironment environment, {
+      GroupMlsFieldCell? abi,
+    }) => _pump(
+      tester,
+      ContactsNewPage(
+        ownUserId: 'self',
+        contacts: Stream.value(const <ContactProjection>[]),
+        directoryService: service,
+      ),
+      environment: environment,
+      abi: abi,
+    );
+
+    bool rowEnabled() => tester
+        .widget<ListTile>(
+          find.ancestor(
+            of: find.text('New Group'),
+            matching: find.byType(ListTile),
+          ),
+        )
+        .enabled;
+
+    // The development preview has a reachable stack, so the row works.
+    await pumpContacts(AppEnvironment.development);
+    expect(find.text('New Group'), findsOneWidget);
+    expect(find.text('Not available on this device'), findsNothing);
+    expect(rowEnabled(), isTrue);
+
+    // The distributed artifact on the measured ABI: the row works there too.
+    await pumpContacts(AppEnvironment.beta, abi: GroupMlsFieldCell.arm64V8a);
+    expect(find.text('Not available on this device'), findsNothing);
+    expect(rowEnabled(), isTrue);
+
+    // The same artifact on an ABI with no admissible record: disabled, and it
+    // says so rather than routing to a refusal.
+    await pumpContacts(AppEnvironment.beta, abi: GroupMlsFieldCell.armeabiV7a);
+    expect(find.text('New Group'), findsOneWidget);
+    expect(find.text('Not available on this device'), findsOneWidget);
+    expect(rowEnabled(), isFalse);
+
+    // So does production, which has no group stack on any processor.
+    await pumpContacts(
+      AppEnvironment.production,
+      abi: GroupMlsFieldCell.arm64V8a,
+    );
+    expect(find.text('Not available on this device'), findsOneWidget);
+    expect(rowEnabled(), isFalse);
+  });
+
   testWidgets('Contacts/New pages cached rows, searches, and loads more', (
     tester,
   ) async {
@@ -209,15 +275,92 @@ void main() {
     expect(find.byType(TextField), findsOneWidget);
     expect(find.byType(AppButton), findsOneWidget);
   });
+
+  testWidgets('a build with no profile adapter says so and offers no Save', (
+    tester,
+  ) async {
+    // Every flavor but development composes the unsupported profile
+    // ports, so the Private Experimental build cannot publish a profile.
+    // It used to claim a "development-only fake transport" instead and
+    // let the user press Save into a generic error (ADR-045).
+    tester.view.physicalSize = const Size(800, 1600);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await _pump(
+      tester,
+      const EditProfilePage(),
+      environment: AppEnvironment.beta,
+    );
+
+    expect(
+      find.byKey(const ValueKey('profile-not-built-notice')),
+      findsOneWidget,
+    );
+    expect(find.text('Not built yet'), findsOneWidget);
+    expect(find.textContaining('cannot publish a profile yet'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('development-profile-transport-warning')),
+      findsNothing,
+    );
+    expect(
+      tester
+          .widget<AppButton>(find.byKey(const ValueKey('profile-save')))
+          .onPressed,
+      isNull,
+    );
+  });
+
+  testWidgets('the development stand-in keeps its own distinct wording', (
+    tester,
+  ) async {
+    await _pump(tester, const EditProfilePage());
+
+    expect(
+      find.byKey(const ValueKey('development-profile-transport-warning')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('profile-not-built-notice')),
+      findsNothing,
+    );
+  });
+
+  test('publishing support is read from the composed adapters', () {
+    ProfilePublishing publishingIn(AppEnvironment environment) {
+      final container = ProviderContainer(
+        overrides: [appEnvironmentProvider.overrideWithValue(environment)],
+      );
+      addTearDown(container.dispose);
+      return container.read(profilePublishingProvider);
+    }
+
+    expect(
+      publishingIn(AppEnvironment.development),
+      ProfilePublishing.developmentStandIn,
+    );
+    expect(publishingIn(AppEnvironment.beta), ProfilePublishing.notBuilt);
+    expect(publishingIn(AppEnvironment.production), ProfilePublishing.notBuilt);
+    expect(ProfilePublishing.notBuilt.canPublish, isFalse);
+  });
 }
 
 Future<void> _pump(
   WidgetTester tester,
   Widget child, {
   Locale locale = const Locale('en'),
+  AppEnvironment environment = AppEnvironment.development,
+  GroupMlsFieldCell? abi,
 }) async {
   await tester.pumpWidget(
     ProviderScope(
+      overrides: [
+        appEnvironmentProvider.overrideWithValue(environment),
+        // Always present, never conditional: Riverpod refuses a change in the
+        // *number* of overrides when one scope is re-pumped, and this file
+        // pumps several times into one.
+        runtimeAbiProvider.overrideWithValue(abi),
+      ],
       child: MaterialApp(
         locale: locale,
         theme: AppTheme.light(),

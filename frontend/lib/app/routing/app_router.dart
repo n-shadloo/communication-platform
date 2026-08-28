@@ -11,6 +11,17 @@ import 'package:communication_platform/features/bootstrap/domain/bootstrap_model
 import 'package:communication_platform/features/bootstrap/presentation/bootstrap_page.dart';
 import 'package:communication_platform/features/contacts/presentation/contact_pages.dart';
 import 'package:communication_platform/features/devices/presentation/device_enrollment_page.dart';
+import 'package:communication_platform/features/devices/presentation/linked_devices_page.dart';
+import 'package:communication_platform/features/diagnostics/presentation/diagnostics_page.dart';
+import 'package:communication_platform/features/groups/presentation/group_pages.dart';
+import 'package:communication_platform/features/messaging/presentation/chat_pages.dart';
+import 'package:communication_platform/features/settings/presentation/about_page.dart';
+import 'package:communication_platform/features/settings/presentation/appearance_page.dart';
+import 'package:communication_platform/features/settings/presentation/recovery_rotation_page.dart';
+import 'package:communication_platform/features/settings/presentation/safety_numbers_page.dart';
+import 'package:communication_platform/features/settings/presentation/security_settings_page.dart';
+import 'package:communication_platform/features/settings/presentation/settings_page.dart';
+import 'package:communication_platform/features/synchronization/presentation/sustained_delivery_page.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
@@ -51,7 +62,7 @@ GoRouter createAppRouter({
           BootstrapPage(
             flow: bootstrapFlow,
             platform: bootstrapPlatform,
-            isProduction: environment.isProduction,
+            environment: environment,
             onResolved: (navigation) {
               switch (navigation.destination) {
                 case BootstrapDestination.login:
@@ -82,6 +93,15 @@ GoRouter createAppRouter({
         );
       },
     ),
+    // Registered unconditionally. The security notice is static content with
+    // three entry points - the pre-login links, Settings, and a deep link - and
+    // none of them may depend on whether authentication happens to be wired
+    // into this composition (ADR-045).
+    GoRoute(
+      path: '/security-notice',
+      pageBuilder: (context, state) =>
+          _page(context, state, const PreAuthSecurityNoticePage()),
+    ),
     if (authenticationRouteState != null) ...[
       GoRoute(
         path: '/session-restoring',
@@ -100,11 +120,6 @@ GoRouter createAppRouter({
           state,
           PendingActivationPage(username: state.extra as String?),
         ),
-      ),
-      GoRoute(
-        path: '/security-notice',
-        pageBuilder: (context, state) =>
-            _page(context, state, const PreAuthSecurityNoticePage()),
       ),
       GoRoute(
         path: '/encryption-setup',
@@ -130,12 +145,62 @@ GoRouter createAppRouter({
         ),
       ],
     ),
+    GoRoute(
+      path: '/groups/new',
+      pageBuilder: (context, state) =>
+          _page(context, state, const CreateGroupPage()),
+    ),
+    GoRoute(
+      path: '/groups/:groupId',
+      pageBuilder: (context, state) => _page(
+        context,
+        state,
+        GroupChatPage(groupId: state.pathParameters['groupId']!),
+      ),
+      routes: [
+        GoRoute(
+          path: 'info',
+          pageBuilder: (context, state) => _page(
+            context,
+            state,
+            GroupInfoPage(groupId: state.pathParameters['groupId']!),
+          ),
+        ),
+        GoRoute(
+          path: 'edit',
+          pageBuilder: (context, state) => _page(
+            context,
+            state,
+            EditGroupPage(groupId: state.pathParameters['groupId']!),
+          ),
+        ),
+        GoRoute(
+          path: 'add-members',
+          pageBuilder: (context, state) => _page(
+            context,
+            state,
+            AddGroupMembersPage(groupId: state.pathParameters['groupId']!),
+          ),
+        ),
+      ],
+    ),
+    GoRoute(
+      path: '/saved-messages',
+      pageBuilder: (context, state) => _page(
+        context,
+        state,
+        SavedMessagesPage(
+          conversationId: state.uri.queryParameters['conversationId'],
+        ),
+      ),
+    ),
     StatefulShellRoute.indexedStack(
       builder: (context, state, navigationShell) {
         final bootstrapOffline = state.uri.queryParameters['offline'] == 'true';
         return AppShell(
           environment: environment,
           navigationShell: navigationShell,
+          location: state.uri.path,
           status: bootstrapOffline
               ? AppShellStatus(
                   connection: AppConnectionState.offline,
@@ -149,13 +214,8 @@ GoRouter createAppRouter({
           routes: [
             GoRoute(
               path: '/chats',
-              pageBuilder: (context, state) => _page(
-                context,
-                state,
-                const StructuralPlaceholderPage(
-                  kind: StructuralPlaceholderKind.chats,
-                ),
-              ),
+              pageBuilder: (context, state) =>
+                  _page(context, state, const ChatsListPage()),
               routes: [
                 GoRoute(
                   path: 'new',
@@ -163,13 +223,23 @@ GoRouter createAppRouter({
                       _page(context, state, const ContactsNewPage()),
                 ),
                 GoRoute(
-                  path: 'sample-thread',
+                  path: 'conversation/:conversationId',
                   pageBuilder: (context, state) => _page(
                     context,
                     state,
-                    const StructuralPlaceholderPage(
-                      kind: StructuralPlaceholderKind.thread,
+                    DirectChatPage(
+                      conversationId: state.pathParameters['conversationId']!,
+                      peerUserId:
+                          state.uri.queryParameters['peer'] ?? 'unknown',
                     ),
+                  ),
+                ),
+                GoRoute(
+                  path: 'direct/:userId',
+                  pageBuilder: (context, state) => _page(
+                    context,
+                    state,
+                    DirectChatPage(peerUserId: state.pathParameters['userId']!),
                   ),
                 ),
               ],
@@ -216,28 +286,63 @@ GoRouter createAppRouter({
           routes: [
             GoRoute(
               path: '/settings',
-              pageBuilder: (context, state) => _page(
-                context,
-                state,
-                const StructuralPlaceholderPage(
-                  kind: StructuralPlaceholderKind.settings,
-                ),
-              ),
+              pageBuilder: (context, state) =>
+                  _page(context, state, const SettingsPage()),
               routes: [
                 GoRoute(
                   path: 'appearance',
-                  pageBuilder: (context, state) => _page(
-                    context,
-                    state,
-                    const StructuralPlaceholderPage(
-                      kind: StructuralPlaceholderKind.appearance,
+                  pageBuilder: (context, state) =>
+                      _page(context, state, const AppearancePage()),
+                ),
+                // Security and recovery, and the two screens behind it.
+                // Both are reached only from here: neither is ever
+                // suggested, prompted or linked from a conversation.
+                GoRoute(
+                  path: 'security',
+                  pageBuilder: (context, state) =>
+                      _page(context, state, const SecuritySettingsPage()),
+                  routes: [
+                    GoRoute(
+                      path: 'recovery',
+                      pageBuilder: (context, state) =>
+                          _page(context, state, const RecoveryRotationPage()),
                     ),
-                  ),
+                    GoRoute(
+                      path: 'safety-numbers',
+                      pageBuilder: (context, state) =>
+                          _page(context, state, const SafetyNumbersPage()),
+                    ),
+                  ],
+                ),
+                GoRoute(
+                  path: 'about',
+                  pageBuilder: (context, state) =>
+                      _page(context, state, const AboutPage()),
+                  routes: [
+                    GoRoute(
+                      path: 'diagnostics',
+                      pageBuilder: (context, state) =>
+                          _page(context, state, const DiagnosticsPage()),
+                    ),
+                  ],
                 ),
                 GoRoute(
                   path: 'profile',
                   pageBuilder: (context, state) =>
                       _page(context, state, const EditProfilePage()),
+                ),
+                GoRoute(
+                  path: 'linked-devices',
+                  pageBuilder: (context, state) =>
+                      _page(context, state, const LinkedDevicesPage()),
+                ),
+                // Reached only from Settings, and deliberately not from
+                // anywhere the application can send a user on its own: this
+                // capability is never suggested, only found.
+                GoRoute(
+                  path: 'receiving-while-closed',
+                  pageBuilder: (context, state) =>
+                      _page(context, state, const SustainedDeliveryPage()),
                 ),
               ],
             ),

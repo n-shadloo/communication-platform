@@ -6,10 +6,21 @@ readonly NDK_VERSION="28.2.13676358"
 readonly ANDROID_API="24"
 readonly LIBRARY_NAME="libcommunication_crypto_core.so"
 
+requested_abi="${1:-all}"
+crypto_profile="${2:-foundation}"
+case "$crypto_profile" in
+  foundation | beta) ;;
+  *)
+    echo "Unsupported crypto profile: $crypto_profile" >&2
+    exit 2
+    ;;
+esac
+
 frontend_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 readonly frontend_root
 readonly manifest="$frontend_root/native/crypto_core/Cargo.toml"
-readonly build_root="$frontend_root/build/rust-android"
+readonly build_root="$frontend_root/build/rust-android/$crypto_profile"
+readonly sodium_root="$frontend_root/build/rust-android/libsodium"
 readonly cargo_target_dir="$build_root/cargo-target"
 readonly jni_root="$build_root/jniLibs"
 readonly cargo_command="${CARGO:-cargo}"
@@ -26,18 +37,21 @@ case "$host_kernel" in
     readonly executable_suffix=".exe"
     readonly clang_wrapper_suffix=".cmd"
     to_tool_path() { cygpath -w "$1"; }
+    to_clang_path() { cygpath -m "$1"; }
     ;;
   Linux*)
     readonly host_tag="linux-x86_64"
     readonly executable_suffix=""
     readonly clang_wrapper_suffix=""
     to_tool_path() { printf '%s\n' "$1"; }
+    to_clang_path() { printf '%s\n' "$1"; }
     ;;
   Darwin*)
     readonly host_tag="darwin-x86_64"
     readonly executable_suffix=""
     readonly clang_wrapper_suffix=""
     to_tool_path() { printf '%s\n' "$1"; }
+    to_clang_path() { printf '%s\n' "$1"; }
     ;;
   *)
     echo "Unsupported build host: $host_kernel" >&2
@@ -72,7 +86,7 @@ case "$actual_rustc_version" in
     ;;
 esac
 
-bash "$frontend_root/tool/build_libsodium_android.sh" "${1:-all}"
+bash "$frontend_root/tool/build_libsodium_android.sh" "$requested_abi"
 
 readonly toolchain="$ndk_root/toolchains/llvm/prebuilt/$host_tag"
 readonly llvm_ar="$toolchain/bin/llvm-ar$executable_suffix"
@@ -87,6 +101,8 @@ build_abi() {
   local cc_target_key
   local linker
   local archiver
+  local bindgen_args
+  local clang_target
   local sodium_lib_dir
   local source_library
   local destination_dir
@@ -95,20 +111,49 @@ build_abi() {
   cc_target_key="$(printf '%s' "$rust_target" | tr '-' '_')"
   linker="$(to_tool_path "$toolchain/bin/$clang_wrapper$clang_wrapper_suffix")"
   archiver="$(to_tool_path "$llvm_ar")"
-  sodium_lib_dir="$(to_tool_path "$build_root/libsodium/$libsodium_cache_key/$abi/install/lib")"
+  clang_target="${clang_wrapper%"$ANDROID_API-clang"}"
+  bindgen_args="--target=$clang_target --sysroot=$(to_clang_path "$toolchain/sysroot") -D__ANDROID_API__=$ANDROID_API"
+  sodium_lib_dir="$(to_tool_path "$sodium_root/$libsodium_cache_key/$abi/install/lib")"
   source_library="$cargo_target_dir/$rust_target/release/$LIBRARY_NAME"
   destination_dir="$jni_root/$abi"
+
+  local cargo_features=()
+  local profile_env=()
+  if [[ "$crypto_profile" == "beta" ]]; then
+    cargo_features=(--features beta-pq-mls)
+    # `aws-lc-sys` configures AWS-LC through CMake and the NDK's own Android
+    # toolchain file. Unlike the pure-Rust foundation profile it needs a C++
+    # compiler, the NDK root, and an explicit generator: on Windows CMake
+    # otherwise defaults to a Visual Studio generator that cannot drive the NDK
+    # cross-compiler, and `cc` otherwise guesses the unprefixed
+    # `<triple>-clang++` name that the NDK does not ship.
+    local cxx_wrapper
+    cxx_wrapper="$(to_tool_path "$toolchain/bin/${clang_wrapper}++$clang_wrapper_suffix")"
+    if [[ ! -f "$toolchain/bin/${clang_wrapper}++$clang_wrapper_suffix" ]]; then
+      echo "Pinned Android NDK C++ compiler is unavailable: ${clang_wrapper}++" >&2
+      exit 2
+    fi
+    profile_env=(
+      "CXX_${cc_target_key}=$cxx_wrapper"
+      "ANDROID_NDK_ROOT=$(to_tool_path "$ndk_root")"
+      "ANDROID_NDK=$(to_tool_path "$ndk_root")"
+      "CMAKE_GENERATOR=Ninja"
+    )
+  fi
 
   env \
     "CARGO_TARGET_${cargo_target_key}_LINKER=$linker" \
     "CC_${cc_target_key}=$linker" \
     "AR_${cc_target_key}=$archiver" \
+    "BINDGEN_EXTRA_CLANG_ARGS_${cc_target_key}=$bindgen_args" \
     "SODIUM_LIB_DIR=$sodium_lib_dir" \
     "CARGO_TARGET_DIR=$(to_tool_path "$cargo_target_dir")" \
+    ${profile_env[@]+"${profile_env[@]}"} \
     "$cargo_command" build \
       --locked \
       --release \
       --manifest-path "$(to_tool_path "$manifest")" \
+      "${cargo_features[@]}" \
       --target "$rust_target"
 
   if [[ ! -f "$source_library" ]]; then
@@ -119,13 +164,16 @@ build_abi() {
   cp "$source_library" "$destination_dir/$LIBRARY_NAME"
 
   # Keep the native surface auditable: Rust's cdylib must expose only the
-  # versioned foundation symbols. Android's 16-KiB page-size requirement applies
+  # versioned profile symbols. Android's 16-KiB page-size requirement applies
   # to the 64-bit artifacts; the 32-bit armeabi-v7a artifact remains 4-KiB aligned.
   local exports
   exports="$("$llvm_nm" -D --defined-only "$destination_dir/$LIBRARY_NAME" |
     awk '{print $NF}' | sort)"
   local expected_exports
-  expected_exports=$'cp_crypto_v1_abi_version\ncp_crypto_v1_attest_peer_master\ncp_crypto_v1_capabilities\ncp_crypto_v1_create_device_log_record\ncp_crypto_v1_cross_sign_device\ncp_crypto_v1_identity_operation\ncp_crypto_v1_inspect_device_log_record\ncp_crypto_v1_prepare_device\ncp_crypto_v1_prepare_first_identity\ncp_crypto_v1_restore_identity\ncp_crypto_v1_sanitize_identity\ncp_crypto_v1_self_test'
+  expected_exports=$'cp_crypto_v1_abi_version\ncp_crypto_v1_application_operation\ncp_crypto_v1_attachment_operation\ncp_crypto_v1_attest_peer_master\ncp_crypto_v1_capabilities\ncp_crypto_v1_create_device_log_record\ncp_crypto_v1_cross_sign_device\ncp_crypto_v1_identity_operation\ncp_crypto_v1_inspect_device_log_record\ncp_crypto_v1_pairwise_operation\ncp_crypto_v1_prepare_device\ncp_crypto_v1_prepare_first_identity\ncp_crypto_v1_restore_identity\ncp_crypto_v1_rotate_recovery_secret\ncp_crypto_v1_sanitize_identity\ncp_crypto_v1_self_test'
+  if [[ "$crypto_profile" == "beta" ]]; then
+    expected_exports=$'cp_crypto_v1_abi_version\ncp_crypto_v1_application_operation\ncp_crypto_v1_attachment_operation\ncp_crypto_v1_attest_peer_master\ncp_crypto_v1_beta_mls_operation\ncp_crypto_v1_capabilities\ncp_crypto_v1_create_device_log_record\ncp_crypto_v1_cross_sign_device\ncp_crypto_v1_identity_operation\ncp_crypto_v1_inspect_device_log_record\ncp_crypto_v1_pairwise_operation\ncp_crypto_v1_prepare_device\ncp_crypto_v1_prepare_first_identity\ncp_crypto_v1_restore_identity\ncp_crypto_v1_rotate_recovery_secret\ncp_crypto_v1_sanitize_identity\ncp_crypto_v1_self_test'
+  fi
   if [[ "$exports" != "$expected_exports" ]]; then
     echo "Unexpected exported symbols in $destination_dir/$LIBRARY_NAME:" >&2
     printf '%s\n' "$exports" >&2
@@ -149,7 +197,6 @@ build_abi() {
   fi
 }
 
-requested_abi="${1:-all}"
 case "$requested_abi" in
   all)
     build_abi "arm64-v8a" "aarch64-linux-android" \

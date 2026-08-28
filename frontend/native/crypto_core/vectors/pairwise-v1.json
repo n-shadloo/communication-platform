@@ -1,0 +1,49 @@
+{
+  "profile": "pairwise-transport-v1",
+  "encoding": "lowercase hexadecimal",
+  "composition": {
+    "dh1": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+    "dh2": "202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f",
+    "dh3": "404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f",
+    "dh4": "606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f",
+    "signed_pq_shared_secret": "808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9f",
+    "one_time_pq_shared_secret": "a0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebf",
+    "cases": [
+      {
+        "classical_one_time": false,
+        "pq_one_time": false,
+        "session_key": "fec67c7678ac53e8b017ab5f2186f5e064d4f7997f074ef240cad3eafd956aa1",
+        "anonymous_sender_material": "b21d8fe4190089d7896d4a0ccf79c5f70a45ffa1019f48fd2b1ea52e38f0f65256eb04409b6c8fe53b856a61b487cc6be02d572fbedccaf1"
+      },
+      {
+        "classical_one_time": true,
+        "pq_one_time": false,
+        "session_key": "f5ed7162a348a0c15b8d0f13db4ce6f2acab94f6db8528988479ac87be236ae7",
+        "anonymous_sender_material": "85cada3aac452b7d4271b93efe1da0a9bc6e22586bcd783910c278e4b61a5ed5092d433a3802072a8560218aadd539ba64df9ee83eb6c4d7"
+      },
+      {
+        "classical_one_time": false,
+        "pq_one_time": true,
+        "session_key": "7c99cae179127e8e5b4bfe22710dcc6728b583d3ba64fa7220c86d05b9e9a3d2",
+        "anonymous_sender_material": "2e64ac8afaaf7c72c55be397b761348e382aadbe782813a8cac3be442a3cc40471837998d000522e3181feeb2054ec7506cee4ecf8dfd37a"
+      },
+      {
+        "classical_one_time": true,
+        "pq_one_time": true,
+        "session_key": "49b9e30bc27927c8ef404f75143469f71ea0d9cbc36725f8eb60286738db76d2",
+        "anonymous_sender_material": "941d7367224a59e5be6c4dd5b0269c3a9e1e09c0485c22d93d09ded276c5160232e7b6705a6fa3b3b598dd64f5294e4166fe9fb0abdf3f6c"
+      }
+    ]
+  },
+  "ratchet_transition": {
+    "root_key": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+    "dh_output": "202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f",
+    "next_root_key": "01f76bf8cdf9ce547a05734159f49ee7d6401b7d40dedb5c63c352089da006f0",
+    "chain_key": "ba2f6d647b34bed970b61004c408695d1d4658dc90e83cff28f827d2cbc8b7c1",
+    "message_key": "947641653704b652ecb363b9c8658c85b23afac40001c50eee2e299ae16668b2",
+    "next_chain_key": "df556eb5c36ad650b0b5b9b8513b493385cdb4f67594ec1a236f3cd7964bcfd5",
+    "aead_material": "db4858e4e99e1740d5fabeb8d106f64202c372c30d0eda8dff660c9be93abe3627414217c05e5f4b292b4553d53d6ce6f989777bada94fce",
+    "device_identity_secret": "404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f",
+    "device_bound_state_auth_key": "a225d4fa3e5ce70bcd6137511cd7819efbd050c7ea0c3aa3e9b5557fd3d52c7a"
+  }
+}

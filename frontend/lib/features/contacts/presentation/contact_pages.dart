@@ -1,6 +1,8 @@
 import 'dart:async';
 
+import 'package:communication_platform/app/config/deployment_disclosure.dart';
 import 'package:communication_platform/app/dependencies/contact_providers.dart';
+import 'package:communication_platform/app/dependencies/group_providers.dart';
 import 'package:communication_platform/app/design_system/app_components.dart';
 import 'package:communication_platform/app/design_system/app_icons.dart';
 import 'package:communication_platform/app/design_system/app_tokens.dart';
@@ -101,6 +103,9 @@ class _ContactsNewPageState extends ConsumerState<ContactsNewPage> {
     required bool waiting,
   }) {
     final strings = AppLocalizations.of(context);
+    final groupsAvailable = ref
+        .watch(groupFeatureAvailabilityProvider)
+        .isAvailable;
     final normalized = _search.text.trim().toLowerCase();
     final filtered = (contacts ?? const <ContactProjection>[])
         .where(
@@ -135,10 +140,16 @@ class _ContactsNewPageState extends ConsumerState<ContactsNewPage> {
                 kind: AppStatusKind.warning,
                 message: strings.contactsOfflineMessage,
               ),
+            // The entry point tells the truth about the build behind it rather
+            // than offering a route to a closed gate. Before ADR-055 this row
+            // was unconditional, so production advertised group creation and
+            // answered it with a refusal page; a withheld surface that still
+            // presents its own entry point is hidden, not withheld.
             _ActionRow(
               label: strings.contactsNewGroup,
               icon: AppIcons.add,
-              onTap: null,
+              subtitle: groupsAvailable ? null : strings.contactsNewGroupClosed,
+              onTap: groupsAvailable ? () => context.push('/groups/new') : null,
             ),
             _ActionRow(
               label: strings.contactsNewVoiceRoom,
@@ -164,7 +175,7 @@ class _ContactsNewPageState extends ConsumerState<ContactsNewPage> {
               for (final contact in shown)
                 _ContactRow(
                   contact: contact,
-                  onTap: () => context.push('/contacts/${contact.userId}'),
+                  onTap: () => context.push('/chats/direct/${contact.userId}'),
                 ),
               if (shown.length < filtered.length)
                 Padding(
@@ -370,8 +381,7 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
   @override
   Widget build(BuildContext context) {
     final strings = AppLocalizations.of(context);
-    final serviceValue =
-        widget.service ?? ref.watch(profileServiceProvider).value;
+    final publishing = ref.watch(profilePublishingProvider);
     return Scaffold(
       appBar: AppBar(
         leading: AppIconButton(
@@ -386,14 +396,22 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
         padding: const EdgeInsets.all(AppSpacing.x6),
         children: [
           Text(strings.profileVisibilityNote),
-          if (serviceValue?.usesTemporaryTransport ?? true) ...[
-            const SizedBox(height: AppSpacing.x4),
-            _Notice(
-              key: const ValueKey('fake-profile-transport-warning'),
-              kind: AppStatusKind.warning,
-              message: strings.profileTemporaryTransport,
+          // The screen states what this build can do rather than offering a
+          // Save that fails with a generic error. Before ADR-045 it claimed a
+          // "development-only fake transport" in every build, including the one
+          // handed to users, where no profile adapter exists at all.
+          switch (publishing) {
+            ProfilePublishing.notBuilt => const _ProfileNotBuiltNotice(),
+            ProfilePublishing.developmentStandIn => Padding(
+              padding: const EdgeInsets.only(top: AppSpacing.x4),
+              child: _Notice(
+                key: const ValueKey('development-profile-transport-warning'),
+                kind: AppStatusKind.warning,
+                message: strings.profileTemporaryTransport,
+              ),
             ),
-          ],
+            ProfilePublishing.available => const SizedBox.shrink(),
+          },
           const SizedBox(height: AppSpacing.x6),
           Center(
             child: ContactAvatar(
@@ -443,7 +461,7 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
             label: _saving
                 ? strings.profileSavingAction
                 : strings.profileSaveAction,
-            onPressed: _saving ? null : _save,
+            onPressed: _saving || !publishing.canPublish ? null : _save,
             leading: AppIcons.success,
           ),
         ],
@@ -494,7 +512,7 @@ class _SafetyNumberPageState extends ConsumerState<SafetyNumberPage> {
         widget.local ?? await ref.read(contactLocalProvider.future);
     await authentication.refreshPeer(
       userId: widget.userId,
-      requirePrekeys: true,
+      requirePrekeys: false,
     );
     final trustResult = await local.readTrust(widget.userId);
     final fingerprintResult = await authentication.safetyFingerprint(
@@ -703,11 +721,13 @@ class _ActionRow extends StatelessWidget {
     required this.label,
     required this.icon,
     required this.onTap,
+    this.subtitle,
     super.key,
   });
 
   final String label;
   final AppIconData icon;
+  final String? subtitle;
   final VoidCallback? onTap;
 
   @override
@@ -715,6 +735,7 @@ class _ActionRow extends StatelessWidget {
     minTileHeight: 56,
     leading: AppIcon(icon),
     title: Text(label),
+    subtitle: subtitle == null ? null : Text(subtitle!),
     enabled: onTap != null,
     onTap: onTap,
   );
@@ -740,6 +761,46 @@ class _Notice extends StatelessWidget {
       child: AppStatusBadge(kind: kind, label: message),
     ),
   );
+}
+
+/// States that this build composes no profile adapter, using the shared
+/// not-built vocabulary rather than inventing a fourth word for it.
+class _ProfileNotBuiltNotice extends StatelessWidget {
+  const _ProfileNotBuiltNotice();
+
+  @override
+  Widget build(BuildContext context) {
+    final strings = AppLocalizations.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(top: AppSpacing.x4),
+      child: Semantics(
+        container: true,
+        child: Container(
+          key: const ValueKey('profile-not-built-notice'),
+          padding: const EdgeInsets.all(AppSpacing.x3),
+          decoration: BoxDecoration(
+            color: context.tokens.colors.surfaceRaised,
+            borderRadius: AppRadii.card,
+            border: Border.all(color: context.tokens.colors.border),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              AppStatusBadge(
+                kind: AppStatusKind.warning,
+                label: SurfaceMaturity.notBuilt.label(strings),
+              ),
+              const SizedBox(height: AppSpacing.x2),
+              Text(
+                strings.profileNotBuiltNotice,
+                style: context.tokens.typography.body,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class _TrustBadge extends StatelessWidget {

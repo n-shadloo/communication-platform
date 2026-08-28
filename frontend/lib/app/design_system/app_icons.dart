@@ -33,9 +33,50 @@ abstract final class AppIcons {
   static const error = AppIconData._(FLucideIcons.circleAlert, 'error');
   static const info = AppIconData._(FLucideIcons.info, 'info');
   static const security = AppIconData._(FLucideIcons.shieldCheck, 'security');
+  static const devices = AppIconData._(
+    FLucideIcons.monitorSmartphone,
+    'devices',
+  );
   static const empty = AppIconData._(FLucideIcons.inbox, 'empty');
   static const retry = AppIconData._(FLucideIcons.rotateCw, 'retry');
   static const close = AppIconData._(FLucideIcons.x, 'close');
+  static const send = AppIconData._(FLucideIcons.send, 'send');
+  static const attach = AppIconData._(FLucideIcons.paperclip, 'attach');
+  static const emoji = AppIconData._(FLucideIcons.smile, 'emoji');
+  static const keyboard = AppIconData._(FLucideIcons.keyboard, 'keyboard');
+  static const more = AppIconData._(FLucideIcons.ellipsisVertical, 'more');
+  static const pin = AppIconData._(FLucideIcons.pin, 'pin');
+  static const reply = AppIconData._(
+    FLucideIcons.reply,
+    'reply',
+    mirrorsInRtl: true,
+  );
+  static const edit = AppIconData._(FLucideIcons.pencil, 'edit');
+  static const delete = AppIconData._(FLucideIcons.trash2, 'delete');
+  static const copy = AppIconData._(FLucideIcons.copy, 'copy');
+  static const star = AppIconData._(FLucideIcons.star, 'star');
+  static const muted = AppIconData._(FLucideIcons.bellOff, 'muted');
+  static const notifications = AppIconData._(
+    FLucideIcons.bell,
+    'notifications',
+  );
+  static const accepted = AppIconData._(FLucideIcons.check, 'accepted');
+  static const delivered = AppIconData._(FLucideIcons.checkCheck, 'delivered');
+  static const jumpDown = AppIconData._(
+    FLucideIcons.arrowDown,
+    'jumpDown',
+    mirrorsInRtl: true,
+  );
+  static const clock = AppIconData._(FLucideIcons.clock3, 'clock');
+  static const saved = AppIconData._(FLucideIcons.bookmark, 'saved');
+  static const unsupported = AppIconData._(
+    FLucideIcons.fileQuestion,
+    'unsupported',
+  );
+  static const offlineQueue = AppIconData._(
+    FLucideIcons.cloudOff,
+    'offlineQueue',
+  );
 }
 
 /// App-owned icon renderer with intentional directional mirroring.

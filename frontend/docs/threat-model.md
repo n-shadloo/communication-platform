@@ -14,6 +14,44 @@ that a device contacted the service or eliminate traffic-analysis metadata.
 - Login and refresh credentials.
 - Recovery secrets.
 - Local decrypted indexes, thumbnails, drafts, and notification previews.
+- The fact that background delivery is armed. Two different exposures, and they are not
+  equal. The shipped floor (ADR-049) leaves nothing on the device to see — one record in
+  the platform's own job store holding an id, an interval and a component name — but it
+  does make this device's *online periods* visible to the server on a roughly
+  fifteen-minute cadence whether or not its owner is present, so an idle device now looks
+  like an active one to a relay that already saw every drain. The opt-in `specialUse`
+  foreground service (ADR-051) is the heavier one, in two ways.
+
+  **Since ADR-053 no artifact a user receives can arm it.** The capability is gated
+  closed until it has been measured on real phones, so everything in the two paragraphs
+  below describes an exposure nobody in this deployment can currently choose. It is kept
+  as written because the gate is a decision that can be reversed by evidence, and because
+  the exposure has to be understood before it is.
+
+  On the device: while it is armed it posts a persistent notification, which is a durable
+  on-device indication that this application is running, and on Android 13 and above the
+  *existence* of any foreground service is additionally listed in the platform's own Task
+  Manager whatever the application does. Both are visible only on an **unlocked** phone —
+  the channel is low importance, silent and `VISIBILITY_SECRET`, so no part of it appears
+  on a secure lock screen or during screen sharing — and its entire content names nothing,
+  counts nothing and promises nothing. It persists beyond the moment the user chose it,
+  which is why the layer is opt-in, why the cost is stated on the screen that turns it on
+  *before* the switch, and why turning it off removes both the service and its durable
+  record. The user may also dismiss the shade entry (Android 13+) or stop the service from
+  the Task Manager.
+
+  On the wire: a held connection makes this device's online periods continuous rather than
+  sampled, so a relay that already saw every drain now sees presence. That is a change in
+  degree against a party the model already treats as untrusted, it creates no new party and
+  no new content exposure, and it is disclosed to the user as "the app stays connected".
+- Who is talking to whom, as it would appear in a message alert. The shipped alert
+  (ADR-048) is a single sender-neutral notification whose entire content is "New message"
+  or "New messages": no sender, no conversation, no text, no count, no timestamp, one
+  constant id and tag, and a tap intent carrying no identifier. That is what a bystander
+  sees on a locked or unlocked screen, what an Android 15+ screen-sharing session shows,
+  and what an application holding notification access can read. Conversation notifications,
+  `MessagingStyle` and long-lived conversation shortcuts are excluded by decision, because
+  each publishes a stable per-contact identifier outside the encrypted database.
 
 ## Adversaries considered
 
@@ -37,8 +75,10 @@ that a device contacted the service or eliminate traffic-analysis metadata.
 - Traffic-analysis resistance, anonymity, or cover traffic.
 - Availability against a server or network that refuses service.
 - Guaranteed remote deletion after another device decrypted content.
-- Reliable delivery to a terminated Android process or closed browser without a push
-  service; Android background polling remains best-effort.
+- Reliable delivery to a force-stopped Android process or closed browser without a push
+  service. Background delivery remains best-effort at every tier (ADR-046, ADR-051), and no
+  tier is a guarantee — including the opt-in one, which the platform or a manufacturer may
+  end at any moment without telling the application or its owner.
 - Hiding the social graph, group fan-out, or communication timing from live server root.
 
 ## Trust boundaries
@@ -107,6 +147,12 @@ conversation graph, but that does not protect routing metadata from a live opera
 client MUST not claim otherwise.
 
 ## Security release gates
+
+These are gates on a **release**. ADR-044 defines the initial Private Experimental
+deployment, which is not one: it is private, named, disclosed distribution of an
+artifact that states its own maturity, and it leaves every gate below closed and
+unsatisfied. Nothing in that decision may be read as clearing one of them, and the
+written disclosure it requires is what makes distributing under them acceptable.
 
 - No handwritten cryptographic primitive.
 - No shipping an unreviewed cross-platform protocol implementation.

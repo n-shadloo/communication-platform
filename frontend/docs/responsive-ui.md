@@ -10,8 +10,8 @@ tokens and component grammar live in [Visual design system](visual-design-system
 
 The visual language is minimal and product-specific, with Telegram as an interaction
 reference rather than a visual clone. Forui provides primitives/tokens behind app-owned
-components. Flyer Chat builders render the timeline. No package-default screen is
-accepted as the final product design.
+components. App-owned builders render the timeline behind the timeline adapter. No
+package-default screen is accepted as the final product design.
 
 ## Adaptive shell
 
@@ -53,7 +53,7 @@ preserves the selected conversation, scroll anchor, draft, and active modal inte
 - Sensitive images/text never appear in blurred app-switcher/notification previews when
   privacy mode is enabled.
 
-## Flyer Chat customization
+## Timeline customization and Flyer boundary
 
 Use `ChatTheme` for shared baseline tokens, default-widget parameters for small changes,
 and builders for:
@@ -69,6 +69,24 @@ and builders for:
 Builders are pure presentation. They receive mapped immutable view models and dispatch
 typed intents. They do not decrypt, call APIs, write Drift, or contain synchronization
 logic.
+
+Piece 15 tested the pinned `flutter_chat_ui` 2.11.1 surface on 2026-07-30. Its
+`Chat`/`ChatAnimatedList` update path requires a mutable `ChatController`, which would
+duplicate application state, and did not provide an app-owned proof for anchor
+restoration after arbitrary row-size and accessibility changes. Under the documented
+replacement rule, only `ChatTimelineAdapter` uses the custom reversed sliver
+implementation. ADR-054 then removed both Flyer packages from `pubspec.yaml`, where
+they were still declared and imported by nothing; what remains is the replaceable
+boundary, and no package model or controller owns domain state. App builders consume
+immutable
+`ChatTimelineViewModel`/`ChatMessageViewModel` values and dispatch typed `ChatIntent`
+values.
+
+The replacement adapter is verified for upward pagination, jump-to-message, dynamic
+edit/reaction/viewport sizing, mixed directionality, keyboard and screen-reader
+semantics, reduced motion, and a 50,000-message fixture with a bounded mounted-widget
+count. Attachment/media builders may be added in piece 16 without changing this
+boundary; the size-notification anchor path is shared by every row builder.
 
 ## Screen checklist
 
@@ -86,14 +104,17 @@ logic.
   display or existing-account identity restore; explicit resumable two-phase
   enrollment/finishing-secure-setup state; mandatory Security Notice.
 - **Security Notice:** exact protected/unprotected boundaries and mandatory acknowledgement
-  during onboarding.
+  during onboarding, plus the deployment disclosure in a build that is distributed to
+  someone. One screen serves all three entry points - onboarding, Settings, and the
+  pre-login links - and is never re-shown on a schedule ([ADR-045](decisions.md)).
 
 ### Discovery and chat
 
 - **Chats List:** pinned/active rooms, conversations ordered by local activity, unread,
   mute/pin/status, offline cached state, context menu.
-- **Search:** local chats/messages/contacts only, jump to message, device-history scope
-  notice.
+- **Search:** three in-place surfaces, never a merged results screen — the chat-list
+  filter, the shared in-conversation sheet (direct, saved and group), and the contact
+  filter. Jump to message, per-surface scope notice, and a stated result cap.
 - **Contacts/New:** New Group, New Voice Room, verified indicator, cached offline state.
 - **Profile bootstrap:** use backend username and deterministic local avatar until an
   authenticated profile key/payload arrives; never render unverified cached identity.
@@ -132,10 +153,15 @@ logic.
 
 - **Saved Messages:** self-conversation without peer presence/receipts.
 - **Settings:** profile, Saved Messages, devices, security/recovery, notifications,
-  appearance, notice, logout, About.
+  receiving while closed, appearance, notice, About, logout.
+- **Appearance:** theme and language, both client-only; high contrast follows the
+  operating system and has no control here.
+- **About/Diagnostics:** local build facts, and a redacted report the user copies. What
+  the screen shows is what the clipboard receives.
 - **Edit Profile:** encrypted display name/avatar and visibility wording.
-- **Security Settings:** identity-recovery guidance, verified-contact/device-log review,
-  notice.
+- **Security Settings:** identity-recovery guidance and replacement, verified-contact
+  review, notice. The replacement screen blocks screen capture and copies through the
+  expiring clipboard path.
 - **Linked Devices:** this/other devices, last-active coarseness, relabel/revoke.
 - **Add Device/Restore:** two-phase registration, recovery-secret identity restore,
   wrong secret, finishing secure setup, waiting for an existing online history source,

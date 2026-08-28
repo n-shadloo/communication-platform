@@ -1,6 +1,8 @@
 param(
     [ValidateSet('all', 'arm64-v8a', 'armeabi-v7a', 'x86_64')]
-    [string]$Abi = 'all'
+    [string]$Abi = 'all',
+    [ValidateSet('foundation', 'beta')]
+    [string]$CryptoProfile = 'foundation'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -27,7 +29,7 @@ if ($LASTEXITCODE -ne 0) {
 
 Push-Location $frontendRoot
 try {
-    & $bash $shellScript $Abi
+    & $bash $shellScript $Abi $CryptoProfile
     if ($LASTEXITCODE -ne 0) {
         throw "Android Rust build exited with code $LASTEXITCODE."
     }

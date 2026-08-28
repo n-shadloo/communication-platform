@@ -1,4 +1,6 @@
 import 'dart:collection';
+import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:communication_platform/features/bootstrap/application/ports/bootstrap_ports.dart';
 import 'package:communication_platform/features/bootstrap/domain/bootstrap_model.dart';
@@ -93,13 +95,20 @@ final class FakeHealthReachabilityPort implements HealthReachabilityPort {
   }
 }
 
+/// Stand-in authority bytes. Nothing in these tests builds a TLS context, so
+/// this only needs to be a certificate container, not a usable certificate.
+final testCertificateAuthorityPem = Uint8List.fromList(
+  utf8.encode('-----BEGIN CERTIFICATE-----\nstub\n-----END CERTIFICATE-----\n'),
+);
+
 final testAndroidConfiguration = ProvisionedBootstrapConfiguration(
   serverOrigin: ServerOrigin.parse('https://provisioned.invalid')!,
-  trustMaterial: const AndroidTrustMaterial(
+  trustMaterial: AndroidTrustMaterial(
     privateCaSha256:
         'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
     primarySpkiSha256: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=',
     backupSpkiSha256: 'BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB=',
+    certificateAuthority: testCertificateAuthorityPem,
   ),
 );
 

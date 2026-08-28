@@ -1,0 +1,85 @@
+  Flags:
+    com.android.server.deviceidle.use_cpu_time_for_temp_allowlist=true
+    com.android.server.deviceidle.remove_idle_location=true
+    com.android.server.deviceidle.stop_power_save_temp_whitelist_broadcast=false
+
+  Settings:
+    flex_time_short=+1m0s0ms
+    light_after_inactive_to=+1m0s0ms
+    light_idle_to=+5m0s0ms
+    light_idle_to_initial_flex=+1m0s0ms
+    light_max_idle_to_flex=+15m0s0ms
+    light_idle_factor=2.0
+    light_idle_increase_linearly=false
+    light_idle_linear_increase_factor_ms=300000
+    light_idle_flex_linear_increase_factor_ms=60000
+    light_max_idle_to=+15m0s0ms
+    light_idle_maintenance_min_budget=+1m0s0ms
+    light_idle_maintenance_max_budget=+5m0s0ms
+    min_light_maintenance_time=+5s0ms
+    min_deep_maintenance_time=+30s0ms
+    inactive_to=+30m0s0ms
+    sensing_to=+4m0s0ms
+    locating_to=+30s0ms
+    location_accuracy=20.0m
+    motion_inactive_to=+10m0s0ms
+    motion_inactive_to_flex=+1m0s0ms
+    idle_after_inactive_to=+30m0s0ms
+    idle_pending_to=+5m0s0ms
+    max_idle_pending_to=+10m0s0ms
+    idle_pending_factor=2.0
+    quick_doze_delay_to=+1m0s0ms
+    idle_to=+1h0m0s0ms
+    max_idle_to=+6h0m0s0ms
+    idle_factor=2.0
+    min_time_to_alarm=+1h0m0s0ms
+    max_temp_app_allowlist_duration_ms=+5m0s0ms
+    mms_temp_app_allowlist_duration_ms=+1m0s0ms
+    sms_temp_app_allowlist_duration_ms=+20s0ms
+    notification_allowlist_duration_ms=+30s0ms
+    wait_for_unlock=true
+    use_window_alarms=true
+    use_mode_manager=false
+    skip_sensing=false
+    skip_locating=true
+    dna_request_version=1
+  Idling history:
+    [100 line(s) withheld: belongs to the device's owner]
+  Whitelist (except idle) system apps:
+    [78 line(s) withheld: belongs to the device's owner]
+  Whitelist system apps:
+    [73 line(s) withheld: belongs to the device's owner]
+  Whitelist user apps:
+    [7 line(s) withheld: belongs to the device's owner]
+  Whitelist (except idle) all app ids:
+    [82 line(s) withheld: belongs to the device's owner]
+  Whitelist user app ids:
+    [7 line(s) withheld: belongs to the device's owner]
+  Whitelist all app ids:
+    [77 line(s) withheld: belongs to the device's owner]
+  Allowlist History:
+    [8 line(s) withheld: belongs to the device's owner]
+  Temp whitelist schedule:
+    [7 line(s) withheld: belongs to the device's owner]
+  Temp whitelist app ids:
+    [7 line(s) withheld: belongs to the device's owner]
+  Doze Allowlist Gatekeeper: false
+  mLightEnabled=true  mDeepEnabled=true
+  mForceIdle=false
+  mUseMotionSensor=true mMotionSensor={Sensor name="Significant Motion", vendor="Samsung Inc.", version=2, type=17, maxRange=1.0, resolution=1.0, power=0.16, minDelay=-1}
+  mScreenOn=true
+  mScreenLocked=false
+  mNetworkConnected=true
+  mCharging=true
+  activeEmergencyCall=false
+  mMotionActive=true
+  mNotMoving=false
+  mMotionListener.activatedTimeElapsed=450606809
+  mLastMotionEventElapsed=450246798
+    [1 line(s) withheld: belongs to the device's owner]
+  Location prefetching disabled
+  mState=ACTIVE mLightState=ACTIVE
+  mInactiveTimeout=+30m0s0ms
+  mNextLightIdleDelay=+5m0s0ms (flex=+1m0s0ms)
+  mCurLightIdleBudget=+1m0s0ms
+  mJobsActive=true

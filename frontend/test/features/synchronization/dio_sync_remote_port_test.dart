@@ -1,0 +1,237 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
+import 'package:communication_platform/core/result/result.dart';
+import 'package:communication_platform/features/networking/application/ports/token_ports.dart';
+import 'package:communication_platform/features/networking/domain/session_tokens.dart';
+import 'package:communication_platform/features/networking/infrastructure/api/dio_rest_client.dart';
+import 'package:communication_platform/features/networking/infrastructure/diagnostics/network_diagnostics.dart';
+import 'package:communication_platform/features/synchronization/domain/sync_model.dart';
+import 'package:communication_platform/features/synchronization/infrastructure/dio_sync_remote_port.dart';
+import 'package:dio/dio.dart';
+import 'package:flutter_test/flutter_test.dart';
+
+void main() {
+  test(
+    'drain uses the authoritative device endpoint and decodes opaque buckets',
+    () async {
+      final adapter = QueueAdapter([
+        jsonResponse(200, {
+          'envelopes': [
+            {'id': uuid(1), 'seq': 8, 'blob': base64Encode(blob(8))},
+          ],
+          'has_more': true,
+          'pruned_through': 7,
+        }),
+      ]);
+      final remote = DioSyncRemotePort(client(adapter));
+
+      final result = await remote.drain(limit: 100);
+
+      expect(result, isA<Success<DrainPage>>());
+      final page = (result as Success<DrainPage>).value;
+      expect(page.envelopes.single.exactCiphertext, blob(8));
+      expect(page.prunedThrough, 7);
+      expect(adapter.requests.single.path, '/api/v1/me/envelopes');
+      expect(adapter.requests.single.queryParameters, {'limit': 100});
+    },
+  );
+
+  test('non-idempotent send is never transport-replayed by Dio', () async {
+    final adapter = QueueAdapter([connectionFailure]);
+    final remote = DioSyncRemotePort(client(adapter));
+    final exact = blob(44);
+    final batch = OutboxBatch(
+      operationId: 'operation',
+      eventId: 'event',
+      batchIndex: 0,
+      attempt: 1,
+      targets: [
+        OutboxTarget(
+          recipientUserId: 'user',
+          recipientDeviceId: uuid(44),
+          exactCiphertext: exact,
+        ),
+      ],
+    );
+
+    final result = await remote.send(batch);
+
+    expect(result, isA<FailureResult<OutboxAcceptance>>());
+    expect(adapter.calls, 1);
+    final body =
+        jsonDecode(adapter.requests.single.data as String)
+            as Map<String, Object?>;
+    final messages = body['messages']! as List<Object?>;
+    final message = messages.single! as Map<String, Object?>;
+    expect(base64Decode(message['blob']! as String), exact);
+  });
+
+  test(
+    'idempotent acknowledgement retries response loss with the exact ids',
+    () async {
+      final adapter = QueueAdapter([
+        connectionFailure,
+        jsonResponse(200, {'deleted': 0}),
+      ]);
+      final remote = DioSyncRemotePort(client(adapter));
+      final ids = [uuid(51), uuid(52)];
+
+      final result = await remote.acknowledge(ids);
+
+      expect(result, isA<Success<int>>());
+      expect((result as Success<int>).value, 0);
+      expect(adapter.calls, 2);
+      final bodies = adapter.requests
+          .map(
+            (request) =>
+                jsonDecode(request.data as String) as Map<String, Object?>,
+          )
+          .toList();
+      expect(bodies[0], {'ids': ids});
+      expect(bodies[1], bodies[0]);
+    },
+  );
+
+  test('sync diagnostics contain no token, UUID, ciphertext, or URL', () async {
+    final diagnostics = CapturingDiagnostics();
+    final adapter = QueueAdapter([
+      jsonResponse(202, {'accepted': 1, 'stale_devices': <Object?>[]}),
+    ]);
+    final remote = DioSyncRemotePort(client(adapter, diagnostics: diagnostics));
+    final secretBlob = blob(93);
+    const token = 'sensitive-access-token';
+    final targetId = uuid(93);
+
+    final result = await remote.send(
+      OutboxBatch(
+        operationId: 'private-operation',
+        eventId: 'private-event',
+        batchIndex: 0,
+        attempt: 1,
+        targets: [
+          OutboxTarget(
+            recipientUserId: 'private-user',
+            recipientDeviceId: targetId,
+            exactCiphertext: secretBlob,
+          ),
+        ],
+      ),
+    );
+
+    expect(result, isA<Success<OutboxAcceptance>>());
+    final diagnostic = formatRedactedDiagnostic(diagnostics.events.single);
+    expect(diagnostic, contains('operation=syncSend'));
+    expect(diagnostic, isNot(contains(token)));
+    expect(diagnostic, isNot(contains(targetId)));
+    expect(diagnostic, isNot(contains(base64Encode(secretBlob))));
+    expect(diagnostic, isNot(contains('/api/v1/envelopes')));
+  });
+}
+
+typedef AdapterHandler =
+    Future<ResponseBody> Function(
+      RequestOptions options,
+      Stream<Uint8List>? requestStream,
+      Future<void>? cancelFuture,
+    );
+
+final class QueueAdapter implements HttpClientAdapter {
+  QueueAdapter(this.handlers);
+
+  final List<AdapterHandler> handlers;
+  final List<RequestOptions> requests = [];
+  int calls = 0;
+
+  @override
+  Future<ResponseBody> fetch(
+    RequestOptions options,
+    Stream<Uint8List>? requestStream,
+    Future<void>? cancelFuture,
+  ) {
+    requests.add(options);
+    final handler = handlers[calls];
+    calls += 1;
+    return handler(options, requestStream, cancelFuture);
+  }
+
+  @override
+  void close({bool force = false}) {}
+}
+
+AdapterHandler jsonResponse(int statusCode, Object body) =>
+    (options, requestStream, cancelFuture) async => ResponseBody.fromString(
+      jsonEncode(body),
+      statusCode,
+      headers: {
+        'content-type': ['application/json'],
+      },
+    );
+
+Future<ResponseBody> connectionFailure(
+  RequestOptions options,
+  Stream<Uint8List>? requestStream,
+  Future<void>? cancelFuture,
+) => throw DioException(
+  requestOptions: options,
+  type: DioExceptionType.connectionError,
+);
+
+DioRestClient client(
+  QueueAdapter adapter, {
+  NetworkDiagnostics diagnostics = const NoopNetworkDiagnostics(),
+}) {
+  final dio = Dio()..httpClientAdapter = adapter;
+  final result = DioRestClient(
+    serverOrigin: Uri.parse('https://chat.example.test'),
+    dio: dio,
+    diagnostics: diagnostics,
+    retryScheduler: const ImmediateRetry(),
+  );
+  result.bindTokenCoordinator(const FullTokenCoordinator());
+  return result;
+}
+
+final class ImmediateRetry implements RetryScheduler {
+  const ImmediateRetry();
+
+  @override
+  Future<void> wait(Duration delay) async {}
+}
+
+final class FullTokenCoordinator implements AccessTokenCoordinator {
+  const FullTokenCoordinator();
+
+  @override
+  Future<Result<AccessToken>> accessToken({bool forceRefresh = false}) async =>
+      Result.success(
+        AccessToken(
+          value: 'sensitive-access-token',
+          expiresAt: DateTime.utc(2100),
+          scope: SessionScope.full,
+        ),
+      );
+
+  @override
+  Future<Result<AccessToken>> recoverAfterUnauthorized(String rejectedToken) =>
+      accessToken();
+
+  @override
+  Future<void> handleRevocation() async {}
+
+  @override
+  Future<void> logout() async {}
+}
+
+final class CapturingDiagnostics implements NetworkDiagnostics {
+  final List<NetworkDiagnosticEvent> events = [];
+
+  @override
+  void record(NetworkDiagnosticEvent event) => events.add(event);
+}
+
+String uuid(int value) =>
+    '00000000-0000-0000-0000-${value.toRadixString(16).padLeft(12, '0')}';
+
+Uint8List blob(int marker) =>
+    Uint8List.fromList(List<int>.filled(1024, marker));

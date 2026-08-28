@@ -592,6 +592,19 @@ class $SecureSecretsTable extends SecureSecrets
     type: DriftSqlType.int,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _stateRevisionMeta = const VerificationMeta(
+    'stateRevision',
+  );
+  @override
+  late final GeneratedColumn<int> stateRevision = GeneratedColumn<int>(
+    'state_revision',
+    aliasedName,
+    false,
+    check: () => ComparableExpr(stateRevision).isBiggerThanValue(0),
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(1),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     createdAt,
@@ -599,6 +612,7 @@ class $SecureSecretsTable extends SecureSecrets
     kind,
     wrappedCiphertextOrOpaqueHandle,
     formatVersion,
+    stateRevision,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -656,6 +670,15 @@ class $SecureSecretsTable extends SecureSecrets
     } else if (isInserting) {
       context.missing(_formatVersionMeta);
     }
+    if (data.containsKey('state_revision')) {
+      context.handle(
+        _stateRevisionMeta,
+        stateRevision.isAcceptableOrUnknown(
+          data['state_revision']!,
+          _stateRevisionMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -685,6 +708,10 @@ class $SecureSecretsTable extends SecureSecrets
         DriftSqlType.int,
         data['${effectivePrefix}format_version'],
       )!,
+      stateRevision: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}state_revision'],
+      )!,
     );
   }
 
@@ -700,12 +727,14 @@ class SecureSecret extends DataClass implements Insertable<SecureSecret> {
   final int kind;
   final Uint8List wrappedCiphertextOrOpaqueHandle;
   final int formatVersion;
+  final int stateRevision;
   const SecureSecret({
     required this.createdAt,
     required this.secretId,
     required this.kind,
     required this.wrappedCiphertextOrOpaqueHandle,
     required this.formatVersion,
+    required this.stateRevision,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -717,6 +746,7 @@ class SecureSecret extends DataClass implements Insertable<SecureSecret> {
       wrappedCiphertextOrOpaqueHandle,
     );
     map['format_version'] = Variable<int>(formatVersion);
+    map['state_revision'] = Variable<int>(stateRevision);
     return map;
   }
 
@@ -727,6 +757,7 @@ class SecureSecret extends DataClass implements Insertable<SecureSecret> {
       kind: Value(kind),
       wrappedCiphertextOrOpaqueHandle: Value(wrappedCiphertextOrOpaqueHandle),
       formatVersion: Value(formatVersion),
+      stateRevision: Value(stateRevision),
     );
   }
 
@@ -743,6 +774,7 @@ class SecureSecret extends DataClass implements Insertable<SecureSecret> {
         json['wrappedCiphertextOrOpaqueHandle'],
       ),
       formatVersion: serializer.fromJson<int>(json['formatVersion']),
+      stateRevision: serializer.fromJson<int>(json['stateRevision']),
     );
   }
   @override
@@ -756,6 +788,7 @@ class SecureSecret extends DataClass implements Insertable<SecureSecret> {
         wrappedCiphertextOrOpaqueHandle,
       ),
       'formatVersion': serializer.toJson<int>(formatVersion),
+      'stateRevision': serializer.toJson<int>(stateRevision),
     };
   }
 
@@ -765,6 +798,7 @@ class SecureSecret extends DataClass implements Insertable<SecureSecret> {
     int? kind,
     Uint8List? wrappedCiphertextOrOpaqueHandle,
     int? formatVersion,
+    int? stateRevision,
   }) => SecureSecret(
     createdAt: createdAt ?? this.createdAt,
     secretId: secretId ?? this.secretId,
@@ -772,6 +806,7 @@ class SecureSecret extends DataClass implements Insertable<SecureSecret> {
     wrappedCiphertextOrOpaqueHandle:
         wrappedCiphertextOrOpaqueHandle ?? this.wrappedCiphertextOrOpaqueHandle,
     formatVersion: formatVersion ?? this.formatVersion,
+    stateRevision: stateRevision ?? this.stateRevision,
   );
   SecureSecret copyWithCompanion(SecureSecretsCompanion data) {
     return SecureSecret(
@@ -785,6 +820,9 @@ class SecureSecret extends DataClass implements Insertable<SecureSecret> {
       formatVersion: data.formatVersion.present
           ? data.formatVersion.value
           : this.formatVersion,
+      stateRevision: data.stateRevision.present
+          ? data.stateRevision.value
+          : this.stateRevision,
     );
   }
 
@@ -797,7 +835,8 @@ class SecureSecret extends DataClass implements Insertable<SecureSecret> {
           ..write(
             'wrappedCiphertextOrOpaqueHandle: $wrappedCiphertextOrOpaqueHandle, ',
           )
-          ..write('formatVersion: $formatVersion')
+          ..write('formatVersion: $formatVersion, ')
+          ..write('stateRevision: $stateRevision')
           ..write(')'))
         .toString();
   }
@@ -809,6 +848,7 @@ class SecureSecret extends DataClass implements Insertable<SecureSecret> {
     kind,
     $driftBlobEquality.hash(wrappedCiphertextOrOpaqueHandle),
     formatVersion,
+    stateRevision,
   );
   @override
   bool operator ==(Object other) =>
@@ -821,7 +861,8 @@ class SecureSecret extends DataClass implements Insertable<SecureSecret> {
             other.wrappedCiphertextOrOpaqueHandle,
             this.wrappedCiphertextOrOpaqueHandle,
           ) &&
-          other.formatVersion == this.formatVersion);
+          other.formatVersion == this.formatVersion &&
+          other.stateRevision == this.stateRevision);
 }
 
 class SecureSecretsCompanion extends UpdateCompanion<SecureSecret> {
@@ -830,6 +871,7 @@ class SecureSecretsCompanion extends UpdateCompanion<SecureSecret> {
   final Value<int> kind;
   final Value<Uint8List> wrappedCiphertextOrOpaqueHandle;
   final Value<int> formatVersion;
+  final Value<int> stateRevision;
   final Value<int> rowid;
   const SecureSecretsCompanion({
     this.createdAt = const Value.absent(),
@@ -837,6 +879,7 @@ class SecureSecretsCompanion extends UpdateCompanion<SecureSecret> {
     this.kind = const Value.absent(),
     this.wrappedCiphertextOrOpaqueHandle = const Value.absent(),
     this.formatVersion = const Value.absent(),
+    this.stateRevision = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   SecureSecretsCompanion.insert({
@@ -845,6 +888,7 @@ class SecureSecretsCompanion extends UpdateCompanion<SecureSecret> {
     required int kind,
     required Uint8List wrappedCiphertextOrOpaqueHandle,
     required int formatVersion,
+    this.stateRevision = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : secretId = Value(secretId),
        kind = Value(kind),
@@ -856,6 +900,7 @@ class SecureSecretsCompanion extends UpdateCompanion<SecureSecret> {
     Expression<int>? kind,
     Expression<Uint8List>? wrappedCiphertextOrOpaqueHandle,
     Expression<int>? formatVersion,
+    Expression<int>? stateRevision,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -865,6 +910,7 @@ class SecureSecretsCompanion extends UpdateCompanion<SecureSecret> {
       if (wrappedCiphertextOrOpaqueHandle != null)
         'wrapped_ciphertext_or_opaque_handle': wrappedCiphertextOrOpaqueHandle,
       if (formatVersion != null) 'format_version': formatVersion,
+      if (stateRevision != null) 'state_revision': stateRevision,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -875,6 +921,7 @@ class SecureSecretsCompanion extends UpdateCompanion<SecureSecret> {
     Value<int>? kind,
     Value<Uint8List>? wrappedCiphertextOrOpaqueHandle,
     Value<int>? formatVersion,
+    Value<int>? stateRevision,
     Value<int>? rowid,
   }) {
     return SecureSecretsCompanion(
@@ -885,6 +932,7 @@ class SecureSecretsCompanion extends UpdateCompanion<SecureSecret> {
           wrappedCiphertextOrOpaqueHandle ??
           this.wrappedCiphertextOrOpaqueHandle,
       formatVersion: formatVersion ?? this.formatVersion,
+      stateRevision: stateRevision ?? this.stateRevision,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -909,6 +957,9 @@ class SecureSecretsCompanion extends UpdateCompanion<SecureSecret> {
     if (formatVersion.present) {
       map['format_version'] = Variable<int>(formatVersion.value);
     }
+    if (stateRevision.present) {
+      map['state_revision'] = Variable<int>(stateRevision.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -925,6 +976,7 @@ class SecureSecretsCompanion extends UpdateCompanion<SecureSecret> {
             'wrappedCiphertextOrOpaqueHandle: $wrappedCiphertextOrOpaqueHandle, ',
           )
           ..write('formatVersion: $formatVersion, ')
+          ..write('stateRevision: $stateRevision, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -3065,6 +3117,17 @@ class $DevicesTable extends Devices with TableInfo<$DevicesTable, Device> {
         type: DriftSqlType.blob,
         requiredDuringInsert: false,
       );
+  static const VerificationMeta _decryptedLabelMeta = const VerificationMeta(
+    'decryptedLabel',
+  );
+  @override
+  late final GeneratedColumn<String> decryptedLabel = GeneratedColumn<String>(
+    'decrypted_label',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _revocationStateMeta = const VerificationMeta(
     'revocationState',
   );
@@ -3091,6 +3154,73 @@ class $DevicesTable extends Devices with TableInfo<$DevicesTable, Device> {
     type: DriftSqlType.int,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _lastSignedPrekeyRotationUnixDayMeta =
+      const VerificationMeta('lastSignedPrekeyRotationUnixDay');
+  @override
+  late final GeneratedColumn<int> lastSignedPrekeyRotationUnixDay =
+      GeneratedColumn<int>(
+        'last_signed_prekey_rotation_unix_day',
+        aliasedName,
+        false,
+        check: () => ComparableExpr(
+          lastSignedPrekeyRotationUnixDay,
+        ).isBiggerOrEqualValue(0),
+        type: DriftSqlType.int,
+        requiredDuringInsert: false,
+        defaultValue: const Constant(0),
+      );
+  static const VerificationMeta _createdDateMeta = const VerificationMeta(
+    'createdDate',
+  );
+  @override
+  late final GeneratedColumn<String> createdDate = GeneratedColumn<String>(
+    'created_date',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _lastActiveDateMeta = const VerificationMeta(
+    'lastActiveDate',
+  );
+  @override
+  late final GeneratedColumn<String> lastActiveDate = GeneratedColumn<String>(
+    'last_active_date',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _isCurrentDeviceMeta = const VerificationMeta(
+    'isCurrentDevice',
+  );
+  @override
+  late final GeneratedColumn<bool> isCurrentDevice = GeneratedColumn<bool>(
+    'is_current_device',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("is_current_device" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _ownerListingMeta = const VerificationMeta(
+    'ownerListing',
+  );
+  @override
+  late final GeneratedColumn<bool> ownerListing = GeneratedColumn<bool>(
+    'owner_listing',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("owner_listing" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     deviceId,
@@ -3098,8 +3228,14 @@ class $DevicesTable extends Devices with TableInfo<$DevicesTable, Device> {
     publicBundle,
     etagCiphertext,
     labelCiphertext,
+    decryptedLabel,
     revocationState,
     bundleVersion,
+    lastSignedPrekeyRotationUnixDay,
+    createdDate,
+    lastActiveDate,
+    isCurrentDevice,
+    ownerListing,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -3158,6 +3294,15 @@ class $DevicesTable extends Devices with TableInfo<$DevicesTable, Device> {
         ),
       );
     }
+    if (data.containsKey('decrypted_label')) {
+      context.handle(
+        _decryptedLabelMeta,
+        decryptedLabel.isAcceptableOrUnknown(
+          data['decrypted_label']!,
+          _decryptedLabelMeta,
+        ),
+      );
+    }
     if (data.containsKey('revocation_state')) {
       context.handle(
         _revocationStateMeta,
@@ -3175,6 +3320,51 @@ class $DevicesTable extends Devices with TableInfo<$DevicesTable, Device> {
         bundleVersion.isAcceptableOrUnknown(
           data['bundle_version']!,
           _bundleVersionMeta,
+        ),
+      );
+    }
+    if (data.containsKey('last_signed_prekey_rotation_unix_day')) {
+      context.handle(
+        _lastSignedPrekeyRotationUnixDayMeta,
+        lastSignedPrekeyRotationUnixDay.isAcceptableOrUnknown(
+          data['last_signed_prekey_rotation_unix_day']!,
+          _lastSignedPrekeyRotationUnixDayMeta,
+        ),
+      );
+    }
+    if (data.containsKey('created_date')) {
+      context.handle(
+        _createdDateMeta,
+        createdDate.isAcceptableOrUnknown(
+          data['created_date']!,
+          _createdDateMeta,
+        ),
+      );
+    }
+    if (data.containsKey('last_active_date')) {
+      context.handle(
+        _lastActiveDateMeta,
+        lastActiveDate.isAcceptableOrUnknown(
+          data['last_active_date']!,
+          _lastActiveDateMeta,
+        ),
+      );
+    }
+    if (data.containsKey('is_current_device')) {
+      context.handle(
+        _isCurrentDeviceMeta,
+        isCurrentDevice.isAcceptableOrUnknown(
+          data['is_current_device']!,
+          _isCurrentDeviceMeta,
+        ),
+      );
+    }
+    if (data.containsKey('owner_listing')) {
+      context.handle(
+        _ownerListingMeta,
+        ownerListing.isAcceptableOrUnknown(
+          data['owner_listing']!,
+          _ownerListingMeta,
         ),
       );
     }
@@ -3207,6 +3397,10 @@ class $DevicesTable extends Devices with TableInfo<$DevicesTable, Device> {
         DriftSqlType.blob,
         data['${effectivePrefix}label_ciphertext'],
       ),
+      decryptedLabel: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}decrypted_label'],
+      ),
       revocationState: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}revocation_state'],
@@ -3215,6 +3409,26 @@ class $DevicesTable extends Devices with TableInfo<$DevicesTable, Device> {
         DriftSqlType.int,
         data['${effectivePrefix}bundle_version'],
       ),
+      lastSignedPrekeyRotationUnixDay: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}last_signed_prekey_rotation_unix_day'],
+      )!,
+      createdDate: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}created_date'],
+      ),
+      lastActiveDate: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}last_active_date'],
+      ),
+      isCurrentDevice: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}is_current_device'],
+      )!,
+      ownerListing: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}owner_listing'],
+      )!,
     );
   }
 
@@ -3230,16 +3444,28 @@ class Device extends DataClass implements Insertable<Device> {
   final Uint8List publicBundle;
   final Uint8List? etagCiphertext;
   final Uint8List? labelCiphertext;
+  final String? decryptedLabel;
   final int revocationState;
   final int? bundleVersion;
+  final int lastSignedPrekeyRotationUnixDay;
+  final String? createdDate;
+  final String? lastActiveDate;
+  final bool isCurrentDevice;
+  final bool ownerListing;
   const Device({
     required this.deviceId,
     required this.userId,
     required this.publicBundle,
     this.etagCiphertext,
     this.labelCiphertext,
+    this.decryptedLabel,
     required this.revocationState,
     this.bundleVersion,
+    required this.lastSignedPrekeyRotationUnixDay,
+    this.createdDate,
+    this.lastActiveDate,
+    required this.isCurrentDevice,
+    required this.ownerListing,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -3253,10 +3479,24 @@ class Device extends DataClass implements Insertable<Device> {
     if (!nullToAbsent || labelCiphertext != null) {
       map['label_ciphertext'] = Variable<Uint8List>(labelCiphertext);
     }
+    if (!nullToAbsent || decryptedLabel != null) {
+      map['decrypted_label'] = Variable<String>(decryptedLabel);
+    }
     map['revocation_state'] = Variable<int>(revocationState);
     if (!nullToAbsent || bundleVersion != null) {
       map['bundle_version'] = Variable<int>(bundleVersion);
     }
+    map['last_signed_prekey_rotation_unix_day'] = Variable<int>(
+      lastSignedPrekeyRotationUnixDay,
+    );
+    if (!nullToAbsent || createdDate != null) {
+      map['created_date'] = Variable<String>(createdDate);
+    }
+    if (!nullToAbsent || lastActiveDate != null) {
+      map['last_active_date'] = Variable<String>(lastActiveDate);
+    }
+    map['is_current_device'] = Variable<bool>(isCurrentDevice);
+    map['owner_listing'] = Variable<bool>(ownerListing);
     return map;
   }
 
@@ -3271,10 +3511,22 @@ class Device extends DataClass implements Insertable<Device> {
       labelCiphertext: labelCiphertext == null && nullToAbsent
           ? const Value.absent()
           : Value(labelCiphertext),
+      decryptedLabel: decryptedLabel == null && nullToAbsent
+          ? const Value.absent()
+          : Value(decryptedLabel),
       revocationState: Value(revocationState),
       bundleVersion: bundleVersion == null && nullToAbsent
           ? const Value.absent()
           : Value(bundleVersion),
+      lastSignedPrekeyRotationUnixDay: Value(lastSignedPrekeyRotationUnixDay),
+      createdDate: createdDate == null && nullToAbsent
+          ? const Value.absent()
+          : Value(createdDate),
+      lastActiveDate: lastActiveDate == null && nullToAbsent
+          ? const Value.absent()
+          : Value(lastActiveDate),
+      isCurrentDevice: Value(isCurrentDevice),
+      ownerListing: Value(ownerListing),
     );
   }
 
@@ -3289,8 +3541,16 @@ class Device extends DataClass implements Insertable<Device> {
       publicBundle: serializer.fromJson<Uint8List>(json['publicBundle']),
       etagCiphertext: serializer.fromJson<Uint8List?>(json['etagCiphertext']),
       labelCiphertext: serializer.fromJson<Uint8List?>(json['labelCiphertext']),
+      decryptedLabel: serializer.fromJson<String?>(json['decryptedLabel']),
       revocationState: serializer.fromJson<int>(json['revocationState']),
       bundleVersion: serializer.fromJson<int?>(json['bundleVersion']),
+      lastSignedPrekeyRotationUnixDay: serializer.fromJson<int>(
+        json['lastSignedPrekeyRotationUnixDay'],
+      ),
+      createdDate: serializer.fromJson<String?>(json['createdDate']),
+      lastActiveDate: serializer.fromJson<String?>(json['lastActiveDate']),
+      isCurrentDevice: serializer.fromJson<bool>(json['isCurrentDevice']),
+      ownerListing: serializer.fromJson<bool>(json['ownerListing']),
     );
   }
   @override
@@ -3302,8 +3562,16 @@ class Device extends DataClass implements Insertable<Device> {
       'publicBundle': serializer.toJson<Uint8List>(publicBundle),
       'etagCiphertext': serializer.toJson<Uint8List?>(etagCiphertext),
       'labelCiphertext': serializer.toJson<Uint8List?>(labelCiphertext),
+      'decryptedLabel': serializer.toJson<String?>(decryptedLabel),
       'revocationState': serializer.toJson<int>(revocationState),
       'bundleVersion': serializer.toJson<int?>(bundleVersion),
+      'lastSignedPrekeyRotationUnixDay': serializer.toJson<int>(
+        lastSignedPrekeyRotationUnixDay,
+      ),
+      'createdDate': serializer.toJson<String?>(createdDate),
+      'lastActiveDate': serializer.toJson<String?>(lastActiveDate),
+      'isCurrentDevice': serializer.toJson<bool>(isCurrentDevice),
+      'ownerListing': serializer.toJson<bool>(ownerListing),
     };
   }
 
@@ -3313,8 +3581,14 @@ class Device extends DataClass implements Insertable<Device> {
     Uint8List? publicBundle,
     Value<Uint8List?> etagCiphertext = const Value.absent(),
     Value<Uint8List?> labelCiphertext = const Value.absent(),
+    Value<String?> decryptedLabel = const Value.absent(),
     int? revocationState,
     Value<int?> bundleVersion = const Value.absent(),
+    int? lastSignedPrekeyRotationUnixDay,
+    Value<String?> createdDate = const Value.absent(),
+    Value<String?> lastActiveDate = const Value.absent(),
+    bool? isCurrentDevice,
+    bool? ownerListing,
   }) => Device(
     deviceId: deviceId ?? this.deviceId,
     userId: userId ?? this.userId,
@@ -3325,10 +3599,21 @@ class Device extends DataClass implements Insertable<Device> {
     labelCiphertext: labelCiphertext.present
         ? labelCiphertext.value
         : this.labelCiphertext,
+    decryptedLabel: decryptedLabel.present
+        ? decryptedLabel.value
+        : this.decryptedLabel,
     revocationState: revocationState ?? this.revocationState,
     bundleVersion: bundleVersion.present
         ? bundleVersion.value
         : this.bundleVersion,
+    lastSignedPrekeyRotationUnixDay:
+        lastSignedPrekeyRotationUnixDay ?? this.lastSignedPrekeyRotationUnixDay,
+    createdDate: createdDate.present ? createdDate.value : this.createdDate,
+    lastActiveDate: lastActiveDate.present
+        ? lastActiveDate.value
+        : this.lastActiveDate,
+    isCurrentDevice: isCurrentDevice ?? this.isCurrentDevice,
+    ownerListing: ownerListing ?? this.ownerListing,
   );
   Device copyWithCompanion(DevicesCompanion data) {
     return Device(
@@ -3343,12 +3628,31 @@ class Device extends DataClass implements Insertable<Device> {
       labelCiphertext: data.labelCiphertext.present
           ? data.labelCiphertext.value
           : this.labelCiphertext,
+      decryptedLabel: data.decryptedLabel.present
+          ? data.decryptedLabel.value
+          : this.decryptedLabel,
       revocationState: data.revocationState.present
           ? data.revocationState.value
           : this.revocationState,
       bundleVersion: data.bundleVersion.present
           ? data.bundleVersion.value
           : this.bundleVersion,
+      lastSignedPrekeyRotationUnixDay:
+          data.lastSignedPrekeyRotationUnixDay.present
+          ? data.lastSignedPrekeyRotationUnixDay.value
+          : this.lastSignedPrekeyRotationUnixDay,
+      createdDate: data.createdDate.present
+          ? data.createdDate.value
+          : this.createdDate,
+      lastActiveDate: data.lastActiveDate.present
+          ? data.lastActiveDate.value
+          : this.lastActiveDate,
+      isCurrentDevice: data.isCurrentDevice.present
+          ? data.isCurrentDevice.value
+          : this.isCurrentDevice,
+      ownerListing: data.ownerListing.present
+          ? data.ownerListing.value
+          : this.ownerListing,
     );
   }
 
@@ -3360,8 +3664,16 @@ class Device extends DataClass implements Insertable<Device> {
           ..write('publicBundle: $publicBundle, ')
           ..write('etagCiphertext: $etagCiphertext, ')
           ..write('labelCiphertext: $labelCiphertext, ')
+          ..write('decryptedLabel: $decryptedLabel, ')
           ..write('revocationState: $revocationState, ')
-          ..write('bundleVersion: $bundleVersion')
+          ..write('bundleVersion: $bundleVersion, ')
+          ..write(
+            'lastSignedPrekeyRotationUnixDay: $lastSignedPrekeyRotationUnixDay, ',
+          )
+          ..write('createdDate: $createdDate, ')
+          ..write('lastActiveDate: $lastActiveDate, ')
+          ..write('isCurrentDevice: $isCurrentDevice, ')
+          ..write('ownerListing: $ownerListing')
           ..write(')'))
         .toString();
   }
@@ -3373,8 +3685,14 @@ class Device extends DataClass implements Insertable<Device> {
     $driftBlobEquality.hash(publicBundle),
     $driftBlobEquality.hash(etagCiphertext),
     $driftBlobEquality.hash(labelCiphertext),
+    decryptedLabel,
     revocationState,
     bundleVersion,
+    lastSignedPrekeyRotationUnixDay,
+    createdDate,
+    lastActiveDate,
+    isCurrentDevice,
+    ownerListing,
   );
   @override
   bool operator ==(Object other) =>
@@ -3391,8 +3709,15 @@ class Device extends DataClass implements Insertable<Device> {
             other.labelCiphertext,
             this.labelCiphertext,
           ) &&
+          other.decryptedLabel == this.decryptedLabel &&
           other.revocationState == this.revocationState &&
-          other.bundleVersion == this.bundleVersion);
+          other.bundleVersion == this.bundleVersion &&
+          other.lastSignedPrekeyRotationUnixDay ==
+              this.lastSignedPrekeyRotationUnixDay &&
+          other.createdDate == this.createdDate &&
+          other.lastActiveDate == this.lastActiveDate &&
+          other.isCurrentDevice == this.isCurrentDevice &&
+          other.ownerListing == this.ownerListing);
 }
 
 class DevicesCompanion extends UpdateCompanion<Device> {
@@ -3401,8 +3726,14 @@ class DevicesCompanion extends UpdateCompanion<Device> {
   final Value<Uint8List> publicBundle;
   final Value<Uint8List?> etagCiphertext;
   final Value<Uint8List?> labelCiphertext;
+  final Value<String?> decryptedLabel;
   final Value<int> revocationState;
   final Value<int?> bundleVersion;
+  final Value<int> lastSignedPrekeyRotationUnixDay;
+  final Value<String?> createdDate;
+  final Value<String?> lastActiveDate;
+  final Value<bool> isCurrentDevice;
+  final Value<bool> ownerListing;
   final Value<int> rowid;
   const DevicesCompanion({
     this.deviceId = const Value.absent(),
@@ -3410,8 +3741,14 @@ class DevicesCompanion extends UpdateCompanion<Device> {
     this.publicBundle = const Value.absent(),
     this.etagCiphertext = const Value.absent(),
     this.labelCiphertext = const Value.absent(),
+    this.decryptedLabel = const Value.absent(),
     this.revocationState = const Value.absent(),
     this.bundleVersion = const Value.absent(),
+    this.lastSignedPrekeyRotationUnixDay = const Value.absent(),
+    this.createdDate = const Value.absent(),
+    this.lastActiveDate = const Value.absent(),
+    this.isCurrentDevice = const Value.absent(),
+    this.ownerListing = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   DevicesCompanion.insert({
@@ -3420,8 +3757,14 @@ class DevicesCompanion extends UpdateCompanion<Device> {
     required Uint8List publicBundle,
     this.etagCiphertext = const Value.absent(),
     this.labelCiphertext = const Value.absent(),
+    this.decryptedLabel = const Value.absent(),
     required int revocationState,
     this.bundleVersion = const Value.absent(),
+    this.lastSignedPrekeyRotationUnixDay = const Value.absent(),
+    this.createdDate = const Value.absent(),
+    this.lastActiveDate = const Value.absent(),
+    this.isCurrentDevice = const Value.absent(),
+    this.ownerListing = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : deviceId = Value(deviceId),
        userId = Value(userId),
@@ -3433,8 +3776,14 @@ class DevicesCompanion extends UpdateCompanion<Device> {
     Expression<Uint8List>? publicBundle,
     Expression<Uint8List>? etagCiphertext,
     Expression<Uint8List>? labelCiphertext,
+    Expression<String>? decryptedLabel,
     Expression<int>? revocationState,
     Expression<int>? bundleVersion,
+    Expression<int>? lastSignedPrekeyRotationUnixDay,
+    Expression<String>? createdDate,
+    Expression<String>? lastActiveDate,
+    Expression<bool>? isCurrentDevice,
+    Expression<bool>? ownerListing,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -3443,8 +3792,15 @@ class DevicesCompanion extends UpdateCompanion<Device> {
       if (publicBundle != null) 'public_bundle': publicBundle,
       if (etagCiphertext != null) 'etag_ciphertext': etagCiphertext,
       if (labelCiphertext != null) 'label_ciphertext': labelCiphertext,
+      if (decryptedLabel != null) 'decrypted_label': decryptedLabel,
       if (revocationState != null) 'revocation_state': revocationState,
       if (bundleVersion != null) 'bundle_version': bundleVersion,
+      if (lastSignedPrekeyRotationUnixDay != null)
+        'last_signed_prekey_rotation_unix_day': lastSignedPrekeyRotationUnixDay,
+      if (createdDate != null) 'created_date': createdDate,
+      if (lastActiveDate != null) 'last_active_date': lastActiveDate,
+      if (isCurrentDevice != null) 'is_current_device': isCurrentDevice,
+      if (ownerListing != null) 'owner_listing': ownerListing,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -3455,8 +3811,14 @@ class DevicesCompanion extends UpdateCompanion<Device> {
     Value<Uint8List>? publicBundle,
     Value<Uint8List?>? etagCiphertext,
     Value<Uint8List?>? labelCiphertext,
+    Value<String?>? decryptedLabel,
     Value<int>? revocationState,
     Value<int?>? bundleVersion,
+    Value<int>? lastSignedPrekeyRotationUnixDay,
+    Value<String?>? createdDate,
+    Value<String?>? lastActiveDate,
+    Value<bool>? isCurrentDevice,
+    Value<bool>? ownerListing,
     Value<int>? rowid,
   }) {
     return DevicesCompanion(
@@ -3465,8 +3827,16 @@ class DevicesCompanion extends UpdateCompanion<Device> {
       publicBundle: publicBundle ?? this.publicBundle,
       etagCiphertext: etagCiphertext ?? this.etagCiphertext,
       labelCiphertext: labelCiphertext ?? this.labelCiphertext,
+      decryptedLabel: decryptedLabel ?? this.decryptedLabel,
       revocationState: revocationState ?? this.revocationState,
       bundleVersion: bundleVersion ?? this.bundleVersion,
+      lastSignedPrekeyRotationUnixDay:
+          lastSignedPrekeyRotationUnixDay ??
+          this.lastSignedPrekeyRotationUnixDay,
+      createdDate: createdDate ?? this.createdDate,
+      lastActiveDate: lastActiveDate ?? this.lastActiveDate,
+      isCurrentDevice: isCurrentDevice ?? this.isCurrentDevice,
+      ownerListing: ownerListing ?? this.ownerListing,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -3489,11 +3859,31 @@ class DevicesCompanion extends UpdateCompanion<Device> {
     if (labelCiphertext.present) {
       map['label_ciphertext'] = Variable<Uint8List>(labelCiphertext.value);
     }
+    if (decryptedLabel.present) {
+      map['decrypted_label'] = Variable<String>(decryptedLabel.value);
+    }
     if (revocationState.present) {
       map['revocation_state'] = Variable<int>(revocationState.value);
     }
     if (bundleVersion.present) {
       map['bundle_version'] = Variable<int>(bundleVersion.value);
+    }
+    if (lastSignedPrekeyRotationUnixDay.present) {
+      map['last_signed_prekey_rotation_unix_day'] = Variable<int>(
+        lastSignedPrekeyRotationUnixDay.value,
+      );
+    }
+    if (createdDate.present) {
+      map['created_date'] = Variable<String>(createdDate.value);
+    }
+    if (lastActiveDate.present) {
+      map['last_active_date'] = Variable<String>(lastActiveDate.value);
+    }
+    if (isCurrentDevice.present) {
+      map['is_current_device'] = Variable<bool>(isCurrentDevice.value);
+    }
+    if (ownerListing.present) {
+      map['owner_listing'] = Variable<bool>(ownerListing.value);
     }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
@@ -3509,8 +3899,16 @@ class DevicesCompanion extends UpdateCompanion<Device> {
           ..write('publicBundle: $publicBundle, ')
           ..write('etagCiphertext: $etagCiphertext, ')
           ..write('labelCiphertext: $labelCiphertext, ')
+          ..write('decryptedLabel: $decryptedLabel, ')
           ..write('revocationState: $revocationState, ')
           ..write('bundleVersion: $bundleVersion, ')
+          ..write(
+            'lastSignedPrekeyRotationUnixDay: $lastSignedPrekeyRotationUnixDay, ',
+          )
+          ..write('createdDate: $createdDate, ')
+          ..write('lastActiveDate: $lastActiveDate, ')
+          ..write('isCurrentDevice: $isCurrentDevice, ')
+          ..write('ownerListing: $ownerListing, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -3962,6 +4360,933 @@ class DeviceLogRecordsCompanion extends UpdateCompanion<DeviceLogRecord> {
   }
 }
 
+class $DeviceLogMutationsTable extends DeviceLogMutations
+    with TableInfo<$DeviceLogMutationsTable, DeviceLogMutation> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $DeviceLogMutationsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _operationIdMeta = const VerificationMeta(
+    'operationId',
+  );
+  @override
+  late final GeneratedColumn<String> operationId = GeneratedColumn<String>(
+    'operation_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _userIdMeta = const VerificationMeta('userId');
+  @override
+  late final GeneratedColumn<String> userId = GeneratedColumn<String>(
+    'user_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _mutationKindMeta = const VerificationMeta(
+    'mutationKind',
+  );
+  @override
+  late final GeneratedColumn<int> mutationKind = GeneratedColumn<int>(
+    'mutation_kind',
+    aliasedName,
+    false,
+    check: () => ComparableExpr(mutationKind).isBetweenValues(0, 3),
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _targetDeviceIdMeta = const VerificationMeta(
+    'targetDeviceId',
+  );
+  @override
+  late final GeneratedColumn<String> targetDeviceId = GeneratedColumn<String>(
+    'target_device_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _expectedSequenceMeta = const VerificationMeta(
+    'expectedSequence',
+  );
+  @override
+  late final GeneratedColumn<int> expectedSequence = GeneratedColumn<int>(
+    'expected_sequence',
+    aliasedName,
+    false,
+    check: () => ComparableExpr(expectedSequence).isBiggerOrEqualValue(0),
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _previousHeadHashMeta = const VerificationMeta(
+    'previousHeadHash',
+  );
+  @override
+  late final GeneratedColumn<Uint8List> previousHeadHash =
+      GeneratedColumn<Uint8List>(
+        'previous_head_hash',
+        aliasedName,
+        false,
+        type: DriftSqlType.blob,
+        requiredDuringInsert: true,
+      );
+  static const VerificationMeta _exactRecordMeta = const VerificationMeta(
+    'exactRecord',
+  );
+  @override
+  late final GeneratedColumn<Uint8List> exactRecord =
+      GeneratedColumn<Uint8List>(
+        'exact_record',
+        aliasedName,
+        false,
+        type: DriftSqlType.blob,
+        requiredDuringInsert: true,
+      );
+  static const VerificationMeta _stateMeta = const VerificationMeta('state');
+  @override
+  late final GeneratedColumn<int> state = GeneratedColumn<int>(
+    'state',
+    aliasedName,
+    false,
+    check: () => ComparableExpr(state).isBetweenValues(0, 3),
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    operationId,
+    userId,
+    mutationKind,
+    targetDeviceId,
+    expectedSequence,
+    previousHeadHash,
+    exactRecord,
+    state,
+    updatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'device_log_mutations';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<DeviceLogMutation> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('operation_id')) {
+      context.handle(
+        _operationIdMeta,
+        operationId.isAcceptableOrUnknown(
+          data['operation_id']!,
+          _operationIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_operationIdMeta);
+    }
+    if (data.containsKey('user_id')) {
+      context.handle(
+        _userIdMeta,
+        userId.isAcceptableOrUnknown(data['user_id']!, _userIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_userIdMeta);
+    }
+    if (data.containsKey('mutation_kind')) {
+      context.handle(
+        _mutationKindMeta,
+        mutationKind.isAcceptableOrUnknown(
+          data['mutation_kind']!,
+          _mutationKindMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_mutationKindMeta);
+    }
+    if (data.containsKey('target_device_id')) {
+      context.handle(
+        _targetDeviceIdMeta,
+        targetDeviceId.isAcceptableOrUnknown(
+          data['target_device_id']!,
+          _targetDeviceIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('expected_sequence')) {
+      context.handle(
+        _expectedSequenceMeta,
+        expectedSequence.isAcceptableOrUnknown(
+          data['expected_sequence']!,
+          _expectedSequenceMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_expectedSequenceMeta);
+    }
+    if (data.containsKey('previous_head_hash')) {
+      context.handle(
+        _previousHeadHashMeta,
+        previousHeadHash.isAcceptableOrUnknown(
+          data['previous_head_hash']!,
+          _previousHeadHashMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_previousHeadHashMeta);
+    }
+    if (data.containsKey('exact_record')) {
+      context.handle(
+        _exactRecordMeta,
+        exactRecord.isAcceptableOrUnknown(
+          data['exact_record']!,
+          _exactRecordMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_exactRecordMeta);
+    }
+    if (data.containsKey('state')) {
+      context.handle(
+        _stateMeta,
+        state.isAcceptableOrUnknown(data['state']!, _stateMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_stateMeta);
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {operationId};
+  @override
+  DeviceLogMutation map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return DeviceLogMutation(
+      operationId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}operation_id'],
+      )!,
+      userId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}user_id'],
+      )!,
+      mutationKind: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}mutation_kind'],
+      )!,
+      targetDeviceId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}target_device_id'],
+      ),
+      expectedSequence: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}expected_sequence'],
+      )!,
+      previousHeadHash: attachedDatabase.typeMapping.read(
+        DriftSqlType.blob,
+        data['${effectivePrefix}previous_head_hash'],
+      )!,
+      exactRecord: attachedDatabase.typeMapping.read(
+        DriftSqlType.blob,
+        data['${effectivePrefix}exact_record'],
+      )!,
+      state: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}state'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+    );
+  }
+
+  @override
+  $DeviceLogMutationsTable createAlias(String alias) {
+    return $DeviceLogMutationsTable(attachedDatabase, alias);
+  }
+}
+
+class DeviceLogMutation extends DataClass
+    implements Insertable<DeviceLogMutation> {
+  final String operationId;
+  final String userId;
+  final int mutationKind;
+  final String? targetDeviceId;
+  final int expectedSequence;
+  final Uint8List previousHeadHash;
+  final Uint8List exactRecord;
+  final int state;
+  final DateTime updatedAt;
+  const DeviceLogMutation({
+    required this.operationId,
+    required this.userId,
+    required this.mutationKind,
+    this.targetDeviceId,
+    required this.expectedSequence,
+    required this.previousHeadHash,
+    required this.exactRecord,
+    required this.state,
+    required this.updatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['operation_id'] = Variable<String>(operationId);
+    map['user_id'] = Variable<String>(userId);
+    map['mutation_kind'] = Variable<int>(mutationKind);
+    if (!nullToAbsent || targetDeviceId != null) {
+      map['target_device_id'] = Variable<String>(targetDeviceId);
+    }
+    map['expected_sequence'] = Variable<int>(expectedSequence);
+    map['previous_head_hash'] = Variable<Uint8List>(previousHeadHash);
+    map['exact_record'] = Variable<Uint8List>(exactRecord);
+    map['state'] = Variable<int>(state);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    return map;
+  }
+
+  DeviceLogMutationsCompanion toCompanion(bool nullToAbsent) {
+    return DeviceLogMutationsCompanion(
+      operationId: Value(operationId),
+      userId: Value(userId),
+      mutationKind: Value(mutationKind),
+      targetDeviceId: targetDeviceId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(targetDeviceId),
+      expectedSequence: Value(expectedSequence),
+      previousHeadHash: Value(previousHeadHash),
+      exactRecord: Value(exactRecord),
+      state: Value(state),
+      updatedAt: Value(updatedAt),
+    );
+  }
+
+  factory DeviceLogMutation.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return DeviceLogMutation(
+      operationId: serializer.fromJson<String>(json['operationId']),
+      userId: serializer.fromJson<String>(json['userId']),
+      mutationKind: serializer.fromJson<int>(json['mutationKind']),
+      targetDeviceId: serializer.fromJson<String?>(json['targetDeviceId']),
+      expectedSequence: serializer.fromJson<int>(json['expectedSequence']),
+      previousHeadHash: serializer.fromJson<Uint8List>(
+        json['previousHeadHash'],
+      ),
+      exactRecord: serializer.fromJson<Uint8List>(json['exactRecord']),
+      state: serializer.fromJson<int>(json['state']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'operationId': serializer.toJson<String>(operationId),
+      'userId': serializer.toJson<String>(userId),
+      'mutationKind': serializer.toJson<int>(mutationKind),
+      'targetDeviceId': serializer.toJson<String?>(targetDeviceId),
+      'expectedSequence': serializer.toJson<int>(expectedSequence),
+      'previousHeadHash': serializer.toJson<Uint8List>(previousHeadHash),
+      'exactRecord': serializer.toJson<Uint8List>(exactRecord),
+      'state': serializer.toJson<int>(state),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+    };
+  }
+
+  DeviceLogMutation copyWith({
+    String? operationId,
+    String? userId,
+    int? mutationKind,
+    Value<String?> targetDeviceId = const Value.absent(),
+    int? expectedSequence,
+    Uint8List? previousHeadHash,
+    Uint8List? exactRecord,
+    int? state,
+    DateTime? updatedAt,
+  }) => DeviceLogMutation(
+    operationId: operationId ?? this.operationId,
+    userId: userId ?? this.userId,
+    mutationKind: mutationKind ?? this.mutationKind,
+    targetDeviceId: targetDeviceId.present
+        ? targetDeviceId.value
+        : this.targetDeviceId,
+    expectedSequence: expectedSequence ?? this.expectedSequence,
+    previousHeadHash: previousHeadHash ?? this.previousHeadHash,
+    exactRecord: exactRecord ?? this.exactRecord,
+    state: state ?? this.state,
+    updatedAt: updatedAt ?? this.updatedAt,
+  );
+  DeviceLogMutation copyWithCompanion(DeviceLogMutationsCompanion data) {
+    return DeviceLogMutation(
+      operationId: data.operationId.present
+          ? data.operationId.value
+          : this.operationId,
+      userId: data.userId.present ? data.userId.value : this.userId,
+      mutationKind: data.mutationKind.present
+          ? data.mutationKind.value
+          : this.mutationKind,
+      targetDeviceId: data.targetDeviceId.present
+          ? data.targetDeviceId.value
+          : this.targetDeviceId,
+      expectedSequence: data.expectedSequence.present
+          ? data.expectedSequence.value
+          : this.expectedSequence,
+      previousHeadHash: data.previousHeadHash.present
+          ? data.previousHeadHash.value
+          : this.previousHeadHash,
+      exactRecord: data.exactRecord.present
+          ? data.exactRecord.value
+          : this.exactRecord,
+      state: data.state.present ? data.state.value : this.state,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('DeviceLogMutation(')
+          ..write('operationId: $operationId, ')
+          ..write('userId: $userId, ')
+          ..write('mutationKind: $mutationKind, ')
+          ..write('targetDeviceId: $targetDeviceId, ')
+          ..write('expectedSequence: $expectedSequence, ')
+          ..write('previousHeadHash: $previousHeadHash, ')
+          ..write('exactRecord: $exactRecord, ')
+          ..write('state: $state, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    operationId,
+    userId,
+    mutationKind,
+    targetDeviceId,
+    expectedSequence,
+    $driftBlobEquality.hash(previousHeadHash),
+    $driftBlobEquality.hash(exactRecord),
+    state,
+    updatedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is DeviceLogMutation &&
+          other.operationId == this.operationId &&
+          other.userId == this.userId &&
+          other.mutationKind == this.mutationKind &&
+          other.targetDeviceId == this.targetDeviceId &&
+          other.expectedSequence == this.expectedSequence &&
+          $driftBlobEquality.equals(
+            other.previousHeadHash,
+            this.previousHeadHash,
+          ) &&
+          $driftBlobEquality.equals(other.exactRecord, this.exactRecord) &&
+          other.state == this.state &&
+          other.updatedAt == this.updatedAt);
+}
+
+class DeviceLogMutationsCompanion extends UpdateCompanion<DeviceLogMutation> {
+  final Value<String> operationId;
+  final Value<String> userId;
+  final Value<int> mutationKind;
+  final Value<String?> targetDeviceId;
+  final Value<int> expectedSequence;
+  final Value<Uint8List> previousHeadHash;
+  final Value<Uint8List> exactRecord;
+  final Value<int> state;
+  final Value<DateTime> updatedAt;
+  final Value<int> rowid;
+  const DeviceLogMutationsCompanion({
+    this.operationId = const Value.absent(),
+    this.userId = const Value.absent(),
+    this.mutationKind = const Value.absent(),
+    this.targetDeviceId = const Value.absent(),
+    this.expectedSequence = const Value.absent(),
+    this.previousHeadHash = const Value.absent(),
+    this.exactRecord = const Value.absent(),
+    this.state = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  DeviceLogMutationsCompanion.insert({
+    required String operationId,
+    required String userId,
+    required int mutationKind,
+    this.targetDeviceId = const Value.absent(),
+    required int expectedSequence,
+    required Uint8List previousHeadHash,
+    required Uint8List exactRecord,
+    required int state,
+    this.updatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : operationId = Value(operationId),
+       userId = Value(userId),
+       mutationKind = Value(mutationKind),
+       expectedSequence = Value(expectedSequence),
+       previousHeadHash = Value(previousHeadHash),
+       exactRecord = Value(exactRecord),
+       state = Value(state);
+  static Insertable<DeviceLogMutation> custom({
+    Expression<String>? operationId,
+    Expression<String>? userId,
+    Expression<int>? mutationKind,
+    Expression<String>? targetDeviceId,
+    Expression<int>? expectedSequence,
+    Expression<Uint8List>? previousHeadHash,
+    Expression<Uint8List>? exactRecord,
+    Expression<int>? state,
+    Expression<DateTime>? updatedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (operationId != null) 'operation_id': operationId,
+      if (userId != null) 'user_id': userId,
+      if (mutationKind != null) 'mutation_kind': mutationKind,
+      if (targetDeviceId != null) 'target_device_id': targetDeviceId,
+      if (expectedSequence != null) 'expected_sequence': expectedSequence,
+      if (previousHeadHash != null) 'previous_head_hash': previousHeadHash,
+      if (exactRecord != null) 'exact_record': exactRecord,
+      if (state != null) 'state': state,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  DeviceLogMutationsCompanion copyWith({
+    Value<String>? operationId,
+    Value<String>? userId,
+    Value<int>? mutationKind,
+    Value<String?>? targetDeviceId,
+    Value<int>? expectedSequence,
+    Value<Uint8List>? previousHeadHash,
+    Value<Uint8List>? exactRecord,
+    Value<int>? state,
+    Value<DateTime>? updatedAt,
+    Value<int>? rowid,
+  }) {
+    return DeviceLogMutationsCompanion(
+      operationId: operationId ?? this.operationId,
+      userId: userId ?? this.userId,
+      mutationKind: mutationKind ?? this.mutationKind,
+      targetDeviceId: targetDeviceId ?? this.targetDeviceId,
+      expectedSequence: expectedSequence ?? this.expectedSequence,
+      previousHeadHash: previousHeadHash ?? this.previousHeadHash,
+      exactRecord: exactRecord ?? this.exactRecord,
+      state: state ?? this.state,
+      updatedAt: updatedAt ?? this.updatedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (operationId.present) {
+      map['operation_id'] = Variable<String>(operationId.value);
+    }
+    if (userId.present) {
+      map['user_id'] = Variable<String>(userId.value);
+    }
+    if (mutationKind.present) {
+      map['mutation_kind'] = Variable<int>(mutationKind.value);
+    }
+    if (targetDeviceId.present) {
+      map['target_device_id'] = Variable<String>(targetDeviceId.value);
+    }
+    if (expectedSequence.present) {
+      map['expected_sequence'] = Variable<int>(expectedSequence.value);
+    }
+    if (previousHeadHash.present) {
+      map['previous_head_hash'] = Variable<Uint8List>(previousHeadHash.value);
+    }
+    if (exactRecord.present) {
+      map['exact_record'] = Variable<Uint8List>(exactRecord.value);
+    }
+    if (state.present) {
+      map['state'] = Variable<int>(state.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('DeviceLogMutationsCompanion(')
+          ..write('operationId: $operationId, ')
+          ..write('userId: $userId, ')
+          ..write('mutationKind: $mutationKind, ')
+          ..write('targetDeviceId: $targetDeviceId, ')
+          ..write('expectedSequence: $expectedSequence, ')
+          ..write('previousHeadHash: $previousHeadHash, ')
+          ..write('exactRecord: $exactRecord, ')
+          ..write('state: $state, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $SecurityPosturesTable extends SecurityPostures
+    with TableInfo<$SecurityPosturesTable, SecurityPosture> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $SecurityPosturesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _singletonIdMeta = const VerificationMeta(
+    'singletonId',
+  );
+  @override
+  late final GeneratedColumn<int> singletonId = GeneratedColumn<int>(
+    'singleton_id',
+    aliasedName,
+    false,
+    check: () => singletonId.equals(1),
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(1),
+  );
+  static const VerificationMeta _stateMeta = const VerificationMeta('state');
+  @override
+  late final GeneratedColumn<int> state = GeneratedColumn<int>(
+    'state',
+    aliasedName,
+    false,
+    check: () => ComparableExpr(state).isBetweenValues(0, 2),
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _evidenceKindMeta = const VerificationMeta(
+    'evidenceKind',
+  );
+  @override
+  late final GeneratedColumn<int> evidenceKind = GeneratedColumn<int>(
+    'evidence_kind',
+    aliasedName,
+    true,
+    check: () =>
+        evidenceKind.isNull() |
+        ComparableExpr(evidenceKind).isBetweenValues(0, 4),
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _detectedAtMeta = const VerificationMeta(
+    'detectedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> detectedAt = GeneratedColumn<DateTime>(
+    'detected_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    singletonId,
+    state,
+    evidenceKind,
+    detectedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'security_posture';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<SecurityPosture> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('singleton_id')) {
+      context.handle(
+        _singletonIdMeta,
+        singletonId.isAcceptableOrUnknown(
+          data['singleton_id']!,
+          _singletonIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('state')) {
+      context.handle(
+        _stateMeta,
+        state.isAcceptableOrUnknown(data['state']!, _stateMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_stateMeta);
+    }
+    if (data.containsKey('evidence_kind')) {
+      context.handle(
+        _evidenceKindMeta,
+        evidenceKind.isAcceptableOrUnknown(
+          data['evidence_kind']!,
+          _evidenceKindMeta,
+        ),
+      );
+    }
+    if (data.containsKey('detected_at')) {
+      context.handle(
+        _detectedAtMeta,
+        detectedAt.isAcceptableOrUnknown(data['detected_at']!, _detectedAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {singletonId};
+  @override
+  SecurityPosture map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return SecurityPosture(
+      singletonId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}singleton_id'],
+      )!,
+      state: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}state'],
+      )!,
+      evidenceKind: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}evidence_kind'],
+      ),
+      detectedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}detected_at'],
+      ),
+    );
+  }
+
+  @override
+  $SecurityPosturesTable createAlias(String alias) {
+    return $SecurityPosturesTable(attachedDatabase, alias);
+  }
+}
+
+class SecurityPosture extends DataClass implements Insertable<SecurityPosture> {
+  final int singletonId;
+  final int state;
+  final int? evidenceKind;
+  final DateTime? detectedAt;
+  const SecurityPosture({
+    required this.singletonId,
+    required this.state,
+    this.evidenceKind,
+    this.detectedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['singleton_id'] = Variable<int>(singletonId);
+    map['state'] = Variable<int>(state);
+    if (!nullToAbsent || evidenceKind != null) {
+      map['evidence_kind'] = Variable<int>(evidenceKind);
+    }
+    if (!nullToAbsent || detectedAt != null) {
+      map['detected_at'] = Variable<DateTime>(detectedAt);
+    }
+    return map;
+  }
+
+  SecurityPosturesCompanion toCompanion(bool nullToAbsent) {
+    return SecurityPosturesCompanion(
+      singletonId: Value(singletonId),
+      state: Value(state),
+      evidenceKind: evidenceKind == null && nullToAbsent
+          ? const Value.absent()
+          : Value(evidenceKind),
+      detectedAt: detectedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(detectedAt),
+    );
+  }
+
+  factory SecurityPosture.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return SecurityPosture(
+      singletonId: serializer.fromJson<int>(json['singletonId']),
+      state: serializer.fromJson<int>(json['state']),
+      evidenceKind: serializer.fromJson<int?>(json['evidenceKind']),
+      detectedAt: serializer.fromJson<DateTime?>(json['detectedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'singletonId': serializer.toJson<int>(singletonId),
+      'state': serializer.toJson<int>(state),
+      'evidenceKind': serializer.toJson<int?>(evidenceKind),
+      'detectedAt': serializer.toJson<DateTime?>(detectedAt),
+    };
+  }
+
+  SecurityPosture copyWith({
+    int? singletonId,
+    int? state,
+    Value<int?> evidenceKind = const Value.absent(),
+    Value<DateTime?> detectedAt = const Value.absent(),
+  }) => SecurityPosture(
+    singletonId: singletonId ?? this.singletonId,
+    state: state ?? this.state,
+    evidenceKind: evidenceKind.present ? evidenceKind.value : this.evidenceKind,
+    detectedAt: detectedAt.present ? detectedAt.value : this.detectedAt,
+  );
+  SecurityPosture copyWithCompanion(SecurityPosturesCompanion data) {
+    return SecurityPosture(
+      singletonId: data.singletonId.present
+          ? data.singletonId.value
+          : this.singletonId,
+      state: data.state.present ? data.state.value : this.state,
+      evidenceKind: data.evidenceKind.present
+          ? data.evidenceKind.value
+          : this.evidenceKind,
+      detectedAt: data.detectedAt.present
+          ? data.detectedAt.value
+          : this.detectedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SecurityPosture(')
+          ..write('singletonId: $singletonId, ')
+          ..write('state: $state, ')
+          ..write('evidenceKind: $evidenceKind, ')
+          ..write('detectedAt: $detectedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(singletonId, state, evidenceKind, detectedAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is SecurityPosture &&
+          other.singletonId == this.singletonId &&
+          other.state == this.state &&
+          other.evidenceKind == this.evidenceKind &&
+          other.detectedAt == this.detectedAt);
+}
+
+class SecurityPosturesCompanion extends UpdateCompanion<SecurityPosture> {
+  final Value<int> singletonId;
+  final Value<int> state;
+  final Value<int?> evidenceKind;
+  final Value<DateTime?> detectedAt;
+  const SecurityPosturesCompanion({
+    this.singletonId = const Value.absent(),
+    this.state = const Value.absent(),
+    this.evidenceKind = const Value.absent(),
+    this.detectedAt = const Value.absent(),
+  });
+  SecurityPosturesCompanion.insert({
+    this.singletonId = const Value.absent(),
+    required int state,
+    this.evidenceKind = const Value.absent(),
+    this.detectedAt = const Value.absent(),
+  }) : state = Value(state);
+  static Insertable<SecurityPosture> custom({
+    Expression<int>? singletonId,
+    Expression<int>? state,
+    Expression<int>? evidenceKind,
+    Expression<DateTime>? detectedAt,
+  }) {
+    return RawValuesInsertable({
+      if (singletonId != null) 'singleton_id': singletonId,
+      if (state != null) 'state': state,
+      if (evidenceKind != null) 'evidence_kind': evidenceKind,
+      if (detectedAt != null) 'detected_at': detectedAt,
+    });
+  }
+
+  SecurityPosturesCompanion copyWith({
+    Value<int>? singletonId,
+    Value<int>? state,
+    Value<int?>? evidenceKind,
+    Value<DateTime?>? detectedAt,
+  }) {
+    return SecurityPosturesCompanion(
+      singletonId: singletonId ?? this.singletonId,
+      state: state ?? this.state,
+      evidenceKind: evidenceKind ?? this.evidenceKind,
+      detectedAt: detectedAt ?? this.detectedAt,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (singletonId.present) {
+      map['singleton_id'] = Variable<int>(singletonId.value);
+    }
+    if (state.present) {
+      map['state'] = Variable<int>(state.value);
+    }
+    if (evidenceKind.present) {
+      map['evidence_kind'] = Variable<int>(evidenceKind.value);
+    }
+    if (detectedAt.present) {
+      map['detected_at'] = Variable<DateTime>(detectedAt.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SecurityPosturesCompanion(')
+          ..write('singletonId: $singletonId, ')
+          ..write('state: $state, ')
+          ..write('evidenceKind: $evidenceKind, ')
+          ..write('detectedAt: $detectedAt')
+          ..write(')'))
+        .toString();
+  }
+}
+
 class $PairwiseSessionsTable extends PairwiseSessions
     with TableInfo<$PairwiseSessionsTable, PairwiseSession> {
   @override
@@ -3974,6 +5299,769 @@ class $PairwiseSessionsTable extends PairwiseSessions
   @override
   late final GeneratedColumn<String> localDeviceId = GeneratedColumn<String>(
     'local_device_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _remoteUserIdMeta = const VerificationMeta(
+    'remoteUserId',
+  );
+  @override
+  late final GeneratedColumn<String> remoteUserId = GeneratedColumn<String>(
+    'remote_user_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
+  static const VerificationMeta _remoteDeviceIdMeta = const VerificationMeta(
+    'remoteDeviceId',
+  );
+  @override
+  late final GeneratedColumn<String> remoteDeviceId = GeneratedColumn<String>(
+    'remote_device_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _sessionIdMeta = const VerificationMeta(
+    'sessionId',
+  );
+  @override
+  late final GeneratedColumn<Uint8List> sessionId = GeneratedColumn<Uint8List>(
+    'session_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.blob,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _opaqueCryptoStateHandleMeta =
+      const VerificationMeta('opaqueCryptoStateHandle');
+  @override
+  late final GeneratedColumn<Uint8List> opaqueCryptoStateHandle =
+      GeneratedColumn<Uint8List>(
+        'opaque_crypto_state_handle',
+        aliasedName,
+        false,
+        type: DriftSqlType.blob,
+        requiredDuringInsert: true,
+      );
+  static const VerificationMeta _stateVersionMeta = const VerificationMeta(
+    'stateVersion',
+  );
+  @override
+  late final GeneratedColumn<int> stateVersion = GeneratedColumn<int>(
+    'state_version',
+    aliasedName,
+    false,
+    check: () => ComparableExpr(stateVersion).isBiggerThanValue(0),
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _skippedKeyCountMeta = const VerificationMeta(
+    'skippedKeyCount',
+  );
+  @override
+  late final GeneratedColumn<int> skippedKeyCount = GeneratedColumn<int>(
+    'skipped_key_count',
+    aliasedName,
+    false,
+    check: () => ComparableExpr(skippedKeyCount).isBetweenValues(0, 2000),
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _dispositionMeta = const VerificationMeta(
+    'disposition',
+  );
+  @override
+  late final GeneratedColumn<int> disposition = GeneratedColumn<int>(
+    'disposition',
+    aliasedName,
+    false,
+    check: () => ComparableExpr(disposition).isBetweenValues(0, 1),
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _repairStateMeta = const VerificationMeta(
+    'repairState',
+  );
+  @override
+  late final GeneratedColumn<int> repairState = GeneratedColumn<int>(
+    'repair_state',
+    aliasedName,
+    false,
+    check: () => ComparableExpr(repairState).isBetweenValues(0, 3),
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _repairAuthorizationMeta =
+      const VerificationMeta('repairAuthorization');
+  @override
+  late final GeneratedColumn<Uint8List> repairAuthorization =
+      GeneratedColumn<Uint8List>(
+        'repair_authorization',
+        aliasedName,
+        true,
+        type: DriftSqlType.blob,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _lastAuthenticatedAtMeta =
+      const VerificationMeta('lastAuthenticatedAt');
+  @override
+  late final GeneratedColumn<DateTime> lastAuthenticatedAt =
+      GeneratedColumn<DateTime>(
+        'last_authenticated_at',
+        aliasedName,
+        true,
+        type: DriftSqlType.dateTime,
+        requiredDuringInsert: false,
+      );
+  @override
+  List<GeneratedColumn> get $columns => [
+    localDeviceId,
+    remoteUserId,
+    remoteDeviceId,
+    sessionId,
+    opaqueCryptoStateHandle,
+    stateVersion,
+    skippedKeyCount,
+    disposition,
+    repairState,
+    repairAuthorization,
+    lastAuthenticatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'pairwise_sessions';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<PairwiseSession> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('local_device_id')) {
+      context.handle(
+        _localDeviceIdMeta,
+        localDeviceId.isAcceptableOrUnknown(
+          data['local_device_id']!,
+          _localDeviceIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_localDeviceIdMeta);
+    }
+    if (data.containsKey('remote_user_id')) {
+      context.handle(
+        _remoteUserIdMeta,
+        remoteUserId.isAcceptableOrUnknown(
+          data['remote_user_id']!,
+          _remoteUserIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('remote_device_id')) {
+      context.handle(
+        _remoteDeviceIdMeta,
+        remoteDeviceId.isAcceptableOrUnknown(
+          data['remote_device_id']!,
+          _remoteDeviceIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_remoteDeviceIdMeta);
+    }
+    if (data.containsKey('session_id')) {
+      context.handle(
+        _sessionIdMeta,
+        sessionId.isAcceptableOrUnknown(data['session_id']!, _sessionIdMeta),
+      );
+    }
+    if (data.containsKey('opaque_crypto_state_handle')) {
+      context.handle(
+        _opaqueCryptoStateHandleMeta,
+        opaqueCryptoStateHandle.isAcceptableOrUnknown(
+          data['opaque_crypto_state_handle']!,
+          _opaqueCryptoStateHandleMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_opaqueCryptoStateHandleMeta);
+    }
+    if (data.containsKey('state_version')) {
+      context.handle(
+        _stateVersionMeta,
+        stateVersion.isAcceptableOrUnknown(
+          data['state_version']!,
+          _stateVersionMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_stateVersionMeta);
+    }
+    if (data.containsKey('skipped_key_count')) {
+      context.handle(
+        _skippedKeyCountMeta,
+        skippedKeyCount.isAcceptableOrUnknown(
+          data['skipped_key_count']!,
+          _skippedKeyCountMeta,
+        ),
+      );
+    }
+    if (data.containsKey('disposition')) {
+      context.handle(
+        _dispositionMeta,
+        disposition.isAcceptableOrUnknown(
+          data['disposition']!,
+          _dispositionMeta,
+        ),
+      );
+    }
+    if (data.containsKey('repair_state')) {
+      context.handle(
+        _repairStateMeta,
+        repairState.isAcceptableOrUnknown(
+          data['repair_state']!,
+          _repairStateMeta,
+        ),
+      );
+    }
+    if (data.containsKey('repair_authorization')) {
+      context.handle(
+        _repairAuthorizationMeta,
+        repairAuthorization.isAcceptableOrUnknown(
+          data['repair_authorization']!,
+          _repairAuthorizationMeta,
+        ),
+      );
+    }
+    if (data.containsKey('last_authenticated_at')) {
+      context.handle(
+        _lastAuthenticatedAtMeta,
+        lastAuthenticatedAt.isAcceptableOrUnknown(
+          data['last_authenticated_at']!,
+          _lastAuthenticatedAtMeta,
+        ),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {localDeviceId, remoteDeviceId};
+  @override
+  PairwiseSession map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return PairwiseSession(
+      localDeviceId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}local_device_id'],
+      )!,
+      remoteUserId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}remote_user_id'],
+      )!,
+      remoteDeviceId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}remote_device_id'],
+      )!,
+      sessionId: attachedDatabase.typeMapping.read(
+        DriftSqlType.blob,
+        data['${effectivePrefix}session_id'],
+      ),
+      opaqueCryptoStateHandle: attachedDatabase.typeMapping.read(
+        DriftSqlType.blob,
+        data['${effectivePrefix}opaque_crypto_state_handle'],
+      )!,
+      stateVersion: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}state_version'],
+      )!,
+      skippedKeyCount: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}skipped_key_count'],
+      )!,
+      disposition: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}disposition'],
+      )!,
+      repairState: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}repair_state'],
+      )!,
+      repairAuthorization: attachedDatabase.typeMapping.read(
+        DriftSqlType.blob,
+        data['${effectivePrefix}repair_authorization'],
+      ),
+      lastAuthenticatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}last_authenticated_at'],
+      ),
+    );
+  }
+
+  @override
+  $PairwiseSessionsTable createAlias(String alias) {
+    return $PairwiseSessionsTable(attachedDatabase, alias);
+  }
+}
+
+class PairwiseSession extends DataClass implements Insertable<PairwiseSession> {
+  final String localDeviceId;
+  final String remoteUserId;
+  final String remoteDeviceId;
+  final Uint8List? sessionId;
+  final Uint8List opaqueCryptoStateHandle;
+  final int stateVersion;
+  final int skippedKeyCount;
+  final int disposition;
+  final int repairState;
+  final Uint8List? repairAuthorization;
+  final DateTime? lastAuthenticatedAt;
+  const PairwiseSession({
+    required this.localDeviceId,
+    required this.remoteUserId,
+    required this.remoteDeviceId,
+    this.sessionId,
+    required this.opaqueCryptoStateHandle,
+    required this.stateVersion,
+    required this.skippedKeyCount,
+    required this.disposition,
+    required this.repairState,
+    this.repairAuthorization,
+    this.lastAuthenticatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['local_device_id'] = Variable<String>(localDeviceId);
+    map['remote_user_id'] = Variable<String>(remoteUserId);
+    map['remote_device_id'] = Variable<String>(remoteDeviceId);
+    if (!nullToAbsent || sessionId != null) {
+      map['session_id'] = Variable<Uint8List>(sessionId);
+    }
+    map['opaque_crypto_state_handle'] = Variable<Uint8List>(
+      opaqueCryptoStateHandle,
+    );
+    map['state_version'] = Variable<int>(stateVersion);
+    map['skipped_key_count'] = Variable<int>(skippedKeyCount);
+    map['disposition'] = Variable<int>(disposition);
+    map['repair_state'] = Variable<int>(repairState);
+    if (!nullToAbsent || repairAuthorization != null) {
+      map['repair_authorization'] = Variable<Uint8List>(repairAuthorization);
+    }
+    if (!nullToAbsent || lastAuthenticatedAt != null) {
+      map['last_authenticated_at'] = Variable<DateTime>(lastAuthenticatedAt);
+    }
+    return map;
+  }
+
+  PairwiseSessionsCompanion toCompanion(bool nullToAbsent) {
+    return PairwiseSessionsCompanion(
+      localDeviceId: Value(localDeviceId),
+      remoteUserId: Value(remoteUserId),
+      remoteDeviceId: Value(remoteDeviceId),
+      sessionId: sessionId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(sessionId),
+      opaqueCryptoStateHandle: Value(opaqueCryptoStateHandle),
+      stateVersion: Value(stateVersion),
+      skippedKeyCount: Value(skippedKeyCount),
+      disposition: Value(disposition),
+      repairState: Value(repairState),
+      repairAuthorization: repairAuthorization == null && nullToAbsent
+          ? const Value.absent()
+          : Value(repairAuthorization),
+      lastAuthenticatedAt: lastAuthenticatedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(lastAuthenticatedAt),
+    );
+  }
+
+  factory PairwiseSession.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return PairwiseSession(
+      localDeviceId: serializer.fromJson<String>(json['localDeviceId']),
+      remoteUserId: serializer.fromJson<String>(json['remoteUserId']),
+      remoteDeviceId: serializer.fromJson<String>(json['remoteDeviceId']),
+      sessionId: serializer.fromJson<Uint8List?>(json['sessionId']),
+      opaqueCryptoStateHandle: serializer.fromJson<Uint8List>(
+        json['opaqueCryptoStateHandle'],
+      ),
+      stateVersion: serializer.fromJson<int>(json['stateVersion']),
+      skippedKeyCount: serializer.fromJson<int>(json['skippedKeyCount']),
+      disposition: serializer.fromJson<int>(json['disposition']),
+      repairState: serializer.fromJson<int>(json['repairState']),
+      repairAuthorization: serializer.fromJson<Uint8List?>(
+        json['repairAuthorization'],
+      ),
+      lastAuthenticatedAt: serializer.fromJson<DateTime?>(
+        json['lastAuthenticatedAt'],
+      ),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'localDeviceId': serializer.toJson<String>(localDeviceId),
+      'remoteUserId': serializer.toJson<String>(remoteUserId),
+      'remoteDeviceId': serializer.toJson<String>(remoteDeviceId),
+      'sessionId': serializer.toJson<Uint8List?>(sessionId),
+      'opaqueCryptoStateHandle': serializer.toJson<Uint8List>(
+        opaqueCryptoStateHandle,
+      ),
+      'stateVersion': serializer.toJson<int>(stateVersion),
+      'skippedKeyCount': serializer.toJson<int>(skippedKeyCount),
+      'disposition': serializer.toJson<int>(disposition),
+      'repairState': serializer.toJson<int>(repairState),
+      'repairAuthorization': serializer.toJson<Uint8List?>(repairAuthorization),
+      'lastAuthenticatedAt': serializer.toJson<DateTime?>(lastAuthenticatedAt),
+    };
+  }
+
+  PairwiseSession copyWith({
+    String? localDeviceId,
+    String? remoteUserId,
+    String? remoteDeviceId,
+    Value<Uint8List?> sessionId = const Value.absent(),
+    Uint8List? opaqueCryptoStateHandle,
+    int? stateVersion,
+    int? skippedKeyCount,
+    int? disposition,
+    int? repairState,
+    Value<Uint8List?> repairAuthorization = const Value.absent(),
+    Value<DateTime?> lastAuthenticatedAt = const Value.absent(),
+  }) => PairwiseSession(
+    localDeviceId: localDeviceId ?? this.localDeviceId,
+    remoteUserId: remoteUserId ?? this.remoteUserId,
+    remoteDeviceId: remoteDeviceId ?? this.remoteDeviceId,
+    sessionId: sessionId.present ? sessionId.value : this.sessionId,
+    opaqueCryptoStateHandle:
+        opaqueCryptoStateHandle ?? this.opaqueCryptoStateHandle,
+    stateVersion: stateVersion ?? this.stateVersion,
+    skippedKeyCount: skippedKeyCount ?? this.skippedKeyCount,
+    disposition: disposition ?? this.disposition,
+    repairState: repairState ?? this.repairState,
+    repairAuthorization: repairAuthorization.present
+        ? repairAuthorization.value
+        : this.repairAuthorization,
+    lastAuthenticatedAt: lastAuthenticatedAt.present
+        ? lastAuthenticatedAt.value
+        : this.lastAuthenticatedAt,
+  );
+  PairwiseSession copyWithCompanion(PairwiseSessionsCompanion data) {
+    return PairwiseSession(
+      localDeviceId: data.localDeviceId.present
+          ? data.localDeviceId.value
+          : this.localDeviceId,
+      remoteUserId: data.remoteUserId.present
+          ? data.remoteUserId.value
+          : this.remoteUserId,
+      remoteDeviceId: data.remoteDeviceId.present
+          ? data.remoteDeviceId.value
+          : this.remoteDeviceId,
+      sessionId: data.sessionId.present ? data.sessionId.value : this.sessionId,
+      opaqueCryptoStateHandle: data.opaqueCryptoStateHandle.present
+          ? data.opaqueCryptoStateHandle.value
+          : this.opaqueCryptoStateHandle,
+      stateVersion: data.stateVersion.present
+          ? data.stateVersion.value
+          : this.stateVersion,
+      skippedKeyCount: data.skippedKeyCount.present
+          ? data.skippedKeyCount.value
+          : this.skippedKeyCount,
+      disposition: data.disposition.present
+          ? data.disposition.value
+          : this.disposition,
+      repairState: data.repairState.present
+          ? data.repairState.value
+          : this.repairState,
+      repairAuthorization: data.repairAuthorization.present
+          ? data.repairAuthorization.value
+          : this.repairAuthorization,
+      lastAuthenticatedAt: data.lastAuthenticatedAt.present
+          ? data.lastAuthenticatedAt.value
+          : this.lastAuthenticatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('PairwiseSession(')
+          ..write('localDeviceId: $localDeviceId, ')
+          ..write('remoteUserId: $remoteUserId, ')
+          ..write('remoteDeviceId: $remoteDeviceId, ')
+          ..write('sessionId: $sessionId, ')
+          ..write('opaqueCryptoStateHandle: $opaqueCryptoStateHandle, ')
+          ..write('stateVersion: $stateVersion, ')
+          ..write('skippedKeyCount: $skippedKeyCount, ')
+          ..write('disposition: $disposition, ')
+          ..write('repairState: $repairState, ')
+          ..write('repairAuthorization: $repairAuthorization, ')
+          ..write('lastAuthenticatedAt: $lastAuthenticatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    localDeviceId,
+    remoteUserId,
+    remoteDeviceId,
+    $driftBlobEquality.hash(sessionId),
+    $driftBlobEquality.hash(opaqueCryptoStateHandle),
+    stateVersion,
+    skippedKeyCount,
+    disposition,
+    repairState,
+    $driftBlobEquality.hash(repairAuthorization),
+    lastAuthenticatedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is PairwiseSession &&
+          other.localDeviceId == this.localDeviceId &&
+          other.remoteUserId == this.remoteUserId &&
+          other.remoteDeviceId == this.remoteDeviceId &&
+          $driftBlobEquality.equals(other.sessionId, this.sessionId) &&
+          $driftBlobEquality.equals(
+            other.opaqueCryptoStateHandle,
+            this.opaqueCryptoStateHandle,
+          ) &&
+          other.stateVersion == this.stateVersion &&
+          other.skippedKeyCount == this.skippedKeyCount &&
+          other.disposition == this.disposition &&
+          other.repairState == this.repairState &&
+          $driftBlobEquality.equals(
+            other.repairAuthorization,
+            this.repairAuthorization,
+          ) &&
+          other.lastAuthenticatedAt == this.lastAuthenticatedAt);
+}
+
+class PairwiseSessionsCompanion extends UpdateCompanion<PairwiseSession> {
+  final Value<String> localDeviceId;
+  final Value<String> remoteUserId;
+  final Value<String> remoteDeviceId;
+  final Value<Uint8List?> sessionId;
+  final Value<Uint8List> opaqueCryptoStateHandle;
+  final Value<int> stateVersion;
+  final Value<int> skippedKeyCount;
+  final Value<int> disposition;
+  final Value<int> repairState;
+  final Value<Uint8List?> repairAuthorization;
+  final Value<DateTime?> lastAuthenticatedAt;
+  final Value<int> rowid;
+  const PairwiseSessionsCompanion({
+    this.localDeviceId = const Value.absent(),
+    this.remoteUserId = const Value.absent(),
+    this.remoteDeviceId = const Value.absent(),
+    this.sessionId = const Value.absent(),
+    this.opaqueCryptoStateHandle = const Value.absent(),
+    this.stateVersion = const Value.absent(),
+    this.skippedKeyCount = const Value.absent(),
+    this.disposition = const Value.absent(),
+    this.repairState = const Value.absent(),
+    this.repairAuthorization = const Value.absent(),
+    this.lastAuthenticatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  PairwiseSessionsCompanion.insert({
+    required String localDeviceId,
+    this.remoteUserId = const Value.absent(),
+    required String remoteDeviceId,
+    this.sessionId = const Value.absent(),
+    required Uint8List opaqueCryptoStateHandle,
+    required int stateVersion,
+    this.skippedKeyCount = const Value.absent(),
+    this.disposition = const Value.absent(),
+    this.repairState = const Value.absent(),
+    this.repairAuthorization = const Value.absent(),
+    this.lastAuthenticatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : localDeviceId = Value(localDeviceId),
+       remoteDeviceId = Value(remoteDeviceId),
+       opaqueCryptoStateHandle = Value(opaqueCryptoStateHandle),
+       stateVersion = Value(stateVersion);
+  static Insertable<PairwiseSession> custom({
+    Expression<String>? localDeviceId,
+    Expression<String>? remoteUserId,
+    Expression<String>? remoteDeviceId,
+    Expression<Uint8List>? sessionId,
+    Expression<Uint8List>? opaqueCryptoStateHandle,
+    Expression<int>? stateVersion,
+    Expression<int>? skippedKeyCount,
+    Expression<int>? disposition,
+    Expression<int>? repairState,
+    Expression<Uint8List>? repairAuthorization,
+    Expression<DateTime>? lastAuthenticatedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (localDeviceId != null) 'local_device_id': localDeviceId,
+      if (remoteUserId != null) 'remote_user_id': remoteUserId,
+      if (remoteDeviceId != null) 'remote_device_id': remoteDeviceId,
+      if (sessionId != null) 'session_id': sessionId,
+      if (opaqueCryptoStateHandle != null)
+        'opaque_crypto_state_handle': opaqueCryptoStateHandle,
+      if (stateVersion != null) 'state_version': stateVersion,
+      if (skippedKeyCount != null) 'skipped_key_count': skippedKeyCount,
+      if (disposition != null) 'disposition': disposition,
+      if (repairState != null) 'repair_state': repairState,
+      if (repairAuthorization != null)
+        'repair_authorization': repairAuthorization,
+      if (lastAuthenticatedAt != null)
+        'last_authenticated_at': lastAuthenticatedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  PairwiseSessionsCompanion copyWith({
+    Value<String>? localDeviceId,
+    Value<String>? remoteUserId,
+    Value<String>? remoteDeviceId,
+    Value<Uint8List?>? sessionId,
+    Value<Uint8List>? opaqueCryptoStateHandle,
+    Value<int>? stateVersion,
+    Value<int>? skippedKeyCount,
+    Value<int>? disposition,
+    Value<int>? repairState,
+    Value<Uint8List?>? repairAuthorization,
+    Value<DateTime?>? lastAuthenticatedAt,
+    Value<int>? rowid,
+  }) {
+    return PairwiseSessionsCompanion(
+      localDeviceId: localDeviceId ?? this.localDeviceId,
+      remoteUserId: remoteUserId ?? this.remoteUserId,
+      remoteDeviceId: remoteDeviceId ?? this.remoteDeviceId,
+      sessionId: sessionId ?? this.sessionId,
+      opaqueCryptoStateHandle:
+          opaqueCryptoStateHandle ?? this.opaqueCryptoStateHandle,
+      stateVersion: stateVersion ?? this.stateVersion,
+      skippedKeyCount: skippedKeyCount ?? this.skippedKeyCount,
+      disposition: disposition ?? this.disposition,
+      repairState: repairState ?? this.repairState,
+      repairAuthorization: repairAuthorization ?? this.repairAuthorization,
+      lastAuthenticatedAt: lastAuthenticatedAt ?? this.lastAuthenticatedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (localDeviceId.present) {
+      map['local_device_id'] = Variable<String>(localDeviceId.value);
+    }
+    if (remoteUserId.present) {
+      map['remote_user_id'] = Variable<String>(remoteUserId.value);
+    }
+    if (remoteDeviceId.present) {
+      map['remote_device_id'] = Variable<String>(remoteDeviceId.value);
+    }
+    if (sessionId.present) {
+      map['session_id'] = Variable<Uint8List>(sessionId.value);
+    }
+    if (opaqueCryptoStateHandle.present) {
+      map['opaque_crypto_state_handle'] = Variable<Uint8List>(
+        opaqueCryptoStateHandle.value,
+      );
+    }
+    if (stateVersion.present) {
+      map['state_version'] = Variable<int>(stateVersion.value);
+    }
+    if (skippedKeyCount.present) {
+      map['skipped_key_count'] = Variable<int>(skippedKeyCount.value);
+    }
+    if (disposition.present) {
+      map['disposition'] = Variable<int>(disposition.value);
+    }
+    if (repairState.present) {
+      map['repair_state'] = Variable<int>(repairState.value);
+    }
+    if (repairAuthorization.present) {
+      map['repair_authorization'] = Variable<Uint8List>(
+        repairAuthorization.value,
+      );
+    }
+    if (lastAuthenticatedAt.present) {
+      map['last_authenticated_at'] = Variable<DateTime>(
+        lastAuthenticatedAt.value,
+      );
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('PairwiseSessionsCompanion(')
+          ..write('localDeviceId: $localDeviceId, ')
+          ..write('remoteUserId: $remoteUserId, ')
+          ..write('remoteDeviceId: $remoteDeviceId, ')
+          ..write('sessionId: $sessionId, ')
+          ..write('opaqueCryptoStateHandle: $opaqueCryptoStateHandle, ')
+          ..write('stateVersion: $stateVersion, ')
+          ..write('skippedKeyCount: $skippedKeyCount, ')
+          ..write('disposition: $disposition, ')
+          ..write('repairState: $repairState, ')
+          ..write('repairAuthorization: $repairAuthorization, ')
+          ..write('lastAuthenticatedAt: $lastAuthenticatedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $PairwiseSessionAlternatesTable extends PairwiseSessionAlternates
+    with TableInfo<$PairwiseSessionAlternatesTable, PairwiseSessionAlternate> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $PairwiseSessionAlternatesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _sessionIdMeta = const VerificationMeta(
+    'sessionId',
+  );
+  @override
+  late final GeneratedColumn<Uint8List> sessionId = GeneratedColumn<Uint8List>(
+    'session_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.blob,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _localDeviceIdMeta = const VerificationMeta(
+    'localDeviceId',
+  );
+  @override
+  late final GeneratedColumn<String> localDeviceId = GeneratedColumn<String>(
+    'local_device_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _remoteUserIdMeta = const VerificationMeta(
+    'remoteUserId',
+  );
+  @override
+  late final GeneratedColumn<String> remoteUserId = GeneratedColumn<String>(
+    'remote_user_id',
     aliasedName,
     false,
     type: DriftSqlType.string,
@@ -4013,25 +6101,98 @@ class $PairwiseSessionsTable extends PairwiseSessions
     type: DriftSqlType.int,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _skippedKeyCountMeta = const VerificationMeta(
+    'skippedKeyCount',
+  );
+  @override
+  late final GeneratedColumn<int> skippedKeyCount = GeneratedColumn<int>(
+    'skipped_key_count',
+    aliasedName,
+    false,
+    check: () => ComparableExpr(skippedKeyCount).isBetweenValues(0, 2000),
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _repairStateMeta = const VerificationMeta(
+    'repairState',
+  );
+  @override
+  late final GeneratedColumn<int> repairState = GeneratedColumn<int>(
+    'repair_state',
+    aliasedName,
+    false,
+    check: () => ComparableExpr(repairState).isBetweenValues(0, 3),
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _repairAuthorizationMeta =
+      const VerificationMeta('repairAuthorization');
+  @override
+  late final GeneratedColumn<Uint8List> repairAuthorization =
+      GeneratedColumn<Uint8List>(
+        'repair_authorization',
+        aliasedName,
+        true,
+        type: DriftSqlType.blob,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  static const VerificationMeta _lastAuthenticatedAtMeta =
+      const VerificationMeta('lastAuthenticatedAt');
+  @override
+  late final GeneratedColumn<DateTime> lastAuthenticatedAt =
+      GeneratedColumn<DateTime>(
+        'last_authenticated_at',
+        aliasedName,
+        true,
+        type: DriftSqlType.dateTime,
+        requiredDuringInsert: false,
+      );
   @override
   List<GeneratedColumn> get $columns => [
+    sessionId,
     localDeviceId,
+    remoteUserId,
     remoteDeviceId,
     opaqueCryptoStateHandle,
     stateVersion,
+    skippedKeyCount,
+    repairState,
+    repairAuthorization,
+    createdAt,
+    lastAuthenticatedAt,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
   @override
   String get actualTableName => $name;
-  static const String $name = 'pairwise_sessions';
+  static const String $name = 'pairwise_session_alternates';
   @override
   VerificationContext validateIntegrity(
-    Insertable<PairwiseSession> instance, {
+    Insertable<PairwiseSessionAlternate> instance, {
     bool isInserting = false,
   }) {
     final context = VerificationContext();
     final data = instance.toColumns(true);
+    if (data.containsKey('session_id')) {
+      context.handle(
+        _sessionIdMeta,
+        sessionId.isAcceptableOrUnknown(data['session_id']!, _sessionIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_sessionIdMeta);
+    }
     if (data.containsKey('local_device_id')) {
       context.handle(
         _localDeviceIdMeta,
@@ -4042,6 +6203,17 @@ class $PairwiseSessionsTable extends PairwiseSessions
       );
     } else if (isInserting) {
       context.missing(_localDeviceIdMeta);
+    }
+    if (data.containsKey('remote_user_id')) {
+      context.handle(
+        _remoteUserIdMeta,
+        remoteUserId.isAcceptableOrUnknown(
+          data['remote_user_id']!,
+          _remoteUserIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_remoteUserIdMeta);
     }
     if (data.containsKey('remote_device_id')) {
       context.handle(
@@ -4076,18 +6248,79 @@ class $PairwiseSessionsTable extends PairwiseSessions
     } else if (isInserting) {
       context.missing(_stateVersionMeta);
     }
+    if (data.containsKey('skipped_key_count')) {
+      context.handle(
+        _skippedKeyCountMeta,
+        skippedKeyCount.isAcceptableOrUnknown(
+          data['skipped_key_count']!,
+          _skippedKeyCountMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_skippedKeyCountMeta);
+    }
+    if (data.containsKey('repair_state')) {
+      context.handle(
+        _repairStateMeta,
+        repairState.isAcceptableOrUnknown(
+          data['repair_state']!,
+          _repairStateMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_repairStateMeta);
+    }
+    if (data.containsKey('repair_authorization')) {
+      context.handle(
+        _repairAuthorizationMeta,
+        repairAuthorization.isAcceptableOrUnknown(
+          data['repair_authorization']!,
+          _repairAuthorizationMeta,
+        ),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    }
+    if (data.containsKey('last_authenticated_at')) {
+      context.handle(
+        _lastAuthenticatedAtMeta,
+        lastAuthenticatedAt.isAcceptableOrUnknown(
+          data['last_authenticated_at']!,
+          _lastAuthenticatedAtMeta,
+        ),
+      );
+    }
     return context;
   }
 
   @override
-  Set<GeneratedColumn> get $primaryKey => {localDeviceId, remoteDeviceId};
+  Set<GeneratedColumn> get $primaryKey => {sessionId};
   @override
-  PairwiseSession map(Map<String, dynamic> data, {String? tablePrefix}) {
+  List<Set<GeneratedColumn>> get uniqueKeys => [
+    {localDeviceId, remoteDeviceId},
+  ];
+  @override
+  PairwiseSessionAlternate map(
+    Map<String, dynamic> data, {
+    String? tablePrefix,
+  }) {
     final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
-    return PairwiseSession(
+    return PairwiseSessionAlternate(
+      sessionId: attachedDatabase.typeMapping.read(
+        DriftSqlType.blob,
+        data['${effectivePrefix}session_id'],
+      )!,
       localDeviceId: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}local_device_id'],
+      )!,
+      remoteUserId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}remote_user_id'],
       )!,
       remoteDeviceId: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
@@ -4101,91 +6334,190 @@ class $PairwiseSessionsTable extends PairwiseSessions
         DriftSqlType.int,
         data['${effectivePrefix}state_version'],
       )!,
+      skippedKeyCount: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}skipped_key_count'],
+      )!,
+      repairState: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}repair_state'],
+      )!,
+      repairAuthorization: attachedDatabase.typeMapping.read(
+        DriftSqlType.blob,
+        data['${effectivePrefix}repair_authorization'],
+      ),
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      lastAuthenticatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}last_authenticated_at'],
+      ),
     );
   }
 
   @override
-  $PairwiseSessionsTable createAlias(String alias) {
-    return $PairwiseSessionsTable(attachedDatabase, alias);
+  $PairwiseSessionAlternatesTable createAlias(String alias) {
+    return $PairwiseSessionAlternatesTable(attachedDatabase, alias);
   }
 }
 
-class PairwiseSession extends DataClass implements Insertable<PairwiseSession> {
+class PairwiseSessionAlternate extends DataClass
+    implements Insertable<PairwiseSessionAlternate> {
+  final Uint8List sessionId;
   final String localDeviceId;
+  final String remoteUserId;
   final String remoteDeviceId;
   final Uint8List opaqueCryptoStateHandle;
   final int stateVersion;
-  const PairwiseSession({
+  final int skippedKeyCount;
+  final int repairState;
+  final Uint8List? repairAuthorization;
+  final DateTime createdAt;
+  final DateTime? lastAuthenticatedAt;
+  const PairwiseSessionAlternate({
+    required this.sessionId,
     required this.localDeviceId,
+    required this.remoteUserId,
     required this.remoteDeviceId,
     required this.opaqueCryptoStateHandle,
     required this.stateVersion,
+    required this.skippedKeyCount,
+    required this.repairState,
+    this.repairAuthorization,
+    required this.createdAt,
+    this.lastAuthenticatedAt,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
+    map['session_id'] = Variable<Uint8List>(sessionId);
     map['local_device_id'] = Variable<String>(localDeviceId);
+    map['remote_user_id'] = Variable<String>(remoteUserId);
     map['remote_device_id'] = Variable<String>(remoteDeviceId);
     map['opaque_crypto_state_handle'] = Variable<Uint8List>(
       opaqueCryptoStateHandle,
     );
     map['state_version'] = Variable<int>(stateVersion);
+    map['skipped_key_count'] = Variable<int>(skippedKeyCount);
+    map['repair_state'] = Variable<int>(repairState);
+    if (!nullToAbsent || repairAuthorization != null) {
+      map['repair_authorization'] = Variable<Uint8List>(repairAuthorization);
+    }
+    map['created_at'] = Variable<DateTime>(createdAt);
+    if (!nullToAbsent || lastAuthenticatedAt != null) {
+      map['last_authenticated_at'] = Variable<DateTime>(lastAuthenticatedAt);
+    }
     return map;
   }
 
-  PairwiseSessionsCompanion toCompanion(bool nullToAbsent) {
-    return PairwiseSessionsCompanion(
+  PairwiseSessionAlternatesCompanion toCompanion(bool nullToAbsent) {
+    return PairwiseSessionAlternatesCompanion(
+      sessionId: Value(sessionId),
       localDeviceId: Value(localDeviceId),
+      remoteUserId: Value(remoteUserId),
       remoteDeviceId: Value(remoteDeviceId),
       opaqueCryptoStateHandle: Value(opaqueCryptoStateHandle),
       stateVersion: Value(stateVersion),
+      skippedKeyCount: Value(skippedKeyCount),
+      repairState: Value(repairState),
+      repairAuthorization: repairAuthorization == null && nullToAbsent
+          ? const Value.absent()
+          : Value(repairAuthorization),
+      createdAt: Value(createdAt),
+      lastAuthenticatedAt: lastAuthenticatedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(lastAuthenticatedAt),
     );
   }
 
-  factory PairwiseSession.fromJson(
+  factory PairwiseSessionAlternate.fromJson(
     Map<String, dynamic> json, {
     ValueSerializer? serializer,
   }) {
     serializer ??= driftRuntimeOptions.defaultSerializer;
-    return PairwiseSession(
+    return PairwiseSessionAlternate(
+      sessionId: serializer.fromJson<Uint8List>(json['sessionId']),
       localDeviceId: serializer.fromJson<String>(json['localDeviceId']),
+      remoteUserId: serializer.fromJson<String>(json['remoteUserId']),
       remoteDeviceId: serializer.fromJson<String>(json['remoteDeviceId']),
       opaqueCryptoStateHandle: serializer.fromJson<Uint8List>(
         json['opaqueCryptoStateHandle'],
       ),
       stateVersion: serializer.fromJson<int>(json['stateVersion']),
+      skippedKeyCount: serializer.fromJson<int>(json['skippedKeyCount']),
+      repairState: serializer.fromJson<int>(json['repairState']),
+      repairAuthorization: serializer.fromJson<Uint8List?>(
+        json['repairAuthorization'],
+      ),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      lastAuthenticatedAt: serializer.fromJson<DateTime?>(
+        json['lastAuthenticatedAt'],
+      ),
     );
   }
   @override
   Map<String, dynamic> toJson({ValueSerializer? serializer}) {
     serializer ??= driftRuntimeOptions.defaultSerializer;
     return <String, dynamic>{
+      'sessionId': serializer.toJson<Uint8List>(sessionId),
       'localDeviceId': serializer.toJson<String>(localDeviceId),
+      'remoteUserId': serializer.toJson<String>(remoteUserId),
       'remoteDeviceId': serializer.toJson<String>(remoteDeviceId),
       'opaqueCryptoStateHandle': serializer.toJson<Uint8List>(
         opaqueCryptoStateHandle,
       ),
       'stateVersion': serializer.toJson<int>(stateVersion),
+      'skippedKeyCount': serializer.toJson<int>(skippedKeyCount),
+      'repairState': serializer.toJson<int>(repairState),
+      'repairAuthorization': serializer.toJson<Uint8List?>(repairAuthorization),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'lastAuthenticatedAt': serializer.toJson<DateTime?>(lastAuthenticatedAt),
     };
   }
 
-  PairwiseSession copyWith({
+  PairwiseSessionAlternate copyWith({
+    Uint8List? sessionId,
     String? localDeviceId,
+    String? remoteUserId,
     String? remoteDeviceId,
     Uint8List? opaqueCryptoStateHandle,
     int? stateVersion,
-  }) => PairwiseSession(
+    int? skippedKeyCount,
+    int? repairState,
+    Value<Uint8List?> repairAuthorization = const Value.absent(),
+    DateTime? createdAt,
+    Value<DateTime?> lastAuthenticatedAt = const Value.absent(),
+  }) => PairwiseSessionAlternate(
+    sessionId: sessionId ?? this.sessionId,
     localDeviceId: localDeviceId ?? this.localDeviceId,
+    remoteUserId: remoteUserId ?? this.remoteUserId,
     remoteDeviceId: remoteDeviceId ?? this.remoteDeviceId,
     opaqueCryptoStateHandle:
         opaqueCryptoStateHandle ?? this.opaqueCryptoStateHandle,
     stateVersion: stateVersion ?? this.stateVersion,
+    skippedKeyCount: skippedKeyCount ?? this.skippedKeyCount,
+    repairState: repairState ?? this.repairState,
+    repairAuthorization: repairAuthorization.present
+        ? repairAuthorization.value
+        : this.repairAuthorization,
+    createdAt: createdAt ?? this.createdAt,
+    lastAuthenticatedAt: lastAuthenticatedAt.present
+        ? lastAuthenticatedAt.value
+        : this.lastAuthenticatedAt,
   );
-  PairwiseSession copyWithCompanion(PairwiseSessionsCompanion data) {
-    return PairwiseSession(
+  PairwiseSessionAlternate copyWithCompanion(
+    PairwiseSessionAlternatesCompanion data,
+  ) {
+    return PairwiseSessionAlternate(
+      sessionId: data.sessionId.present ? data.sessionId.value : this.sessionId,
       localDeviceId: data.localDeviceId.present
           ? data.localDeviceId.value
           : this.localDeviceId,
+      remoteUserId: data.remoteUserId.present
+          ? data.remoteUserId.value
+          : this.remoteUserId,
       remoteDeviceId: data.remoteDeviceId.present
           ? data.remoteDeviceId.value
           : this.remoteDeviceId,
@@ -4195,93 +6527,186 @@ class PairwiseSession extends DataClass implements Insertable<PairwiseSession> {
       stateVersion: data.stateVersion.present
           ? data.stateVersion.value
           : this.stateVersion,
+      skippedKeyCount: data.skippedKeyCount.present
+          ? data.skippedKeyCount.value
+          : this.skippedKeyCount,
+      repairState: data.repairState.present
+          ? data.repairState.value
+          : this.repairState,
+      repairAuthorization: data.repairAuthorization.present
+          ? data.repairAuthorization.value
+          : this.repairAuthorization,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      lastAuthenticatedAt: data.lastAuthenticatedAt.present
+          ? data.lastAuthenticatedAt.value
+          : this.lastAuthenticatedAt,
     );
   }
 
   @override
   String toString() {
-    return (StringBuffer('PairwiseSession(')
+    return (StringBuffer('PairwiseSessionAlternate(')
+          ..write('sessionId: $sessionId, ')
           ..write('localDeviceId: $localDeviceId, ')
+          ..write('remoteUserId: $remoteUserId, ')
           ..write('remoteDeviceId: $remoteDeviceId, ')
           ..write('opaqueCryptoStateHandle: $opaqueCryptoStateHandle, ')
-          ..write('stateVersion: $stateVersion')
+          ..write('stateVersion: $stateVersion, ')
+          ..write('skippedKeyCount: $skippedKeyCount, ')
+          ..write('repairState: $repairState, ')
+          ..write('repairAuthorization: $repairAuthorization, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('lastAuthenticatedAt: $lastAuthenticatedAt')
           ..write(')'))
         .toString();
   }
 
   @override
   int get hashCode => Object.hash(
+    $driftBlobEquality.hash(sessionId),
     localDeviceId,
+    remoteUserId,
     remoteDeviceId,
     $driftBlobEquality.hash(opaqueCryptoStateHandle),
     stateVersion,
+    skippedKeyCount,
+    repairState,
+    $driftBlobEquality.hash(repairAuthorization),
+    createdAt,
+    lastAuthenticatedAt,
   );
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      (other is PairwiseSession &&
+      (other is PairwiseSessionAlternate &&
+          $driftBlobEquality.equals(other.sessionId, this.sessionId) &&
           other.localDeviceId == this.localDeviceId &&
+          other.remoteUserId == this.remoteUserId &&
           other.remoteDeviceId == this.remoteDeviceId &&
           $driftBlobEquality.equals(
             other.opaqueCryptoStateHandle,
             this.opaqueCryptoStateHandle,
           ) &&
-          other.stateVersion == this.stateVersion);
+          other.stateVersion == this.stateVersion &&
+          other.skippedKeyCount == this.skippedKeyCount &&
+          other.repairState == this.repairState &&
+          $driftBlobEquality.equals(
+            other.repairAuthorization,
+            this.repairAuthorization,
+          ) &&
+          other.createdAt == this.createdAt &&
+          other.lastAuthenticatedAt == this.lastAuthenticatedAt);
 }
 
-class PairwiseSessionsCompanion extends UpdateCompanion<PairwiseSession> {
+class PairwiseSessionAlternatesCompanion
+    extends UpdateCompanion<PairwiseSessionAlternate> {
+  final Value<Uint8List> sessionId;
   final Value<String> localDeviceId;
+  final Value<String> remoteUserId;
   final Value<String> remoteDeviceId;
   final Value<Uint8List> opaqueCryptoStateHandle;
   final Value<int> stateVersion;
+  final Value<int> skippedKeyCount;
+  final Value<int> repairState;
+  final Value<Uint8List?> repairAuthorization;
+  final Value<DateTime> createdAt;
+  final Value<DateTime?> lastAuthenticatedAt;
   final Value<int> rowid;
-  const PairwiseSessionsCompanion({
+  const PairwiseSessionAlternatesCompanion({
+    this.sessionId = const Value.absent(),
     this.localDeviceId = const Value.absent(),
+    this.remoteUserId = const Value.absent(),
     this.remoteDeviceId = const Value.absent(),
     this.opaqueCryptoStateHandle = const Value.absent(),
     this.stateVersion = const Value.absent(),
+    this.skippedKeyCount = const Value.absent(),
+    this.repairState = const Value.absent(),
+    this.repairAuthorization = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.lastAuthenticatedAt = const Value.absent(),
     this.rowid = const Value.absent(),
   });
-  PairwiseSessionsCompanion.insert({
+  PairwiseSessionAlternatesCompanion.insert({
+    required Uint8List sessionId,
     required String localDeviceId,
+    required String remoteUserId,
     required String remoteDeviceId,
     required Uint8List opaqueCryptoStateHandle,
     required int stateVersion,
+    required int skippedKeyCount,
+    required int repairState,
+    this.repairAuthorization = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.lastAuthenticatedAt = const Value.absent(),
     this.rowid = const Value.absent(),
-  }) : localDeviceId = Value(localDeviceId),
+  }) : sessionId = Value(sessionId),
+       localDeviceId = Value(localDeviceId),
+       remoteUserId = Value(remoteUserId),
        remoteDeviceId = Value(remoteDeviceId),
        opaqueCryptoStateHandle = Value(opaqueCryptoStateHandle),
-       stateVersion = Value(stateVersion);
-  static Insertable<PairwiseSession> custom({
+       stateVersion = Value(stateVersion),
+       skippedKeyCount = Value(skippedKeyCount),
+       repairState = Value(repairState);
+  static Insertable<PairwiseSessionAlternate> custom({
+    Expression<Uint8List>? sessionId,
     Expression<String>? localDeviceId,
+    Expression<String>? remoteUserId,
     Expression<String>? remoteDeviceId,
     Expression<Uint8List>? opaqueCryptoStateHandle,
     Expression<int>? stateVersion,
+    Expression<int>? skippedKeyCount,
+    Expression<int>? repairState,
+    Expression<Uint8List>? repairAuthorization,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? lastAuthenticatedAt,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
+      if (sessionId != null) 'session_id': sessionId,
       if (localDeviceId != null) 'local_device_id': localDeviceId,
+      if (remoteUserId != null) 'remote_user_id': remoteUserId,
       if (remoteDeviceId != null) 'remote_device_id': remoteDeviceId,
       if (opaqueCryptoStateHandle != null)
         'opaque_crypto_state_handle': opaqueCryptoStateHandle,
       if (stateVersion != null) 'state_version': stateVersion,
+      if (skippedKeyCount != null) 'skipped_key_count': skippedKeyCount,
+      if (repairState != null) 'repair_state': repairState,
+      if (repairAuthorization != null)
+        'repair_authorization': repairAuthorization,
+      if (createdAt != null) 'created_at': createdAt,
+      if (lastAuthenticatedAt != null)
+        'last_authenticated_at': lastAuthenticatedAt,
       if (rowid != null) 'rowid': rowid,
     });
   }
 
-  PairwiseSessionsCompanion copyWith({
+  PairwiseSessionAlternatesCompanion copyWith({
+    Value<Uint8List>? sessionId,
     Value<String>? localDeviceId,
+    Value<String>? remoteUserId,
     Value<String>? remoteDeviceId,
     Value<Uint8List>? opaqueCryptoStateHandle,
     Value<int>? stateVersion,
+    Value<int>? skippedKeyCount,
+    Value<int>? repairState,
+    Value<Uint8List?>? repairAuthorization,
+    Value<DateTime>? createdAt,
+    Value<DateTime?>? lastAuthenticatedAt,
     Value<int>? rowid,
   }) {
-    return PairwiseSessionsCompanion(
+    return PairwiseSessionAlternatesCompanion(
+      sessionId: sessionId ?? this.sessionId,
       localDeviceId: localDeviceId ?? this.localDeviceId,
+      remoteUserId: remoteUserId ?? this.remoteUserId,
       remoteDeviceId: remoteDeviceId ?? this.remoteDeviceId,
       opaqueCryptoStateHandle:
           opaqueCryptoStateHandle ?? this.opaqueCryptoStateHandle,
       stateVersion: stateVersion ?? this.stateVersion,
+      skippedKeyCount: skippedKeyCount ?? this.skippedKeyCount,
+      repairState: repairState ?? this.repairState,
+      repairAuthorization: repairAuthorization ?? this.repairAuthorization,
+      createdAt: createdAt ?? this.createdAt,
+      lastAuthenticatedAt: lastAuthenticatedAt ?? this.lastAuthenticatedAt,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -4289,8 +6714,14 @@ class PairwiseSessionsCompanion extends UpdateCompanion<PairwiseSession> {
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
+    if (sessionId.present) {
+      map['session_id'] = Variable<Uint8List>(sessionId.value);
+    }
     if (localDeviceId.present) {
       map['local_device_id'] = Variable<String>(localDeviceId.value);
+    }
+    if (remoteUserId.present) {
+      map['remote_user_id'] = Variable<String>(remoteUserId.value);
     }
     if (remoteDeviceId.present) {
       map['remote_device_id'] = Variable<String>(remoteDeviceId.value);
@@ -4303,6 +6734,25 @@ class PairwiseSessionsCompanion extends UpdateCompanion<PairwiseSession> {
     if (stateVersion.present) {
       map['state_version'] = Variable<int>(stateVersion.value);
     }
+    if (skippedKeyCount.present) {
+      map['skipped_key_count'] = Variable<int>(skippedKeyCount.value);
+    }
+    if (repairState.present) {
+      map['repair_state'] = Variable<int>(repairState.value);
+    }
+    if (repairAuthorization.present) {
+      map['repair_authorization'] = Variable<Uint8List>(
+        repairAuthorization.value,
+      );
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (lastAuthenticatedAt.present) {
+      map['last_authenticated_at'] = Variable<DateTime>(
+        lastAuthenticatedAt.value,
+      );
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -4311,11 +6761,18 @@ class PairwiseSessionsCompanion extends UpdateCompanion<PairwiseSession> {
 
   @override
   String toString() {
-    return (StringBuffer('PairwiseSessionsCompanion(')
+    return (StringBuffer('PairwiseSessionAlternatesCompanion(')
+          ..write('sessionId: $sessionId, ')
           ..write('localDeviceId: $localDeviceId, ')
+          ..write('remoteUserId: $remoteUserId, ')
           ..write('remoteDeviceId: $remoteDeviceId, ')
           ..write('opaqueCryptoStateHandle: $opaqueCryptoStateHandle, ')
           ..write('stateVersion: $stateVersion, ')
+          ..write('skippedKeyCount: $skippedKeyCount, ')
+          ..write('repairState: $repairState, ')
+          ..write('repairAuthorization: $repairAuthorization, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('lastAuthenticatedAt: $lastAuthenticatedAt, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -4712,6 +7169,1353 @@ class PrekeysCompanion extends UpdateCompanion<Prekey> {
   }
 }
 
+class $PrekeyMaintenancePlansTable extends PrekeyMaintenancePlans
+    with TableInfo<$PrekeyMaintenancePlansTable, StoredPrekeyMaintenancePlan> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $PrekeyMaintenancePlansTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _deviceIdMeta = const VerificationMeta(
+    'deviceId',
+  );
+  @override
+  late final GeneratedColumn<String> deviceId = GeneratedColumn<String>(
+    'device_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _stageMeta = const VerificationMeta('stage');
+  @override
+  late final GeneratedColumn<int> stage = GeneratedColumn<int>(
+    'stage',
+    aliasedName,
+    false,
+    check: () => ComparableExpr(stage).isBetweenValues(0, 2),
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _expectedStateRevisionMeta =
+      const VerificationMeta('expectedStateRevision');
+  @override
+  late final GeneratedColumn<int> expectedStateRevision = GeneratedColumn<int>(
+    'expected_state_revision',
+    aliasedName,
+    false,
+    check: () => ComparableExpr(expectedStateRevision).isBiggerThanValue(0),
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _preparedUnixDayMeta = const VerificationMeta(
+    'preparedUnixDay',
+  );
+  @override
+  late final GeneratedColumn<int> preparedUnixDay = GeneratedColumn<int>(
+    'prepared_unix_day',
+    aliasedName,
+    false,
+    check: () => ComparableExpr(preparedUnixDay).isBiggerOrEqualValue(0),
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _bundleVersionMeta = const VerificationMeta(
+    'bundleVersion',
+  );
+  @override
+  late final GeneratedColumn<int> bundleVersion = GeneratedColumn<int>(
+    'bundle_version',
+    aliasedName,
+    false,
+    check: () => ComparableExpr(bundleVersion).isBiggerThanValue(0),
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _currentSignedPrekeyCreatedUnixDayMeta =
+      const VerificationMeta('currentSignedPrekeyCreatedUnixDay');
+  @override
+  late final GeneratedColumn<int> currentSignedPrekeyCreatedUnixDay =
+      GeneratedColumn<int>(
+        'current_signed_prekey_created_unix_day',
+        aliasedName,
+        false,
+        check: () => ComparableExpr(
+          currentSignedPrekeyCreatedUnixDay,
+        ).isBiggerOrEqualValue(0),
+        type: DriftSqlType.int,
+        requiredDuringInsert: true,
+      );
+  static const VerificationMeta _batchIdMeta = const VerificationMeta(
+    'batchId',
+  );
+  @override
+  late final GeneratedColumn<Uint8List> batchId = GeneratedColumn<Uint8List>(
+    'batch_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.blob,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _nativeUploadProjectionMeta =
+      const VerificationMeta('nativeUploadProjection');
+  @override
+  late final GeneratedColumn<Uint8List> nativeUploadProjection =
+      GeneratedColumn<Uint8List>(
+        'native_upload_projection',
+        aliasedName,
+        false,
+        type: DriftSqlType.blob,
+        requiredDuringInsert: true,
+      );
+  static const VerificationMeta _exactLogRecordMeta = const VerificationMeta(
+    'exactLogRecord',
+  );
+  @override
+  late final GeneratedColumn<Uint8List> exactLogRecord =
+      GeneratedColumn<Uint8List>(
+        'exact_log_record',
+        aliasedName,
+        true,
+        type: DriftSqlType.blob,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _expectedLogSequenceMeta =
+      const VerificationMeta('expectedLogSequence');
+  @override
+  late final GeneratedColumn<int> expectedLogSequence = GeneratedColumn<int>(
+    'expected_log_sequence',
+    aliasedName,
+    true,
+    check: () =>
+        expectedLogSequence.isNull() |
+        ComparableExpr(expectedLogSequence).isBiggerOrEqualValue(0),
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _previousLogHeadMeta = const VerificationMeta(
+    'previousLogHead',
+  );
+  @override
+  late final GeneratedColumn<Uint8List> previousLogHead =
+      GeneratedColumn<Uint8List>(
+        'previous_log_head',
+        aliasedName,
+        true,
+        type: DriftSqlType.blob,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    deviceId,
+    stage,
+    expectedStateRevision,
+    preparedUnixDay,
+    bundleVersion,
+    currentSignedPrekeyCreatedUnixDay,
+    batchId,
+    nativeUploadProjection,
+    exactLogRecord,
+    expectedLogSequence,
+    previousLogHead,
+    updatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'prekey_maintenance_plans';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<StoredPrekeyMaintenancePlan> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('device_id')) {
+      context.handle(
+        _deviceIdMeta,
+        deviceId.isAcceptableOrUnknown(data['device_id']!, _deviceIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_deviceIdMeta);
+    }
+    if (data.containsKey('stage')) {
+      context.handle(
+        _stageMeta,
+        stage.isAcceptableOrUnknown(data['stage']!, _stageMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_stageMeta);
+    }
+    if (data.containsKey('expected_state_revision')) {
+      context.handle(
+        _expectedStateRevisionMeta,
+        expectedStateRevision.isAcceptableOrUnknown(
+          data['expected_state_revision']!,
+          _expectedStateRevisionMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_expectedStateRevisionMeta);
+    }
+    if (data.containsKey('prepared_unix_day')) {
+      context.handle(
+        _preparedUnixDayMeta,
+        preparedUnixDay.isAcceptableOrUnknown(
+          data['prepared_unix_day']!,
+          _preparedUnixDayMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_preparedUnixDayMeta);
+    }
+    if (data.containsKey('bundle_version')) {
+      context.handle(
+        _bundleVersionMeta,
+        bundleVersion.isAcceptableOrUnknown(
+          data['bundle_version']!,
+          _bundleVersionMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_bundleVersionMeta);
+    }
+    if (data.containsKey('current_signed_prekey_created_unix_day')) {
+      context.handle(
+        _currentSignedPrekeyCreatedUnixDayMeta,
+        currentSignedPrekeyCreatedUnixDay.isAcceptableOrUnknown(
+          data['current_signed_prekey_created_unix_day']!,
+          _currentSignedPrekeyCreatedUnixDayMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_currentSignedPrekeyCreatedUnixDayMeta);
+    }
+    if (data.containsKey('batch_id')) {
+      context.handle(
+        _batchIdMeta,
+        batchId.isAcceptableOrUnknown(data['batch_id']!, _batchIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_batchIdMeta);
+    }
+    if (data.containsKey('native_upload_projection')) {
+      context.handle(
+        _nativeUploadProjectionMeta,
+        nativeUploadProjection.isAcceptableOrUnknown(
+          data['native_upload_projection']!,
+          _nativeUploadProjectionMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_nativeUploadProjectionMeta);
+    }
+    if (data.containsKey('exact_log_record')) {
+      context.handle(
+        _exactLogRecordMeta,
+        exactLogRecord.isAcceptableOrUnknown(
+          data['exact_log_record']!,
+          _exactLogRecordMeta,
+        ),
+      );
+    }
+    if (data.containsKey('expected_log_sequence')) {
+      context.handle(
+        _expectedLogSequenceMeta,
+        expectedLogSequence.isAcceptableOrUnknown(
+          data['expected_log_sequence']!,
+          _expectedLogSequenceMeta,
+        ),
+      );
+    }
+    if (data.containsKey('previous_log_head')) {
+      context.handle(
+        _previousLogHeadMeta,
+        previousLogHead.isAcceptableOrUnknown(
+          data['previous_log_head']!,
+          _previousLogHeadMeta,
+        ),
+      );
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {deviceId};
+  @override
+  StoredPrekeyMaintenancePlan map(
+    Map<String, dynamic> data, {
+    String? tablePrefix,
+  }) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return StoredPrekeyMaintenancePlan(
+      deviceId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}device_id'],
+      )!,
+      stage: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}stage'],
+      )!,
+      expectedStateRevision: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}expected_state_revision'],
+      )!,
+      preparedUnixDay: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}prepared_unix_day'],
+      )!,
+      bundleVersion: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}bundle_version'],
+      )!,
+      currentSignedPrekeyCreatedUnixDay: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}current_signed_prekey_created_unix_day'],
+      )!,
+      batchId: attachedDatabase.typeMapping.read(
+        DriftSqlType.blob,
+        data['${effectivePrefix}batch_id'],
+      )!,
+      nativeUploadProjection: attachedDatabase.typeMapping.read(
+        DriftSqlType.blob,
+        data['${effectivePrefix}native_upload_projection'],
+      )!,
+      exactLogRecord: attachedDatabase.typeMapping.read(
+        DriftSqlType.blob,
+        data['${effectivePrefix}exact_log_record'],
+      ),
+      expectedLogSequence: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}expected_log_sequence'],
+      ),
+      previousLogHead: attachedDatabase.typeMapping.read(
+        DriftSqlType.blob,
+        data['${effectivePrefix}previous_log_head'],
+      ),
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+    );
+  }
+
+  @override
+  $PrekeyMaintenancePlansTable createAlias(String alias) {
+    return $PrekeyMaintenancePlansTable(attachedDatabase, alias);
+  }
+}
+
+class StoredPrekeyMaintenancePlan extends DataClass
+    implements Insertable<StoredPrekeyMaintenancePlan> {
+  final String deviceId;
+  final int stage;
+  final int expectedStateRevision;
+  final int preparedUnixDay;
+  final int bundleVersion;
+  final int currentSignedPrekeyCreatedUnixDay;
+  final Uint8List batchId;
+  final Uint8List nativeUploadProjection;
+  final Uint8List? exactLogRecord;
+  final int? expectedLogSequence;
+  final Uint8List? previousLogHead;
+  final DateTime updatedAt;
+  const StoredPrekeyMaintenancePlan({
+    required this.deviceId,
+    required this.stage,
+    required this.expectedStateRevision,
+    required this.preparedUnixDay,
+    required this.bundleVersion,
+    required this.currentSignedPrekeyCreatedUnixDay,
+    required this.batchId,
+    required this.nativeUploadProjection,
+    this.exactLogRecord,
+    this.expectedLogSequence,
+    this.previousLogHead,
+    required this.updatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['device_id'] = Variable<String>(deviceId);
+    map['stage'] = Variable<int>(stage);
+    map['expected_state_revision'] = Variable<int>(expectedStateRevision);
+    map['prepared_unix_day'] = Variable<int>(preparedUnixDay);
+    map['bundle_version'] = Variable<int>(bundleVersion);
+    map['current_signed_prekey_created_unix_day'] = Variable<int>(
+      currentSignedPrekeyCreatedUnixDay,
+    );
+    map['batch_id'] = Variable<Uint8List>(batchId);
+    map['native_upload_projection'] = Variable<Uint8List>(
+      nativeUploadProjection,
+    );
+    if (!nullToAbsent || exactLogRecord != null) {
+      map['exact_log_record'] = Variable<Uint8List>(exactLogRecord);
+    }
+    if (!nullToAbsent || expectedLogSequence != null) {
+      map['expected_log_sequence'] = Variable<int>(expectedLogSequence);
+    }
+    if (!nullToAbsent || previousLogHead != null) {
+      map['previous_log_head'] = Variable<Uint8List>(previousLogHead);
+    }
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    return map;
+  }
+
+  PrekeyMaintenancePlansCompanion toCompanion(bool nullToAbsent) {
+    return PrekeyMaintenancePlansCompanion(
+      deviceId: Value(deviceId),
+      stage: Value(stage),
+      expectedStateRevision: Value(expectedStateRevision),
+      preparedUnixDay: Value(preparedUnixDay),
+      bundleVersion: Value(bundleVersion),
+      currentSignedPrekeyCreatedUnixDay: Value(
+        currentSignedPrekeyCreatedUnixDay,
+      ),
+      batchId: Value(batchId),
+      nativeUploadProjection: Value(nativeUploadProjection),
+      exactLogRecord: exactLogRecord == null && nullToAbsent
+          ? const Value.absent()
+          : Value(exactLogRecord),
+      expectedLogSequence: expectedLogSequence == null && nullToAbsent
+          ? const Value.absent()
+          : Value(expectedLogSequence),
+      previousLogHead: previousLogHead == null && nullToAbsent
+          ? const Value.absent()
+          : Value(previousLogHead),
+      updatedAt: Value(updatedAt),
+    );
+  }
+
+  factory StoredPrekeyMaintenancePlan.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return StoredPrekeyMaintenancePlan(
+      deviceId: serializer.fromJson<String>(json['deviceId']),
+      stage: serializer.fromJson<int>(json['stage']),
+      expectedStateRevision: serializer.fromJson<int>(
+        json['expectedStateRevision'],
+      ),
+      preparedUnixDay: serializer.fromJson<int>(json['preparedUnixDay']),
+      bundleVersion: serializer.fromJson<int>(json['bundleVersion']),
+      currentSignedPrekeyCreatedUnixDay: serializer.fromJson<int>(
+        json['currentSignedPrekeyCreatedUnixDay'],
+      ),
+      batchId: serializer.fromJson<Uint8List>(json['batchId']),
+      nativeUploadProjection: serializer.fromJson<Uint8List>(
+        json['nativeUploadProjection'],
+      ),
+      exactLogRecord: serializer.fromJson<Uint8List?>(json['exactLogRecord']),
+      expectedLogSequence: serializer.fromJson<int?>(
+        json['expectedLogSequence'],
+      ),
+      previousLogHead: serializer.fromJson<Uint8List?>(json['previousLogHead']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'deviceId': serializer.toJson<String>(deviceId),
+      'stage': serializer.toJson<int>(stage),
+      'expectedStateRevision': serializer.toJson<int>(expectedStateRevision),
+      'preparedUnixDay': serializer.toJson<int>(preparedUnixDay),
+      'bundleVersion': serializer.toJson<int>(bundleVersion),
+      'currentSignedPrekeyCreatedUnixDay': serializer.toJson<int>(
+        currentSignedPrekeyCreatedUnixDay,
+      ),
+      'batchId': serializer.toJson<Uint8List>(batchId),
+      'nativeUploadProjection': serializer.toJson<Uint8List>(
+        nativeUploadProjection,
+      ),
+      'exactLogRecord': serializer.toJson<Uint8List?>(exactLogRecord),
+      'expectedLogSequence': serializer.toJson<int?>(expectedLogSequence),
+      'previousLogHead': serializer.toJson<Uint8List?>(previousLogHead),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+    };
+  }
+
+  StoredPrekeyMaintenancePlan copyWith({
+    String? deviceId,
+    int? stage,
+    int? expectedStateRevision,
+    int? preparedUnixDay,
+    int? bundleVersion,
+    int? currentSignedPrekeyCreatedUnixDay,
+    Uint8List? batchId,
+    Uint8List? nativeUploadProjection,
+    Value<Uint8List?> exactLogRecord = const Value.absent(),
+    Value<int?> expectedLogSequence = const Value.absent(),
+    Value<Uint8List?> previousLogHead = const Value.absent(),
+    DateTime? updatedAt,
+  }) => StoredPrekeyMaintenancePlan(
+    deviceId: deviceId ?? this.deviceId,
+    stage: stage ?? this.stage,
+    expectedStateRevision: expectedStateRevision ?? this.expectedStateRevision,
+    preparedUnixDay: preparedUnixDay ?? this.preparedUnixDay,
+    bundleVersion: bundleVersion ?? this.bundleVersion,
+    currentSignedPrekeyCreatedUnixDay:
+        currentSignedPrekeyCreatedUnixDay ??
+        this.currentSignedPrekeyCreatedUnixDay,
+    batchId: batchId ?? this.batchId,
+    nativeUploadProjection:
+        nativeUploadProjection ?? this.nativeUploadProjection,
+    exactLogRecord: exactLogRecord.present
+        ? exactLogRecord.value
+        : this.exactLogRecord,
+    expectedLogSequence: expectedLogSequence.present
+        ? expectedLogSequence.value
+        : this.expectedLogSequence,
+    previousLogHead: previousLogHead.present
+        ? previousLogHead.value
+        : this.previousLogHead,
+    updatedAt: updatedAt ?? this.updatedAt,
+  );
+  StoredPrekeyMaintenancePlan copyWithCompanion(
+    PrekeyMaintenancePlansCompanion data,
+  ) {
+    return StoredPrekeyMaintenancePlan(
+      deviceId: data.deviceId.present ? data.deviceId.value : this.deviceId,
+      stage: data.stage.present ? data.stage.value : this.stage,
+      expectedStateRevision: data.expectedStateRevision.present
+          ? data.expectedStateRevision.value
+          : this.expectedStateRevision,
+      preparedUnixDay: data.preparedUnixDay.present
+          ? data.preparedUnixDay.value
+          : this.preparedUnixDay,
+      bundleVersion: data.bundleVersion.present
+          ? data.bundleVersion.value
+          : this.bundleVersion,
+      currentSignedPrekeyCreatedUnixDay:
+          data.currentSignedPrekeyCreatedUnixDay.present
+          ? data.currentSignedPrekeyCreatedUnixDay.value
+          : this.currentSignedPrekeyCreatedUnixDay,
+      batchId: data.batchId.present ? data.batchId.value : this.batchId,
+      nativeUploadProjection: data.nativeUploadProjection.present
+          ? data.nativeUploadProjection.value
+          : this.nativeUploadProjection,
+      exactLogRecord: data.exactLogRecord.present
+          ? data.exactLogRecord.value
+          : this.exactLogRecord,
+      expectedLogSequence: data.expectedLogSequence.present
+          ? data.expectedLogSequence.value
+          : this.expectedLogSequence,
+      previousLogHead: data.previousLogHead.present
+          ? data.previousLogHead.value
+          : this.previousLogHead,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('StoredPrekeyMaintenancePlan(')
+          ..write('deviceId: $deviceId, ')
+          ..write('stage: $stage, ')
+          ..write('expectedStateRevision: $expectedStateRevision, ')
+          ..write('preparedUnixDay: $preparedUnixDay, ')
+          ..write('bundleVersion: $bundleVersion, ')
+          ..write(
+            'currentSignedPrekeyCreatedUnixDay: $currentSignedPrekeyCreatedUnixDay, ',
+          )
+          ..write('batchId: $batchId, ')
+          ..write('nativeUploadProjection: $nativeUploadProjection, ')
+          ..write('exactLogRecord: $exactLogRecord, ')
+          ..write('expectedLogSequence: $expectedLogSequence, ')
+          ..write('previousLogHead: $previousLogHead, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    deviceId,
+    stage,
+    expectedStateRevision,
+    preparedUnixDay,
+    bundleVersion,
+    currentSignedPrekeyCreatedUnixDay,
+    $driftBlobEquality.hash(batchId),
+    $driftBlobEquality.hash(nativeUploadProjection),
+    $driftBlobEquality.hash(exactLogRecord),
+    expectedLogSequence,
+    $driftBlobEquality.hash(previousLogHead),
+    updatedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is StoredPrekeyMaintenancePlan &&
+          other.deviceId == this.deviceId &&
+          other.stage == this.stage &&
+          other.expectedStateRevision == this.expectedStateRevision &&
+          other.preparedUnixDay == this.preparedUnixDay &&
+          other.bundleVersion == this.bundleVersion &&
+          other.currentSignedPrekeyCreatedUnixDay ==
+              this.currentSignedPrekeyCreatedUnixDay &&
+          $driftBlobEquality.equals(other.batchId, this.batchId) &&
+          $driftBlobEquality.equals(
+            other.nativeUploadProjection,
+            this.nativeUploadProjection,
+          ) &&
+          $driftBlobEquality.equals(
+            other.exactLogRecord,
+            this.exactLogRecord,
+          ) &&
+          other.expectedLogSequence == this.expectedLogSequence &&
+          $driftBlobEquality.equals(
+            other.previousLogHead,
+            this.previousLogHead,
+          ) &&
+          other.updatedAt == this.updatedAt);
+}
+
+class PrekeyMaintenancePlansCompanion
+    extends UpdateCompanion<StoredPrekeyMaintenancePlan> {
+  final Value<String> deviceId;
+  final Value<int> stage;
+  final Value<int> expectedStateRevision;
+  final Value<int> preparedUnixDay;
+  final Value<int> bundleVersion;
+  final Value<int> currentSignedPrekeyCreatedUnixDay;
+  final Value<Uint8List> batchId;
+  final Value<Uint8List> nativeUploadProjection;
+  final Value<Uint8List?> exactLogRecord;
+  final Value<int?> expectedLogSequence;
+  final Value<Uint8List?> previousLogHead;
+  final Value<DateTime> updatedAt;
+  final Value<int> rowid;
+  const PrekeyMaintenancePlansCompanion({
+    this.deviceId = const Value.absent(),
+    this.stage = const Value.absent(),
+    this.expectedStateRevision = const Value.absent(),
+    this.preparedUnixDay = const Value.absent(),
+    this.bundleVersion = const Value.absent(),
+    this.currentSignedPrekeyCreatedUnixDay = const Value.absent(),
+    this.batchId = const Value.absent(),
+    this.nativeUploadProjection = const Value.absent(),
+    this.exactLogRecord = const Value.absent(),
+    this.expectedLogSequence = const Value.absent(),
+    this.previousLogHead = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  PrekeyMaintenancePlansCompanion.insert({
+    required String deviceId,
+    required int stage,
+    required int expectedStateRevision,
+    required int preparedUnixDay,
+    required int bundleVersion,
+    required int currentSignedPrekeyCreatedUnixDay,
+    required Uint8List batchId,
+    required Uint8List nativeUploadProjection,
+    this.exactLogRecord = const Value.absent(),
+    this.expectedLogSequence = const Value.absent(),
+    this.previousLogHead = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : deviceId = Value(deviceId),
+       stage = Value(stage),
+       expectedStateRevision = Value(expectedStateRevision),
+       preparedUnixDay = Value(preparedUnixDay),
+       bundleVersion = Value(bundleVersion),
+       currentSignedPrekeyCreatedUnixDay = Value(
+         currentSignedPrekeyCreatedUnixDay,
+       ),
+       batchId = Value(batchId),
+       nativeUploadProjection = Value(nativeUploadProjection);
+  static Insertable<StoredPrekeyMaintenancePlan> custom({
+    Expression<String>? deviceId,
+    Expression<int>? stage,
+    Expression<int>? expectedStateRevision,
+    Expression<int>? preparedUnixDay,
+    Expression<int>? bundleVersion,
+    Expression<int>? currentSignedPrekeyCreatedUnixDay,
+    Expression<Uint8List>? batchId,
+    Expression<Uint8List>? nativeUploadProjection,
+    Expression<Uint8List>? exactLogRecord,
+    Expression<int>? expectedLogSequence,
+    Expression<Uint8List>? previousLogHead,
+    Expression<DateTime>? updatedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (deviceId != null) 'device_id': deviceId,
+      if (stage != null) 'stage': stage,
+      if (expectedStateRevision != null)
+        'expected_state_revision': expectedStateRevision,
+      if (preparedUnixDay != null) 'prepared_unix_day': preparedUnixDay,
+      if (bundleVersion != null) 'bundle_version': bundleVersion,
+      if (currentSignedPrekeyCreatedUnixDay != null)
+        'current_signed_prekey_created_unix_day':
+            currentSignedPrekeyCreatedUnixDay,
+      if (batchId != null) 'batch_id': batchId,
+      if (nativeUploadProjection != null)
+        'native_upload_projection': nativeUploadProjection,
+      if (exactLogRecord != null) 'exact_log_record': exactLogRecord,
+      if (expectedLogSequence != null)
+        'expected_log_sequence': expectedLogSequence,
+      if (previousLogHead != null) 'previous_log_head': previousLogHead,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  PrekeyMaintenancePlansCompanion copyWith({
+    Value<String>? deviceId,
+    Value<int>? stage,
+    Value<int>? expectedStateRevision,
+    Value<int>? preparedUnixDay,
+    Value<int>? bundleVersion,
+    Value<int>? currentSignedPrekeyCreatedUnixDay,
+    Value<Uint8List>? batchId,
+    Value<Uint8List>? nativeUploadProjection,
+    Value<Uint8List?>? exactLogRecord,
+    Value<int?>? expectedLogSequence,
+    Value<Uint8List?>? previousLogHead,
+    Value<DateTime>? updatedAt,
+    Value<int>? rowid,
+  }) {
+    return PrekeyMaintenancePlansCompanion(
+      deviceId: deviceId ?? this.deviceId,
+      stage: stage ?? this.stage,
+      expectedStateRevision:
+          expectedStateRevision ?? this.expectedStateRevision,
+      preparedUnixDay: preparedUnixDay ?? this.preparedUnixDay,
+      bundleVersion: bundleVersion ?? this.bundleVersion,
+      currentSignedPrekeyCreatedUnixDay:
+          currentSignedPrekeyCreatedUnixDay ??
+          this.currentSignedPrekeyCreatedUnixDay,
+      batchId: batchId ?? this.batchId,
+      nativeUploadProjection:
+          nativeUploadProjection ?? this.nativeUploadProjection,
+      exactLogRecord: exactLogRecord ?? this.exactLogRecord,
+      expectedLogSequence: expectedLogSequence ?? this.expectedLogSequence,
+      previousLogHead: previousLogHead ?? this.previousLogHead,
+      updatedAt: updatedAt ?? this.updatedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (deviceId.present) {
+      map['device_id'] = Variable<String>(deviceId.value);
+    }
+    if (stage.present) {
+      map['stage'] = Variable<int>(stage.value);
+    }
+    if (expectedStateRevision.present) {
+      map['expected_state_revision'] = Variable<int>(
+        expectedStateRevision.value,
+      );
+    }
+    if (preparedUnixDay.present) {
+      map['prepared_unix_day'] = Variable<int>(preparedUnixDay.value);
+    }
+    if (bundleVersion.present) {
+      map['bundle_version'] = Variable<int>(bundleVersion.value);
+    }
+    if (currentSignedPrekeyCreatedUnixDay.present) {
+      map['current_signed_prekey_created_unix_day'] = Variable<int>(
+        currentSignedPrekeyCreatedUnixDay.value,
+      );
+    }
+    if (batchId.present) {
+      map['batch_id'] = Variable<Uint8List>(batchId.value);
+    }
+    if (nativeUploadProjection.present) {
+      map['native_upload_projection'] = Variable<Uint8List>(
+        nativeUploadProjection.value,
+      );
+    }
+    if (exactLogRecord.present) {
+      map['exact_log_record'] = Variable<Uint8List>(exactLogRecord.value);
+    }
+    if (expectedLogSequence.present) {
+      map['expected_log_sequence'] = Variable<int>(expectedLogSequence.value);
+    }
+    if (previousLogHead.present) {
+      map['previous_log_head'] = Variable<Uint8List>(previousLogHead.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('PrekeyMaintenancePlansCompanion(')
+          ..write('deviceId: $deviceId, ')
+          ..write('stage: $stage, ')
+          ..write('expectedStateRevision: $expectedStateRevision, ')
+          ..write('preparedUnixDay: $preparedUnixDay, ')
+          ..write('bundleVersion: $bundleVersion, ')
+          ..write(
+            'currentSignedPrekeyCreatedUnixDay: $currentSignedPrekeyCreatedUnixDay, ',
+          )
+          ..write('batchId: $batchId, ')
+          ..write('nativeUploadProjection: $nativeUploadProjection, ')
+          ..write('exactLogRecord: $exactLogRecord, ')
+          ..write('expectedLogSequence: $expectedLogSequence, ')
+          ..write('previousLogHead: $previousLogHead, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $MlsKeyPackageMaintenanceStatesTable
+    extends MlsKeyPackageMaintenanceStates
+    with
+        TableInfo<
+          $MlsKeyPackageMaintenanceStatesTable,
+          StoredMlsKeyPackageMaintenanceState
+        > {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $MlsKeyPackageMaintenanceStatesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _deviceIdMeta = const VerificationMeta(
+    'deviceId',
+  );
+  @override
+  late final GeneratedColumn<String> deviceId = GeneratedColumn<String>(
+    'device_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _stageMeta = const VerificationMeta('stage');
+  @override
+  late final GeneratedColumn<int> stage = GeneratedColumn<int>(
+    'stage',
+    aliasedName,
+    false,
+    check: () => ComparableExpr(stage).isBetweenValues(0, 3),
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _expectedStateRevisionMeta =
+      const VerificationMeta('expectedStateRevision');
+  @override
+  late final GeneratedColumn<int> expectedStateRevision = GeneratedColumn<int>(
+    'expected_state_revision',
+    aliasedName,
+    false,
+    check: () => ComparableExpr(expectedStateRevision).isBiggerOrEqualValue(0),
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _plannedKindMeta = const VerificationMeta(
+    'plannedKind',
+  );
+  @override
+  late final GeneratedColumn<int> plannedKind = GeneratedColumn<int>(
+    'planned_kind',
+    aliasedName,
+    true,
+    check: () =>
+        plannedKind.isNull() |
+        ComparableExpr(plannedKind).isBetweenValues(0, 1),
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _exactUploadProjectionMeta =
+      const VerificationMeta('exactUploadProjection');
+  @override
+  late final GeneratedColumn<Uint8List> exactUploadProjection =
+      GeneratedColumn<Uint8List>(
+        'exact_upload_projection',
+        aliasedName,
+        true,
+        type: DriftSqlType.blob,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _lastResortUploadedMeta =
+      const VerificationMeta('lastResortUploaded');
+  @override
+  late final GeneratedColumn<bool> lastResortUploaded = GeneratedColumn<bool>(
+    'last_resort_uploaded',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("last_resort_uploaded" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    deviceId,
+    stage,
+    expectedStateRevision,
+    plannedKind,
+    exactUploadProjection,
+    lastResortUploaded,
+    updatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'mls_key_package_maintenance_states';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<StoredMlsKeyPackageMaintenanceState> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('device_id')) {
+      context.handle(
+        _deviceIdMeta,
+        deviceId.isAcceptableOrUnknown(data['device_id']!, _deviceIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_deviceIdMeta);
+    }
+    if (data.containsKey('stage')) {
+      context.handle(
+        _stageMeta,
+        stage.isAcceptableOrUnknown(data['stage']!, _stageMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_stageMeta);
+    }
+    if (data.containsKey('expected_state_revision')) {
+      context.handle(
+        _expectedStateRevisionMeta,
+        expectedStateRevision.isAcceptableOrUnknown(
+          data['expected_state_revision']!,
+          _expectedStateRevisionMeta,
+        ),
+      );
+    }
+    if (data.containsKey('planned_kind')) {
+      context.handle(
+        _plannedKindMeta,
+        plannedKind.isAcceptableOrUnknown(
+          data['planned_kind']!,
+          _plannedKindMeta,
+        ),
+      );
+    }
+    if (data.containsKey('exact_upload_projection')) {
+      context.handle(
+        _exactUploadProjectionMeta,
+        exactUploadProjection.isAcceptableOrUnknown(
+          data['exact_upload_projection']!,
+          _exactUploadProjectionMeta,
+        ),
+      );
+    }
+    if (data.containsKey('last_resort_uploaded')) {
+      context.handle(
+        _lastResortUploadedMeta,
+        lastResortUploaded.isAcceptableOrUnknown(
+          data['last_resort_uploaded']!,
+          _lastResortUploadedMeta,
+        ),
+      );
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {deviceId};
+  @override
+  StoredMlsKeyPackageMaintenanceState map(
+    Map<String, dynamic> data, {
+    String? tablePrefix,
+  }) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return StoredMlsKeyPackageMaintenanceState(
+      deviceId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}device_id'],
+      )!,
+      stage: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}stage'],
+      )!,
+      expectedStateRevision: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}expected_state_revision'],
+      )!,
+      plannedKind: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}planned_kind'],
+      ),
+      exactUploadProjection: attachedDatabase.typeMapping.read(
+        DriftSqlType.blob,
+        data['${effectivePrefix}exact_upload_projection'],
+      ),
+      lastResortUploaded: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}last_resort_uploaded'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+    );
+  }
+
+  @override
+  $MlsKeyPackageMaintenanceStatesTable createAlias(String alias) {
+    return $MlsKeyPackageMaintenanceStatesTable(attachedDatabase, alias);
+  }
+}
+
+class StoredMlsKeyPackageMaintenanceState extends DataClass
+    implements Insertable<StoredMlsKeyPackageMaintenanceState> {
+  final String deviceId;
+  final int stage;
+  final int expectedStateRevision;
+  final int? plannedKind;
+  final Uint8List? exactUploadProjection;
+  final bool lastResortUploaded;
+  final DateTime updatedAt;
+  const StoredMlsKeyPackageMaintenanceState({
+    required this.deviceId,
+    required this.stage,
+    required this.expectedStateRevision,
+    this.plannedKind,
+    this.exactUploadProjection,
+    required this.lastResortUploaded,
+    required this.updatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['device_id'] = Variable<String>(deviceId);
+    map['stage'] = Variable<int>(stage);
+    map['expected_state_revision'] = Variable<int>(expectedStateRevision);
+    if (!nullToAbsent || plannedKind != null) {
+      map['planned_kind'] = Variable<int>(plannedKind);
+    }
+    if (!nullToAbsent || exactUploadProjection != null) {
+      map['exact_upload_projection'] = Variable<Uint8List>(
+        exactUploadProjection,
+      );
+    }
+    map['last_resort_uploaded'] = Variable<bool>(lastResortUploaded);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    return map;
+  }
+
+  MlsKeyPackageMaintenanceStatesCompanion toCompanion(bool nullToAbsent) {
+    return MlsKeyPackageMaintenanceStatesCompanion(
+      deviceId: Value(deviceId),
+      stage: Value(stage),
+      expectedStateRevision: Value(expectedStateRevision),
+      plannedKind: plannedKind == null && nullToAbsent
+          ? const Value.absent()
+          : Value(plannedKind),
+      exactUploadProjection: exactUploadProjection == null && nullToAbsent
+          ? const Value.absent()
+          : Value(exactUploadProjection),
+      lastResortUploaded: Value(lastResortUploaded),
+      updatedAt: Value(updatedAt),
+    );
+  }
+
+  factory StoredMlsKeyPackageMaintenanceState.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return StoredMlsKeyPackageMaintenanceState(
+      deviceId: serializer.fromJson<String>(json['deviceId']),
+      stage: serializer.fromJson<int>(json['stage']),
+      expectedStateRevision: serializer.fromJson<int>(
+        json['expectedStateRevision'],
+      ),
+      plannedKind: serializer.fromJson<int?>(json['plannedKind']),
+      exactUploadProjection: serializer.fromJson<Uint8List?>(
+        json['exactUploadProjection'],
+      ),
+      lastResortUploaded: serializer.fromJson<bool>(json['lastResortUploaded']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'deviceId': serializer.toJson<String>(deviceId),
+      'stage': serializer.toJson<int>(stage),
+      'expectedStateRevision': serializer.toJson<int>(expectedStateRevision),
+      'plannedKind': serializer.toJson<int?>(plannedKind),
+      'exactUploadProjection': serializer.toJson<Uint8List?>(
+        exactUploadProjection,
+      ),
+      'lastResortUploaded': serializer.toJson<bool>(lastResortUploaded),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+    };
+  }
+
+  StoredMlsKeyPackageMaintenanceState copyWith({
+    String? deviceId,
+    int? stage,
+    int? expectedStateRevision,
+    Value<int?> plannedKind = const Value.absent(),
+    Value<Uint8List?> exactUploadProjection = const Value.absent(),
+    bool? lastResortUploaded,
+    DateTime? updatedAt,
+  }) => StoredMlsKeyPackageMaintenanceState(
+    deviceId: deviceId ?? this.deviceId,
+    stage: stage ?? this.stage,
+    expectedStateRevision: expectedStateRevision ?? this.expectedStateRevision,
+    plannedKind: plannedKind.present ? plannedKind.value : this.plannedKind,
+    exactUploadProjection: exactUploadProjection.present
+        ? exactUploadProjection.value
+        : this.exactUploadProjection,
+    lastResortUploaded: lastResortUploaded ?? this.lastResortUploaded,
+    updatedAt: updatedAt ?? this.updatedAt,
+  );
+  StoredMlsKeyPackageMaintenanceState copyWithCompanion(
+    MlsKeyPackageMaintenanceStatesCompanion data,
+  ) {
+    return StoredMlsKeyPackageMaintenanceState(
+      deviceId: data.deviceId.present ? data.deviceId.value : this.deviceId,
+      stage: data.stage.present ? data.stage.value : this.stage,
+      expectedStateRevision: data.expectedStateRevision.present
+          ? data.expectedStateRevision.value
+          : this.expectedStateRevision,
+      plannedKind: data.plannedKind.present
+          ? data.plannedKind.value
+          : this.plannedKind,
+      exactUploadProjection: data.exactUploadProjection.present
+          ? data.exactUploadProjection.value
+          : this.exactUploadProjection,
+      lastResortUploaded: data.lastResortUploaded.present
+          ? data.lastResortUploaded.value
+          : this.lastResortUploaded,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('StoredMlsKeyPackageMaintenanceState(')
+          ..write('deviceId: $deviceId, ')
+          ..write('stage: $stage, ')
+          ..write('expectedStateRevision: $expectedStateRevision, ')
+          ..write('plannedKind: $plannedKind, ')
+          ..write('exactUploadProjection: $exactUploadProjection, ')
+          ..write('lastResortUploaded: $lastResortUploaded, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    deviceId,
+    stage,
+    expectedStateRevision,
+    plannedKind,
+    $driftBlobEquality.hash(exactUploadProjection),
+    lastResortUploaded,
+    updatedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is StoredMlsKeyPackageMaintenanceState &&
+          other.deviceId == this.deviceId &&
+          other.stage == this.stage &&
+          other.expectedStateRevision == this.expectedStateRevision &&
+          other.plannedKind == this.plannedKind &&
+          $driftBlobEquality.equals(
+            other.exactUploadProjection,
+            this.exactUploadProjection,
+          ) &&
+          other.lastResortUploaded == this.lastResortUploaded &&
+          other.updatedAt == this.updatedAt);
+}
+
+class MlsKeyPackageMaintenanceStatesCompanion
+    extends UpdateCompanion<StoredMlsKeyPackageMaintenanceState> {
+  final Value<String> deviceId;
+  final Value<int> stage;
+  final Value<int> expectedStateRevision;
+  final Value<int?> plannedKind;
+  final Value<Uint8List?> exactUploadProjection;
+  final Value<bool> lastResortUploaded;
+  final Value<DateTime> updatedAt;
+  final Value<int> rowid;
+  const MlsKeyPackageMaintenanceStatesCompanion({
+    this.deviceId = const Value.absent(),
+    this.stage = const Value.absent(),
+    this.expectedStateRevision = const Value.absent(),
+    this.plannedKind = const Value.absent(),
+    this.exactUploadProjection = const Value.absent(),
+    this.lastResortUploaded = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  MlsKeyPackageMaintenanceStatesCompanion.insert({
+    required String deviceId,
+    required int stage,
+    this.expectedStateRevision = const Value.absent(),
+    this.plannedKind = const Value.absent(),
+    this.exactUploadProjection = const Value.absent(),
+    this.lastResortUploaded = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : deviceId = Value(deviceId),
+       stage = Value(stage);
+  static Insertable<StoredMlsKeyPackageMaintenanceState> custom({
+    Expression<String>? deviceId,
+    Expression<int>? stage,
+    Expression<int>? expectedStateRevision,
+    Expression<int>? plannedKind,
+    Expression<Uint8List>? exactUploadProjection,
+    Expression<bool>? lastResortUploaded,
+    Expression<DateTime>? updatedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (deviceId != null) 'device_id': deviceId,
+      if (stage != null) 'stage': stage,
+      if (expectedStateRevision != null)
+        'expected_state_revision': expectedStateRevision,
+      if (plannedKind != null) 'planned_kind': plannedKind,
+      if (exactUploadProjection != null)
+        'exact_upload_projection': exactUploadProjection,
+      if (lastResortUploaded != null)
+        'last_resort_uploaded': lastResortUploaded,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  MlsKeyPackageMaintenanceStatesCompanion copyWith({
+    Value<String>? deviceId,
+    Value<int>? stage,
+    Value<int>? expectedStateRevision,
+    Value<int?>? plannedKind,
+    Value<Uint8List?>? exactUploadProjection,
+    Value<bool>? lastResortUploaded,
+    Value<DateTime>? updatedAt,
+    Value<int>? rowid,
+  }) {
+    return MlsKeyPackageMaintenanceStatesCompanion(
+      deviceId: deviceId ?? this.deviceId,
+      stage: stage ?? this.stage,
+      expectedStateRevision:
+          expectedStateRevision ?? this.expectedStateRevision,
+      plannedKind: plannedKind ?? this.plannedKind,
+      exactUploadProjection:
+          exactUploadProjection ?? this.exactUploadProjection,
+      lastResortUploaded: lastResortUploaded ?? this.lastResortUploaded,
+      updatedAt: updatedAt ?? this.updatedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (deviceId.present) {
+      map['device_id'] = Variable<String>(deviceId.value);
+    }
+    if (stage.present) {
+      map['stage'] = Variable<int>(stage.value);
+    }
+    if (expectedStateRevision.present) {
+      map['expected_state_revision'] = Variable<int>(
+        expectedStateRevision.value,
+      );
+    }
+    if (plannedKind.present) {
+      map['planned_kind'] = Variable<int>(plannedKind.value);
+    }
+    if (exactUploadProjection.present) {
+      map['exact_upload_projection'] = Variable<Uint8List>(
+        exactUploadProjection.value,
+      );
+    }
+    if (lastResortUploaded.present) {
+      map['last_resort_uploaded'] = Variable<bool>(lastResortUploaded.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('MlsKeyPackageMaintenanceStatesCompanion(')
+          ..write('deviceId: $deviceId, ')
+          ..write('stage: $stage, ')
+          ..write('expectedStateRevision: $expectedStateRevision, ')
+          ..write('plannedKind: $plannedKind, ')
+          ..write('exactUploadProjection: $exactUploadProjection, ')
+          ..write('lastResortUploaded: $lastResortUploaded, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 class $MlsGroupsTable extends MlsGroups
     with TableInfo<$MlsGroupsTable, MlsGroup> {
   @override
@@ -4764,12 +8568,91 @@ class $MlsGroupsTable extends MlsGroups
     type: DriftSqlType.int,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _queueGapRecoveryStateMeta =
+      const VerificationMeta('queueGapRecoveryState');
+  @override
+  late final GeneratedColumn<int> queueGapRecoveryState = GeneratedColumn<int>(
+    'queue_gap_recovery_state',
+    aliasedName,
+    false,
+    check: () => ComparableExpr(queueGapRecoveryState).isBetweenValues(0, 2),
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _controlProjectionCiphertextMeta =
+      const VerificationMeta('controlProjectionCiphertext');
+  @override
+  late final GeneratedColumn<Uint8List> controlProjectionCiphertext =
+      GeneratedColumn<Uint8List>(
+        'control_projection_ciphertext',
+        aliasedName,
+        true,
+        type: DriftSqlType.blob,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _controlRevisionMeta = const VerificationMeta(
+    'controlRevision',
+  );
+  @override
+  late final GeneratedColumn<int> controlRevision = GeneratedColumn<int>(
+    'control_revision',
+    aliasedName,
+    false,
+    check: () => ComparableExpr(controlRevision).isBiggerOrEqualValue(0),
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _controlStateHashMeta = const VerificationMeta(
+    'controlStateHash',
+  );
+  @override
+  late final GeneratedColumn<Uint8List> controlStateHash =
+      GeneratedColumn<Uint8List>(
+        'control_state_hash',
+        aliasedName,
+        true,
+        type: DriftSqlType.blob,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _lifecycleMeta = const VerificationMeta(
+    'lifecycle',
+  );
+  @override
+  late final GeneratedColumn<int> lifecycle = GeneratedColumn<int>(
+    'lifecycle',
+    aliasedName,
+    false,
+    check: () => ComparableExpr(lifecycle).isBetweenValues(0, 6),
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _pendingMutationIdMeta = const VerificationMeta(
+    'pendingMutationId',
+  );
+  @override
+  late final GeneratedColumn<String> pendingMutationId =
+      GeneratedColumn<String>(
+        'pending_mutation_id',
+        aliasedName,
+        true,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+      );
   @override
   List<GeneratedColumn> get $columns => [
     groupId,
     opaqueCryptoStateHandle,
     acceptedEpoch,
     stateVersion,
+    queueGapRecoveryState,
+    controlProjectionCiphertext,
+    controlRevision,
+    controlStateHash,
+    lifecycle,
+    pendingMutationId,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -4824,6 +8707,57 @@ class $MlsGroupsTable extends MlsGroups
     } else if (isInserting) {
       context.missing(_stateVersionMeta);
     }
+    if (data.containsKey('queue_gap_recovery_state')) {
+      context.handle(
+        _queueGapRecoveryStateMeta,
+        queueGapRecoveryState.isAcceptableOrUnknown(
+          data['queue_gap_recovery_state']!,
+          _queueGapRecoveryStateMeta,
+        ),
+      );
+    }
+    if (data.containsKey('control_projection_ciphertext')) {
+      context.handle(
+        _controlProjectionCiphertextMeta,
+        controlProjectionCiphertext.isAcceptableOrUnknown(
+          data['control_projection_ciphertext']!,
+          _controlProjectionCiphertextMeta,
+        ),
+      );
+    }
+    if (data.containsKey('control_revision')) {
+      context.handle(
+        _controlRevisionMeta,
+        controlRevision.isAcceptableOrUnknown(
+          data['control_revision']!,
+          _controlRevisionMeta,
+        ),
+      );
+    }
+    if (data.containsKey('control_state_hash')) {
+      context.handle(
+        _controlStateHashMeta,
+        controlStateHash.isAcceptableOrUnknown(
+          data['control_state_hash']!,
+          _controlStateHashMeta,
+        ),
+      );
+    }
+    if (data.containsKey('lifecycle')) {
+      context.handle(
+        _lifecycleMeta,
+        lifecycle.isAcceptableOrUnknown(data['lifecycle']!, _lifecycleMeta),
+      );
+    }
+    if (data.containsKey('pending_mutation_id')) {
+      context.handle(
+        _pendingMutationIdMeta,
+        pendingMutationId.isAcceptableOrUnknown(
+          data['pending_mutation_id']!,
+          _pendingMutationIdMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -4849,6 +8783,30 @@ class $MlsGroupsTable extends MlsGroups
         DriftSqlType.int,
         data['${effectivePrefix}state_version'],
       )!,
+      queueGapRecoveryState: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}queue_gap_recovery_state'],
+      )!,
+      controlProjectionCiphertext: attachedDatabase.typeMapping.read(
+        DriftSqlType.blob,
+        data['${effectivePrefix}control_projection_ciphertext'],
+      ),
+      controlRevision: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}control_revision'],
+      )!,
+      controlStateHash: attachedDatabase.typeMapping.read(
+        DriftSqlType.blob,
+        data['${effectivePrefix}control_state_hash'],
+      ),
+      lifecycle: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}lifecycle'],
+      )!,
+      pendingMutationId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}pending_mutation_id'],
+      ),
     );
   }
 
@@ -4863,11 +8821,23 @@ class MlsGroup extends DataClass implements Insertable<MlsGroup> {
   final Uint8List opaqueCryptoStateHandle;
   final int acceptedEpoch;
   final int stateVersion;
+  final int queueGapRecoveryState;
+  final Uint8List? controlProjectionCiphertext;
+  final int controlRevision;
+  final Uint8List? controlStateHash;
+  final int lifecycle;
+  final String? pendingMutationId;
   const MlsGroup({
     required this.groupId,
     required this.opaqueCryptoStateHandle,
     required this.acceptedEpoch,
     required this.stateVersion,
+    required this.queueGapRecoveryState,
+    this.controlProjectionCiphertext,
+    required this.controlRevision,
+    this.controlStateHash,
+    required this.lifecycle,
+    this.pendingMutationId,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -4878,6 +8848,20 @@ class MlsGroup extends DataClass implements Insertable<MlsGroup> {
     );
     map['accepted_epoch'] = Variable<int>(acceptedEpoch);
     map['state_version'] = Variable<int>(stateVersion);
+    map['queue_gap_recovery_state'] = Variable<int>(queueGapRecoveryState);
+    if (!nullToAbsent || controlProjectionCiphertext != null) {
+      map['control_projection_ciphertext'] = Variable<Uint8List>(
+        controlProjectionCiphertext,
+      );
+    }
+    map['control_revision'] = Variable<int>(controlRevision);
+    if (!nullToAbsent || controlStateHash != null) {
+      map['control_state_hash'] = Variable<Uint8List>(controlStateHash);
+    }
+    map['lifecycle'] = Variable<int>(lifecycle);
+    if (!nullToAbsent || pendingMutationId != null) {
+      map['pending_mutation_id'] = Variable<String>(pendingMutationId);
+    }
     return map;
   }
 
@@ -4887,6 +8871,19 @@ class MlsGroup extends DataClass implements Insertable<MlsGroup> {
       opaqueCryptoStateHandle: Value(opaqueCryptoStateHandle),
       acceptedEpoch: Value(acceptedEpoch),
       stateVersion: Value(stateVersion),
+      queueGapRecoveryState: Value(queueGapRecoveryState),
+      controlProjectionCiphertext:
+          controlProjectionCiphertext == null && nullToAbsent
+          ? const Value.absent()
+          : Value(controlProjectionCiphertext),
+      controlRevision: Value(controlRevision),
+      controlStateHash: controlStateHash == null && nullToAbsent
+          ? const Value.absent()
+          : Value(controlStateHash),
+      lifecycle: Value(lifecycle),
+      pendingMutationId: pendingMutationId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(pendingMutationId),
     );
   }
 
@@ -4902,6 +8899,20 @@ class MlsGroup extends DataClass implements Insertable<MlsGroup> {
       ),
       acceptedEpoch: serializer.fromJson<int>(json['acceptedEpoch']),
       stateVersion: serializer.fromJson<int>(json['stateVersion']),
+      queueGapRecoveryState: serializer.fromJson<int>(
+        json['queueGapRecoveryState'],
+      ),
+      controlProjectionCiphertext: serializer.fromJson<Uint8List?>(
+        json['controlProjectionCiphertext'],
+      ),
+      controlRevision: serializer.fromJson<int>(json['controlRevision']),
+      controlStateHash: serializer.fromJson<Uint8List?>(
+        json['controlStateHash'],
+      ),
+      lifecycle: serializer.fromJson<int>(json['lifecycle']),
+      pendingMutationId: serializer.fromJson<String?>(
+        json['pendingMutationId'],
+      ),
     );
   }
   @override
@@ -4914,6 +8925,14 @@ class MlsGroup extends DataClass implements Insertable<MlsGroup> {
       ),
       'acceptedEpoch': serializer.toJson<int>(acceptedEpoch),
       'stateVersion': serializer.toJson<int>(stateVersion),
+      'queueGapRecoveryState': serializer.toJson<int>(queueGapRecoveryState),
+      'controlProjectionCiphertext': serializer.toJson<Uint8List?>(
+        controlProjectionCiphertext,
+      ),
+      'controlRevision': serializer.toJson<int>(controlRevision),
+      'controlStateHash': serializer.toJson<Uint8List?>(controlStateHash),
+      'lifecycle': serializer.toJson<int>(lifecycle),
+      'pendingMutationId': serializer.toJson<String?>(pendingMutationId),
     };
   }
 
@@ -4922,12 +8941,30 @@ class MlsGroup extends DataClass implements Insertable<MlsGroup> {
     Uint8List? opaqueCryptoStateHandle,
     int? acceptedEpoch,
     int? stateVersion,
+    int? queueGapRecoveryState,
+    Value<Uint8List?> controlProjectionCiphertext = const Value.absent(),
+    int? controlRevision,
+    Value<Uint8List?> controlStateHash = const Value.absent(),
+    int? lifecycle,
+    Value<String?> pendingMutationId = const Value.absent(),
   }) => MlsGroup(
     groupId: groupId ?? this.groupId,
     opaqueCryptoStateHandle:
         opaqueCryptoStateHandle ?? this.opaqueCryptoStateHandle,
     acceptedEpoch: acceptedEpoch ?? this.acceptedEpoch,
     stateVersion: stateVersion ?? this.stateVersion,
+    queueGapRecoveryState: queueGapRecoveryState ?? this.queueGapRecoveryState,
+    controlProjectionCiphertext: controlProjectionCiphertext.present
+        ? controlProjectionCiphertext.value
+        : this.controlProjectionCiphertext,
+    controlRevision: controlRevision ?? this.controlRevision,
+    controlStateHash: controlStateHash.present
+        ? controlStateHash.value
+        : this.controlStateHash,
+    lifecycle: lifecycle ?? this.lifecycle,
+    pendingMutationId: pendingMutationId.present
+        ? pendingMutationId.value
+        : this.pendingMutationId,
   );
   MlsGroup copyWithCompanion(MlsGroupsCompanion data) {
     return MlsGroup(
@@ -4941,6 +8978,22 @@ class MlsGroup extends DataClass implements Insertable<MlsGroup> {
       stateVersion: data.stateVersion.present
           ? data.stateVersion.value
           : this.stateVersion,
+      queueGapRecoveryState: data.queueGapRecoveryState.present
+          ? data.queueGapRecoveryState.value
+          : this.queueGapRecoveryState,
+      controlProjectionCiphertext: data.controlProjectionCiphertext.present
+          ? data.controlProjectionCiphertext.value
+          : this.controlProjectionCiphertext,
+      controlRevision: data.controlRevision.present
+          ? data.controlRevision.value
+          : this.controlRevision,
+      controlStateHash: data.controlStateHash.present
+          ? data.controlStateHash.value
+          : this.controlStateHash,
+      lifecycle: data.lifecycle.present ? data.lifecycle.value : this.lifecycle,
+      pendingMutationId: data.pendingMutationId.present
+          ? data.pendingMutationId.value
+          : this.pendingMutationId,
     );
   }
 
@@ -4950,7 +9003,13 @@ class MlsGroup extends DataClass implements Insertable<MlsGroup> {
           ..write('groupId: $groupId, ')
           ..write('opaqueCryptoStateHandle: $opaqueCryptoStateHandle, ')
           ..write('acceptedEpoch: $acceptedEpoch, ')
-          ..write('stateVersion: $stateVersion')
+          ..write('stateVersion: $stateVersion, ')
+          ..write('queueGapRecoveryState: $queueGapRecoveryState, ')
+          ..write('controlProjectionCiphertext: $controlProjectionCiphertext, ')
+          ..write('controlRevision: $controlRevision, ')
+          ..write('controlStateHash: $controlStateHash, ')
+          ..write('lifecycle: $lifecycle, ')
+          ..write('pendingMutationId: $pendingMutationId')
           ..write(')'))
         .toString();
   }
@@ -4961,6 +9020,12 @@ class MlsGroup extends DataClass implements Insertable<MlsGroup> {
     $driftBlobEquality.hash(opaqueCryptoStateHandle),
     acceptedEpoch,
     stateVersion,
+    queueGapRecoveryState,
+    $driftBlobEquality.hash(controlProjectionCiphertext),
+    controlRevision,
+    $driftBlobEquality.hash(controlStateHash),
+    lifecycle,
+    pendingMutationId,
   );
   @override
   bool operator ==(Object other) =>
@@ -4972,7 +9037,19 @@ class MlsGroup extends DataClass implements Insertable<MlsGroup> {
             this.opaqueCryptoStateHandle,
           ) &&
           other.acceptedEpoch == this.acceptedEpoch &&
-          other.stateVersion == this.stateVersion);
+          other.stateVersion == this.stateVersion &&
+          other.queueGapRecoveryState == this.queueGapRecoveryState &&
+          $driftBlobEquality.equals(
+            other.controlProjectionCiphertext,
+            this.controlProjectionCiphertext,
+          ) &&
+          other.controlRevision == this.controlRevision &&
+          $driftBlobEquality.equals(
+            other.controlStateHash,
+            this.controlStateHash,
+          ) &&
+          other.lifecycle == this.lifecycle &&
+          other.pendingMutationId == this.pendingMutationId);
 }
 
 class MlsGroupsCompanion extends UpdateCompanion<MlsGroup> {
@@ -4980,12 +9057,24 @@ class MlsGroupsCompanion extends UpdateCompanion<MlsGroup> {
   final Value<Uint8List> opaqueCryptoStateHandle;
   final Value<int> acceptedEpoch;
   final Value<int> stateVersion;
+  final Value<int> queueGapRecoveryState;
+  final Value<Uint8List?> controlProjectionCiphertext;
+  final Value<int> controlRevision;
+  final Value<Uint8List?> controlStateHash;
+  final Value<int> lifecycle;
+  final Value<String?> pendingMutationId;
   final Value<int> rowid;
   const MlsGroupsCompanion({
     this.groupId = const Value.absent(),
     this.opaqueCryptoStateHandle = const Value.absent(),
     this.acceptedEpoch = const Value.absent(),
     this.stateVersion = const Value.absent(),
+    this.queueGapRecoveryState = const Value.absent(),
+    this.controlProjectionCiphertext = const Value.absent(),
+    this.controlRevision = const Value.absent(),
+    this.controlStateHash = const Value.absent(),
+    this.lifecycle = const Value.absent(),
+    this.pendingMutationId = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   MlsGroupsCompanion.insert({
@@ -4993,6 +9082,12 @@ class MlsGroupsCompanion extends UpdateCompanion<MlsGroup> {
     required Uint8List opaqueCryptoStateHandle,
     required int acceptedEpoch,
     required int stateVersion,
+    this.queueGapRecoveryState = const Value.absent(),
+    this.controlProjectionCiphertext = const Value.absent(),
+    this.controlRevision = const Value.absent(),
+    this.controlStateHash = const Value.absent(),
+    this.lifecycle = const Value.absent(),
+    this.pendingMutationId = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : groupId = Value(groupId),
        opaqueCryptoStateHandle = Value(opaqueCryptoStateHandle),
@@ -5003,6 +9098,12 @@ class MlsGroupsCompanion extends UpdateCompanion<MlsGroup> {
     Expression<Uint8List>? opaqueCryptoStateHandle,
     Expression<int>? acceptedEpoch,
     Expression<int>? stateVersion,
+    Expression<int>? queueGapRecoveryState,
+    Expression<Uint8List>? controlProjectionCiphertext,
+    Expression<int>? controlRevision,
+    Expression<Uint8List>? controlStateHash,
+    Expression<int>? lifecycle,
+    Expression<String>? pendingMutationId,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -5011,6 +9112,14 @@ class MlsGroupsCompanion extends UpdateCompanion<MlsGroup> {
         'opaque_crypto_state_handle': opaqueCryptoStateHandle,
       if (acceptedEpoch != null) 'accepted_epoch': acceptedEpoch,
       if (stateVersion != null) 'state_version': stateVersion,
+      if (queueGapRecoveryState != null)
+        'queue_gap_recovery_state': queueGapRecoveryState,
+      if (controlProjectionCiphertext != null)
+        'control_projection_ciphertext': controlProjectionCiphertext,
+      if (controlRevision != null) 'control_revision': controlRevision,
+      if (controlStateHash != null) 'control_state_hash': controlStateHash,
+      if (lifecycle != null) 'lifecycle': lifecycle,
+      if (pendingMutationId != null) 'pending_mutation_id': pendingMutationId,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -5020,6 +9129,12 @@ class MlsGroupsCompanion extends UpdateCompanion<MlsGroup> {
     Value<Uint8List>? opaqueCryptoStateHandle,
     Value<int>? acceptedEpoch,
     Value<int>? stateVersion,
+    Value<int>? queueGapRecoveryState,
+    Value<Uint8List?>? controlProjectionCiphertext,
+    Value<int>? controlRevision,
+    Value<Uint8List?>? controlStateHash,
+    Value<int>? lifecycle,
+    Value<String?>? pendingMutationId,
     Value<int>? rowid,
   }) {
     return MlsGroupsCompanion(
@@ -5028,6 +9143,14 @@ class MlsGroupsCompanion extends UpdateCompanion<MlsGroup> {
           opaqueCryptoStateHandle ?? this.opaqueCryptoStateHandle,
       acceptedEpoch: acceptedEpoch ?? this.acceptedEpoch,
       stateVersion: stateVersion ?? this.stateVersion,
+      queueGapRecoveryState:
+          queueGapRecoveryState ?? this.queueGapRecoveryState,
+      controlProjectionCiphertext:
+          controlProjectionCiphertext ?? this.controlProjectionCiphertext,
+      controlRevision: controlRevision ?? this.controlRevision,
+      controlStateHash: controlStateHash ?? this.controlStateHash,
+      lifecycle: lifecycle ?? this.lifecycle,
+      pendingMutationId: pendingMutationId ?? this.pendingMutationId,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -5049,6 +9172,28 @@ class MlsGroupsCompanion extends UpdateCompanion<MlsGroup> {
     if (stateVersion.present) {
       map['state_version'] = Variable<int>(stateVersion.value);
     }
+    if (queueGapRecoveryState.present) {
+      map['queue_gap_recovery_state'] = Variable<int>(
+        queueGapRecoveryState.value,
+      );
+    }
+    if (controlProjectionCiphertext.present) {
+      map['control_projection_ciphertext'] = Variable<Uint8List>(
+        controlProjectionCiphertext.value,
+      );
+    }
+    if (controlRevision.present) {
+      map['control_revision'] = Variable<int>(controlRevision.value);
+    }
+    if (controlStateHash.present) {
+      map['control_state_hash'] = Variable<Uint8List>(controlStateHash.value);
+    }
+    if (lifecycle.present) {
+      map['lifecycle'] = Variable<int>(lifecycle.value);
+    }
+    if (pendingMutationId.present) {
+      map['pending_mutation_id'] = Variable<String>(pendingMutationId.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -5062,6 +9207,1639 @@ class MlsGroupsCompanion extends UpdateCompanion<MlsGroup> {
           ..write('opaqueCryptoStateHandle: $opaqueCryptoStateHandle, ')
           ..write('acceptedEpoch: $acceptedEpoch, ')
           ..write('stateVersion: $stateVersion, ')
+          ..write('queueGapRecoveryState: $queueGapRecoveryState, ')
+          ..write('controlProjectionCiphertext: $controlProjectionCiphertext, ')
+          ..write('controlRevision: $controlRevision, ')
+          ..write('controlStateHash: $controlStateHash, ')
+          ..write('lifecycle: $lifecycle, ')
+          ..write('pendingMutationId: $pendingMutationId, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $GroupControlEventsTable extends GroupControlEvents
+    with TableInfo<$GroupControlEventsTable, StoredGroupControlEventRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $GroupControlEventsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _eventIdMeta = const VerificationMeta(
+    'eventId',
+  );
+  @override
+  late final GeneratedColumn<String> eventId = GeneratedColumn<String>(
+    'event_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _groupIdMeta = const VerificationMeta(
+    'groupId',
+  );
+  @override
+  late final GeneratedColumn<String> groupId = GeneratedColumn<String>(
+    'group_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES mls_groups (group_id) ON DELETE CASCADE',
+    ),
+  );
+  static const VerificationMeta _revisionMeta = const VerificationMeta(
+    'revision',
+  );
+  @override
+  late final GeneratedColumn<int> revision = GeneratedColumn<int>(
+    'revision',
+    aliasedName,
+    false,
+    check: () => ComparableExpr(revision).isBiggerThanValue(0),
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _previousControlStateHashMeta =
+      const VerificationMeta('previousControlStateHash');
+  @override
+  late final GeneratedColumn<Uint8List> previousControlStateHash =
+      GeneratedColumn<Uint8List>(
+        'previous_control_state_hash',
+        aliasedName,
+        true,
+        type: DriftSqlType.blob,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _controlStateHashMeta = const VerificationMeta(
+    'controlStateHash',
+  );
+  @override
+  late final GeneratedColumn<Uint8List> controlStateHash =
+      GeneratedColumn<Uint8List>(
+        'control_state_hash',
+        aliasedName,
+        false,
+        type: DriftSqlType.blob,
+        requiredDuringInsert: true,
+      );
+  static const VerificationMeta _mlsCommitHashMeta = const VerificationMeta(
+    'mlsCommitHash',
+  );
+  @override
+  late final GeneratedColumn<Uint8List> mlsCommitHash =
+      GeneratedColumn<Uint8List>(
+        'mls_commit_hash',
+        aliasedName,
+        true,
+        type: DriftSqlType.blob,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _epochMeta = const VerificationMeta('epoch');
+  @override
+  late final GeneratedColumn<int> epoch = GeneratedColumn<int>(
+    'epoch',
+    aliasedName,
+    false,
+    check: () => ComparableExpr(epoch).isBiggerOrEqualValue(0),
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _signerUserIdMeta = const VerificationMeta(
+    'signerUserId',
+  );
+  @override
+  late final GeneratedColumn<String> signerUserId = GeneratedColumn<String>(
+    'signer_user_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _signerDeviceIdMeta = const VerificationMeta(
+    'signerDeviceId',
+  );
+  @override
+  late final GeneratedColumn<String> signerDeviceId = GeneratedColumn<String>(
+    'signer_device_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _operationKindMeta = const VerificationMeta(
+    'operationKind',
+  );
+  @override
+  late final GeneratedColumn<int> operationKind = GeneratedColumn<int>(
+    'operation_kind',
+    aliasedName,
+    false,
+    check: () => ComparableExpr(operationKind).isBetweenValues(1, 8),
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _deterministicProjectionMeta =
+      const VerificationMeta('deterministicProjection');
+  @override
+  late final GeneratedColumn<String> deterministicProjection =
+      GeneratedColumn<String>(
+        'deterministic_projection',
+        aliasedName,
+        true,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _canonicalControlMeta = const VerificationMeta(
+    'canonicalControl',
+  );
+  @override
+  late final GeneratedColumn<Uint8List> canonicalControl =
+      GeneratedColumn<Uint8List>(
+        'canonical_control',
+        aliasedName,
+        false,
+        type: DriftSqlType.blob,
+        requiredDuringInsert: true,
+      );
+  static const VerificationMeta _signatureMeta = const VerificationMeta(
+    'signature',
+  );
+  @override
+  late final GeneratedColumn<Uint8List> signature = GeneratedColumn<Uint8List>(
+    'signature',
+    aliasedName,
+    false,
+    type: DriftSqlType.blob,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _signedPayloadMeta = const VerificationMeta(
+    'signedPayload',
+  );
+  @override
+  late final GeneratedColumn<Uint8List> signedPayload =
+      GeneratedColumn<Uint8List>(
+        'signed_payload',
+        aliasedName,
+        true,
+        type: DriftSqlType.blob,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _signerAuthenticationProofMeta =
+      const VerificationMeta('signerAuthenticationProof');
+  @override
+  late final GeneratedColumn<Uint8List> signerAuthenticationProof =
+      GeneratedColumn<Uint8List>(
+        'signer_authentication_proof',
+        aliasedName,
+        true,
+        type: DriftSqlType.blob,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _applyStateMeta = const VerificationMeta(
+    'applyState',
+  );
+  @override
+  late final GeneratedColumn<int> applyState = GeneratedColumn<int>(
+    'apply_state',
+    aliasedName,
+    false,
+    check: () => ComparableExpr(applyState).isBetweenValues(0, 2),
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _createdMsMeta = const VerificationMeta(
+    'createdMs',
+  );
+  @override
+  late final GeneratedColumn<int> createdMs = GeneratedColumn<int>(
+    'created_ms',
+    aliasedName,
+    false,
+    check: () => ComparableExpr(createdMs).isBiggerOrEqualValue(0),
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    eventId,
+    groupId,
+    revision,
+    previousControlStateHash,
+    controlStateHash,
+    mlsCommitHash,
+    epoch,
+    signerUserId,
+    signerDeviceId,
+    operationKind,
+    deterministicProjection,
+    canonicalControl,
+    signature,
+    signedPayload,
+    signerAuthenticationProof,
+    applyState,
+    createdMs,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'group_control_events';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<StoredGroupControlEventRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('event_id')) {
+      context.handle(
+        _eventIdMeta,
+        eventId.isAcceptableOrUnknown(data['event_id']!, _eventIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_eventIdMeta);
+    }
+    if (data.containsKey('group_id')) {
+      context.handle(
+        _groupIdMeta,
+        groupId.isAcceptableOrUnknown(data['group_id']!, _groupIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_groupIdMeta);
+    }
+    if (data.containsKey('revision')) {
+      context.handle(
+        _revisionMeta,
+        revision.isAcceptableOrUnknown(data['revision']!, _revisionMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_revisionMeta);
+    }
+    if (data.containsKey('previous_control_state_hash')) {
+      context.handle(
+        _previousControlStateHashMeta,
+        previousControlStateHash.isAcceptableOrUnknown(
+          data['previous_control_state_hash']!,
+          _previousControlStateHashMeta,
+        ),
+      );
+    }
+    if (data.containsKey('control_state_hash')) {
+      context.handle(
+        _controlStateHashMeta,
+        controlStateHash.isAcceptableOrUnknown(
+          data['control_state_hash']!,
+          _controlStateHashMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_controlStateHashMeta);
+    }
+    if (data.containsKey('mls_commit_hash')) {
+      context.handle(
+        _mlsCommitHashMeta,
+        mlsCommitHash.isAcceptableOrUnknown(
+          data['mls_commit_hash']!,
+          _mlsCommitHashMeta,
+        ),
+      );
+    }
+    if (data.containsKey('epoch')) {
+      context.handle(
+        _epochMeta,
+        epoch.isAcceptableOrUnknown(data['epoch']!, _epochMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_epochMeta);
+    }
+    if (data.containsKey('signer_user_id')) {
+      context.handle(
+        _signerUserIdMeta,
+        signerUserId.isAcceptableOrUnknown(
+          data['signer_user_id']!,
+          _signerUserIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_signerUserIdMeta);
+    }
+    if (data.containsKey('signer_device_id')) {
+      context.handle(
+        _signerDeviceIdMeta,
+        signerDeviceId.isAcceptableOrUnknown(
+          data['signer_device_id']!,
+          _signerDeviceIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_signerDeviceIdMeta);
+    }
+    if (data.containsKey('operation_kind')) {
+      context.handle(
+        _operationKindMeta,
+        operationKind.isAcceptableOrUnknown(
+          data['operation_kind']!,
+          _operationKindMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_operationKindMeta);
+    }
+    if (data.containsKey('deterministic_projection')) {
+      context.handle(
+        _deterministicProjectionMeta,
+        deterministicProjection.isAcceptableOrUnknown(
+          data['deterministic_projection']!,
+          _deterministicProjectionMeta,
+        ),
+      );
+    }
+    if (data.containsKey('canonical_control')) {
+      context.handle(
+        _canonicalControlMeta,
+        canonicalControl.isAcceptableOrUnknown(
+          data['canonical_control']!,
+          _canonicalControlMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_canonicalControlMeta);
+    }
+    if (data.containsKey('signature')) {
+      context.handle(
+        _signatureMeta,
+        signature.isAcceptableOrUnknown(data['signature']!, _signatureMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_signatureMeta);
+    }
+    if (data.containsKey('signed_payload')) {
+      context.handle(
+        _signedPayloadMeta,
+        signedPayload.isAcceptableOrUnknown(
+          data['signed_payload']!,
+          _signedPayloadMeta,
+        ),
+      );
+    }
+    if (data.containsKey('signer_authentication_proof')) {
+      context.handle(
+        _signerAuthenticationProofMeta,
+        signerAuthenticationProof.isAcceptableOrUnknown(
+          data['signer_authentication_proof']!,
+          _signerAuthenticationProofMeta,
+        ),
+      );
+    }
+    if (data.containsKey('apply_state')) {
+      context.handle(
+        _applyStateMeta,
+        applyState.isAcceptableOrUnknown(data['apply_state']!, _applyStateMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_applyStateMeta);
+    }
+    if (data.containsKey('created_ms')) {
+      context.handle(
+        _createdMsMeta,
+        createdMs.isAcceptableOrUnknown(data['created_ms']!, _createdMsMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdMsMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {eventId};
+  @override
+  List<Set<GeneratedColumn>> get uniqueKeys => [
+    {groupId, revision},
+  ];
+  @override
+  StoredGroupControlEventRow map(
+    Map<String, dynamic> data, {
+    String? tablePrefix,
+  }) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return StoredGroupControlEventRow(
+      eventId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}event_id'],
+      )!,
+      groupId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}group_id'],
+      )!,
+      revision: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}revision'],
+      )!,
+      previousControlStateHash: attachedDatabase.typeMapping.read(
+        DriftSqlType.blob,
+        data['${effectivePrefix}previous_control_state_hash'],
+      ),
+      controlStateHash: attachedDatabase.typeMapping.read(
+        DriftSqlType.blob,
+        data['${effectivePrefix}control_state_hash'],
+      )!,
+      mlsCommitHash: attachedDatabase.typeMapping.read(
+        DriftSqlType.blob,
+        data['${effectivePrefix}mls_commit_hash'],
+      ),
+      epoch: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}epoch'],
+      )!,
+      signerUserId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}signer_user_id'],
+      )!,
+      signerDeviceId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}signer_device_id'],
+      )!,
+      operationKind: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}operation_kind'],
+      )!,
+      deterministicProjection: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}deterministic_projection'],
+      ),
+      canonicalControl: attachedDatabase.typeMapping.read(
+        DriftSqlType.blob,
+        data['${effectivePrefix}canonical_control'],
+      )!,
+      signature: attachedDatabase.typeMapping.read(
+        DriftSqlType.blob,
+        data['${effectivePrefix}signature'],
+      )!,
+      signedPayload: attachedDatabase.typeMapping.read(
+        DriftSqlType.blob,
+        data['${effectivePrefix}signed_payload'],
+      ),
+      signerAuthenticationProof: attachedDatabase.typeMapping.read(
+        DriftSqlType.blob,
+        data['${effectivePrefix}signer_authentication_proof'],
+      ),
+      applyState: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}apply_state'],
+      )!,
+      createdMs: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}created_ms'],
+      )!,
+    );
+  }
+
+  @override
+  $GroupControlEventsTable createAlias(String alias) {
+    return $GroupControlEventsTable(attachedDatabase, alias);
+  }
+}
+
+class StoredGroupControlEventRow extends DataClass
+    implements Insertable<StoredGroupControlEventRow> {
+  final String eventId;
+  final String groupId;
+  final int revision;
+  final Uint8List? previousControlStateHash;
+  final Uint8List controlStateHash;
+  final Uint8List? mlsCommitHash;
+  final int epoch;
+  final String signerUserId;
+  final String signerDeviceId;
+  final int operationKind;
+  final String? deterministicProjection;
+  final Uint8List canonicalControl;
+  final Uint8List signature;
+  final Uint8List? signedPayload;
+  final Uint8List? signerAuthenticationProof;
+  final int applyState;
+  final int createdMs;
+  const StoredGroupControlEventRow({
+    required this.eventId,
+    required this.groupId,
+    required this.revision,
+    this.previousControlStateHash,
+    required this.controlStateHash,
+    this.mlsCommitHash,
+    required this.epoch,
+    required this.signerUserId,
+    required this.signerDeviceId,
+    required this.operationKind,
+    this.deterministicProjection,
+    required this.canonicalControl,
+    required this.signature,
+    this.signedPayload,
+    this.signerAuthenticationProof,
+    required this.applyState,
+    required this.createdMs,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['event_id'] = Variable<String>(eventId);
+    map['group_id'] = Variable<String>(groupId);
+    map['revision'] = Variable<int>(revision);
+    if (!nullToAbsent || previousControlStateHash != null) {
+      map['previous_control_state_hash'] = Variable<Uint8List>(
+        previousControlStateHash,
+      );
+    }
+    map['control_state_hash'] = Variable<Uint8List>(controlStateHash);
+    if (!nullToAbsent || mlsCommitHash != null) {
+      map['mls_commit_hash'] = Variable<Uint8List>(mlsCommitHash);
+    }
+    map['epoch'] = Variable<int>(epoch);
+    map['signer_user_id'] = Variable<String>(signerUserId);
+    map['signer_device_id'] = Variable<String>(signerDeviceId);
+    map['operation_kind'] = Variable<int>(operationKind);
+    if (!nullToAbsent || deterministicProjection != null) {
+      map['deterministic_projection'] = Variable<String>(
+        deterministicProjection,
+      );
+    }
+    map['canonical_control'] = Variable<Uint8List>(canonicalControl);
+    map['signature'] = Variable<Uint8List>(signature);
+    if (!nullToAbsent || signedPayload != null) {
+      map['signed_payload'] = Variable<Uint8List>(signedPayload);
+    }
+    if (!nullToAbsent || signerAuthenticationProof != null) {
+      map['signer_authentication_proof'] = Variable<Uint8List>(
+        signerAuthenticationProof,
+      );
+    }
+    map['apply_state'] = Variable<int>(applyState);
+    map['created_ms'] = Variable<int>(createdMs);
+    return map;
+  }
+
+  GroupControlEventsCompanion toCompanion(bool nullToAbsent) {
+    return GroupControlEventsCompanion(
+      eventId: Value(eventId),
+      groupId: Value(groupId),
+      revision: Value(revision),
+      previousControlStateHash: previousControlStateHash == null && nullToAbsent
+          ? const Value.absent()
+          : Value(previousControlStateHash),
+      controlStateHash: Value(controlStateHash),
+      mlsCommitHash: mlsCommitHash == null && nullToAbsent
+          ? const Value.absent()
+          : Value(mlsCommitHash),
+      epoch: Value(epoch),
+      signerUserId: Value(signerUserId),
+      signerDeviceId: Value(signerDeviceId),
+      operationKind: Value(operationKind),
+      deterministicProjection: deterministicProjection == null && nullToAbsent
+          ? const Value.absent()
+          : Value(deterministicProjection),
+      canonicalControl: Value(canonicalControl),
+      signature: Value(signature),
+      signedPayload: signedPayload == null && nullToAbsent
+          ? const Value.absent()
+          : Value(signedPayload),
+      signerAuthenticationProof:
+          signerAuthenticationProof == null && nullToAbsent
+          ? const Value.absent()
+          : Value(signerAuthenticationProof),
+      applyState: Value(applyState),
+      createdMs: Value(createdMs),
+    );
+  }
+
+  factory StoredGroupControlEventRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return StoredGroupControlEventRow(
+      eventId: serializer.fromJson<String>(json['eventId']),
+      groupId: serializer.fromJson<String>(json['groupId']),
+      revision: serializer.fromJson<int>(json['revision']),
+      previousControlStateHash: serializer.fromJson<Uint8List?>(
+        json['previousControlStateHash'],
+      ),
+      controlStateHash: serializer.fromJson<Uint8List>(
+        json['controlStateHash'],
+      ),
+      mlsCommitHash: serializer.fromJson<Uint8List?>(json['mlsCommitHash']),
+      epoch: serializer.fromJson<int>(json['epoch']),
+      signerUserId: serializer.fromJson<String>(json['signerUserId']),
+      signerDeviceId: serializer.fromJson<String>(json['signerDeviceId']),
+      operationKind: serializer.fromJson<int>(json['operationKind']),
+      deterministicProjection: serializer.fromJson<String?>(
+        json['deterministicProjection'],
+      ),
+      canonicalControl: serializer.fromJson<Uint8List>(
+        json['canonicalControl'],
+      ),
+      signature: serializer.fromJson<Uint8List>(json['signature']),
+      signedPayload: serializer.fromJson<Uint8List?>(json['signedPayload']),
+      signerAuthenticationProof: serializer.fromJson<Uint8List?>(
+        json['signerAuthenticationProof'],
+      ),
+      applyState: serializer.fromJson<int>(json['applyState']),
+      createdMs: serializer.fromJson<int>(json['createdMs']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'eventId': serializer.toJson<String>(eventId),
+      'groupId': serializer.toJson<String>(groupId),
+      'revision': serializer.toJson<int>(revision),
+      'previousControlStateHash': serializer.toJson<Uint8List?>(
+        previousControlStateHash,
+      ),
+      'controlStateHash': serializer.toJson<Uint8List>(controlStateHash),
+      'mlsCommitHash': serializer.toJson<Uint8List?>(mlsCommitHash),
+      'epoch': serializer.toJson<int>(epoch),
+      'signerUserId': serializer.toJson<String>(signerUserId),
+      'signerDeviceId': serializer.toJson<String>(signerDeviceId),
+      'operationKind': serializer.toJson<int>(operationKind),
+      'deterministicProjection': serializer.toJson<String?>(
+        deterministicProjection,
+      ),
+      'canonicalControl': serializer.toJson<Uint8List>(canonicalControl),
+      'signature': serializer.toJson<Uint8List>(signature),
+      'signedPayload': serializer.toJson<Uint8List?>(signedPayload),
+      'signerAuthenticationProof': serializer.toJson<Uint8List?>(
+        signerAuthenticationProof,
+      ),
+      'applyState': serializer.toJson<int>(applyState),
+      'createdMs': serializer.toJson<int>(createdMs),
+    };
+  }
+
+  StoredGroupControlEventRow copyWith({
+    String? eventId,
+    String? groupId,
+    int? revision,
+    Value<Uint8List?> previousControlStateHash = const Value.absent(),
+    Uint8List? controlStateHash,
+    Value<Uint8List?> mlsCommitHash = const Value.absent(),
+    int? epoch,
+    String? signerUserId,
+    String? signerDeviceId,
+    int? operationKind,
+    Value<String?> deterministicProjection = const Value.absent(),
+    Uint8List? canonicalControl,
+    Uint8List? signature,
+    Value<Uint8List?> signedPayload = const Value.absent(),
+    Value<Uint8List?> signerAuthenticationProof = const Value.absent(),
+    int? applyState,
+    int? createdMs,
+  }) => StoredGroupControlEventRow(
+    eventId: eventId ?? this.eventId,
+    groupId: groupId ?? this.groupId,
+    revision: revision ?? this.revision,
+    previousControlStateHash: previousControlStateHash.present
+        ? previousControlStateHash.value
+        : this.previousControlStateHash,
+    controlStateHash: controlStateHash ?? this.controlStateHash,
+    mlsCommitHash: mlsCommitHash.present
+        ? mlsCommitHash.value
+        : this.mlsCommitHash,
+    epoch: epoch ?? this.epoch,
+    signerUserId: signerUserId ?? this.signerUserId,
+    signerDeviceId: signerDeviceId ?? this.signerDeviceId,
+    operationKind: operationKind ?? this.operationKind,
+    deterministicProjection: deterministicProjection.present
+        ? deterministicProjection.value
+        : this.deterministicProjection,
+    canonicalControl: canonicalControl ?? this.canonicalControl,
+    signature: signature ?? this.signature,
+    signedPayload: signedPayload.present
+        ? signedPayload.value
+        : this.signedPayload,
+    signerAuthenticationProof: signerAuthenticationProof.present
+        ? signerAuthenticationProof.value
+        : this.signerAuthenticationProof,
+    applyState: applyState ?? this.applyState,
+    createdMs: createdMs ?? this.createdMs,
+  );
+  StoredGroupControlEventRow copyWithCompanion(
+    GroupControlEventsCompanion data,
+  ) {
+    return StoredGroupControlEventRow(
+      eventId: data.eventId.present ? data.eventId.value : this.eventId,
+      groupId: data.groupId.present ? data.groupId.value : this.groupId,
+      revision: data.revision.present ? data.revision.value : this.revision,
+      previousControlStateHash: data.previousControlStateHash.present
+          ? data.previousControlStateHash.value
+          : this.previousControlStateHash,
+      controlStateHash: data.controlStateHash.present
+          ? data.controlStateHash.value
+          : this.controlStateHash,
+      mlsCommitHash: data.mlsCommitHash.present
+          ? data.mlsCommitHash.value
+          : this.mlsCommitHash,
+      epoch: data.epoch.present ? data.epoch.value : this.epoch,
+      signerUserId: data.signerUserId.present
+          ? data.signerUserId.value
+          : this.signerUserId,
+      signerDeviceId: data.signerDeviceId.present
+          ? data.signerDeviceId.value
+          : this.signerDeviceId,
+      operationKind: data.operationKind.present
+          ? data.operationKind.value
+          : this.operationKind,
+      deterministicProjection: data.deterministicProjection.present
+          ? data.deterministicProjection.value
+          : this.deterministicProjection,
+      canonicalControl: data.canonicalControl.present
+          ? data.canonicalControl.value
+          : this.canonicalControl,
+      signature: data.signature.present ? data.signature.value : this.signature,
+      signedPayload: data.signedPayload.present
+          ? data.signedPayload.value
+          : this.signedPayload,
+      signerAuthenticationProof: data.signerAuthenticationProof.present
+          ? data.signerAuthenticationProof.value
+          : this.signerAuthenticationProof,
+      applyState: data.applyState.present
+          ? data.applyState.value
+          : this.applyState,
+      createdMs: data.createdMs.present ? data.createdMs.value : this.createdMs,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('StoredGroupControlEventRow(')
+          ..write('eventId: $eventId, ')
+          ..write('groupId: $groupId, ')
+          ..write('revision: $revision, ')
+          ..write('previousControlStateHash: $previousControlStateHash, ')
+          ..write('controlStateHash: $controlStateHash, ')
+          ..write('mlsCommitHash: $mlsCommitHash, ')
+          ..write('epoch: $epoch, ')
+          ..write('signerUserId: $signerUserId, ')
+          ..write('signerDeviceId: $signerDeviceId, ')
+          ..write('operationKind: $operationKind, ')
+          ..write('deterministicProjection: $deterministicProjection, ')
+          ..write('canonicalControl: $canonicalControl, ')
+          ..write('signature: $signature, ')
+          ..write('signedPayload: $signedPayload, ')
+          ..write('signerAuthenticationProof: $signerAuthenticationProof, ')
+          ..write('applyState: $applyState, ')
+          ..write('createdMs: $createdMs')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    eventId,
+    groupId,
+    revision,
+    $driftBlobEquality.hash(previousControlStateHash),
+    $driftBlobEquality.hash(controlStateHash),
+    $driftBlobEquality.hash(mlsCommitHash),
+    epoch,
+    signerUserId,
+    signerDeviceId,
+    operationKind,
+    deterministicProjection,
+    $driftBlobEquality.hash(canonicalControl),
+    $driftBlobEquality.hash(signature),
+    $driftBlobEquality.hash(signedPayload),
+    $driftBlobEquality.hash(signerAuthenticationProof),
+    applyState,
+    createdMs,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is StoredGroupControlEventRow &&
+          other.eventId == this.eventId &&
+          other.groupId == this.groupId &&
+          other.revision == this.revision &&
+          $driftBlobEquality.equals(
+            other.previousControlStateHash,
+            this.previousControlStateHash,
+          ) &&
+          $driftBlobEquality.equals(
+            other.controlStateHash,
+            this.controlStateHash,
+          ) &&
+          $driftBlobEquality.equals(other.mlsCommitHash, this.mlsCommitHash) &&
+          other.epoch == this.epoch &&
+          other.signerUserId == this.signerUserId &&
+          other.signerDeviceId == this.signerDeviceId &&
+          other.operationKind == this.operationKind &&
+          other.deterministicProjection == this.deterministicProjection &&
+          $driftBlobEquality.equals(
+            other.canonicalControl,
+            this.canonicalControl,
+          ) &&
+          $driftBlobEquality.equals(other.signature, this.signature) &&
+          $driftBlobEquality.equals(other.signedPayload, this.signedPayload) &&
+          $driftBlobEquality.equals(
+            other.signerAuthenticationProof,
+            this.signerAuthenticationProof,
+          ) &&
+          other.applyState == this.applyState &&
+          other.createdMs == this.createdMs);
+}
+
+class GroupControlEventsCompanion
+    extends UpdateCompanion<StoredGroupControlEventRow> {
+  final Value<String> eventId;
+  final Value<String> groupId;
+  final Value<int> revision;
+  final Value<Uint8List?> previousControlStateHash;
+  final Value<Uint8List> controlStateHash;
+  final Value<Uint8List?> mlsCommitHash;
+  final Value<int> epoch;
+  final Value<String> signerUserId;
+  final Value<String> signerDeviceId;
+  final Value<int> operationKind;
+  final Value<String?> deterministicProjection;
+  final Value<Uint8List> canonicalControl;
+  final Value<Uint8List> signature;
+  final Value<Uint8List?> signedPayload;
+  final Value<Uint8List?> signerAuthenticationProof;
+  final Value<int> applyState;
+  final Value<int> createdMs;
+  final Value<int> rowid;
+  const GroupControlEventsCompanion({
+    this.eventId = const Value.absent(),
+    this.groupId = const Value.absent(),
+    this.revision = const Value.absent(),
+    this.previousControlStateHash = const Value.absent(),
+    this.controlStateHash = const Value.absent(),
+    this.mlsCommitHash = const Value.absent(),
+    this.epoch = const Value.absent(),
+    this.signerUserId = const Value.absent(),
+    this.signerDeviceId = const Value.absent(),
+    this.operationKind = const Value.absent(),
+    this.deterministicProjection = const Value.absent(),
+    this.canonicalControl = const Value.absent(),
+    this.signature = const Value.absent(),
+    this.signedPayload = const Value.absent(),
+    this.signerAuthenticationProof = const Value.absent(),
+    this.applyState = const Value.absent(),
+    this.createdMs = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  GroupControlEventsCompanion.insert({
+    required String eventId,
+    required String groupId,
+    required int revision,
+    this.previousControlStateHash = const Value.absent(),
+    required Uint8List controlStateHash,
+    this.mlsCommitHash = const Value.absent(),
+    required int epoch,
+    required String signerUserId,
+    required String signerDeviceId,
+    required int operationKind,
+    this.deterministicProjection = const Value.absent(),
+    required Uint8List canonicalControl,
+    required Uint8List signature,
+    this.signedPayload = const Value.absent(),
+    this.signerAuthenticationProof = const Value.absent(),
+    required int applyState,
+    required int createdMs,
+    this.rowid = const Value.absent(),
+  }) : eventId = Value(eventId),
+       groupId = Value(groupId),
+       revision = Value(revision),
+       controlStateHash = Value(controlStateHash),
+       epoch = Value(epoch),
+       signerUserId = Value(signerUserId),
+       signerDeviceId = Value(signerDeviceId),
+       operationKind = Value(operationKind),
+       canonicalControl = Value(canonicalControl),
+       signature = Value(signature),
+       applyState = Value(applyState),
+       createdMs = Value(createdMs);
+  static Insertable<StoredGroupControlEventRow> custom({
+    Expression<String>? eventId,
+    Expression<String>? groupId,
+    Expression<int>? revision,
+    Expression<Uint8List>? previousControlStateHash,
+    Expression<Uint8List>? controlStateHash,
+    Expression<Uint8List>? mlsCommitHash,
+    Expression<int>? epoch,
+    Expression<String>? signerUserId,
+    Expression<String>? signerDeviceId,
+    Expression<int>? operationKind,
+    Expression<String>? deterministicProjection,
+    Expression<Uint8List>? canonicalControl,
+    Expression<Uint8List>? signature,
+    Expression<Uint8List>? signedPayload,
+    Expression<Uint8List>? signerAuthenticationProof,
+    Expression<int>? applyState,
+    Expression<int>? createdMs,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (eventId != null) 'event_id': eventId,
+      if (groupId != null) 'group_id': groupId,
+      if (revision != null) 'revision': revision,
+      if (previousControlStateHash != null)
+        'previous_control_state_hash': previousControlStateHash,
+      if (controlStateHash != null) 'control_state_hash': controlStateHash,
+      if (mlsCommitHash != null) 'mls_commit_hash': mlsCommitHash,
+      if (epoch != null) 'epoch': epoch,
+      if (signerUserId != null) 'signer_user_id': signerUserId,
+      if (signerDeviceId != null) 'signer_device_id': signerDeviceId,
+      if (operationKind != null) 'operation_kind': operationKind,
+      if (deterministicProjection != null)
+        'deterministic_projection': deterministicProjection,
+      if (canonicalControl != null) 'canonical_control': canonicalControl,
+      if (signature != null) 'signature': signature,
+      if (signedPayload != null) 'signed_payload': signedPayload,
+      if (signerAuthenticationProof != null)
+        'signer_authentication_proof': signerAuthenticationProof,
+      if (applyState != null) 'apply_state': applyState,
+      if (createdMs != null) 'created_ms': createdMs,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  GroupControlEventsCompanion copyWith({
+    Value<String>? eventId,
+    Value<String>? groupId,
+    Value<int>? revision,
+    Value<Uint8List?>? previousControlStateHash,
+    Value<Uint8List>? controlStateHash,
+    Value<Uint8List?>? mlsCommitHash,
+    Value<int>? epoch,
+    Value<String>? signerUserId,
+    Value<String>? signerDeviceId,
+    Value<int>? operationKind,
+    Value<String?>? deterministicProjection,
+    Value<Uint8List>? canonicalControl,
+    Value<Uint8List>? signature,
+    Value<Uint8List?>? signedPayload,
+    Value<Uint8List?>? signerAuthenticationProof,
+    Value<int>? applyState,
+    Value<int>? createdMs,
+    Value<int>? rowid,
+  }) {
+    return GroupControlEventsCompanion(
+      eventId: eventId ?? this.eventId,
+      groupId: groupId ?? this.groupId,
+      revision: revision ?? this.revision,
+      previousControlStateHash:
+          previousControlStateHash ?? this.previousControlStateHash,
+      controlStateHash: controlStateHash ?? this.controlStateHash,
+      mlsCommitHash: mlsCommitHash ?? this.mlsCommitHash,
+      epoch: epoch ?? this.epoch,
+      signerUserId: signerUserId ?? this.signerUserId,
+      signerDeviceId: signerDeviceId ?? this.signerDeviceId,
+      operationKind: operationKind ?? this.operationKind,
+      deterministicProjection:
+          deterministicProjection ?? this.deterministicProjection,
+      canonicalControl: canonicalControl ?? this.canonicalControl,
+      signature: signature ?? this.signature,
+      signedPayload: signedPayload ?? this.signedPayload,
+      signerAuthenticationProof:
+          signerAuthenticationProof ?? this.signerAuthenticationProof,
+      applyState: applyState ?? this.applyState,
+      createdMs: createdMs ?? this.createdMs,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (eventId.present) {
+      map['event_id'] = Variable<String>(eventId.value);
+    }
+    if (groupId.present) {
+      map['group_id'] = Variable<String>(groupId.value);
+    }
+    if (revision.present) {
+      map['revision'] = Variable<int>(revision.value);
+    }
+    if (previousControlStateHash.present) {
+      map['previous_control_state_hash'] = Variable<Uint8List>(
+        previousControlStateHash.value,
+      );
+    }
+    if (controlStateHash.present) {
+      map['control_state_hash'] = Variable<Uint8List>(controlStateHash.value);
+    }
+    if (mlsCommitHash.present) {
+      map['mls_commit_hash'] = Variable<Uint8List>(mlsCommitHash.value);
+    }
+    if (epoch.present) {
+      map['epoch'] = Variable<int>(epoch.value);
+    }
+    if (signerUserId.present) {
+      map['signer_user_id'] = Variable<String>(signerUserId.value);
+    }
+    if (signerDeviceId.present) {
+      map['signer_device_id'] = Variable<String>(signerDeviceId.value);
+    }
+    if (operationKind.present) {
+      map['operation_kind'] = Variable<int>(operationKind.value);
+    }
+    if (deterministicProjection.present) {
+      map['deterministic_projection'] = Variable<String>(
+        deterministicProjection.value,
+      );
+    }
+    if (canonicalControl.present) {
+      map['canonical_control'] = Variable<Uint8List>(canonicalControl.value);
+    }
+    if (signature.present) {
+      map['signature'] = Variable<Uint8List>(signature.value);
+    }
+    if (signedPayload.present) {
+      map['signed_payload'] = Variable<Uint8List>(signedPayload.value);
+    }
+    if (signerAuthenticationProof.present) {
+      map['signer_authentication_proof'] = Variable<Uint8List>(
+        signerAuthenticationProof.value,
+      );
+    }
+    if (applyState.present) {
+      map['apply_state'] = Variable<int>(applyState.value);
+    }
+    if (createdMs.present) {
+      map['created_ms'] = Variable<int>(createdMs.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('GroupControlEventsCompanion(')
+          ..write('eventId: $eventId, ')
+          ..write('groupId: $groupId, ')
+          ..write('revision: $revision, ')
+          ..write('previousControlStateHash: $previousControlStateHash, ')
+          ..write('controlStateHash: $controlStateHash, ')
+          ..write('mlsCommitHash: $mlsCommitHash, ')
+          ..write('epoch: $epoch, ')
+          ..write('signerUserId: $signerUserId, ')
+          ..write('signerDeviceId: $signerDeviceId, ')
+          ..write('operationKind: $operationKind, ')
+          ..write('deterministicProjection: $deterministicProjection, ')
+          ..write('canonicalControl: $canonicalControl, ')
+          ..write('signature: $signature, ')
+          ..write('signedPayload: $signedPayload, ')
+          ..write('signerAuthenticationProof: $signerAuthenticationProof, ')
+          ..write('applyState: $applyState, ')
+          ..write('createdMs: $createdMs, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $GroupOutboundObjectsTable extends GroupOutboundObjects
+    with TableInfo<$GroupOutboundObjectsTable, StoredGroupOutboundObjectRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $GroupOutboundObjectsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _operationIdMeta = const VerificationMeta(
+    'operationId',
+  );
+  @override
+  late final GeneratedColumn<String> operationId = GeneratedColumn<String>(
+    'operation_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _groupIdMeta = const VerificationMeta(
+    'groupId',
+  );
+  @override
+  late final GeneratedColumn<String> groupId = GeneratedColumn<String>(
+    'group_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES mls_groups (group_id) ON DELETE CASCADE',
+    ),
+  );
+  static const VerificationMeta _eventIdMeta = const VerificationMeta(
+    'eventId',
+  );
+  @override
+  late final GeneratedColumn<String> eventId = GeneratedColumn<String>(
+    'event_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _epochMeta = const VerificationMeta('epoch');
+  @override
+  late final GeneratedColumn<int> epoch = GeneratedColumn<int>(
+    'epoch',
+    aliasedName,
+    false,
+    check: () => ComparableExpr(epoch).isBiggerOrEqualValue(0),
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _mlsObjectMeta = const VerificationMeta(
+    'mlsObject',
+  );
+  @override
+  late final GeneratedColumn<Uint8List> mlsObject = GeneratedColumn<Uint8List>(
+    'mls_object',
+    aliasedName,
+    false,
+    type: DriftSqlType.blob,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _recipientUserIdsJsonMeta =
+      const VerificationMeta('recipientUserIdsJson');
+  @override
+  late final GeneratedColumn<String> recipientUserIdsJson =
+      GeneratedColumn<String>(
+        'recipient_user_ids_json',
+        aliasedName,
+        false,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+        defaultValue: const Constant('[]'),
+      );
+  static const VerificationMeta _deliveryStateMeta = const VerificationMeta(
+    'deliveryState',
+  );
+  @override
+  late final GeneratedColumn<int> deliveryState = GeneratedColumn<int>(
+    'delivery_state',
+    aliasedName,
+    false,
+    check: () => ComparableExpr(deliveryState).isBetweenValues(0, 2),
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    operationId,
+    groupId,
+    eventId,
+    epoch,
+    mlsObject,
+    recipientUserIdsJson,
+    deliveryState,
+    createdAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'group_outbound_objects';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<StoredGroupOutboundObjectRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('operation_id')) {
+      context.handle(
+        _operationIdMeta,
+        operationId.isAcceptableOrUnknown(
+          data['operation_id']!,
+          _operationIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_operationIdMeta);
+    }
+    if (data.containsKey('group_id')) {
+      context.handle(
+        _groupIdMeta,
+        groupId.isAcceptableOrUnknown(data['group_id']!, _groupIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_groupIdMeta);
+    }
+    if (data.containsKey('event_id')) {
+      context.handle(
+        _eventIdMeta,
+        eventId.isAcceptableOrUnknown(data['event_id']!, _eventIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_eventIdMeta);
+    }
+    if (data.containsKey('epoch')) {
+      context.handle(
+        _epochMeta,
+        epoch.isAcceptableOrUnknown(data['epoch']!, _epochMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_epochMeta);
+    }
+    if (data.containsKey('mls_object')) {
+      context.handle(
+        _mlsObjectMeta,
+        mlsObject.isAcceptableOrUnknown(data['mls_object']!, _mlsObjectMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_mlsObjectMeta);
+    }
+    if (data.containsKey('recipient_user_ids_json')) {
+      context.handle(
+        _recipientUserIdsJsonMeta,
+        recipientUserIdsJson.isAcceptableOrUnknown(
+          data['recipient_user_ids_json']!,
+          _recipientUserIdsJsonMeta,
+        ),
+      );
+    }
+    if (data.containsKey('delivery_state')) {
+      context.handle(
+        _deliveryStateMeta,
+        deliveryState.isAcceptableOrUnknown(
+          data['delivery_state']!,
+          _deliveryStateMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_deliveryStateMeta);
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {operationId};
+  @override
+  StoredGroupOutboundObjectRow map(
+    Map<String, dynamic> data, {
+    String? tablePrefix,
+  }) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return StoredGroupOutboundObjectRow(
+      operationId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}operation_id'],
+      )!,
+      groupId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}group_id'],
+      )!,
+      eventId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}event_id'],
+      )!,
+      epoch: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}epoch'],
+      )!,
+      mlsObject: attachedDatabase.typeMapping.read(
+        DriftSqlType.blob,
+        data['${effectivePrefix}mls_object'],
+      )!,
+      recipientUserIdsJson: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}recipient_user_ids_json'],
+      )!,
+      deliveryState: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}delivery_state'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+    );
+  }
+
+  @override
+  $GroupOutboundObjectsTable createAlias(String alias) {
+    return $GroupOutboundObjectsTable(attachedDatabase, alias);
+  }
+}
+
+class StoredGroupOutboundObjectRow extends DataClass
+    implements Insertable<StoredGroupOutboundObjectRow> {
+  final String operationId;
+  final String groupId;
+  final String eventId;
+  final int epoch;
+  final Uint8List mlsObject;
+  final String recipientUserIdsJson;
+  final int deliveryState;
+  final DateTime createdAt;
+  const StoredGroupOutboundObjectRow({
+    required this.operationId,
+    required this.groupId,
+    required this.eventId,
+    required this.epoch,
+    required this.mlsObject,
+    required this.recipientUserIdsJson,
+    required this.deliveryState,
+    required this.createdAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['operation_id'] = Variable<String>(operationId);
+    map['group_id'] = Variable<String>(groupId);
+    map['event_id'] = Variable<String>(eventId);
+    map['epoch'] = Variable<int>(epoch);
+    map['mls_object'] = Variable<Uint8List>(mlsObject);
+    map['recipient_user_ids_json'] = Variable<String>(recipientUserIdsJson);
+    map['delivery_state'] = Variable<int>(deliveryState);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    return map;
+  }
+
+  GroupOutboundObjectsCompanion toCompanion(bool nullToAbsent) {
+    return GroupOutboundObjectsCompanion(
+      operationId: Value(operationId),
+      groupId: Value(groupId),
+      eventId: Value(eventId),
+      epoch: Value(epoch),
+      mlsObject: Value(mlsObject),
+      recipientUserIdsJson: Value(recipientUserIdsJson),
+      deliveryState: Value(deliveryState),
+      createdAt: Value(createdAt),
+    );
+  }
+
+  factory StoredGroupOutboundObjectRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return StoredGroupOutboundObjectRow(
+      operationId: serializer.fromJson<String>(json['operationId']),
+      groupId: serializer.fromJson<String>(json['groupId']),
+      eventId: serializer.fromJson<String>(json['eventId']),
+      epoch: serializer.fromJson<int>(json['epoch']),
+      mlsObject: serializer.fromJson<Uint8List>(json['mlsObject']),
+      recipientUserIdsJson: serializer.fromJson<String>(
+        json['recipientUserIdsJson'],
+      ),
+      deliveryState: serializer.fromJson<int>(json['deliveryState']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'operationId': serializer.toJson<String>(operationId),
+      'groupId': serializer.toJson<String>(groupId),
+      'eventId': serializer.toJson<String>(eventId),
+      'epoch': serializer.toJson<int>(epoch),
+      'mlsObject': serializer.toJson<Uint8List>(mlsObject),
+      'recipientUserIdsJson': serializer.toJson<String>(recipientUserIdsJson),
+      'deliveryState': serializer.toJson<int>(deliveryState),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+    };
+  }
+
+  StoredGroupOutboundObjectRow copyWith({
+    String? operationId,
+    String? groupId,
+    String? eventId,
+    int? epoch,
+    Uint8List? mlsObject,
+    String? recipientUserIdsJson,
+    int? deliveryState,
+    DateTime? createdAt,
+  }) => StoredGroupOutboundObjectRow(
+    operationId: operationId ?? this.operationId,
+    groupId: groupId ?? this.groupId,
+    eventId: eventId ?? this.eventId,
+    epoch: epoch ?? this.epoch,
+    mlsObject: mlsObject ?? this.mlsObject,
+    recipientUserIdsJson: recipientUserIdsJson ?? this.recipientUserIdsJson,
+    deliveryState: deliveryState ?? this.deliveryState,
+    createdAt: createdAt ?? this.createdAt,
+  );
+  StoredGroupOutboundObjectRow copyWithCompanion(
+    GroupOutboundObjectsCompanion data,
+  ) {
+    return StoredGroupOutboundObjectRow(
+      operationId: data.operationId.present
+          ? data.operationId.value
+          : this.operationId,
+      groupId: data.groupId.present ? data.groupId.value : this.groupId,
+      eventId: data.eventId.present ? data.eventId.value : this.eventId,
+      epoch: data.epoch.present ? data.epoch.value : this.epoch,
+      mlsObject: data.mlsObject.present ? data.mlsObject.value : this.mlsObject,
+      recipientUserIdsJson: data.recipientUserIdsJson.present
+          ? data.recipientUserIdsJson.value
+          : this.recipientUserIdsJson,
+      deliveryState: data.deliveryState.present
+          ? data.deliveryState.value
+          : this.deliveryState,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('StoredGroupOutboundObjectRow(')
+          ..write('operationId: $operationId, ')
+          ..write('groupId: $groupId, ')
+          ..write('eventId: $eventId, ')
+          ..write('epoch: $epoch, ')
+          ..write('mlsObject: $mlsObject, ')
+          ..write('recipientUserIdsJson: $recipientUserIdsJson, ')
+          ..write('deliveryState: $deliveryState, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    operationId,
+    groupId,
+    eventId,
+    epoch,
+    $driftBlobEquality.hash(mlsObject),
+    recipientUserIdsJson,
+    deliveryState,
+    createdAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is StoredGroupOutboundObjectRow &&
+          other.operationId == this.operationId &&
+          other.groupId == this.groupId &&
+          other.eventId == this.eventId &&
+          other.epoch == this.epoch &&
+          $driftBlobEquality.equals(other.mlsObject, this.mlsObject) &&
+          other.recipientUserIdsJson == this.recipientUserIdsJson &&
+          other.deliveryState == this.deliveryState &&
+          other.createdAt == this.createdAt);
+}
+
+class GroupOutboundObjectsCompanion
+    extends UpdateCompanion<StoredGroupOutboundObjectRow> {
+  final Value<String> operationId;
+  final Value<String> groupId;
+  final Value<String> eventId;
+  final Value<int> epoch;
+  final Value<Uint8List> mlsObject;
+  final Value<String> recipientUserIdsJson;
+  final Value<int> deliveryState;
+  final Value<DateTime> createdAt;
+  final Value<int> rowid;
+  const GroupOutboundObjectsCompanion({
+    this.operationId = const Value.absent(),
+    this.groupId = const Value.absent(),
+    this.eventId = const Value.absent(),
+    this.epoch = const Value.absent(),
+    this.mlsObject = const Value.absent(),
+    this.recipientUserIdsJson = const Value.absent(),
+    this.deliveryState = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  GroupOutboundObjectsCompanion.insert({
+    required String operationId,
+    required String groupId,
+    required String eventId,
+    required int epoch,
+    required Uint8List mlsObject,
+    this.recipientUserIdsJson = const Value.absent(),
+    required int deliveryState,
+    this.createdAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : operationId = Value(operationId),
+       groupId = Value(groupId),
+       eventId = Value(eventId),
+       epoch = Value(epoch),
+       mlsObject = Value(mlsObject),
+       deliveryState = Value(deliveryState);
+  static Insertable<StoredGroupOutboundObjectRow> custom({
+    Expression<String>? operationId,
+    Expression<String>? groupId,
+    Expression<String>? eventId,
+    Expression<int>? epoch,
+    Expression<Uint8List>? mlsObject,
+    Expression<String>? recipientUserIdsJson,
+    Expression<int>? deliveryState,
+    Expression<DateTime>? createdAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (operationId != null) 'operation_id': operationId,
+      if (groupId != null) 'group_id': groupId,
+      if (eventId != null) 'event_id': eventId,
+      if (epoch != null) 'epoch': epoch,
+      if (mlsObject != null) 'mls_object': mlsObject,
+      if (recipientUserIdsJson != null)
+        'recipient_user_ids_json': recipientUserIdsJson,
+      if (deliveryState != null) 'delivery_state': deliveryState,
+      if (createdAt != null) 'created_at': createdAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  GroupOutboundObjectsCompanion copyWith({
+    Value<String>? operationId,
+    Value<String>? groupId,
+    Value<String>? eventId,
+    Value<int>? epoch,
+    Value<Uint8List>? mlsObject,
+    Value<String>? recipientUserIdsJson,
+    Value<int>? deliveryState,
+    Value<DateTime>? createdAt,
+    Value<int>? rowid,
+  }) {
+    return GroupOutboundObjectsCompanion(
+      operationId: operationId ?? this.operationId,
+      groupId: groupId ?? this.groupId,
+      eventId: eventId ?? this.eventId,
+      epoch: epoch ?? this.epoch,
+      mlsObject: mlsObject ?? this.mlsObject,
+      recipientUserIdsJson: recipientUserIdsJson ?? this.recipientUserIdsJson,
+      deliveryState: deliveryState ?? this.deliveryState,
+      createdAt: createdAt ?? this.createdAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (operationId.present) {
+      map['operation_id'] = Variable<String>(operationId.value);
+    }
+    if (groupId.present) {
+      map['group_id'] = Variable<String>(groupId.value);
+    }
+    if (eventId.present) {
+      map['event_id'] = Variable<String>(eventId.value);
+    }
+    if (epoch.present) {
+      map['epoch'] = Variable<int>(epoch.value);
+    }
+    if (mlsObject.present) {
+      map['mls_object'] = Variable<Uint8List>(mlsObject.value);
+    }
+    if (recipientUserIdsJson.present) {
+      map['recipient_user_ids_json'] = Variable<String>(
+        recipientUserIdsJson.value,
+      );
+    }
+    if (deliveryState.present) {
+      map['delivery_state'] = Variable<int>(deliveryState.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('GroupOutboundObjectsCompanion(')
+          ..write('operationId: $operationId, ')
+          ..write('groupId: $groupId, ')
+          ..write('eventId: $eventId, ')
+          ..write('epoch: $epoch, ')
+          ..write('mlsObject: $mlsObject, ')
+          ..write('recipientUserIdsJson: $recipientUserIdsJson, ')
+          ..write('deliveryState: $deliveryState, ')
+          ..write('createdAt: $createdAt, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -5132,6 +10910,88 @@ class $ConversationsTable extends Conversations
     ),
     defaultValue: const Constant(false),
   );
+  static const VerificationMeta _pinnedMeta = const VerificationMeta('pinned');
+  @override
+  late final GeneratedColumn<bool> pinned = GeneratedColumn<bool>(
+    'pinned',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("pinned" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _peerUserIdMeta = const VerificationMeta(
+    'peerUserId',
+  );
+  @override
+  late final GeneratedColumn<String> peerUserId = GeneratedColumn<String>(
+    'peer_user_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _lastActivityEventIdMeta =
+      const VerificationMeta('lastActivityEventId');
+  @override
+  late final GeneratedColumn<String> lastActivityEventId =
+      GeneratedColumn<String>(
+        'last_activity_event_id',
+        aliasedName,
+        true,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _unreadCountMeta = const VerificationMeta(
+    'unreadCount',
+  );
+  @override
+  late final GeneratedColumn<int> unreadCount = GeneratedColumn<int>(
+    'unread_count',
+    aliasedName,
+    false,
+    check: () => ComparableExpr(unreadCount).isBiggerOrEqualValue(0),
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _mutedUntilMeta = const VerificationMeta(
+    'mutedUntil',
+  );
+  @override
+  late final GeneratedColumn<DateTime> mutedUntil = GeneratedColumn<DateTime>(
+    'muted_until',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _draftCiphertextMeta = const VerificationMeta(
+    'draftCiphertext',
+  );
+  @override
+  late final GeneratedColumn<Uint8List> draftCiphertext =
+      GeneratedColumn<Uint8List>(
+        'draft_ciphertext',
+        aliasedName,
+        true,
+        type: DriftSqlType.blob,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _displayTitleCiphertextMeta =
+      const VerificationMeta('displayTitleCiphertext');
+  @override
+  late final GeneratedColumn<Uint8List> displayTitleCiphertext =
+      GeneratedColumn<Uint8List>(
+        'display_title_ciphertext',
+        aliasedName,
+        true,
+        type: DriftSqlType.blob,
+        requiredDuringInsert: false,
+      );
   @override
   List<GeneratedColumn> get $columns => [
     conversationId,
@@ -5139,6 +10999,13 @@ class $ConversationsTable extends Conversations
     listProjectionCiphertext,
     sortKey,
     tombstoned,
+    pinned,
+    peerUserId,
+    lastActivityEventId,
+    unreadCount,
+    mutedUntil,
+    draftCiphertext,
+    displayTitleCiphertext,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -5196,6 +11063,63 @@ class $ConversationsTable extends Conversations
         tombstoned.isAcceptableOrUnknown(data['tombstoned']!, _tombstonedMeta),
       );
     }
+    if (data.containsKey('pinned')) {
+      context.handle(
+        _pinnedMeta,
+        pinned.isAcceptableOrUnknown(data['pinned']!, _pinnedMeta),
+      );
+    }
+    if (data.containsKey('peer_user_id')) {
+      context.handle(
+        _peerUserIdMeta,
+        peerUserId.isAcceptableOrUnknown(
+          data['peer_user_id']!,
+          _peerUserIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('last_activity_event_id')) {
+      context.handle(
+        _lastActivityEventIdMeta,
+        lastActivityEventId.isAcceptableOrUnknown(
+          data['last_activity_event_id']!,
+          _lastActivityEventIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('unread_count')) {
+      context.handle(
+        _unreadCountMeta,
+        unreadCount.isAcceptableOrUnknown(
+          data['unread_count']!,
+          _unreadCountMeta,
+        ),
+      );
+    }
+    if (data.containsKey('muted_until')) {
+      context.handle(
+        _mutedUntilMeta,
+        mutedUntil.isAcceptableOrUnknown(data['muted_until']!, _mutedUntilMeta),
+      );
+    }
+    if (data.containsKey('draft_ciphertext')) {
+      context.handle(
+        _draftCiphertextMeta,
+        draftCiphertext.isAcceptableOrUnknown(
+          data['draft_ciphertext']!,
+          _draftCiphertextMeta,
+        ),
+      );
+    }
+    if (data.containsKey('display_title_ciphertext')) {
+      context.handle(
+        _displayTitleCiphertextMeta,
+        displayTitleCiphertext.isAcceptableOrUnknown(
+          data['display_title_ciphertext']!,
+          _displayTitleCiphertextMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -5225,6 +11149,34 @@ class $ConversationsTable extends Conversations
         DriftSqlType.bool,
         data['${effectivePrefix}tombstoned'],
       )!,
+      pinned: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}pinned'],
+      )!,
+      peerUserId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}peer_user_id'],
+      ),
+      lastActivityEventId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}last_activity_event_id'],
+      ),
+      unreadCount: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}unread_count'],
+      )!,
+      mutedUntil: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}muted_until'],
+      ),
+      draftCiphertext: attachedDatabase.typeMapping.read(
+        DriftSqlType.blob,
+        data['${effectivePrefix}draft_ciphertext'],
+      ),
+      displayTitleCiphertext: attachedDatabase.typeMapping.read(
+        DriftSqlType.blob,
+        data['${effectivePrefix}display_title_ciphertext'],
+      ),
     );
   }
 
@@ -5240,12 +11192,26 @@ class Conversation extends DataClass implements Insertable<Conversation> {
   final Uint8List listProjectionCiphertext;
   final int sortKey;
   final bool tombstoned;
+  final bool pinned;
+  final String? peerUserId;
+  final String? lastActivityEventId;
+  final int unreadCount;
+  final DateTime? mutedUntil;
+  final Uint8List? draftCiphertext;
+  final Uint8List? displayTitleCiphertext;
   const Conversation({
     required this.conversationId,
     required this.kind,
     required this.listProjectionCiphertext,
     required this.sortKey,
     required this.tombstoned,
+    required this.pinned,
+    this.peerUserId,
+    this.lastActivityEventId,
+    required this.unreadCount,
+    this.mutedUntil,
+    this.draftCiphertext,
+    this.displayTitleCiphertext,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -5257,6 +11223,25 @@ class Conversation extends DataClass implements Insertable<Conversation> {
     );
     map['sort_key'] = Variable<int>(sortKey);
     map['tombstoned'] = Variable<bool>(tombstoned);
+    map['pinned'] = Variable<bool>(pinned);
+    if (!nullToAbsent || peerUserId != null) {
+      map['peer_user_id'] = Variable<String>(peerUserId);
+    }
+    if (!nullToAbsent || lastActivityEventId != null) {
+      map['last_activity_event_id'] = Variable<String>(lastActivityEventId);
+    }
+    map['unread_count'] = Variable<int>(unreadCount);
+    if (!nullToAbsent || mutedUntil != null) {
+      map['muted_until'] = Variable<DateTime>(mutedUntil);
+    }
+    if (!nullToAbsent || draftCiphertext != null) {
+      map['draft_ciphertext'] = Variable<Uint8List>(draftCiphertext);
+    }
+    if (!nullToAbsent || displayTitleCiphertext != null) {
+      map['display_title_ciphertext'] = Variable<Uint8List>(
+        displayTitleCiphertext,
+      );
+    }
     return map;
   }
 
@@ -5267,6 +11252,23 @@ class Conversation extends DataClass implements Insertable<Conversation> {
       listProjectionCiphertext: Value(listProjectionCiphertext),
       sortKey: Value(sortKey),
       tombstoned: Value(tombstoned),
+      pinned: Value(pinned),
+      peerUserId: peerUserId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(peerUserId),
+      lastActivityEventId: lastActivityEventId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(lastActivityEventId),
+      unreadCount: Value(unreadCount),
+      mutedUntil: mutedUntil == null && nullToAbsent
+          ? const Value.absent()
+          : Value(mutedUntil),
+      draftCiphertext: draftCiphertext == null && nullToAbsent
+          ? const Value.absent()
+          : Value(draftCiphertext),
+      displayTitleCiphertext: displayTitleCiphertext == null && nullToAbsent
+          ? const Value.absent()
+          : Value(displayTitleCiphertext),
     );
   }
 
@@ -5283,6 +11285,17 @@ class Conversation extends DataClass implements Insertable<Conversation> {
       ),
       sortKey: serializer.fromJson<int>(json['sortKey']),
       tombstoned: serializer.fromJson<bool>(json['tombstoned']),
+      pinned: serializer.fromJson<bool>(json['pinned']),
+      peerUserId: serializer.fromJson<String?>(json['peerUserId']),
+      lastActivityEventId: serializer.fromJson<String?>(
+        json['lastActivityEventId'],
+      ),
+      unreadCount: serializer.fromJson<int>(json['unreadCount']),
+      mutedUntil: serializer.fromJson<DateTime?>(json['mutedUntil']),
+      draftCiphertext: serializer.fromJson<Uint8List?>(json['draftCiphertext']),
+      displayTitleCiphertext: serializer.fromJson<Uint8List?>(
+        json['displayTitleCiphertext'],
+      ),
     );
   }
   @override
@@ -5296,6 +11309,15 @@ class Conversation extends DataClass implements Insertable<Conversation> {
       ),
       'sortKey': serializer.toJson<int>(sortKey),
       'tombstoned': serializer.toJson<bool>(tombstoned),
+      'pinned': serializer.toJson<bool>(pinned),
+      'peerUserId': serializer.toJson<String?>(peerUserId),
+      'lastActivityEventId': serializer.toJson<String?>(lastActivityEventId),
+      'unreadCount': serializer.toJson<int>(unreadCount),
+      'mutedUntil': serializer.toJson<DateTime?>(mutedUntil),
+      'draftCiphertext': serializer.toJson<Uint8List?>(draftCiphertext),
+      'displayTitleCiphertext': serializer.toJson<Uint8List?>(
+        displayTitleCiphertext,
+      ),
     };
   }
 
@@ -5305,6 +11327,13 @@ class Conversation extends DataClass implements Insertable<Conversation> {
     Uint8List? listProjectionCiphertext,
     int? sortKey,
     bool? tombstoned,
+    bool? pinned,
+    Value<String?> peerUserId = const Value.absent(),
+    Value<String?> lastActivityEventId = const Value.absent(),
+    int? unreadCount,
+    Value<DateTime?> mutedUntil = const Value.absent(),
+    Value<Uint8List?> draftCiphertext = const Value.absent(),
+    Value<Uint8List?> displayTitleCiphertext = const Value.absent(),
   }) => Conversation(
     conversationId: conversationId ?? this.conversationId,
     kind: kind ?? this.kind,
@@ -5312,6 +11341,19 @@ class Conversation extends DataClass implements Insertable<Conversation> {
         listProjectionCiphertext ?? this.listProjectionCiphertext,
     sortKey: sortKey ?? this.sortKey,
     tombstoned: tombstoned ?? this.tombstoned,
+    pinned: pinned ?? this.pinned,
+    peerUserId: peerUserId.present ? peerUserId.value : this.peerUserId,
+    lastActivityEventId: lastActivityEventId.present
+        ? lastActivityEventId.value
+        : this.lastActivityEventId,
+    unreadCount: unreadCount ?? this.unreadCount,
+    mutedUntil: mutedUntil.present ? mutedUntil.value : this.mutedUntil,
+    draftCiphertext: draftCiphertext.present
+        ? draftCiphertext.value
+        : this.draftCiphertext,
+    displayTitleCiphertext: displayTitleCiphertext.present
+        ? displayTitleCiphertext.value
+        : this.displayTitleCiphertext,
   );
   Conversation copyWithCompanion(ConversationsCompanion data) {
     return Conversation(
@@ -5326,6 +11368,25 @@ class Conversation extends DataClass implements Insertable<Conversation> {
       tombstoned: data.tombstoned.present
           ? data.tombstoned.value
           : this.tombstoned,
+      pinned: data.pinned.present ? data.pinned.value : this.pinned,
+      peerUserId: data.peerUserId.present
+          ? data.peerUserId.value
+          : this.peerUserId,
+      lastActivityEventId: data.lastActivityEventId.present
+          ? data.lastActivityEventId.value
+          : this.lastActivityEventId,
+      unreadCount: data.unreadCount.present
+          ? data.unreadCount.value
+          : this.unreadCount,
+      mutedUntil: data.mutedUntil.present
+          ? data.mutedUntil.value
+          : this.mutedUntil,
+      draftCiphertext: data.draftCiphertext.present
+          ? data.draftCiphertext.value
+          : this.draftCiphertext,
+      displayTitleCiphertext: data.displayTitleCiphertext.present
+          ? data.displayTitleCiphertext.value
+          : this.displayTitleCiphertext,
     );
   }
 
@@ -5336,7 +11397,14 @@ class Conversation extends DataClass implements Insertable<Conversation> {
           ..write('kind: $kind, ')
           ..write('listProjectionCiphertext: $listProjectionCiphertext, ')
           ..write('sortKey: $sortKey, ')
-          ..write('tombstoned: $tombstoned')
+          ..write('tombstoned: $tombstoned, ')
+          ..write('pinned: $pinned, ')
+          ..write('peerUserId: $peerUserId, ')
+          ..write('lastActivityEventId: $lastActivityEventId, ')
+          ..write('unreadCount: $unreadCount, ')
+          ..write('mutedUntil: $mutedUntil, ')
+          ..write('draftCiphertext: $draftCiphertext, ')
+          ..write('displayTitleCiphertext: $displayTitleCiphertext')
           ..write(')'))
         .toString();
   }
@@ -5348,6 +11416,13 @@ class Conversation extends DataClass implements Insertable<Conversation> {
     $driftBlobEquality.hash(listProjectionCiphertext),
     sortKey,
     tombstoned,
+    pinned,
+    peerUserId,
+    lastActivityEventId,
+    unreadCount,
+    mutedUntil,
+    $driftBlobEquality.hash(draftCiphertext),
+    $driftBlobEquality.hash(displayTitleCiphertext),
   );
   @override
   bool operator ==(Object other) =>
@@ -5360,7 +11435,20 @@ class Conversation extends DataClass implements Insertable<Conversation> {
             this.listProjectionCiphertext,
           ) &&
           other.sortKey == this.sortKey &&
-          other.tombstoned == this.tombstoned);
+          other.tombstoned == this.tombstoned &&
+          other.pinned == this.pinned &&
+          other.peerUserId == this.peerUserId &&
+          other.lastActivityEventId == this.lastActivityEventId &&
+          other.unreadCount == this.unreadCount &&
+          other.mutedUntil == this.mutedUntil &&
+          $driftBlobEquality.equals(
+            other.draftCiphertext,
+            this.draftCiphertext,
+          ) &&
+          $driftBlobEquality.equals(
+            other.displayTitleCiphertext,
+            this.displayTitleCiphertext,
+          ));
 }
 
 class ConversationsCompanion extends UpdateCompanion<Conversation> {
@@ -5369,6 +11457,13 @@ class ConversationsCompanion extends UpdateCompanion<Conversation> {
   final Value<Uint8List> listProjectionCiphertext;
   final Value<int> sortKey;
   final Value<bool> tombstoned;
+  final Value<bool> pinned;
+  final Value<String?> peerUserId;
+  final Value<String?> lastActivityEventId;
+  final Value<int> unreadCount;
+  final Value<DateTime?> mutedUntil;
+  final Value<Uint8List?> draftCiphertext;
+  final Value<Uint8List?> displayTitleCiphertext;
   final Value<int> rowid;
   const ConversationsCompanion({
     this.conversationId = const Value.absent(),
@@ -5376,6 +11471,13 @@ class ConversationsCompanion extends UpdateCompanion<Conversation> {
     this.listProjectionCiphertext = const Value.absent(),
     this.sortKey = const Value.absent(),
     this.tombstoned = const Value.absent(),
+    this.pinned = const Value.absent(),
+    this.peerUserId = const Value.absent(),
+    this.lastActivityEventId = const Value.absent(),
+    this.unreadCount = const Value.absent(),
+    this.mutedUntil = const Value.absent(),
+    this.draftCiphertext = const Value.absent(),
+    this.displayTitleCiphertext = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   ConversationsCompanion.insert({
@@ -5384,6 +11486,13 @@ class ConversationsCompanion extends UpdateCompanion<Conversation> {
     required Uint8List listProjectionCiphertext,
     required int sortKey,
     this.tombstoned = const Value.absent(),
+    this.pinned = const Value.absent(),
+    this.peerUserId = const Value.absent(),
+    this.lastActivityEventId = const Value.absent(),
+    this.unreadCount = const Value.absent(),
+    this.mutedUntil = const Value.absent(),
+    this.draftCiphertext = const Value.absent(),
+    this.displayTitleCiphertext = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : conversationId = Value(conversationId),
        kind = Value(kind),
@@ -5395,6 +11504,13 @@ class ConversationsCompanion extends UpdateCompanion<Conversation> {
     Expression<Uint8List>? listProjectionCiphertext,
     Expression<int>? sortKey,
     Expression<bool>? tombstoned,
+    Expression<bool>? pinned,
+    Expression<String>? peerUserId,
+    Expression<String>? lastActivityEventId,
+    Expression<int>? unreadCount,
+    Expression<DateTime>? mutedUntil,
+    Expression<Uint8List>? draftCiphertext,
+    Expression<Uint8List>? displayTitleCiphertext,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -5404,6 +11520,15 @@ class ConversationsCompanion extends UpdateCompanion<Conversation> {
         'list_projection_ciphertext': listProjectionCiphertext,
       if (sortKey != null) 'sort_key': sortKey,
       if (tombstoned != null) 'tombstoned': tombstoned,
+      if (pinned != null) 'pinned': pinned,
+      if (peerUserId != null) 'peer_user_id': peerUserId,
+      if (lastActivityEventId != null)
+        'last_activity_event_id': lastActivityEventId,
+      if (unreadCount != null) 'unread_count': unreadCount,
+      if (mutedUntil != null) 'muted_until': mutedUntil,
+      if (draftCiphertext != null) 'draft_ciphertext': draftCiphertext,
+      if (displayTitleCiphertext != null)
+        'display_title_ciphertext': displayTitleCiphertext,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -5414,6 +11539,13 @@ class ConversationsCompanion extends UpdateCompanion<Conversation> {
     Value<Uint8List>? listProjectionCiphertext,
     Value<int>? sortKey,
     Value<bool>? tombstoned,
+    Value<bool>? pinned,
+    Value<String?>? peerUserId,
+    Value<String?>? lastActivityEventId,
+    Value<int>? unreadCount,
+    Value<DateTime?>? mutedUntil,
+    Value<Uint8List?>? draftCiphertext,
+    Value<Uint8List?>? displayTitleCiphertext,
     Value<int>? rowid,
   }) {
     return ConversationsCompanion(
@@ -5423,6 +11555,14 @@ class ConversationsCompanion extends UpdateCompanion<Conversation> {
           listProjectionCiphertext ?? this.listProjectionCiphertext,
       sortKey: sortKey ?? this.sortKey,
       tombstoned: tombstoned ?? this.tombstoned,
+      pinned: pinned ?? this.pinned,
+      peerUserId: peerUserId ?? this.peerUserId,
+      lastActivityEventId: lastActivityEventId ?? this.lastActivityEventId,
+      unreadCount: unreadCount ?? this.unreadCount,
+      mutedUntil: mutedUntil ?? this.mutedUntil,
+      draftCiphertext: draftCiphertext ?? this.draftCiphertext,
+      displayTitleCiphertext:
+          displayTitleCiphertext ?? this.displayTitleCiphertext,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -5447,6 +11587,31 @@ class ConversationsCompanion extends UpdateCompanion<Conversation> {
     if (tombstoned.present) {
       map['tombstoned'] = Variable<bool>(tombstoned.value);
     }
+    if (pinned.present) {
+      map['pinned'] = Variable<bool>(pinned.value);
+    }
+    if (peerUserId.present) {
+      map['peer_user_id'] = Variable<String>(peerUserId.value);
+    }
+    if (lastActivityEventId.present) {
+      map['last_activity_event_id'] = Variable<String>(
+        lastActivityEventId.value,
+      );
+    }
+    if (unreadCount.present) {
+      map['unread_count'] = Variable<int>(unreadCount.value);
+    }
+    if (mutedUntil.present) {
+      map['muted_until'] = Variable<DateTime>(mutedUntil.value);
+    }
+    if (draftCiphertext.present) {
+      map['draft_ciphertext'] = Variable<Uint8List>(draftCiphertext.value);
+    }
+    if (displayTitleCiphertext.present) {
+      map['display_title_ciphertext'] = Variable<Uint8List>(
+        displayTitleCiphertext.value,
+      );
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -5461,6 +11626,13 @@ class ConversationsCompanion extends UpdateCompanion<Conversation> {
           ..write('listProjectionCiphertext: $listProjectionCiphertext, ')
           ..write('sortKey: $sortKey, ')
           ..write('tombstoned: $tombstoned, ')
+          ..write('pinned: $pinned, ')
+          ..write('peerUserId: $peerUserId, ')
+          ..write('lastActivityEventId: $lastActivityEventId, ')
+          ..write('unreadCount: $unreadCount, ')
+          ..write('mutedUntil: $mutedUntil, ')
+          ..write('draftCiphertext: $draftCiphertext, ')
+          ..write('displayTitleCiphertext: $displayTitleCiphertext, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -5862,6 +12034,188 @@ class $MessagesTable extends Messages with TableInfo<$MessagesTable, Message> {
     type: DriftSqlType.dateTime,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _senderUserIdMeta = const VerificationMeta(
+    'senderUserId',
+  );
+  @override
+  late final GeneratedColumn<String> senderUserId = GeneratedColumn<String>(
+    'sender_user_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
+  static const VerificationMeta _senderDeviceIdMeta = const VerificationMeta(
+    'senderDeviceId',
+  );
+  @override
+  late final GeneratedColumn<String> senderDeviceId = GeneratedColumn<String>(
+    'sender_device_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
+  static const VerificationMeta _replyToMessageIdMeta = const VerificationMeta(
+    'replyToMessageId',
+  );
+  @override
+  late final GeneratedColumn<String> replyToMessageId = GeneratedColumn<String>(
+    'reply_to_message_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _quoteFallbackCiphertextMeta =
+      const VerificationMeta('quoteFallbackCiphertext');
+  @override
+  late final GeneratedColumn<Uint8List> quoteFallbackCiphertext =
+      GeneratedColumn<Uint8List>(
+        'quote_fallback_ciphertext',
+        aliasedName,
+        true,
+        type: DriftSqlType.blob,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _orderingMsMeta = const VerificationMeta(
+    'orderingMs',
+  );
+  @override
+  late final GeneratedColumn<int> orderingMs = GeneratedColumn<int>(
+    'ordering_ms',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _orderingEventIdMeta = const VerificationMeta(
+    'orderingEventId',
+  );
+  @override
+  late final GeneratedColumn<String> orderingEventId = GeneratedColumn<String>(
+    'ordering_event_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
+  static const VerificationMeta _timestampStateMeta = const VerificationMeta(
+    'timestampState',
+  );
+  @override
+  late final GeneratedColumn<int> timestampState = GeneratedColumn<int>(
+    'timestamp_state',
+    aliasedName,
+    false,
+    check: () => ComparableExpr(timestampState).isBetweenValues(0, 1),
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _deletedForEveryoneMeta =
+      const VerificationMeta('deletedForEveryone');
+  @override
+  late final GeneratedColumn<bool> deletedForEveryone = GeneratedColumn<bool>(
+    'deleted_for_everyone',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("deleted_for_everyone" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _deletedForMeMeta = const VerificationMeta(
+    'deletedForMe',
+  );
+  @override
+  late final GeneratedColumn<bool> deletedForMe = GeneratedColumn<bool>(
+    'deleted_for_me',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("deleted_for_me" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _pinnedMeta = const VerificationMeta('pinned');
+  @override
+  late final GeneratedColumn<bool> pinned = GeneratedColumn<bool>(
+    'pinned',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("pinned" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _starredMeta = const VerificationMeta(
+    'starred',
+  );
+  @override
+  late final GeneratedColumn<bool> starred = GeneratedColumn<bool>(
+    'starred',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("starred" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _unreadMeta = const VerificationMeta('unread');
+  @override
+  late final GeneratedColumn<bool> unread = GeneratedColumn<bool>(
+    'unread',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("unread" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _alertedMeta = const VerificationMeta(
+    'alerted',
+  );
+  @override
+  late final GeneratedColumn<bool> alerted = GeneratedColumn<bool>(
+    'alerted',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("alerted" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _deliveredReceiptSentMeta =
+      const VerificationMeta('deliveredReceiptSent');
+  @override
+  late final GeneratedColumn<bool> deliveredReceiptSent = GeneratedColumn<bool>(
+    'delivered_receipt_sent',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("delivered_receipt_sent" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     messageId,
@@ -5871,6 +12225,20 @@ class $MessagesTable extends Messages with TableInfo<$MessagesTable, Message> {
     status,
     revision,
     createdAt,
+    senderUserId,
+    senderDeviceId,
+    replyToMessageId,
+    quoteFallbackCiphertext,
+    orderingMs,
+    orderingEventId,
+    timestampState,
+    deletedForEveryone,
+    deletedForMe,
+    pinned,
+    starred,
+    unread,
+    alerted,
+    deliveredReceiptSent,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -5949,6 +12317,117 @@ class $MessagesTable extends Messages with TableInfo<$MessagesTable, Message> {
     } else if (isInserting) {
       context.missing(_createdAtMeta);
     }
+    if (data.containsKey('sender_user_id')) {
+      context.handle(
+        _senderUserIdMeta,
+        senderUserId.isAcceptableOrUnknown(
+          data['sender_user_id']!,
+          _senderUserIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('sender_device_id')) {
+      context.handle(
+        _senderDeviceIdMeta,
+        senderDeviceId.isAcceptableOrUnknown(
+          data['sender_device_id']!,
+          _senderDeviceIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('reply_to_message_id')) {
+      context.handle(
+        _replyToMessageIdMeta,
+        replyToMessageId.isAcceptableOrUnknown(
+          data['reply_to_message_id']!,
+          _replyToMessageIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('quote_fallback_ciphertext')) {
+      context.handle(
+        _quoteFallbackCiphertextMeta,
+        quoteFallbackCiphertext.isAcceptableOrUnknown(
+          data['quote_fallback_ciphertext']!,
+          _quoteFallbackCiphertextMeta,
+        ),
+      );
+    }
+    if (data.containsKey('ordering_ms')) {
+      context.handle(
+        _orderingMsMeta,
+        orderingMs.isAcceptableOrUnknown(data['ordering_ms']!, _orderingMsMeta),
+      );
+    }
+    if (data.containsKey('ordering_event_id')) {
+      context.handle(
+        _orderingEventIdMeta,
+        orderingEventId.isAcceptableOrUnknown(
+          data['ordering_event_id']!,
+          _orderingEventIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('timestamp_state')) {
+      context.handle(
+        _timestampStateMeta,
+        timestampState.isAcceptableOrUnknown(
+          data['timestamp_state']!,
+          _timestampStateMeta,
+        ),
+      );
+    }
+    if (data.containsKey('deleted_for_everyone')) {
+      context.handle(
+        _deletedForEveryoneMeta,
+        deletedForEveryone.isAcceptableOrUnknown(
+          data['deleted_for_everyone']!,
+          _deletedForEveryoneMeta,
+        ),
+      );
+    }
+    if (data.containsKey('deleted_for_me')) {
+      context.handle(
+        _deletedForMeMeta,
+        deletedForMe.isAcceptableOrUnknown(
+          data['deleted_for_me']!,
+          _deletedForMeMeta,
+        ),
+      );
+    }
+    if (data.containsKey('pinned')) {
+      context.handle(
+        _pinnedMeta,
+        pinned.isAcceptableOrUnknown(data['pinned']!, _pinnedMeta),
+      );
+    }
+    if (data.containsKey('starred')) {
+      context.handle(
+        _starredMeta,
+        starred.isAcceptableOrUnknown(data['starred']!, _starredMeta),
+      );
+    }
+    if (data.containsKey('unread')) {
+      context.handle(
+        _unreadMeta,
+        unread.isAcceptableOrUnknown(data['unread']!, _unreadMeta),
+      );
+    }
+    if (data.containsKey('alerted')) {
+      context.handle(
+        _alertedMeta,
+        alerted.isAcceptableOrUnknown(data['alerted']!, _alertedMeta),
+      );
+    }
+    if (data.containsKey('delivered_receipt_sent')) {
+      context.handle(
+        _deliveredReceiptSentMeta,
+        deliveredReceiptSent.isAcceptableOrUnknown(
+          data['delivered_receipt_sent']!,
+          _deliveredReceiptSentMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -5986,6 +12465,62 @@ class $MessagesTable extends Messages with TableInfo<$MessagesTable, Message> {
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
       )!,
+      senderUserId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}sender_user_id'],
+      )!,
+      senderDeviceId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}sender_device_id'],
+      )!,
+      replyToMessageId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}reply_to_message_id'],
+      ),
+      quoteFallbackCiphertext: attachedDatabase.typeMapping.read(
+        DriftSqlType.blob,
+        data['${effectivePrefix}quote_fallback_ciphertext'],
+      ),
+      orderingMs: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}ordering_ms'],
+      )!,
+      orderingEventId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}ordering_event_id'],
+      )!,
+      timestampState: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}timestamp_state'],
+      )!,
+      deletedForEveryone: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}deleted_for_everyone'],
+      )!,
+      deletedForMe: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}deleted_for_me'],
+      )!,
+      pinned: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}pinned'],
+      )!,
+      starred: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}starred'],
+      )!,
+      unread: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}unread'],
+      )!,
+      alerted: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}alerted'],
+      )!,
+      deliveredReceiptSent: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}delivered_receipt_sent'],
+      )!,
     );
   }
 
@@ -6003,6 +12538,45 @@ class Message extends DataClass implements Insertable<Message> {
   final int status;
   final int revision;
   final DateTime createdAt;
+  final String senderUserId;
+  final String senderDeviceId;
+  final String? replyToMessageId;
+  final Uint8List? quoteFallbackCiphertext;
+  final int orderingMs;
+  final String orderingEventId;
+  final int timestampState;
+  final bool deletedForEveryone;
+  final bool deletedForMe;
+  final bool pinned;
+  final bool starred;
+  final bool unread;
+
+  /// Whether the user has already been alerted that this message arrived.
+  ///
+  /// Local, durable, and deliberately separate from [unread]: [unread] is what
+  /// the timeline and the conversation badge project, while this marks the
+  /// one-shot alert as spent. The isolate that alerts may not be the one that
+  /// comes back, so an in-memory flag would re-alert after every restart. A
+  /// projection rebuild writes messages through `insertOnConflictUpdate`, whose
+  /// companion omits this column and therefore leaves it unchanged - the same
+  /// mechanism that already preserves [starred].
+  final bool alerted;
+
+  /// Whether this device has already told the sender it received this message.
+  ///
+  /// Local, durable, and one-shot for the same reason as [alerted], which it is
+  /// modelled on. A delivered receipt is owed once per message; whether one is
+  /// *owed* was previously re-derived on every projection rebuild from
+  /// properties that never change — the message came from a peer, in a direct
+  /// conversation — so every rebuild re-queued a receipt for every message the
+  /// conversation had ever received. Each of those receipts is an event at the
+  /// far end, which rebuilds that conversation, which re-queues its own, and
+  /// two devices talking to each other sustain it indefinitely. This column is
+  /// what makes "owed" a fact about what has happened rather than a restatement
+  /// of what the message is. A projection rebuild writes messages through
+  /// `insertOnConflictUpdate` with a companion that omits this column, which is
+  /// the same mechanism that preserves [alerted] and [starred].
+  final bool deliveredReceiptSent;
   const Message({
     required this.messageId,
     required this.conversationId,
@@ -6011,6 +12585,20 @@ class Message extends DataClass implements Insertable<Message> {
     required this.status,
     required this.revision,
     required this.createdAt,
+    required this.senderUserId,
+    required this.senderDeviceId,
+    this.replyToMessageId,
+    this.quoteFallbackCiphertext,
+    required this.orderingMs,
+    required this.orderingEventId,
+    required this.timestampState,
+    required this.deletedForEveryone,
+    required this.deletedForMe,
+    required this.pinned,
+    required this.starred,
+    required this.unread,
+    required this.alerted,
+    required this.deliveredReceiptSent,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -6022,6 +12610,26 @@ class Message extends DataClass implements Insertable<Message> {
     map['status'] = Variable<int>(status);
     map['revision'] = Variable<int>(revision);
     map['created_at'] = Variable<DateTime>(createdAt);
+    map['sender_user_id'] = Variable<String>(senderUserId);
+    map['sender_device_id'] = Variable<String>(senderDeviceId);
+    if (!nullToAbsent || replyToMessageId != null) {
+      map['reply_to_message_id'] = Variable<String>(replyToMessageId);
+    }
+    if (!nullToAbsent || quoteFallbackCiphertext != null) {
+      map['quote_fallback_ciphertext'] = Variable<Uint8List>(
+        quoteFallbackCiphertext,
+      );
+    }
+    map['ordering_ms'] = Variable<int>(orderingMs);
+    map['ordering_event_id'] = Variable<String>(orderingEventId);
+    map['timestamp_state'] = Variable<int>(timestampState);
+    map['deleted_for_everyone'] = Variable<bool>(deletedForEveryone);
+    map['deleted_for_me'] = Variable<bool>(deletedForMe);
+    map['pinned'] = Variable<bool>(pinned);
+    map['starred'] = Variable<bool>(starred);
+    map['unread'] = Variable<bool>(unread);
+    map['alerted'] = Variable<bool>(alerted);
+    map['delivered_receipt_sent'] = Variable<bool>(deliveredReceiptSent);
     return map;
   }
 
@@ -6034,6 +12642,24 @@ class Message extends DataClass implements Insertable<Message> {
       status: Value(status),
       revision: Value(revision),
       createdAt: Value(createdAt),
+      senderUserId: Value(senderUserId),
+      senderDeviceId: Value(senderDeviceId),
+      replyToMessageId: replyToMessageId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(replyToMessageId),
+      quoteFallbackCiphertext: quoteFallbackCiphertext == null && nullToAbsent
+          ? const Value.absent()
+          : Value(quoteFallbackCiphertext),
+      orderingMs: Value(orderingMs),
+      orderingEventId: Value(orderingEventId),
+      timestampState: Value(timestampState),
+      deletedForEveryone: Value(deletedForEveryone),
+      deletedForMe: Value(deletedForMe),
+      pinned: Value(pinned),
+      starred: Value(starred),
+      unread: Value(unread),
+      alerted: Value(alerted),
+      deliveredReceiptSent: Value(deliveredReceiptSent),
     );
   }
 
@@ -6052,6 +12678,24 @@ class Message extends DataClass implements Insertable<Message> {
       status: serializer.fromJson<int>(json['status']),
       revision: serializer.fromJson<int>(json['revision']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      senderUserId: serializer.fromJson<String>(json['senderUserId']),
+      senderDeviceId: serializer.fromJson<String>(json['senderDeviceId']),
+      replyToMessageId: serializer.fromJson<String?>(json['replyToMessageId']),
+      quoteFallbackCiphertext: serializer.fromJson<Uint8List?>(
+        json['quoteFallbackCiphertext'],
+      ),
+      orderingMs: serializer.fromJson<int>(json['orderingMs']),
+      orderingEventId: serializer.fromJson<String>(json['orderingEventId']),
+      timestampState: serializer.fromJson<int>(json['timestampState']),
+      deletedForEveryone: serializer.fromJson<bool>(json['deletedForEveryone']),
+      deletedForMe: serializer.fromJson<bool>(json['deletedForMe']),
+      pinned: serializer.fromJson<bool>(json['pinned']),
+      starred: serializer.fromJson<bool>(json['starred']),
+      unread: serializer.fromJson<bool>(json['unread']),
+      alerted: serializer.fromJson<bool>(json['alerted']),
+      deliveredReceiptSent: serializer.fromJson<bool>(
+        json['deliveredReceiptSent'],
+      ),
     );
   }
   @override
@@ -6067,6 +12711,22 @@ class Message extends DataClass implements Insertable<Message> {
       'status': serializer.toJson<int>(status),
       'revision': serializer.toJson<int>(revision),
       'createdAt': serializer.toJson<DateTime>(createdAt),
+      'senderUserId': serializer.toJson<String>(senderUserId),
+      'senderDeviceId': serializer.toJson<String>(senderDeviceId),
+      'replyToMessageId': serializer.toJson<String?>(replyToMessageId),
+      'quoteFallbackCiphertext': serializer.toJson<Uint8List?>(
+        quoteFallbackCiphertext,
+      ),
+      'orderingMs': serializer.toJson<int>(orderingMs),
+      'orderingEventId': serializer.toJson<String>(orderingEventId),
+      'timestampState': serializer.toJson<int>(timestampState),
+      'deletedForEveryone': serializer.toJson<bool>(deletedForEveryone),
+      'deletedForMe': serializer.toJson<bool>(deletedForMe),
+      'pinned': serializer.toJson<bool>(pinned),
+      'starred': serializer.toJson<bool>(starred),
+      'unread': serializer.toJson<bool>(unread),
+      'alerted': serializer.toJson<bool>(alerted),
+      'deliveredReceiptSent': serializer.toJson<bool>(deliveredReceiptSent),
     };
   }
 
@@ -6078,6 +12738,20 @@ class Message extends DataClass implements Insertable<Message> {
     int? status,
     int? revision,
     DateTime? createdAt,
+    String? senderUserId,
+    String? senderDeviceId,
+    Value<String?> replyToMessageId = const Value.absent(),
+    Value<Uint8List?> quoteFallbackCiphertext = const Value.absent(),
+    int? orderingMs,
+    String? orderingEventId,
+    int? timestampState,
+    bool? deletedForEveryone,
+    bool? deletedForMe,
+    bool? pinned,
+    bool? starred,
+    bool? unread,
+    bool? alerted,
+    bool? deliveredReceiptSent,
   }) => Message(
     messageId: messageId ?? this.messageId,
     conversationId: conversationId ?? this.conversationId,
@@ -6086,6 +12760,24 @@ class Message extends DataClass implements Insertable<Message> {
     status: status ?? this.status,
     revision: revision ?? this.revision,
     createdAt: createdAt ?? this.createdAt,
+    senderUserId: senderUserId ?? this.senderUserId,
+    senderDeviceId: senderDeviceId ?? this.senderDeviceId,
+    replyToMessageId: replyToMessageId.present
+        ? replyToMessageId.value
+        : this.replyToMessageId,
+    quoteFallbackCiphertext: quoteFallbackCiphertext.present
+        ? quoteFallbackCiphertext.value
+        : this.quoteFallbackCiphertext,
+    orderingMs: orderingMs ?? this.orderingMs,
+    orderingEventId: orderingEventId ?? this.orderingEventId,
+    timestampState: timestampState ?? this.timestampState,
+    deletedForEveryone: deletedForEveryone ?? this.deletedForEveryone,
+    deletedForMe: deletedForMe ?? this.deletedForMe,
+    pinned: pinned ?? this.pinned,
+    starred: starred ?? this.starred,
+    unread: unread ?? this.unread,
+    alerted: alerted ?? this.alerted,
+    deliveredReceiptSent: deliveredReceiptSent ?? this.deliveredReceiptSent,
   );
   Message copyWithCompanion(MessagesCompanion data) {
     return Message(
@@ -6102,6 +12794,40 @@ class Message extends DataClass implements Insertable<Message> {
       status: data.status.present ? data.status.value : this.status,
       revision: data.revision.present ? data.revision.value : this.revision,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      senderUserId: data.senderUserId.present
+          ? data.senderUserId.value
+          : this.senderUserId,
+      senderDeviceId: data.senderDeviceId.present
+          ? data.senderDeviceId.value
+          : this.senderDeviceId,
+      replyToMessageId: data.replyToMessageId.present
+          ? data.replyToMessageId.value
+          : this.replyToMessageId,
+      quoteFallbackCiphertext: data.quoteFallbackCiphertext.present
+          ? data.quoteFallbackCiphertext.value
+          : this.quoteFallbackCiphertext,
+      orderingMs: data.orderingMs.present
+          ? data.orderingMs.value
+          : this.orderingMs,
+      orderingEventId: data.orderingEventId.present
+          ? data.orderingEventId.value
+          : this.orderingEventId,
+      timestampState: data.timestampState.present
+          ? data.timestampState.value
+          : this.timestampState,
+      deletedForEveryone: data.deletedForEveryone.present
+          ? data.deletedForEveryone.value
+          : this.deletedForEveryone,
+      deletedForMe: data.deletedForMe.present
+          ? data.deletedForMe.value
+          : this.deletedForMe,
+      pinned: data.pinned.present ? data.pinned.value : this.pinned,
+      starred: data.starred.present ? data.starred.value : this.starred,
+      unread: data.unread.present ? data.unread.value : this.unread,
+      alerted: data.alerted.present ? data.alerted.value : this.alerted,
+      deliveredReceiptSent: data.deliveredReceiptSent.present
+          ? data.deliveredReceiptSent.value
+          : this.deliveredReceiptSent,
     );
   }
 
@@ -6114,13 +12840,27 @@ class Message extends DataClass implements Insertable<Message> {
           ..write('projectionCiphertext: $projectionCiphertext, ')
           ..write('status: $status, ')
           ..write('revision: $revision, ')
-          ..write('createdAt: $createdAt')
+          ..write('createdAt: $createdAt, ')
+          ..write('senderUserId: $senderUserId, ')
+          ..write('senderDeviceId: $senderDeviceId, ')
+          ..write('replyToMessageId: $replyToMessageId, ')
+          ..write('quoteFallbackCiphertext: $quoteFallbackCiphertext, ')
+          ..write('orderingMs: $orderingMs, ')
+          ..write('orderingEventId: $orderingEventId, ')
+          ..write('timestampState: $timestampState, ')
+          ..write('deletedForEveryone: $deletedForEveryone, ')
+          ..write('deletedForMe: $deletedForMe, ')
+          ..write('pinned: $pinned, ')
+          ..write('starred: $starred, ')
+          ..write('unread: $unread, ')
+          ..write('alerted: $alerted, ')
+          ..write('deliveredReceiptSent: $deliveredReceiptSent')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode => Object.hash(
+  int get hashCode => Object.hashAll([
     messageId,
     conversationId,
     currentEventId,
@@ -6128,7 +12868,21 @@ class Message extends DataClass implements Insertable<Message> {
     status,
     revision,
     createdAt,
-  );
+    senderUserId,
+    senderDeviceId,
+    replyToMessageId,
+    $driftBlobEquality.hash(quoteFallbackCiphertext),
+    orderingMs,
+    orderingEventId,
+    timestampState,
+    deletedForEveryone,
+    deletedForMe,
+    pinned,
+    starred,
+    unread,
+    alerted,
+    deliveredReceiptSent,
+  ]);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -6142,7 +12896,24 @@ class Message extends DataClass implements Insertable<Message> {
           ) &&
           other.status == this.status &&
           other.revision == this.revision &&
-          other.createdAt == this.createdAt);
+          other.createdAt == this.createdAt &&
+          other.senderUserId == this.senderUserId &&
+          other.senderDeviceId == this.senderDeviceId &&
+          other.replyToMessageId == this.replyToMessageId &&
+          $driftBlobEquality.equals(
+            other.quoteFallbackCiphertext,
+            this.quoteFallbackCiphertext,
+          ) &&
+          other.orderingMs == this.orderingMs &&
+          other.orderingEventId == this.orderingEventId &&
+          other.timestampState == this.timestampState &&
+          other.deletedForEveryone == this.deletedForEveryone &&
+          other.deletedForMe == this.deletedForMe &&
+          other.pinned == this.pinned &&
+          other.starred == this.starred &&
+          other.unread == this.unread &&
+          other.alerted == this.alerted &&
+          other.deliveredReceiptSent == this.deliveredReceiptSent);
 }
 
 class MessagesCompanion extends UpdateCompanion<Message> {
@@ -6153,6 +12924,20 @@ class MessagesCompanion extends UpdateCompanion<Message> {
   final Value<int> status;
   final Value<int> revision;
   final Value<DateTime> createdAt;
+  final Value<String> senderUserId;
+  final Value<String> senderDeviceId;
+  final Value<String?> replyToMessageId;
+  final Value<Uint8List?> quoteFallbackCiphertext;
+  final Value<int> orderingMs;
+  final Value<String> orderingEventId;
+  final Value<int> timestampState;
+  final Value<bool> deletedForEveryone;
+  final Value<bool> deletedForMe;
+  final Value<bool> pinned;
+  final Value<bool> starred;
+  final Value<bool> unread;
+  final Value<bool> alerted;
+  final Value<bool> deliveredReceiptSent;
   final Value<int> rowid;
   const MessagesCompanion({
     this.messageId = const Value.absent(),
@@ -6162,6 +12947,20 @@ class MessagesCompanion extends UpdateCompanion<Message> {
     this.status = const Value.absent(),
     this.revision = const Value.absent(),
     this.createdAt = const Value.absent(),
+    this.senderUserId = const Value.absent(),
+    this.senderDeviceId = const Value.absent(),
+    this.replyToMessageId = const Value.absent(),
+    this.quoteFallbackCiphertext = const Value.absent(),
+    this.orderingMs = const Value.absent(),
+    this.orderingEventId = const Value.absent(),
+    this.timestampState = const Value.absent(),
+    this.deletedForEveryone = const Value.absent(),
+    this.deletedForMe = const Value.absent(),
+    this.pinned = const Value.absent(),
+    this.starred = const Value.absent(),
+    this.unread = const Value.absent(),
+    this.alerted = const Value.absent(),
+    this.deliveredReceiptSent = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   MessagesCompanion.insert({
@@ -6172,6 +12971,20 @@ class MessagesCompanion extends UpdateCompanion<Message> {
     required int status,
     required int revision,
     required DateTime createdAt,
+    this.senderUserId = const Value.absent(),
+    this.senderDeviceId = const Value.absent(),
+    this.replyToMessageId = const Value.absent(),
+    this.quoteFallbackCiphertext = const Value.absent(),
+    this.orderingMs = const Value.absent(),
+    this.orderingEventId = const Value.absent(),
+    this.timestampState = const Value.absent(),
+    this.deletedForEveryone = const Value.absent(),
+    this.deletedForMe = const Value.absent(),
+    this.pinned = const Value.absent(),
+    this.starred = const Value.absent(),
+    this.unread = const Value.absent(),
+    this.alerted = const Value.absent(),
+    this.deliveredReceiptSent = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : messageId = Value(messageId),
        conversationId = Value(conversationId),
@@ -6188,6 +13001,20 @@ class MessagesCompanion extends UpdateCompanion<Message> {
     Expression<int>? status,
     Expression<int>? revision,
     Expression<DateTime>? createdAt,
+    Expression<String>? senderUserId,
+    Expression<String>? senderDeviceId,
+    Expression<String>? replyToMessageId,
+    Expression<Uint8List>? quoteFallbackCiphertext,
+    Expression<int>? orderingMs,
+    Expression<String>? orderingEventId,
+    Expression<int>? timestampState,
+    Expression<bool>? deletedForEveryone,
+    Expression<bool>? deletedForMe,
+    Expression<bool>? pinned,
+    Expression<bool>? starred,
+    Expression<bool>? unread,
+    Expression<bool>? alerted,
+    Expression<bool>? deliveredReceiptSent,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -6199,6 +13026,23 @@ class MessagesCompanion extends UpdateCompanion<Message> {
       if (status != null) 'status': status,
       if (revision != null) 'revision': revision,
       if (createdAt != null) 'created_at': createdAt,
+      if (senderUserId != null) 'sender_user_id': senderUserId,
+      if (senderDeviceId != null) 'sender_device_id': senderDeviceId,
+      if (replyToMessageId != null) 'reply_to_message_id': replyToMessageId,
+      if (quoteFallbackCiphertext != null)
+        'quote_fallback_ciphertext': quoteFallbackCiphertext,
+      if (orderingMs != null) 'ordering_ms': orderingMs,
+      if (orderingEventId != null) 'ordering_event_id': orderingEventId,
+      if (timestampState != null) 'timestamp_state': timestampState,
+      if (deletedForEveryone != null)
+        'deleted_for_everyone': deletedForEveryone,
+      if (deletedForMe != null) 'deleted_for_me': deletedForMe,
+      if (pinned != null) 'pinned': pinned,
+      if (starred != null) 'starred': starred,
+      if (unread != null) 'unread': unread,
+      if (alerted != null) 'alerted': alerted,
+      if (deliveredReceiptSent != null)
+        'delivered_receipt_sent': deliveredReceiptSent,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -6211,6 +13055,20 @@ class MessagesCompanion extends UpdateCompanion<Message> {
     Value<int>? status,
     Value<int>? revision,
     Value<DateTime>? createdAt,
+    Value<String>? senderUserId,
+    Value<String>? senderDeviceId,
+    Value<String?>? replyToMessageId,
+    Value<Uint8List?>? quoteFallbackCiphertext,
+    Value<int>? orderingMs,
+    Value<String>? orderingEventId,
+    Value<int>? timestampState,
+    Value<bool>? deletedForEveryone,
+    Value<bool>? deletedForMe,
+    Value<bool>? pinned,
+    Value<bool>? starred,
+    Value<bool>? unread,
+    Value<bool>? alerted,
+    Value<bool>? deliveredReceiptSent,
     Value<int>? rowid,
   }) {
     return MessagesCompanion(
@@ -6221,6 +13079,21 @@ class MessagesCompanion extends UpdateCompanion<Message> {
       status: status ?? this.status,
       revision: revision ?? this.revision,
       createdAt: createdAt ?? this.createdAt,
+      senderUserId: senderUserId ?? this.senderUserId,
+      senderDeviceId: senderDeviceId ?? this.senderDeviceId,
+      replyToMessageId: replyToMessageId ?? this.replyToMessageId,
+      quoteFallbackCiphertext:
+          quoteFallbackCiphertext ?? this.quoteFallbackCiphertext,
+      orderingMs: orderingMs ?? this.orderingMs,
+      orderingEventId: orderingEventId ?? this.orderingEventId,
+      timestampState: timestampState ?? this.timestampState,
+      deletedForEveryone: deletedForEveryone ?? this.deletedForEveryone,
+      deletedForMe: deletedForMe ?? this.deletedForMe,
+      pinned: pinned ?? this.pinned,
+      starred: starred ?? this.starred,
+      unread: unread ?? this.unread,
+      alerted: alerted ?? this.alerted,
+      deliveredReceiptSent: deliveredReceiptSent ?? this.deliveredReceiptSent,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -6251,6 +13124,52 @@ class MessagesCompanion extends UpdateCompanion<Message> {
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
+    if (senderUserId.present) {
+      map['sender_user_id'] = Variable<String>(senderUserId.value);
+    }
+    if (senderDeviceId.present) {
+      map['sender_device_id'] = Variable<String>(senderDeviceId.value);
+    }
+    if (replyToMessageId.present) {
+      map['reply_to_message_id'] = Variable<String>(replyToMessageId.value);
+    }
+    if (quoteFallbackCiphertext.present) {
+      map['quote_fallback_ciphertext'] = Variable<Uint8List>(
+        quoteFallbackCiphertext.value,
+      );
+    }
+    if (orderingMs.present) {
+      map['ordering_ms'] = Variable<int>(orderingMs.value);
+    }
+    if (orderingEventId.present) {
+      map['ordering_event_id'] = Variable<String>(orderingEventId.value);
+    }
+    if (timestampState.present) {
+      map['timestamp_state'] = Variable<int>(timestampState.value);
+    }
+    if (deletedForEveryone.present) {
+      map['deleted_for_everyone'] = Variable<bool>(deletedForEveryone.value);
+    }
+    if (deletedForMe.present) {
+      map['deleted_for_me'] = Variable<bool>(deletedForMe.value);
+    }
+    if (pinned.present) {
+      map['pinned'] = Variable<bool>(pinned.value);
+    }
+    if (starred.present) {
+      map['starred'] = Variable<bool>(starred.value);
+    }
+    if (unread.present) {
+      map['unread'] = Variable<bool>(unread.value);
+    }
+    if (alerted.present) {
+      map['alerted'] = Variable<bool>(alerted.value);
+    }
+    if (deliveredReceiptSent.present) {
+      map['delivered_receipt_sent'] = Variable<bool>(
+        deliveredReceiptSent.value,
+      );
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -6267,6 +13186,20 @@ class MessagesCompanion extends UpdateCompanion<Message> {
           ..write('status: $status, ')
           ..write('revision: $revision, ')
           ..write('createdAt: $createdAt, ')
+          ..write('senderUserId: $senderUserId, ')
+          ..write('senderDeviceId: $senderDeviceId, ')
+          ..write('replyToMessageId: $replyToMessageId, ')
+          ..write('quoteFallbackCiphertext: $quoteFallbackCiphertext, ')
+          ..write('orderingMs: $orderingMs, ')
+          ..write('orderingEventId: $orderingEventId, ')
+          ..write('timestampState: $timestampState, ')
+          ..write('deletedForEveryone: $deletedForEveryone, ')
+          ..write('deletedForMe: $deletedForMe, ')
+          ..write('pinned: $pinned, ')
+          ..write('starred: $starred, ')
+          ..write('unread: $unread, ')
+          ..write('alerted: $alerted, ')
+          ..write('deliveredReceiptSent: $deliveredReceiptSent, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -6716,6 +13649,2497 @@ class MessageEventsCompanion extends UpdateCompanion<MessageEvent> {
           ..write('eventKind: $eventKind, ')
           ..write('authenticatedCiphertext: $authenticatedCiphertext, ')
           ..write('createdAt: $createdAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $StoredApplicationEventsTable extends StoredApplicationEvents
+    with TableInfo<$StoredApplicationEventsTable, StoredApplicationEvent> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $StoredApplicationEventsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _eventIdMeta = const VerificationMeta(
+    'eventId',
+  );
+  @override
+  late final GeneratedColumn<String> eventId = GeneratedColumn<String>(
+    'event_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _conversationIdMeta = const VerificationMeta(
+    'conversationId',
+  );
+  @override
+  late final GeneratedColumn<String> conversationId = GeneratedColumn<String>(
+    'conversation_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _kindMeta = const VerificationMeta('kind');
+  @override
+  late final GeneratedColumn<int> kind = GeneratedColumn<int>(
+    'kind',
+    aliasedName,
+    false,
+    check: () => ComparableExpr(kind).isBetweenValues(1, 65535),
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _senderUserIdMeta = const VerificationMeta(
+    'senderUserId',
+  );
+  @override
+  late final GeneratedColumn<String> senderUserId = GeneratedColumn<String>(
+    'sender_user_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _senderDeviceIdMeta = const VerificationMeta(
+    'senderDeviceId',
+  );
+  @override
+  late final GeneratedColumn<String> senderDeviceId = GeneratedColumn<String>(
+    'sender_device_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _senderCounterMeta = const VerificationMeta(
+    'senderCounter',
+  );
+  @override
+  late final GeneratedColumn<int> senderCounter = GeneratedColumn<int>(
+    'sender_counter',
+    aliasedName,
+    false,
+    check: () => ComparableExpr(senderCounter).isBiggerThanValue(0),
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _createdMsMeta = const VerificationMeta(
+    'createdMs',
+  );
+  @override
+  late final GeneratedColumn<int> createdMs = GeneratedColumn<int>(
+    'created_ms',
+    aliasedName,
+    false,
+    check: () => ComparableExpr(createdMs).isBiggerOrEqualValue(0),
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _orderingMsMeta = const VerificationMeta(
+    'orderingMs',
+  );
+  @override
+  late final GeneratedColumn<int> orderingMs = GeneratedColumn<int>(
+    'ordering_ms',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _canonicalEventMeta = const VerificationMeta(
+    'canonicalEvent',
+  );
+  @override
+  late final GeneratedColumn<Uint8List> canonicalEvent =
+      GeneratedColumn<Uint8List>(
+        'canonical_event',
+        aliasedName,
+        false,
+        type: DriftSqlType.blob,
+        requiredDuringInsert: true,
+      );
+  static const VerificationMeta _bodyProjectionMeta = const VerificationMeta(
+    'bodyProjection',
+  );
+  @override
+  late final GeneratedColumn<Uint8List> bodyProjection =
+      GeneratedColumn<Uint8List>(
+        'body_projection',
+        aliasedName,
+        false,
+        type: DriftSqlType.blob,
+        requiredDuringInsert: true,
+      );
+  static const VerificationMeta _applyStateMeta = const VerificationMeta(
+    'applyState',
+  );
+  @override
+  late final GeneratedColumn<int> applyState = GeneratedColumn<int>(
+    'apply_state',
+    aliasedName,
+    false,
+    check: () => ComparableExpr(applyState).isBetweenValues(0, 5),
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _localOriginMeta = const VerificationMeta(
+    'localOrigin',
+  );
+  @override
+  late final GeneratedColumn<bool> localOrigin = GeneratedColumn<bool>(
+    'local_origin',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("local_origin" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _localDeviceIdMeta = const VerificationMeta(
+    'localDeviceId',
+  );
+  @override
+  late final GeneratedColumn<String> localDeviceId = GeneratedColumn<String>(
+    'local_device_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
+  static const VerificationMeta _targetMessageIdMeta = const VerificationMeta(
+    'targetMessageId',
+  );
+  @override
+  late final GeneratedColumn<String> targetMessageId = GeneratedColumn<String>(
+    'target_message_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _revisionMeta = const VerificationMeta(
+    'revision',
+  );
+  @override
+  late final GeneratedColumn<int> revision = GeneratedColumn<int>(
+    'revision',
+    aliasedName,
+    true,
+    check: () =>
+        revision.isNull() | ComparableExpr(revision).isBiggerThanValue(0),
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _authenticatedAtMeta = const VerificationMeta(
+    'authenticatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> authenticatedAt =
+      GeneratedColumn<DateTime>(
+        'authenticated_at',
+        aliasedName,
+        false,
+        type: DriftSqlType.dateTime,
+        requiredDuringInsert: false,
+        defaultValue: currentDateAndTime,
+      );
+  @override
+  List<GeneratedColumn> get $columns => [
+    eventId,
+    conversationId,
+    kind,
+    senderUserId,
+    senderDeviceId,
+    senderCounter,
+    createdMs,
+    orderingMs,
+    canonicalEvent,
+    bodyProjection,
+    applyState,
+    localOrigin,
+    localDeviceId,
+    targetMessageId,
+    revision,
+    authenticatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'application_events';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<StoredApplicationEvent> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('event_id')) {
+      context.handle(
+        _eventIdMeta,
+        eventId.isAcceptableOrUnknown(data['event_id']!, _eventIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_eventIdMeta);
+    }
+    if (data.containsKey('conversation_id')) {
+      context.handle(
+        _conversationIdMeta,
+        conversationId.isAcceptableOrUnknown(
+          data['conversation_id']!,
+          _conversationIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_conversationIdMeta);
+    }
+    if (data.containsKey('kind')) {
+      context.handle(
+        _kindMeta,
+        kind.isAcceptableOrUnknown(data['kind']!, _kindMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_kindMeta);
+    }
+    if (data.containsKey('sender_user_id')) {
+      context.handle(
+        _senderUserIdMeta,
+        senderUserId.isAcceptableOrUnknown(
+          data['sender_user_id']!,
+          _senderUserIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_senderUserIdMeta);
+    }
+    if (data.containsKey('sender_device_id')) {
+      context.handle(
+        _senderDeviceIdMeta,
+        senderDeviceId.isAcceptableOrUnknown(
+          data['sender_device_id']!,
+          _senderDeviceIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_senderDeviceIdMeta);
+    }
+    if (data.containsKey('sender_counter')) {
+      context.handle(
+        _senderCounterMeta,
+        senderCounter.isAcceptableOrUnknown(
+          data['sender_counter']!,
+          _senderCounterMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_senderCounterMeta);
+    }
+    if (data.containsKey('created_ms')) {
+      context.handle(
+        _createdMsMeta,
+        createdMs.isAcceptableOrUnknown(data['created_ms']!, _createdMsMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdMsMeta);
+    }
+    if (data.containsKey('ordering_ms')) {
+      context.handle(
+        _orderingMsMeta,
+        orderingMs.isAcceptableOrUnknown(data['ordering_ms']!, _orderingMsMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_orderingMsMeta);
+    }
+    if (data.containsKey('canonical_event')) {
+      context.handle(
+        _canonicalEventMeta,
+        canonicalEvent.isAcceptableOrUnknown(
+          data['canonical_event']!,
+          _canonicalEventMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_canonicalEventMeta);
+    }
+    if (data.containsKey('body_projection')) {
+      context.handle(
+        _bodyProjectionMeta,
+        bodyProjection.isAcceptableOrUnknown(
+          data['body_projection']!,
+          _bodyProjectionMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_bodyProjectionMeta);
+    }
+    if (data.containsKey('apply_state')) {
+      context.handle(
+        _applyStateMeta,
+        applyState.isAcceptableOrUnknown(data['apply_state']!, _applyStateMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_applyStateMeta);
+    }
+    if (data.containsKey('local_origin')) {
+      context.handle(
+        _localOriginMeta,
+        localOrigin.isAcceptableOrUnknown(
+          data['local_origin']!,
+          _localOriginMeta,
+        ),
+      );
+    }
+    if (data.containsKey('local_device_id')) {
+      context.handle(
+        _localDeviceIdMeta,
+        localDeviceId.isAcceptableOrUnknown(
+          data['local_device_id']!,
+          _localDeviceIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('target_message_id')) {
+      context.handle(
+        _targetMessageIdMeta,
+        targetMessageId.isAcceptableOrUnknown(
+          data['target_message_id']!,
+          _targetMessageIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('revision')) {
+      context.handle(
+        _revisionMeta,
+        revision.isAcceptableOrUnknown(data['revision']!, _revisionMeta),
+      );
+    }
+    if (data.containsKey('authenticated_at')) {
+      context.handle(
+        _authenticatedAtMeta,
+        authenticatedAt.isAcceptableOrUnknown(
+          data['authenticated_at']!,
+          _authenticatedAtMeta,
+        ),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {eventId};
+  @override
+  StoredApplicationEvent map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return StoredApplicationEvent(
+      eventId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}event_id'],
+      )!,
+      conversationId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}conversation_id'],
+      )!,
+      kind: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}kind'],
+      )!,
+      senderUserId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}sender_user_id'],
+      )!,
+      senderDeviceId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}sender_device_id'],
+      )!,
+      senderCounter: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}sender_counter'],
+      )!,
+      createdMs: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}created_ms'],
+      )!,
+      orderingMs: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}ordering_ms'],
+      )!,
+      canonicalEvent: attachedDatabase.typeMapping.read(
+        DriftSqlType.blob,
+        data['${effectivePrefix}canonical_event'],
+      )!,
+      bodyProjection: attachedDatabase.typeMapping.read(
+        DriftSqlType.blob,
+        data['${effectivePrefix}body_projection'],
+      )!,
+      applyState: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}apply_state'],
+      )!,
+      localOrigin: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}local_origin'],
+      )!,
+      localDeviceId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}local_device_id'],
+      )!,
+      targetMessageId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}target_message_id'],
+      ),
+      revision: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}revision'],
+      ),
+      authenticatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}authenticated_at'],
+      )!,
+    );
+  }
+
+  @override
+  $StoredApplicationEventsTable createAlias(String alias) {
+    return $StoredApplicationEventsTable(attachedDatabase, alias);
+  }
+}
+
+class StoredApplicationEvent extends DataClass
+    implements Insertable<StoredApplicationEvent> {
+  final String eventId;
+  final String conversationId;
+  final int kind;
+  final String senderUserId;
+  final String senderDeviceId;
+  final int senderCounter;
+  final int createdMs;
+  final int orderingMs;
+  final Uint8List canonicalEvent;
+  final Uint8List bodyProjection;
+  final int applyState;
+  final bool localOrigin;
+  final String localDeviceId;
+  final String? targetMessageId;
+  final int? revision;
+  final DateTime authenticatedAt;
+  const StoredApplicationEvent({
+    required this.eventId,
+    required this.conversationId,
+    required this.kind,
+    required this.senderUserId,
+    required this.senderDeviceId,
+    required this.senderCounter,
+    required this.createdMs,
+    required this.orderingMs,
+    required this.canonicalEvent,
+    required this.bodyProjection,
+    required this.applyState,
+    required this.localOrigin,
+    required this.localDeviceId,
+    this.targetMessageId,
+    this.revision,
+    required this.authenticatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['event_id'] = Variable<String>(eventId);
+    map['conversation_id'] = Variable<String>(conversationId);
+    map['kind'] = Variable<int>(kind);
+    map['sender_user_id'] = Variable<String>(senderUserId);
+    map['sender_device_id'] = Variable<String>(senderDeviceId);
+    map['sender_counter'] = Variable<int>(senderCounter);
+    map['created_ms'] = Variable<int>(createdMs);
+    map['ordering_ms'] = Variable<int>(orderingMs);
+    map['canonical_event'] = Variable<Uint8List>(canonicalEvent);
+    map['body_projection'] = Variable<Uint8List>(bodyProjection);
+    map['apply_state'] = Variable<int>(applyState);
+    map['local_origin'] = Variable<bool>(localOrigin);
+    map['local_device_id'] = Variable<String>(localDeviceId);
+    if (!nullToAbsent || targetMessageId != null) {
+      map['target_message_id'] = Variable<String>(targetMessageId);
+    }
+    if (!nullToAbsent || revision != null) {
+      map['revision'] = Variable<int>(revision);
+    }
+    map['authenticated_at'] = Variable<DateTime>(authenticatedAt);
+    return map;
+  }
+
+  StoredApplicationEventsCompanion toCompanion(bool nullToAbsent) {
+    return StoredApplicationEventsCompanion(
+      eventId: Value(eventId),
+      conversationId: Value(conversationId),
+      kind: Value(kind),
+      senderUserId: Value(senderUserId),
+      senderDeviceId: Value(senderDeviceId),
+      senderCounter: Value(senderCounter),
+      createdMs: Value(createdMs),
+      orderingMs: Value(orderingMs),
+      canonicalEvent: Value(canonicalEvent),
+      bodyProjection: Value(bodyProjection),
+      applyState: Value(applyState),
+      localOrigin: Value(localOrigin),
+      localDeviceId: Value(localDeviceId),
+      targetMessageId: targetMessageId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(targetMessageId),
+      revision: revision == null && nullToAbsent
+          ? const Value.absent()
+          : Value(revision),
+      authenticatedAt: Value(authenticatedAt),
+    );
+  }
+
+  factory StoredApplicationEvent.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return StoredApplicationEvent(
+      eventId: serializer.fromJson<String>(json['eventId']),
+      conversationId: serializer.fromJson<String>(json['conversationId']),
+      kind: serializer.fromJson<int>(json['kind']),
+      senderUserId: serializer.fromJson<String>(json['senderUserId']),
+      senderDeviceId: serializer.fromJson<String>(json['senderDeviceId']),
+      senderCounter: serializer.fromJson<int>(json['senderCounter']),
+      createdMs: serializer.fromJson<int>(json['createdMs']),
+      orderingMs: serializer.fromJson<int>(json['orderingMs']),
+      canonicalEvent: serializer.fromJson<Uint8List>(json['canonicalEvent']),
+      bodyProjection: serializer.fromJson<Uint8List>(json['bodyProjection']),
+      applyState: serializer.fromJson<int>(json['applyState']),
+      localOrigin: serializer.fromJson<bool>(json['localOrigin']),
+      localDeviceId: serializer.fromJson<String>(json['localDeviceId']),
+      targetMessageId: serializer.fromJson<String?>(json['targetMessageId']),
+      revision: serializer.fromJson<int?>(json['revision']),
+      authenticatedAt: serializer.fromJson<DateTime>(json['authenticatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'eventId': serializer.toJson<String>(eventId),
+      'conversationId': serializer.toJson<String>(conversationId),
+      'kind': serializer.toJson<int>(kind),
+      'senderUserId': serializer.toJson<String>(senderUserId),
+      'senderDeviceId': serializer.toJson<String>(senderDeviceId),
+      'senderCounter': serializer.toJson<int>(senderCounter),
+      'createdMs': serializer.toJson<int>(createdMs),
+      'orderingMs': serializer.toJson<int>(orderingMs),
+      'canonicalEvent': serializer.toJson<Uint8List>(canonicalEvent),
+      'bodyProjection': serializer.toJson<Uint8List>(bodyProjection),
+      'applyState': serializer.toJson<int>(applyState),
+      'localOrigin': serializer.toJson<bool>(localOrigin),
+      'localDeviceId': serializer.toJson<String>(localDeviceId),
+      'targetMessageId': serializer.toJson<String?>(targetMessageId),
+      'revision': serializer.toJson<int?>(revision),
+      'authenticatedAt': serializer.toJson<DateTime>(authenticatedAt),
+    };
+  }
+
+  StoredApplicationEvent copyWith({
+    String? eventId,
+    String? conversationId,
+    int? kind,
+    String? senderUserId,
+    String? senderDeviceId,
+    int? senderCounter,
+    int? createdMs,
+    int? orderingMs,
+    Uint8List? canonicalEvent,
+    Uint8List? bodyProjection,
+    int? applyState,
+    bool? localOrigin,
+    String? localDeviceId,
+    Value<String?> targetMessageId = const Value.absent(),
+    Value<int?> revision = const Value.absent(),
+    DateTime? authenticatedAt,
+  }) => StoredApplicationEvent(
+    eventId: eventId ?? this.eventId,
+    conversationId: conversationId ?? this.conversationId,
+    kind: kind ?? this.kind,
+    senderUserId: senderUserId ?? this.senderUserId,
+    senderDeviceId: senderDeviceId ?? this.senderDeviceId,
+    senderCounter: senderCounter ?? this.senderCounter,
+    createdMs: createdMs ?? this.createdMs,
+    orderingMs: orderingMs ?? this.orderingMs,
+    canonicalEvent: canonicalEvent ?? this.canonicalEvent,
+    bodyProjection: bodyProjection ?? this.bodyProjection,
+    applyState: applyState ?? this.applyState,
+    localOrigin: localOrigin ?? this.localOrigin,
+    localDeviceId: localDeviceId ?? this.localDeviceId,
+    targetMessageId: targetMessageId.present
+        ? targetMessageId.value
+        : this.targetMessageId,
+    revision: revision.present ? revision.value : this.revision,
+    authenticatedAt: authenticatedAt ?? this.authenticatedAt,
+  );
+  StoredApplicationEvent copyWithCompanion(
+    StoredApplicationEventsCompanion data,
+  ) {
+    return StoredApplicationEvent(
+      eventId: data.eventId.present ? data.eventId.value : this.eventId,
+      conversationId: data.conversationId.present
+          ? data.conversationId.value
+          : this.conversationId,
+      kind: data.kind.present ? data.kind.value : this.kind,
+      senderUserId: data.senderUserId.present
+          ? data.senderUserId.value
+          : this.senderUserId,
+      senderDeviceId: data.senderDeviceId.present
+          ? data.senderDeviceId.value
+          : this.senderDeviceId,
+      senderCounter: data.senderCounter.present
+          ? data.senderCounter.value
+          : this.senderCounter,
+      createdMs: data.createdMs.present ? data.createdMs.value : this.createdMs,
+      orderingMs: data.orderingMs.present
+          ? data.orderingMs.value
+          : this.orderingMs,
+      canonicalEvent: data.canonicalEvent.present
+          ? data.canonicalEvent.value
+          : this.canonicalEvent,
+      bodyProjection: data.bodyProjection.present
+          ? data.bodyProjection.value
+          : this.bodyProjection,
+      applyState: data.applyState.present
+          ? data.applyState.value
+          : this.applyState,
+      localOrigin: data.localOrigin.present
+          ? data.localOrigin.value
+          : this.localOrigin,
+      localDeviceId: data.localDeviceId.present
+          ? data.localDeviceId.value
+          : this.localDeviceId,
+      targetMessageId: data.targetMessageId.present
+          ? data.targetMessageId.value
+          : this.targetMessageId,
+      revision: data.revision.present ? data.revision.value : this.revision,
+      authenticatedAt: data.authenticatedAt.present
+          ? data.authenticatedAt.value
+          : this.authenticatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('StoredApplicationEvent(')
+          ..write('eventId: $eventId, ')
+          ..write('conversationId: $conversationId, ')
+          ..write('kind: $kind, ')
+          ..write('senderUserId: $senderUserId, ')
+          ..write('senderDeviceId: $senderDeviceId, ')
+          ..write('senderCounter: $senderCounter, ')
+          ..write('createdMs: $createdMs, ')
+          ..write('orderingMs: $orderingMs, ')
+          ..write('canonicalEvent: $canonicalEvent, ')
+          ..write('bodyProjection: $bodyProjection, ')
+          ..write('applyState: $applyState, ')
+          ..write('localOrigin: $localOrigin, ')
+          ..write('localDeviceId: $localDeviceId, ')
+          ..write('targetMessageId: $targetMessageId, ')
+          ..write('revision: $revision, ')
+          ..write('authenticatedAt: $authenticatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    eventId,
+    conversationId,
+    kind,
+    senderUserId,
+    senderDeviceId,
+    senderCounter,
+    createdMs,
+    orderingMs,
+    $driftBlobEquality.hash(canonicalEvent),
+    $driftBlobEquality.hash(bodyProjection),
+    applyState,
+    localOrigin,
+    localDeviceId,
+    targetMessageId,
+    revision,
+    authenticatedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is StoredApplicationEvent &&
+          other.eventId == this.eventId &&
+          other.conversationId == this.conversationId &&
+          other.kind == this.kind &&
+          other.senderUserId == this.senderUserId &&
+          other.senderDeviceId == this.senderDeviceId &&
+          other.senderCounter == this.senderCounter &&
+          other.createdMs == this.createdMs &&
+          other.orderingMs == this.orderingMs &&
+          $driftBlobEquality.equals(
+            other.canonicalEvent,
+            this.canonicalEvent,
+          ) &&
+          $driftBlobEquality.equals(
+            other.bodyProjection,
+            this.bodyProjection,
+          ) &&
+          other.applyState == this.applyState &&
+          other.localOrigin == this.localOrigin &&
+          other.localDeviceId == this.localDeviceId &&
+          other.targetMessageId == this.targetMessageId &&
+          other.revision == this.revision &&
+          other.authenticatedAt == this.authenticatedAt);
+}
+
+class StoredApplicationEventsCompanion
+    extends UpdateCompanion<StoredApplicationEvent> {
+  final Value<String> eventId;
+  final Value<String> conversationId;
+  final Value<int> kind;
+  final Value<String> senderUserId;
+  final Value<String> senderDeviceId;
+  final Value<int> senderCounter;
+  final Value<int> createdMs;
+  final Value<int> orderingMs;
+  final Value<Uint8List> canonicalEvent;
+  final Value<Uint8List> bodyProjection;
+  final Value<int> applyState;
+  final Value<bool> localOrigin;
+  final Value<String> localDeviceId;
+  final Value<String?> targetMessageId;
+  final Value<int?> revision;
+  final Value<DateTime> authenticatedAt;
+  final Value<int> rowid;
+  const StoredApplicationEventsCompanion({
+    this.eventId = const Value.absent(),
+    this.conversationId = const Value.absent(),
+    this.kind = const Value.absent(),
+    this.senderUserId = const Value.absent(),
+    this.senderDeviceId = const Value.absent(),
+    this.senderCounter = const Value.absent(),
+    this.createdMs = const Value.absent(),
+    this.orderingMs = const Value.absent(),
+    this.canonicalEvent = const Value.absent(),
+    this.bodyProjection = const Value.absent(),
+    this.applyState = const Value.absent(),
+    this.localOrigin = const Value.absent(),
+    this.localDeviceId = const Value.absent(),
+    this.targetMessageId = const Value.absent(),
+    this.revision = const Value.absent(),
+    this.authenticatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  StoredApplicationEventsCompanion.insert({
+    required String eventId,
+    required String conversationId,
+    required int kind,
+    required String senderUserId,
+    required String senderDeviceId,
+    required int senderCounter,
+    required int createdMs,
+    required int orderingMs,
+    required Uint8List canonicalEvent,
+    required Uint8List bodyProjection,
+    required int applyState,
+    this.localOrigin = const Value.absent(),
+    this.localDeviceId = const Value.absent(),
+    this.targetMessageId = const Value.absent(),
+    this.revision = const Value.absent(),
+    this.authenticatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : eventId = Value(eventId),
+       conversationId = Value(conversationId),
+       kind = Value(kind),
+       senderUserId = Value(senderUserId),
+       senderDeviceId = Value(senderDeviceId),
+       senderCounter = Value(senderCounter),
+       createdMs = Value(createdMs),
+       orderingMs = Value(orderingMs),
+       canonicalEvent = Value(canonicalEvent),
+       bodyProjection = Value(bodyProjection),
+       applyState = Value(applyState);
+  static Insertable<StoredApplicationEvent> custom({
+    Expression<String>? eventId,
+    Expression<String>? conversationId,
+    Expression<int>? kind,
+    Expression<String>? senderUserId,
+    Expression<String>? senderDeviceId,
+    Expression<int>? senderCounter,
+    Expression<int>? createdMs,
+    Expression<int>? orderingMs,
+    Expression<Uint8List>? canonicalEvent,
+    Expression<Uint8List>? bodyProjection,
+    Expression<int>? applyState,
+    Expression<bool>? localOrigin,
+    Expression<String>? localDeviceId,
+    Expression<String>? targetMessageId,
+    Expression<int>? revision,
+    Expression<DateTime>? authenticatedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (eventId != null) 'event_id': eventId,
+      if (conversationId != null) 'conversation_id': conversationId,
+      if (kind != null) 'kind': kind,
+      if (senderUserId != null) 'sender_user_id': senderUserId,
+      if (senderDeviceId != null) 'sender_device_id': senderDeviceId,
+      if (senderCounter != null) 'sender_counter': senderCounter,
+      if (createdMs != null) 'created_ms': createdMs,
+      if (orderingMs != null) 'ordering_ms': orderingMs,
+      if (canonicalEvent != null) 'canonical_event': canonicalEvent,
+      if (bodyProjection != null) 'body_projection': bodyProjection,
+      if (applyState != null) 'apply_state': applyState,
+      if (localOrigin != null) 'local_origin': localOrigin,
+      if (localDeviceId != null) 'local_device_id': localDeviceId,
+      if (targetMessageId != null) 'target_message_id': targetMessageId,
+      if (revision != null) 'revision': revision,
+      if (authenticatedAt != null) 'authenticated_at': authenticatedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  StoredApplicationEventsCompanion copyWith({
+    Value<String>? eventId,
+    Value<String>? conversationId,
+    Value<int>? kind,
+    Value<String>? senderUserId,
+    Value<String>? senderDeviceId,
+    Value<int>? senderCounter,
+    Value<int>? createdMs,
+    Value<int>? orderingMs,
+    Value<Uint8List>? canonicalEvent,
+    Value<Uint8List>? bodyProjection,
+    Value<int>? applyState,
+    Value<bool>? localOrigin,
+    Value<String>? localDeviceId,
+    Value<String?>? targetMessageId,
+    Value<int?>? revision,
+    Value<DateTime>? authenticatedAt,
+    Value<int>? rowid,
+  }) {
+    return StoredApplicationEventsCompanion(
+      eventId: eventId ?? this.eventId,
+      conversationId: conversationId ?? this.conversationId,
+      kind: kind ?? this.kind,
+      senderUserId: senderUserId ?? this.senderUserId,
+      senderDeviceId: senderDeviceId ?? this.senderDeviceId,
+      senderCounter: senderCounter ?? this.senderCounter,
+      createdMs: createdMs ?? this.createdMs,
+      orderingMs: orderingMs ?? this.orderingMs,
+      canonicalEvent: canonicalEvent ?? this.canonicalEvent,
+      bodyProjection: bodyProjection ?? this.bodyProjection,
+      applyState: applyState ?? this.applyState,
+      localOrigin: localOrigin ?? this.localOrigin,
+      localDeviceId: localDeviceId ?? this.localDeviceId,
+      targetMessageId: targetMessageId ?? this.targetMessageId,
+      revision: revision ?? this.revision,
+      authenticatedAt: authenticatedAt ?? this.authenticatedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (eventId.present) {
+      map['event_id'] = Variable<String>(eventId.value);
+    }
+    if (conversationId.present) {
+      map['conversation_id'] = Variable<String>(conversationId.value);
+    }
+    if (kind.present) {
+      map['kind'] = Variable<int>(kind.value);
+    }
+    if (senderUserId.present) {
+      map['sender_user_id'] = Variable<String>(senderUserId.value);
+    }
+    if (senderDeviceId.present) {
+      map['sender_device_id'] = Variable<String>(senderDeviceId.value);
+    }
+    if (senderCounter.present) {
+      map['sender_counter'] = Variable<int>(senderCounter.value);
+    }
+    if (createdMs.present) {
+      map['created_ms'] = Variable<int>(createdMs.value);
+    }
+    if (orderingMs.present) {
+      map['ordering_ms'] = Variable<int>(orderingMs.value);
+    }
+    if (canonicalEvent.present) {
+      map['canonical_event'] = Variable<Uint8List>(canonicalEvent.value);
+    }
+    if (bodyProjection.present) {
+      map['body_projection'] = Variable<Uint8List>(bodyProjection.value);
+    }
+    if (applyState.present) {
+      map['apply_state'] = Variable<int>(applyState.value);
+    }
+    if (localOrigin.present) {
+      map['local_origin'] = Variable<bool>(localOrigin.value);
+    }
+    if (localDeviceId.present) {
+      map['local_device_id'] = Variable<String>(localDeviceId.value);
+    }
+    if (targetMessageId.present) {
+      map['target_message_id'] = Variable<String>(targetMessageId.value);
+    }
+    if (revision.present) {
+      map['revision'] = Variable<int>(revision.value);
+    }
+    if (authenticatedAt.present) {
+      map['authenticated_at'] = Variable<DateTime>(authenticatedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('StoredApplicationEventsCompanion(')
+          ..write('eventId: $eventId, ')
+          ..write('conversationId: $conversationId, ')
+          ..write('kind: $kind, ')
+          ..write('senderUserId: $senderUserId, ')
+          ..write('senderDeviceId: $senderDeviceId, ')
+          ..write('senderCounter: $senderCounter, ')
+          ..write('createdMs: $createdMs, ')
+          ..write('orderingMs: $orderingMs, ')
+          ..write('canonicalEvent: $canonicalEvent, ')
+          ..write('bodyProjection: $bodyProjection, ')
+          ..write('applyState: $applyState, ')
+          ..write('localOrigin: $localOrigin, ')
+          ..write('localDeviceId: $localDeviceId, ')
+          ..write('targetMessageId: $targetMessageId, ')
+          ..write('revision: $revision, ')
+          ..write('authenticatedAt: $authenticatedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $ApplicationEventTargetsTable extends ApplicationEventTargets
+    with TableInfo<$ApplicationEventTargetsTable, ApplicationEventTarget> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $ApplicationEventTargetsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _messageIdMeta = const VerificationMeta(
+    'messageId',
+  );
+  @override
+  late final GeneratedColumn<String> messageId = GeneratedColumn<String>(
+    'message_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _eventIdMeta = const VerificationMeta(
+    'eventId',
+  );
+  @override
+  late final GeneratedColumn<String> eventId = GeneratedColumn<String>(
+    'event_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [messageId, eventId];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'application_event_targets';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<ApplicationEventTarget> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('message_id')) {
+      context.handle(
+        _messageIdMeta,
+        messageId.isAcceptableOrUnknown(data['message_id']!, _messageIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_messageIdMeta);
+    }
+    if (data.containsKey('event_id')) {
+      context.handle(
+        _eventIdMeta,
+        eventId.isAcceptableOrUnknown(data['event_id']!, _eventIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_eventIdMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {messageId, eventId};
+  @override
+  ApplicationEventTarget map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return ApplicationEventTarget(
+      messageId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}message_id'],
+      )!,
+      eventId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}event_id'],
+      )!,
+    );
+  }
+
+  @override
+  $ApplicationEventTargetsTable createAlias(String alias) {
+    return $ApplicationEventTargetsTable(attachedDatabase, alias);
+  }
+}
+
+class ApplicationEventTarget extends DataClass
+    implements Insertable<ApplicationEventTarget> {
+  final String messageId;
+  final String eventId;
+  const ApplicationEventTarget({
+    required this.messageId,
+    required this.eventId,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['message_id'] = Variable<String>(messageId);
+    map['event_id'] = Variable<String>(eventId);
+    return map;
+  }
+
+  ApplicationEventTargetsCompanion toCompanion(bool nullToAbsent) {
+    return ApplicationEventTargetsCompanion(
+      messageId: Value(messageId),
+      eventId: Value(eventId),
+    );
+  }
+
+  factory ApplicationEventTarget.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return ApplicationEventTarget(
+      messageId: serializer.fromJson<String>(json['messageId']),
+      eventId: serializer.fromJson<String>(json['eventId']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'messageId': serializer.toJson<String>(messageId),
+      'eventId': serializer.toJson<String>(eventId),
+    };
+  }
+
+  ApplicationEventTarget copyWith({String? messageId, String? eventId}) =>
+      ApplicationEventTarget(
+        messageId: messageId ?? this.messageId,
+        eventId: eventId ?? this.eventId,
+      );
+  ApplicationEventTarget copyWithCompanion(
+    ApplicationEventTargetsCompanion data,
+  ) {
+    return ApplicationEventTarget(
+      messageId: data.messageId.present ? data.messageId.value : this.messageId,
+      eventId: data.eventId.present ? data.eventId.value : this.eventId,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ApplicationEventTarget(')
+          ..write('messageId: $messageId, ')
+          ..write('eventId: $eventId')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(messageId, eventId);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is ApplicationEventTarget &&
+          other.messageId == this.messageId &&
+          other.eventId == this.eventId);
+}
+
+class ApplicationEventTargetsCompanion
+    extends UpdateCompanion<ApplicationEventTarget> {
+  final Value<String> messageId;
+  final Value<String> eventId;
+  final Value<int> rowid;
+  const ApplicationEventTargetsCompanion({
+    this.messageId = const Value.absent(),
+    this.eventId = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  ApplicationEventTargetsCompanion.insert({
+    required String messageId,
+    required String eventId,
+    this.rowid = const Value.absent(),
+  }) : messageId = Value(messageId),
+       eventId = Value(eventId);
+  static Insertable<ApplicationEventTarget> custom({
+    Expression<String>? messageId,
+    Expression<String>? eventId,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (messageId != null) 'message_id': messageId,
+      if (eventId != null) 'event_id': eventId,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  ApplicationEventTargetsCompanion copyWith({
+    Value<String>? messageId,
+    Value<String>? eventId,
+    Value<int>? rowid,
+  }) {
+    return ApplicationEventTargetsCompanion(
+      messageId: messageId ?? this.messageId,
+      eventId: eventId ?? this.eventId,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (messageId.present) {
+      map['message_id'] = Variable<String>(messageId.value);
+    }
+    if (eventId.present) {
+      map['event_id'] = Variable<String>(eventId.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ApplicationEventTargetsCompanion(')
+          ..write('messageId: $messageId, ')
+          ..write('eventId: $eventId, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $UnsupportedApplicationEventsTable extends UnsupportedApplicationEvents
+    with
+        TableInfo<
+          $UnsupportedApplicationEventsTable,
+          UnsupportedApplicationEvent
+        > {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $UnsupportedApplicationEventsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _recordKeyMeta = const VerificationMeta(
+    'recordKey',
+  );
+  @override
+  late final GeneratedColumn<String> recordKey = GeneratedColumn<String>(
+    'record_key',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _eventIdMeta = const VerificationMeta(
+    'eventId',
+  );
+  @override
+  late final GeneratedColumn<String> eventId = GeneratedColumn<String>(
+    'event_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways('UNIQUE'),
+  );
+  static const VerificationMeta _conversationIdMeta = const VerificationMeta(
+    'conversationId',
+  );
+  @override
+  late final GeneratedColumn<String> conversationId = GeneratedColumn<String>(
+    'conversation_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _versionMeta = const VerificationMeta(
+    'version',
+  );
+  @override
+  late final GeneratedColumn<int> version = GeneratedColumn<int>(
+    'version',
+    aliasedName,
+    false,
+    check: () => ComparableExpr(version).isBetweenValues(0, 255),
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _kindMeta = const VerificationMeta('kind');
+  @override
+  late final GeneratedColumn<int> kind = GeneratedColumn<int>(
+    'kind',
+    aliasedName,
+    true,
+    check: () => kind.isNull() | ComparableExpr(kind).isBetweenValues(0, 65535),
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _senderUserIdMeta = const VerificationMeta(
+    'senderUserId',
+  );
+  @override
+  late final GeneratedColumn<String> senderUserId = GeneratedColumn<String>(
+    'sender_user_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _senderDeviceIdMeta = const VerificationMeta(
+    'senderDeviceId',
+  );
+  @override
+  late final GeneratedColumn<String> senderDeviceId = GeneratedColumn<String>(
+    'sender_device_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _senderCounterMeta = const VerificationMeta(
+    'senderCounter',
+  );
+  @override
+  late final GeneratedColumn<int> senderCounter = GeneratedColumn<int>(
+    'sender_counter',
+    aliasedName,
+    true,
+    check: () =>
+        senderCounter.isNull() |
+        ComparableExpr(senderCounter).isBiggerThanValue(0),
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _applyStateMeta = const VerificationMeta(
+    'applyState',
+  );
+  @override
+  late final GeneratedColumn<int> applyState = GeneratedColumn<int>(
+    'apply_state',
+    aliasedName,
+    false,
+    check: () => ComparableExpr(applyState).isBetweenValues(0, 2),
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _retainedPayloadMeta = const VerificationMeta(
+    'retainedPayload',
+  );
+  @override
+  late final GeneratedColumn<Uint8List> retainedPayload =
+      GeneratedColumn<Uint8List>(
+        'retained_payload',
+        aliasedName,
+        false,
+        type: DriftSqlType.blob,
+        requiredDuringInsert: true,
+      );
+  static const VerificationMeta _authenticatedAtMeta = const VerificationMeta(
+    'authenticatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> authenticatedAt =
+      GeneratedColumn<DateTime>(
+        'authenticated_at',
+        aliasedName,
+        false,
+        type: DriftSqlType.dateTime,
+        requiredDuringInsert: false,
+        defaultValue: currentDateAndTime,
+      );
+  @override
+  List<GeneratedColumn> get $columns => [
+    recordKey,
+    eventId,
+    conversationId,
+    version,
+    kind,
+    senderUserId,
+    senderDeviceId,
+    senderCounter,
+    applyState,
+    retainedPayload,
+    authenticatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'unsupported_application_events';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<UnsupportedApplicationEvent> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('record_key')) {
+      context.handle(
+        _recordKeyMeta,
+        recordKey.isAcceptableOrUnknown(data['record_key']!, _recordKeyMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_recordKeyMeta);
+    }
+    if (data.containsKey('event_id')) {
+      context.handle(
+        _eventIdMeta,
+        eventId.isAcceptableOrUnknown(data['event_id']!, _eventIdMeta),
+      );
+    }
+    if (data.containsKey('conversation_id')) {
+      context.handle(
+        _conversationIdMeta,
+        conversationId.isAcceptableOrUnknown(
+          data['conversation_id']!,
+          _conversationIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('version')) {
+      context.handle(
+        _versionMeta,
+        version.isAcceptableOrUnknown(data['version']!, _versionMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_versionMeta);
+    }
+    if (data.containsKey('kind')) {
+      context.handle(
+        _kindMeta,
+        kind.isAcceptableOrUnknown(data['kind']!, _kindMeta),
+      );
+    }
+    if (data.containsKey('sender_user_id')) {
+      context.handle(
+        _senderUserIdMeta,
+        senderUserId.isAcceptableOrUnknown(
+          data['sender_user_id']!,
+          _senderUserIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_senderUserIdMeta);
+    }
+    if (data.containsKey('sender_device_id')) {
+      context.handle(
+        _senderDeviceIdMeta,
+        senderDeviceId.isAcceptableOrUnknown(
+          data['sender_device_id']!,
+          _senderDeviceIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_senderDeviceIdMeta);
+    }
+    if (data.containsKey('sender_counter')) {
+      context.handle(
+        _senderCounterMeta,
+        senderCounter.isAcceptableOrUnknown(
+          data['sender_counter']!,
+          _senderCounterMeta,
+        ),
+      );
+    }
+    if (data.containsKey('apply_state')) {
+      context.handle(
+        _applyStateMeta,
+        applyState.isAcceptableOrUnknown(data['apply_state']!, _applyStateMeta),
+      );
+    }
+    if (data.containsKey('retained_payload')) {
+      context.handle(
+        _retainedPayloadMeta,
+        retainedPayload.isAcceptableOrUnknown(
+          data['retained_payload']!,
+          _retainedPayloadMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_retainedPayloadMeta);
+    }
+    if (data.containsKey('authenticated_at')) {
+      context.handle(
+        _authenticatedAtMeta,
+        authenticatedAt.isAcceptableOrUnknown(
+          data['authenticated_at']!,
+          _authenticatedAtMeta,
+        ),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {recordKey};
+  @override
+  UnsupportedApplicationEvent map(
+    Map<String, dynamic> data, {
+    String? tablePrefix,
+  }) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return UnsupportedApplicationEvent(
+      recordKey: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}record_key'],
+      )!,
+      eventId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}event_id'],
+      ),
+      conversationId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}conversation_id'],
+      ),
+      version: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}version'],
+      )!,
+      kind: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}kind'],
+      ),
+      senderUserId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}sender_user_id'],
+      )!,
+      senderDeviceId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}sender_device_id'],
+      )!,
+      senderCounter: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}sender_counter'],
+      ),
+      applyState: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}apply_state'],
+      )!,
+      retainedPayload: attachedDatabase.typeMapping.read(
+        DriftSqlType.blob,
+        data['${effectivePrefix}retained_payload'],
+      )!,
+      authenticatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}authenticated_at'],
+      )!,
+    );
+  }
+
+  @override
+  $UnsupportedApplicationEventsTable createAlias(String alias) {
+    return $UnsupportedApplicationEventsTable(attachedDatabase, alias);
+  }
+}
+
+class UnsupportedApplicationEvent extends DataClass
+    implements Insertable<UnsupportedApplicationEvent> {
+  final String recordKey;
+  final String? eventId;
+  final String? conversationId;
+  final int version;
+  final int? kind;
+  final String senderUserId;
+  final String senderDeviceId;
+  final int? senderCounter;
+  final int applyState;
+  final Uint8List retainedPayload;
+  final DateTime authenticatedAt;
+  const UnsupportedApplicationEvent({
+    required this.recordKey,
+    this.eventId,
+    this.conversationId,
+    required this.version,
+    this.kind,
+    required this.senderUserId,
+    required this.senderDeviceId,
+    this.senderCounter,
+    required this.applyState,
+    required this.retainedPayload,
+    required this.authenticatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['record_key'] = Variable<String>(recordKey);
+    if (!nullToAbsent || eventId != null) {
+      map['event_id'] = Variable<String>(eventId);
+    }
+    if (!nullToAbsent || conversationId != null) {
+      map['conversation_id'] = Variable<String>(conversationId);
+    }
+    map['version'] = Variable<int>(version);
+    if (!nullToAbsent || kind != null) {
+      map['kind'] = Variable<int>(kind);
+    }
+    map['sender_user_id'] = Variable<String>(senderUserId);
+    map['sender_device_id'] = Variable<String>(senderDeviceId);
+    if (!nullToAbsent || senderCounter != null) {
+      map['sender_counter'] = Variable<int>(senderCounter);
+    }
+    map['apply_state'] = Variable<int>(applyState);
+    map['retained_payload'] = Variable<Uint8List>(retainedPayload);
+    map['authenticated_at'] = Variable<DateTime>(authenticatedAt);
+    return map;
+  }
+
+  UnsupportedApplicationEventsCompanion toCompanion(bool nullToAbsent) {
+    return UnsupportedApplicationEventsCompanion(
+      recordKey: Value(recordKey),
+      eventId: eventId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(eventId),
+      conversationId: conversationId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(conversationId),
+      version: Value(version),
+      kind: kind == null && nullToAbsent ? const Value.absent() : Value(kind),
+      senderUserId: Value(senderUserId),
+      senderDeviceId: Value(senderDeviceId),
+      senderCounter: senderCounter == null && nullToAbsent
+          ? const Value.absent()
+          : Value(senderCounter),
+      applyState: Value(applyState),
+      retainedPayload: Value(retainedPayload),
+      authenticatedAt: Value(authenticatedAt),
+    );
+  }
+
+  factory UnsupportedApplicationEvent.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return UnsupportedApplicationEvent(
+      recordKey: serializer.fromJson<String>(json['recordKey']),
+      eventId: serializer.fromJson<String?>(json['eventId']),
+      conversationId: serializer.fromJson<String?>(json['conversationId']),
+      version: serializer.fromJson<int>(json['version']),
+      kind: serializer.fromJson<int?>(json['kind']),
+      senderUserId: serializer.fromJson<String>(json['senderUserId']),
+      senderDeviceId: serializer.fromJson<String>(json['senderDeviceId']),
+      senderCounter: serializer.fromJson<int?>(json['senderCounter']),
+      applyState: serializer.fromJson<int>(json['applyState']),
+      retainedPayload: serializer.fromJson<Uint8List>(json['retainedPayload']),
+      authenticatedAt: serializer.fromJson<DateTime>(json['authenticatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'recordKey': serializer.toJson<String>(recordKey),
+      'eventId': serializer.toJson<String?>(eventId),
+      'conversationId': serializer.toJson<String?>(conversationId),
+      'version': serializer.toJson<int>(version),
+      'kind': serializer.toJson<int?>(kind),
+      'senderUserId': serializer.toJson<String>(senderUserId),
+      'senderDeviceId': serializer.toJson<String>(senderDeviceId),
+      'senderCounter': serializer.toJson<int?>(senderCounter),
+      'applyState': serializer.toJson<int>(applyState),
+      'retainedPayload': serializer.toJson<Uint8List>(retainedPayload),
+      'authenticatedAt': serializer.toJson<DateTime>(authenticatedAt),
+    };
+  }
+
+  UnsupportedApplicationEvent copyWith({
+    String? recordKey,
+    Value<String?> eventId = const Value.absent(),
+    Value<String?> conversationId = const Value.absent(),
+    int? version,
+    Value<int?> kind = const Value.absent(),
+    String? senderUserId,
+    String? senderDeviceId,
+    Value<int?> senderCounter = const Value.absent(),
+    int? applyState,
+    Uint8List? retainedPayload,
+    DateTime? authenticatedAt,
+  }) => UnsupportedApplicationEvent(
+    recordKey: recordKey ?? this.recordKey,
+    eventId: eventId.present ? eventId.value : this.eventId,
+    conversationId: conversationId.present
+        ? conversationId.value
+        : this.conversationId,
+    version: version ?? this.version,
+    kind: kind.present ? kind.value : this.kind,
+    senderUserId: senderUserId ?? this.senderUserId,
+    senderDeviceId: senderDeviceId ?? this.senderDeviceId,
+    senderCounter: senderCounter.present
+        ? senderCounter.value
+        : this.senderCounter,
+    applyState: applyState ?? this.applyState,
+    retainedPayload: retainedPayload ?? this.retainedPayload,
+    authenticatedAt: authenticatedAt ?? this.authenticatedAt,
+  );
+  UnsupportedApplicationEvent copyWithCompanion(
+    UnsupportedApplicationEventsCompanion data,
+  ) {
+    return UnsupportedApplicationEvent(
+      recordKey: data.recordKey.present ? data.recordKey.value : this.recordKey,
+      eventId: data.eventId.present ? data.eventId.value : this.eventId,
+      conversationId: data.conversationId.present
+          ? data.conversationId.value
+          : this.conversationId,
+      version: data.version.present ? data.version.value : this.version,
+      kind: data.kind.present ? data.kind.value : this.kind,
+      senderUserId: data.senderUserId.present
+          ? data.senderUserId.value
+          : this.senderUserId,
+      senderDeviceId: data.senderDeviceId.present
+          ? data.senderDeviceId.value
+          : this.senderDeviceId,
+      senderCounter: data.senderCounter.present
+          ? data.senderCounter.value
+          : this.senderCounter,
+      applyState: data.applyState.present
+          ? data.applyState.value
+          : this.applyState,
+      retainedPayload: data.retainedPayload.present
+          ? data.retainedPayload.value
+          : this.retainedPayload,
+      authenticatedAt: data.authenticatedAt.present
+          ? data.authenticatedAt.value
+          : this.authenticatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('UnsupportedApplicationEvent(')
+          ..write('recordKey: $recordKey, ')
+          ..write('eventId: $eventId, ')
+          ..write('conversationId: $conversationId, ')
+          ..write('version: $version, ')
+          ..write('kind: $kind, ')
+          ..write('senderUserId: $senderUserId, ')
+          ..write('senderDeviceId: $senderDeviceId, ')
+          ..write('senderCounter: $senderCounter, ')
+          ..write('applyState: $applyState, ')
+          ..write('retainedPayload: $retainedPayload, ')
+          ..write('authenticatedAt: $authenticatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    recordKey,
+    eventId,
+    conversationId,
+    version,
+    kind,
+    senderUserId,
+    senderDeviceId,
+    senderCounter,
+    applyState,
+    $driftBlobEquality.hash(retainedPayload),
+    authenticatedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is UnsupportedApplicationEvent &&
+          other.recordKey == this.recordKey &&
+          other.eventId == this.eventId &&
+          other.conversationId == this.conversationId &&
+          other.version == this.version &&
+          other.kind == this.kind &&
+          other.senderUserId == this.senderUserId &&
+          other.senderDeviceId == this.senderDeviceId &&
+          other.senderCounter == this.senderCounter &&
+          other.applyState == this.applyState &&
+          $driftBlobEquality.equals(
+            other.retainedPayload,
+            this.retainedPayload,
+          ) &&
+          other.authenticatedAt == this.authenticatedAt);
+}
+
+class UnsupportedApplicationEventsCompanion
+    extends UpdateCompanion<UnsupportedApplicationEvent> {
+  final Value<String> recordKey;
+  final Value<String?> eventId;
+  final Value<String?> conversationId;
+  final Value<int> version;
+  final Value<int?> kind;
+  final Value<String> senderUserId;
+  final Value<String> senderDeviceId;
+  final Value<int?> senderCounter;
+  final Value<int> applyState;
+  final Value<Uint8List> retainedPayload;
+  final Value<DateTime> authenticatedAt;
+  final Value<int> rowid;
+  const UnsupportedApplicationEventsCompanion({
+    this.recordKey = const Value.absent(),
+    this.eventId = const Value.absent(),
+    this.conversationId = const Value.absent(),
+    this.version = const Value.absent(),
+    this.kind = const Value.absent(),
+    this.senderUserId = const Value.absent(),
+    this.senderDeviceId = const Value.absent(),
+    this.senderCounter = const Value.absent(),
+    this.applyState = const Value.absent(),
+    this.retainedPayload = const Value.absent(),
+    this.authenticatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  UnsupportedApplicationEventsCompanion.insert({
+    required String recordKey,
+    this.eventId = const Value.absent(),
+    this.conversationId = const Value.absent(),
+    required int version,
+    this.kind = const Value.absent(),
+    required String senderUserId,
+    required String senderDeviceId,
+    this.senderCounter = const Value.absent(),
+    this.applyState = const Value.absent(),
+    required Uint8List retainedPayload,
+    this.authenticatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : recordKey = Value(recordKey),
+       version = Value(version),
+       senderUserId = Value(senderUserId),
+       senderDeviceId = Value(senderDeviceId),
+       retainedPayload = Value(retainedPayload);
+  static Insertable<UnsupportedApplicationEvent> custom({
+    Expression<String>? recordKey,
+    Expression<String>? eventId,
+    Expression<String>? conversationId,
+    Expression<int>? version,
+    Expression<int>? kind,
+    Expression<String>? senderUserId,
+    Expression<String>? senderDeviceId,
+    Expression<int>? senderCounter,
+    Expression<int>? applyState,
+    Expression<Uint8List>? retainedPayload,
+    Expression<DateTime>? authenticatedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (recordKey != null) 'record_key': recordKey,
+      if (eventId != null) 'event_id': eventId,
+      if (conversationId != null) 'conversation_id': conversationId,
+      if (version != null) 'version': version,
+      if (kind != null) 'kind': kind,
+      if (senderUserId != null) 'sender_user_id': senderUserId,
+      if (senderDeviceId != null) 'sender_device_id': senderDeviceId,
+      if (senderCounter != null) 'sender_counter': senderCounter,
+      if (applyState != null) 'apply_state': applyState,
+      if (retainedPayload != null) 'retained_payload': retainedPayload,
+      if (authenticatedAt != null) 'authenticated_at': authenticatedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  UnsupportedApplicationEventsCompanion copyWith({
+    Value<String>? recordKey,
+    Value<String?>? eventId,
+    Value<String?>? conversationId,
+    Value<int>? version,
+    Value<int?>? kind,
+    Value<String>? senderUserId,
+    Value<String>? senderDeviceId,
+    Value<int?>? senderCounter,
+    Value<int>? applyState,
+    Value<Uint8List>? retainedPayload,
+    Value<DateTime>? authenticatedAt,
+    Value<int>? rowid,
+  }) {
+    return UnsupportedApplicationEventsCompanion(
+      recordKey: recordKey ?? this.recordKey,
+      eventId: eventId ?? this.eventId,
+      conversationId: conversationId ?? this.conversationId,
+      version: version ?? this.version,
+      kind: kind ?? this.kind,
+      senderUserId: senderUserId ?? this.senderUserId,
+      senderDeviceId: senderDeviceId ?? this.senderDeviceId,
+      senderCounter: senderCounter ?? this.senderCounter,
+      applyState: applyState ?? this.applyState,
+      retainedPayload: retainedPayload ?? this.retainedPayload,
+      authenticatedAt: authenticatedAt ?? this.authenticatedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (recordKey.present) {
+      map['record_key'] = Variable<String>(recordKey.value);
+    }
+    if (eventId.present) {
+      map['event_id'] = Variable<String>(eventId.value);
+    }
+    if (conversationId.present) {
+      map['conversation_id'] = Variable<String>(conversationId.value);
+    }
+    if (version.present) {
+      map['version'] = Variable<int>(version.value);
+    }
+    if (kind.present) {
+      map['kind'] = Variable<int>(kind.value);
+    }
+    if (senderUserId.present) {
+      map['sender_user_id'] = Variable<String>(senderUserId.value);
+    }
+    if (senderDeviceId.present) {
+      map['sender_device_id'] = Variable<String>(senderDeviceId.value);
+    }
+    if (senderCounter.present) {
+      map['sender_counter'] = Variable<int>(senderCounter.value);
+    }
+    if (applyState.present) {
+      map['apply_state'] = Variable<int>(applyState.value);
+    }
+    if (retainedPayload.present) {
+      map['retained_payload'] = Variable<Uint8List>(retainedPayload.value);
+    }
+    if (authenticatedAt.present) {
+      map['authenticated_at'] = Variable<DateTime>(authenticatedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('UnsupportedApplicationEventsCompanion(')
+          ..write('recordKey: $recordKey, ')
+          ..write('eventId: $eventId, ')
+          ..write('conversationId: $conversationId, ')
+          ..write('version: $version, ')
+          ..write('kind: $kind, ')
+          ..write('senderUserId: $senderUserId, ')
+          ..write('senderDeviceId: $senderDeviceId, ')
+          ..write('senderCounter: $senderCounter, ')
+          ..write('applyState: $applyState, ')
+          ..write('retainedPayload: $retainedPayload, ')
+          ..write('authenticatedAt: $authenticatedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $ApplicationSenderCountersTable extends ApplicationSenderCounters
+    with TableInfo<$ApplicationSenderCountersTable, ApplicationSenderCounter> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $ApplicationSenderCountersTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _deviceIdMeta = const VerificationMeta(
+    'deviceId',
+  );
+  @override
+  late final GeneratedColumn<String> deviceId = GeneratedColumn<String>(
+    'device_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _lastCounterMeta = const VerificationMeta(
+    'lastCounter',
+  );
+  @override
+  late final GeneratedColumn<int> lastCounter = GeneratedColumn<int>(
+    'last_counter',
+    aliasedName,
+    false,
+    check: () => ComparableExpr(lastCounter).isBiggerOrEqualValue(0),
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  @override
+  List<GeneratedColumn> get $columns => [deviceId, lastCounter];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'application_sender_counters';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<ApplicationSenderCounter> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('device_id')) {
+      context.handle(
+        _deviceIdMeta,
+        deviceId.isAcceptableOrUnknown(data['device_id']!, _deviceIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_deviceIdMeta);
+    }
+    if (data.containsKey('last_counter')) {
+      context.handle(
+        _lastCounterMeta,
+        lastCounter.isAcceptableOrUnknown(
+          data['last_counter']!,
+          _lastCounterMeta,
+        ),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {deviceId};
+  @override
+  ApplicationSenderCounter map(
+    Map<String, dynamic> data, {
+    String? tablePrefix,
+  }) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return ApplicationSenderCounter(
+      deviceId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}device_id'],
+      )!,
+      lastCounter: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}last_counter'],
+      )!,
+    );
+  }
+
+  @override
+  $ApplicationSenderCountersTable createAlias(String alias) {
+    return $ApplicationSenderCountersTable(attachedDatabase, alias);
+  }
+}
+
+class ApplicationSenderCounter extends DataClass
+    implements Insertable<ApplicationSenderCounter> {
+  final String deviceId;
+  final int lastCounter;
+  const ApplicationSenderCounter({
+    required this.deviceId,
+    required this.lastCounter,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['device_id'] = Variable<String>(deviceId);
+    map['last_counter'] = Variable<int>(lastCounter);
+    return map;
+  }
+
+  ApplicationSenderCountersCompanion toCompanion(bool nullToAbsent) {
+    return ApplicationSenderCountersCompanion(
+      deviceId: Value(deviceId),
+      lastCounter: Value(lastCounter),
+    );
+  }
+
+  factory ApplicationSenderCounter.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return ApplicationSenderCounter(
+      deviceId: serializer.fromJson<String>(json['deviceId']),
+      lastCounter: serializer.fromJson<int>(json['lastCounter']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'deviceId': serializer.toJson<String>(deviceId),
+      'lastCounter': serializer.toJson<int>(lastCounter),
+    };
+  }
+
+  ApplicationSenderCounter copyWith({String? deviceId, int? lastCounter}) =>
+      ApplicationSenderCounter(
+        deviceId: deviceId ?? this.deviceId,
+        lastCounter: lastCounter ?? this.lastCounter,
+      );
+  ApplicationSenderCounter copyWithCompanion(
+    ApplicationSenderCountersCompanion data,
+  ) {
+    return ApplicationSenderCounter(
+      deviceId: data.deviceId.present ? data.deviceId.value : this.deviceId,
+      lastCounter: data.lastCounter.present
+          ? data.lastCounter.value
+          : this.lastCounter,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ApplicationSenderCounter(')
+          ..write('deviceId: $deviceId, ')
+          ..write('lastCounter: $lastCounter')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(deviceId, lastCounter);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is ApplicationSenderCounter &&
+          other.deviceId == this.deviceId &&
+          other.lastCounter == this.lastCounter);
+}
+
+class ApplicationSenderCountersCompanion
+    extends UpdateCompanion<ApplicationSenderCounter> {
+  final Value<String> deviceId;
+  final Value<int> lastCounter;
+  final Value<int> rowid;
+  const ApplicationSenderCountersCompanion({
+    this.deviceId = const Value.absent(),
+    this.lastCounter = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  ApplicationSenderCountersCompanion.insert({
+    required String deviceId,
+    this.lastCounter = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : deviceId = Value(deviceId);
+  static Insertable<ApplicationSenderCounter> custom({
+    Expression<String>? deviceId,
+    Expression<int>? lastCounter,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (deviceId != null) 'device_id': deviceId,
+      if (lastCounter != null) 'last_counter': lastCounter,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  ApplicationSenderCountersCompanion copyWith({
+    Value<String>? deviceId,
+    Value<int>? lastCounter,
+    Value<int>? rowid,
+  }) {
+    return ApplicationSenderCountersCompanion(
+      deviceId: deviceId ?? this.deviceId,
+      lastCounter: lastCounter ?? this.lastCounter,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (deviceId.present) {
+      map['device_id'] = Variable<String>(deviceId.value);
+    }
+    if (lastCounter.present) {
+      map['last_counter'] = Variable<int>(lastCounter.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ApplicationSenderCountersCompanion(')
+          ..write('deviceId: $deviceId, ')
+          ..write('lastCounter: $lastCounter, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $MessageReactionsTable extends MessageReactions
+    with TableInfo<$MessageReactionsTable, MessageReaction> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $MessageReactionsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _messageIdMeta = const VerificationMeta(
+    'messageId',
+  );
+  @override
+  late final GeneratedColumn<String> messageId = GeneratedColumn<String>(
+    'message_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES messages (message_id) ON DELETE CASCADE',
+    ),
+  );
+  static const VerificationMeta _reactingUserIdMeta = const VerificationMeta(
+    'reactingUserId',
+  );
+  @override
+  late final GeneratedColumn<String> reactingUserId = GeneratedColumn<String>(
+    'reacting_user_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _eventIdMeta = const VerificationMeta(
+    'eventId',
+  );
+  @override
+  late final GeneratedColumn<String> eventId = GeneratedColumn<String>(
+    'event_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _emojiCiphertextMeta = const VerificationMeta(
+    'emojiCiphertext',
+  );
+  @override
+  late final GeneratedColumn<Uint8List> emojiCiphertext =
+      GeneratedColumn<Uint8List>(
+        'emoji_ciphertext',
+        aliasedName,
+        true,
+        type: DriftSqlType.blob,
+        requiredDuringInsert: false,
+      );
+  @override
+  List<GeneratedColumn> get $columns => [
+    messageId,
+    reactingUserId,
+    eventId,
+    emojiCiphertext,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'message_reactions';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<MessageReaction> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('message_id')) {
+      context.handle(
+        _messageIdMeta,
+        messageId.isAcceptableOrUnknown(data['message_id']!, _messageIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_messageIdMeta);
+    }
+    if (data.containsKey('reacting_user_id')) {
+      context.handle(
+        _reactingUserIdMeta,
+        reactingUserId.isAcceptableOrUnknown(
+          data['reacting_user_id']!,
+          _reactingUserIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_reactingUserIdMeta);
+    }
+    if (data.containsKey('event_id')) {
+      context.handle(
+        _eventIdMeta,
+        eventId.isAcceptableOrUnknown(data['event_id']!, _eventIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_eventIdMeta);
+    }
+    if (data.containsKey('emoji_ciphertext')) {
+      context.handle(
+        _emojiCiphertextMeta,
+        emojiCiphertext.isAcceptableOrUnknown(
+          data['emoji_ciphertext']!,
+          _emojiCiphertextMeta,
+        ),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {messageId, reactingUserId};
+  @override
+  MessageReaction map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return MessageReaction(
+      messageId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}message_id'],
+      )!,
+      reactingUserId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}reacting_user_id'],
+      )!,
+      eventId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}event_id'],
+      )!,
+      emojiCiphertext: attachedDatabase.typeMapping.read(
+        DriftSqlType.blob,
+        data['${effectivePrefix}emoji_ciphertext'],
+      ),
+    );
+  }
+
+  @override
+  $MessageReactionsTable createAlias(String alias) {
+    return $MessageReactionsTable(attachedDatabase, alias);
+  }
+}
+
+class MessageReaction extends DataClass implements Insertable<MessageReaction> {
+  final String messageId;
+  final String reactingUserId;
+  final String eventId;
+  final Uint8List? emojiCiphertext;
+  const MessageReaction({
+    required this.messageId,
+    required this.reactingUserId,
+    required this.eventId,
+    this.emojiCiphertext,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['message_id'] = Variable<String>(messageId);
+    map['reacting_user_id'] = Variable<String>(reactingUserId);
+    map['event_id'] = Variable<String>(eventId);
+    if (!nullToAbsent || emojiCiphertext != null) {
+      map['emoji_ciphertext'] = Variable<Uint8List>(emojiCiphertext);
+    }
+    return map;
+  }
+
+  MessageReactionsCompanion toCompanion(bool nullToAbsent) {
+    return MessageReactionsCompanion(
+      messageId: Value(messageId),
+      reactingUserId: Value(reactingUserId),
+      eventId: Value(eventId),
+      emojiCiphertext: emojiCiphertext == null && nullToAbsent
+          ? const Value.absent()
+          : Value(emojiCiphertext),
+    );
+  }
+
+  factory MessageReaction.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return MessageReaction(
+      messageId: serializer.fromJson<String>(json['messageId']),
+      reactingUserId: serializer.fromJson<String>(json['reactingUserId']),
+      eventId: serializer.fromJson<String>(json['eventId']),
+      emojiCiphertext: serializer.fromJson<Uint8List?>(json['emojiCiphertext']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'messageId': serializer.toJson<String>(messageId),
+      'reactingUserId': serializer.toJson<String>(reactingUserId),
+      'eventId': serializer.toJson<String>(eventId),
+      'emojiCiphertext': serializer.toJson<Uint8List?>(emojiCiphertext),
+    };
+  }
+
+  MessageReaction copyWith({
+    String? messageId,
+    String? reactingUserId,
+    String? eventId,
+    Value<Uint8List?> emojiCiphertext = const Value.absent(),
+  }) => MessageReaction(
+    messageId: messageId ?? this.messageId,
+    reactingUserId: reactingUserId ?? this.reactingUserId,
+    eventId: eventId ?? this.eventId,
+    emojiCiphertext: emojiCiphertext.present
+        ? emojiCiphertext.value
+        : this.emojiCiphertext,
+  );
+  MessageReaction copyWithCompanion(MessageReactionsCompanion data) {
+    return MessageReaction(
+      messageId: data.messageId.present ? data.messageId.value : this.messageId,
+      reactingUserId: data.reactingUserId.present
+          ? data.reactingUserId.value
+          : this.reactingUserId,
+      eventId: data.eventId.present ? data.eventId.value : this.eventId,
+      emojiCiphertext: data.emojiCiphertext.present
+          ? data.emojiCiphertext.value
+          : this.emojiCiphertext,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('MessageReaction(')
+          ..write('messageId: $messageId, ')
+          ..write('reactingUserId: $reactingUserId, ')
+          ..write('eventId: $eventId, ')
+          ..write('emojiCiphertext: $emojiCiphertext')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    messageId,
+    reactingUserId,
+    eventId,
+    $driftBlobEquality.hash(emojiCiphertext),
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is MessageReaction &&
+          other.messageId == this.messageId &&
+          other.reactingUserId == this.reactingUserId &&
+          other.eventId == this.eventId &&
+          $driftBlobEquality.equals(
+            other.emojiCiphertext,
+            this.emojiCiphertext,
+          ));
+}
+
+class MessageReactionsCompanion extends UpdateCompanion<MessageReaction> {
+  final Value<String> messageId;
+  final Value<String> reactingUserId;
+  final Value<String> eventId;
+  final Value<Uint8List?> emojiCiphertext;
+  final Value<int> rowid;
+  const MessageReactionsCompanion({
+    this.messageId = const Value.absent(),
+    this.reactingUserId = const Value.absent(),
+    this.eventId = const Value.absent(),
+    this.emojiCiphertext = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  MessageReactionsCompanion.insert({
+    required String messageId,
+    required String reactingUserId,
+    required String eventId,
+    this.emojiCiphertext = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : messageId = Value(messageId),
+       reactingUserId = Value(reactingUserId),
+       eventId = Value(eventId);
+  static Insertable<MessageReaction> custom({
+    Expression<String>? messageId,
+    Expression<String>? reactingUserId,
+    Expression<String>? eventId,
+    Expression<Uint8List>? emojiCiphertext,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (messageId != null) 'message_id': messageId,
+      if (reactingUserId != null) 'reacting_user_id': reactingUserId,
+      if (eventId != null) 'event_id': eventId,
+      if (emojiCiphertext != null) 'emoji_ciphertext': emojiCiphertext,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  MessageReactionsCompanion copyWith({
+    Value<String>? messageId,
+    Value<String>? reactingUserId,
+    Value<String>? eventId,
+    Value<Uint8List?>? emojiCiphertext,
+    Value<int>? rowid,
+  }) {
+    return MessageReactionsCompanion(
+      messageId: messageId ?? this.messageId,
+      reactingUserId: reactingUserId ?? this.reactingUserId,
+      eventId: eventId ?? this.eventId,
+      emojiCiphertext: emojiCiphertext ?? this.emojiCiphertext,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (messageId.present) {
+      map['message_id'] = Variable<String>(messageId.value);
+    }
+    if (reactingUserId.present) {
+      map['reacting_user_id'] = Variable<String>(reactingUserId.value);
+    }
+    if (eventId.present) {
+      map['event_id'] = Variable<String>(eventId.value);
+    }
+    if (emojiCiphertext.present) {
+      map['emoji_ciphertext'] = Variable<Uint8List>(emojiCiphertext.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('MessageReactionsCompanion(')
+          ..write('messageId: $messageId, ')
+          ..write('reactingUserId: $reactingUserId, ')
+          ..write('eventId: $eventId, ')
+          ..write('emojiCiphertext: $emojiCiphertext, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -7272,6 +16696,68 @@ class $InboxEnvelopesTable extends InboxEnvelopes
     ),
     defaultValue: const Constant(false),
   );
+  static const VerificationMeta _opaqueEventIdMeta = const VerificationMeta(
+    'opaqueEventId',
+  );
+  @override
+  late final GeneratedColumn<String> opaqueEventId = GeneratedColumn<String>(
+    'opaque_event_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _dependencyClassMeta = const VerificationMeta(
+    'dependencyClass',
+  );
+  @override
+  late final GeneratedColumn<int> dependencyClass = GeneratedColumn<int>(
+    'dependency_class',
+    aliasedName,
+    true,
+    check: () =>
+        dependencyClass.isNull() |
+        ComparableExpr(dependencyClass).isBetweenValues(0, 1),
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _attemptCountMeta = const VerificationMeta(
+    'attemptCount',
+  );
+  @override
+  late final GeneratedColumn<int> attemptCount = GeneratedColumn<int>(
+    'attempt_count',
+    aliasedName,
+    false,
+    check: () => ComparableExpr(attemptCount).isBiggerOrEqualValue(0),
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _inspectionFailuresMeta =
+      const VerificationMeta('inspectionFailures');
+  @override
+  late final GeneratedColumn<int> inspectionFailures = GeneratedColumn<int>(
+    'inspection_failures',
+    aliasedName,
+    false,
+    check: () => ComparableExpr(inspectionFailures).isBiggerOrEqualValue(0),
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _nextAttemptAtMeta = const VerificationMeta(
+    'nextAttemptAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> nextAttemptAt =
+      GeneratedColumn<DateTime>(
+        'next_attempt_at',
+        aliasedName,
+        true,
+        type: DriftSqlType.dateTime,
+        requiredDuringInsert: false,
+      );
   @override
   List<GeneratedColumn> get $columns => [
     envelopeId,
@@ -7279,6 +16765,11 @@ class $InboxEnvelopesTable extends InboxEnvelopes
     envelopeCiphertext,
     processingState,
     readyToAcknowledge,
+    opaqueEventId,
+    dependencyClass,
+    attemptCount,
+    inspectionFailures,
+    nextAttemptAt,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -7339,6 +16830,51 @@ class $InboxEnvelopesTable extends InboxEnvelopes
         ),
       );
     }
+    if (data.containsKey('opaque_event_id')) {
+      context.handle(
+        _opaqueEventIdMeta,
+        opaqueEventId.isAcceptableOrUnknown(
+          data['opaque_event_id']!,
+          _opaqueEventIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('dependency_class')) {
+      context.handle(
+        _dependencyClassMeta,
+        dependencyClass.isAcceptableOrUnknown(
+          data['dependency_class']!,
+          _dependencyClassMeta,
+        ),
+      );
+    }
+    if (data.containsKey('attempt_count')) {
+      context.handle(
+        _attemptCountMeta,
+        attemptCount.isAcceptableOrUnknown(
+          data['attempt_count']!,
+          _attemptCountMeta,
+        ),
+      );
+    }
+    if (data.containsKey('inspection_failures')) {
+      context.handle(
+        _inspectionFailuresMeta,
+        inspectionFailures.isAcceptableOrUnknown(
+          data['inspection_failures']!,
+          _inspectionFailuresMeta,
+        ),
+      );
+    }
+    if (data.containsKey('next_attempt_at')) {
+      context.handle(
+        _nextAttemptAtMeta,
+        nextAttemptAt.isAcceptableOrUnknown(
+          data['next_attempt_at']!,
+          _nextAttemptAtMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -7368,6 +16904,26 @@ class $InboxEnvelopesTable extends InboxEnvelopes
         DriftSqlType.bool,
         data['${effectivePrefix}ready_to_acknowledge'],
       )!,
+      opaqueEventId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}opaque_event_id'],
+      ),
+      dependencyClass: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}dependency_class'],
+      ),
+      attemptCount: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}attempt_count'],
+      )!,
+      inspectionFailures: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}inspection_failures'],
+      )!,
+      nextAttemptAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}next_attempt_at'],
+      ),
     );
   }
 
@@ -7383,12 +16939,31 @@ class InboxEnvelope extends DataClass implements Insertable<InboxEnvelope> {
   final Uint8List envelopeCiphertext;
   final int processingState;
   final bool readyToAcknowledge;
+  final String? opaqueEventId;
+  final int? dependencyClass;
+  final int attemptCount;
+
+  /// Failed inspections whose cause a later attempt cannot change.
+  ///
+  /// Deliberately not [attemptCount]. That column counts every begun attempt,
+  /// inspection and acknowledgement alike, and drives retry backoff; it rises
+  /// while a device is merely offline. This one rises only when the bytes
+  /// themselves were refused, and it is what retires an envelope this device
+  /// can never open into quarantine instead of leaving it to be re-served
+  /// forever.
+  final int inspectionFailures;
+  final DateTime? nextAttemptAt;
   const InboxEnvelope({
     required this.envelopeId,
     required this.sequence,
     required this.envelopeCiphertext,
     required this.processingState,
     required this.readyToAcknowledge,
+    this.opaqueEventId,
+    this.dependencyClass,
+    required this.attemptCount,
+    required this.inspectionFailures,
+    this.nextAttemptAt,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -7398,6 +16973,17 @@ class InboxEnvelope extends DataClass implements Insertable<InboxEnvelope> {
     map['envelope_ciphertext'] = Variable<Uint8List>(envelopeCiphertext);
     map['processing_state'] = Variable<int>(processingState);
     map['ready_to_acknowledge'] = Variable<bool>(readyToAcknowledge);
+    if (!nullToAbsent || opaqueEventId != null) {
+      map['opaque_event_id'] = Variable<String>(opaqueEventId);
+    }
+    if (!nullToAbsent || dependencyClass != null) {
+      map['dependency_class'] = Variable<int>(dependencyClass);
+    }
+    map['attempt_count'] = Variable<int>(attemptCount);
+    map['inspection_failures'] = Variable<int>(inspectionFailures);
+    if (!nullToAbsent || nextAttemptAt != null) {
+      map['next_attempt_at'] = Variable<DateTime>(nextAttemptAt);
+    }
     return map;
   }
 
@@ -7408,6 +16994,17 @@ class InboxEnvelope extends DataClass implements Insertable<InboxEnvelope> {
       envelopeCiphertext: Value(envelopeCiphertext),
       processingState: Value(processingState),
       readyToAcknowledge: Value(readyToAcknowledge),
+      opaqueEventId: opaqueEventId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(opaqueEventId),
+      dependencyClass: dependencyClass == null && nullToAbsent
+          ? const Value.absent()
+          : Value(dependencyClass),
+      attemptCount: Value(attemptCount),
+      inspectionFailures: Value(inspectionFailures),
+      nextAttemptAt: nextAttemptAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(nextAttemptAt),
     );
   }
 
@@ -7424,6 +17021,11 @@ class InboxEnvelope extends DataClass implements Insertable<InboxEnvelope> {
       ),
       processingState: serializer.fromJson<int>(json['processingState']),
       readyToAcknowledge: serializer.fromJson<bool>(json['readyToAcknowledge']),
+      opaqueEventId: serializer.fromJson<String?>(json['opaqueEventId']),
+      dependencyClass: serializer.fromJson<int?>(json['dependencyClass']),
+      attemptCount: serializer.fromJson<int>(json['attemptCount']),
+      inspectionFailures: serializer.fromJson<int>(json['inspectionFailures']),
+      nextAttemptAt: serializer.fromJson<DateTime?>(json['nextAttemptAt']),
     );
   }
   @override
@@ -7435,6 +17037,11 @@ class InboxEnvelope extends DataClass implements Insertable<InboxEnvelope> {
       'envelopeCiphertext': serializer.toJson<Uint8List>(envelopeCiphertext),
       'processingState': serializer.toJson<int>(processingState),
       'readyToAcknowledge': serializer.toJson<bool>(readyToAcknowledge),
+      'opaqueEventId': serializer.toJson<String?>(opaqueEventId),
+      'dependencyClass': serializer.toJson<int?>(dependencyClass),
+      'attemptCount': serializer.toJson<int>(attemptCount),
+      'inspectionFailures': serializer.toJson<int>(inspectionFailures),
+      'nextAttemptAt': serializer.toJson<DateTime?>(nextAttemptAt),
     };
   }
 
@@ -7444,12 +17051,28 @@ class InboxEnvelope extends DataClass implements Insertable<InboxEnvelope> {
     Uint8List? envelopeCiphertext,
     int? processingState,
     bool? readyToAcknowledge,
+    Value<String?> opaqueEventId = const Value.absent(),
+    Value<int?> dependencyClass = const Value.absent(),
+    int? attemptCount,
+    int? inspectionFailures,
+    Value<DateTime?> nextAttemptAt = const Value.absent(),
   }) => InboxEnvelope(
     envelopeId: envelopeId ?? this.envelopeId,
     sequence: sequence ?? this.sequence,
     envelopeCiphertext: envelopeCiphertext ?? this.envelopeCiphertext,
     processingState: processingState ?? this.processingState,
     readyToAcknowledge: readyToAcknowledge ?? this.readyToAcknowledge,
+    opaqueEventId: opaqueEventId.present
+        ? opaqueEventId.value
+        : this.opaqueEventId,
+    dependencyClass: dependencyClass.present
+        ? dependencyClass.value
+        : this.dependencyClass,
+    attemptCount: attemptCount ?? this.attemptCount,
+    inspectionFailures: inspectionFailures ?? this.inspectionFailures,
+    nextAttemptAt: nextAttemptAt.present
+        ? nextAttemptAt.value
+        : this.nextAttemptAt,
   );
   InboxEnvelope copyWithCompanion(InboxEnvelopesCompanion data) {
     return InboxEnvelope(
@@ -7466,6 +17089,21 @@ class InboxEnvelope extends DataClass implements Insertable<InboxEnvelope> {
       readyToAcknowledge: data.readyToAcknowledge.present
           ? data.readyToAcknowledge.value
           : this.readyToAcknowledge,
+      opaqueEventId: data.opaqueEventId.present
+          ? data.opaqueEventId.value
+          : this.opaqueEventId,
+      dependencyClass: data.dependencyClass.present
+          ? data.dependencyClass.value
+          : this.dependencyClass,
+      attemptCount: data.attemptCount.present
+          ? data.attemptCount.value
+          : this.attemptCount,
+      inspectionFailures: data.inspectionFailures.present
+          ? data.inspectionFailures.value
+          : this.inspectionFailures,
+      nextAttemptAt: data.nextAttemptAt.present
+          ? data.nextAttemptAt.value
+          : this.nextAttemptAt,
     );
   }
 
@@ -7476,7 +17114,12 @@ class InboxEnvelope extends DataClass implements Insertable<InboxEnvelope> {
           ..write('sequence: $sequence, ')
           ..write('envelopeCiphertext: $envelopeCiphertext, ')
           ..write('processingState: $processingState, ')
-          ..write('readyToAcknowledge: $readyToAcknowledge')
+          ..write('readyToAcknowledge: $readyToAcknowledge, ')
+          ..write('opaqueEventId: $opaqueEventId, ')
+          ..write('dependencyClass: $dependencyClass, ')
+          ..write('attemptCount: $attemptCount, ')
+          ..write('inspectionFailures: $inspectionFailures, ')
+          ..write('nextAttemptAt: $nextAttemptAt')
           ..write(')'))
         .toString();
   }
@@ -7488,6 +17131,11 @@ class InboxEnvelope extends DataClass implements Insertable<InboxEnvelope> {
     $driftBlobEquality.hash(envelopeCiphertext),
     processingState,
     readyToAcknowledge,
+    opaqueEventId,
+    dependencyClass,
+    attemptCount,
+    inspectionFailures,
+    nextAttemptAt,
   );
   @override
   bool operator ==(Object other) =>
@@ -7500,7 +17148,12 @@ class InboxEnvelope extends DataClass implements Insertable<InboxEnvelope> {
             this.envelopeCiphertext,
           ) &&
           other.processingState == this.processingState &&
-          other.readyToAcknowledge == this.readyToAcknowledge);
+          other.readyToAcknowledge == this.readyToAcknowledge &&
+          other.opaqueEventId == this.opaqueEventId &&
+          other.dependencyClass == this.dependencyClass &&
+          other.attemptCount == this.attemptCount &&
+          other.inspectionFailures == this.inspectionFailures &&
+          other.nextAttemptAt == this.nextAttemptAt);
 }
 
 class InboxEnvelopesCompanion extends UpdateCompanion<InboxEnvelope> {
@@ -7509,6 +17162,11 @@ class InboxEnvelopesCompanion extends UpdateCompanion<InboxEnvelope> {
   final Value<Uint8List> envelopeCiphertext;
   final Value<int> processingState;
   final Value<bool> readyToAcknowledge;
+  final Value<String?> opaqueEventId;
+  final Value<int?> dependencyClass;
+  final Value<int> attemptCount;
+  final Value<int> inspectionFailures;
+  final Value<DateTime?> nextAttemptAt;
   final Value<int> rowid;
   const InboxEnvelopesCompanion({
     this.envelopeId = const Value.absent(),
@@ -7516,6 +17174,11 @@ class InboxEnvelopesCompanion extends UpdateCompanion<InboxEnvelope> {
     this.envelopeCiphertext = const Value.absent(),
     this.processingState = const Value.absent(),
     this.readyToAcknowledge = const Value.absent(),
+    this.opaqueEventId = const Value.absent(),
+    this.dependencyClass = const Value.absent(),
+    this.attemptCount = const Value.absent(),
+    this.inspectionFailures = const Value.absent(),
+    this.nextAttemptAt = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   InboxEnvelopesCompanion.insert({
@@ -7524,6 +17187,11 @@ class InboxEnvelopesCompanion extends UpdateCompanion<InboxEnvelope> {
     required Uint8List envelopeCiphertext,
     required int processingState,
     this.readyToAcknowledge = const Value.absent(),
+    this.opaqueEventId = const Value.absent(),
+    this.dependencyClass = const Value.absent(),
+    this.attemptCount = const Value.absent(),
+    this.inspectionFailures = const Value.absent(),
+    this.nextAttemptAt = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : envelopeId = Value(envelopeId),
        sequence = Value(sequence),
@@ -7535,6 +17203,11 @@ class InboxEnvelopesCompanion extends UpdateCompanion<InboxEnvelope> {
     Expression<Uint8List>? envelopeCiphertext,
     Expression<int>? processingState,
     Expression<bool>? readyToAcknowledge,
+    Expression<String>? opaqueEventId,
+    Expression<int>? dependencyClass,
+    Expression<int>? attemptCount,
+    Expression<int>? inspectionFailures,
+    Expression<DateTime>? nextAttemptAt,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -7544,6 +17217,11 @@ class InboxEnvelopesCompanion extends UpdateCompanion<InboxEnvelope> {
       if (processingState != null) 'processing_state': processingState,
       if (readyToAcknowledge != null)
         'ready_to_acknowledge': readyToAcknowledge,
+      if (opaqueEventId != null) 'opaque_event_id': opaqueEventId,
+      if (dependencyClass != null) 'dependency_class': dependencyClass,
+      if (attemptCount != null) 'attempt_count': attemptCount,
+      if (inspectionFailures != null) 'inspection_failures': inspectionFailures,
+      if (nextAttemptAt != null) 'next_attempt_at': nextAttemptAt,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -7554,6 +17232,11 @@ class InboxEnvelopesCompanion extends UpdateCompanion<InboxEnvelope> {
     Value<Uint8List>? envelopeCiphertext,
     Value<int>? processingState,
     Value<bool>? readyToAcknowledge,
+    Value<String?>? opaqueEventId,
+    Value<int?>? dependencyClass,
+    Value<int>? attemptCount,
+    Value<int>? inspectionFailures,
+    Value<DateTime?>? nextAttemptAt,
     Value<int>? rowid,
   }) {
     return InboxEnvelopesCompanion(
@@ -7562,6 +17245,11 @@ class InboxEnvelopesCompanion extends UpdateCompanion<InboxEnvelope> {
       envelopeCiphertext: envelopeCiphertext ?? this.envelopeCiphertext,
       processingState: processingState ?? this.processingState,
       readyToAcknowledge: readyToAcknowledge ?? this.readyToAcknowledge,
+      opaqueEventId: opaqueEventId ?? this.opaqueEventId,
+      dependencyClass: dependencyClass ?? this.dependencyClass,
+      attemptCount: attemptCount ?? this.attemptCount,
+      inspectionFailures: inspectionFailures ?? this.inspectionFailures,
+      nextAttemptAt: nextAttemptAt ?? this.nextAttemptAt,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -7586,6 +17274,21 @@ class InboxEnvelopesCompanion extends UpdateCompanion<InboxEnvelope> {
     if (readyToAcknowledge.present) {
       map['ready_to_acknowledge'] = Variable<bool>(readyToAcknowledge.value);
     }
+    if (opaqueEventId.present) {
+      map['opaque_event_id'] = Variable<String>(opaqueEventId.value);
+    }
+    if (dependencyClass.present) {
+      map['dependency_class'] = Variable<int>(dependencyClass.value);
+    }
+    if (attemptCount.present) {
+      map['attempt_count'] = Variable<int>(attemptCount.value);
+    }
+    if (inspectionFailures.present) {
+      map['inspection_failures'] = Variable<int>(inspectionFailures.value);
+    }
+    if (nextAttemptAt.present) {
+      map['next_attempt_at'] = Variable<DateTime>(nextAttemptAt.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -7600,6 +17303,11 @@ class InboxEnvelopesCompanion extends UpdateCompanion<InboxEnvelope> {
           ..write('envelopeCiphertext: $envelopeCiphertext, ')
           ..write('processingState: $processingState, ')
           ..write('readyToAcknowledge: $readyToAcknowledge, ')
+          ..write('opaqueEventId: $opaqueEventId, ')
+          ..write('dependencyClass: $dependencyClass, ')
+          ..write('attemptCount: $attemptCount, ')
+          ..write('inspectionFailures: $inspectionFailures, ')
+          ..write('nextAttemptAt: $nextAttemptAt, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -7646,6 +17354,18 @@ class $OutboxOperationsTable extends OutboxOperations
         type: DriftSqlType.string,
         requiredDuringInsert: true,
       );
+  static const VerificationMeta _recipientUserIdMeta = const VerificationMeta(
+    'recipientUserId',
+  );
+  @override
+  late final GeneratedColumn<String> recipientUserId = GeneratedColumn<String>(
+    'recipient_user_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
   static const VerificationMeta _batchIndexMeta = const VerificationMeta(
     'batchIndex',
   );
@@ -7694,15 +17414,54 @@ class $OutboxOperationsTable extends OutboxOperations
     requiredDuringInsert: false,
     defaultValue: const Constant(0),
   );
+  static const VerificationMeta _nextAttemptAtMeta = const VerificationMeta(
+    'nextAttemptAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> nextAttemptAt =
+      GeneratedColumn<DateTime>(
+        'next_attempt_at',
+        aliasedName,
+        true,
+        type: DriftSqlType.dateTime,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _lastAttemptAtMeta = const VerificationMeta(
+    'lastAttemptAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> lastAttemptAt =
+      GeneratedColumn<DateTime>(
+        'last_attempt_at',
+        aliasedName,
+        true,
+        type: DriftSqlType.dateTime,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _terminalAtMeta = const VerificationMeta(
+    'terminalAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> terminalAt = GeneratedColumn<DateTime>(
+    'terminal_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
   @override
   List<GeneratedColumn> get $columns => [
     operationId,
     eventId,
     recipientDeviceId,
+    recipientUserId,
     batchIndex,
     exactRecipientCiphertext,
     attemptState,
     attemptCount,
+    nextAttemptAt,
+    lastAttemptAt,
+    terminalAt,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -7746,6 +17505,15 @@ class $OutboxOperationsTable extends OutboxOperations
     } else if (isInserting) {
       context.missing(_recipientDeviceIdMeta);
     }
+    if (data.containsKey('recipient_user_id')) {
+      context.handle(
+        _recipientUserIdMeta,
+        recipientUserId.isAcceptableOrUnknown(
+          data['recipient_user_id']!,
+          _recipientUserIdMeta,
+        ),
+      );
+    }
     if (data.containsKey('batch_index')) {
       context.handle(
         _batchIndexMeta,
@@ -7785,6 +17553,30 @@ class $OutboxOperationsTable extends OutboxOperations
         ),
       );
     }
+    if (data.containsKey('next_attempt_at')) {
+      context.handle(
+        _nextAttemptAtMeta,
+        nextAttemptAt.isAcceptableOrUnknown(
+          data['next_attempt_at']!,
+          _nextAttemptAtMeta,
+        ),
+      );
+    }
+    if (data.containsKey('last_attempt_at')) {
+      context.handle(
+        _lastAttemptAtMeta,
+        lastAttemptAt.isAcceptableOrUnknown(
+          data['last_attempt_at']!,
+          _lastAttemptAtMeta,
+        ),
+      );
+    }
+    if (data.containsKey('terminal_at')) {
+      context.handle(
+        _terminalAtMeta,
+        terminalAt.isAcceptableOrUnknown(data['terminal_at']!, _terminalAtMeta),
+      );
+    }
     return context;
   }
 
@@ -7806,6 +17598,10 @@ class $OutboxOperationsTable extends OutboxOperations
         DriftSqlType.string,
         data['${effectivePrefix}recipient_device_id'],
       )!,
+      recipientUserId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}recipient_user_id'],
+      )!,
       batchIndex: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}batch_index'],
@@ -7822,6 +17618,18 @@ class $OutboxOperationsTable extends OutboxOperations
         DriftSqlType.int,
         data['${effectivePrefix}attempt_count'],
       )!,
+      nextAttemptAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}next_attempt_at'],
+      ),
+      lastAttemptAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}last_attempt_at'],
+      ),
+      terminalAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}terminal_at'],
+      ),
     );
   }
 
@@ -7835,18 +17643,26 @@ class OutboxOperation extends DataClass implements Insertable<OutboxOperation> {
   final String operationId;
   final String eventId;
   final String recipientDeviceId;
+  final String recipientUserId;
   final int batchIndex;
   final Uint8List exactRecipientCiphertext;
   final int attemptState;
   final int attemptCount;
+  final DateTime? nextAttemptAt;
+  final DateTime? lastAttemptAt;
+  final DateTime? terminalAt;
   const OutboxOperation({
     required this.operationId,
     required this.eventId,
     required this.recipientDeviceId,
+    required this.recipientUserId,
     required this.batchIndex,
     required this.exactRecipientCiphertext,
     required this.attemptState,
     required this.attemptCount,
+    this.nextAttemptAt,
+    this.lastAttemptAt,
+    this.terminalAt,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -7854,12 +17670,22 @@ class OutboxOperation extends DataClass implements Insertable<OutboxOperation> {
     map['operation_id'] = Variable<String>(operationId);
     map['event_id'] = Variable<String>(eventId);
     map['recipient_device_id'] = Variable<String>(recipientDeviceId);
+    map['recipient_user_id'] = Variable<String>(recipientUserId);
     map['batch_index'] = Variable<int>(batchIndex);
     map['exact_recipient_ciphertext'] = Variable<Uint8List>(
       exactRecipientCiphertext,
     );
     map['attempt_state'] = Variable<int>(attemptState);
     map['attempt_count'] = Variable<int>(attemptCount);
+    if (!nullToAbsent || nextAttemptAt != null) {
+      map['next_attempt_at'] = Variable<DateTime>(nextAttemptAt);
+    }
+    if (!nullToAbsent || lastAttemptAt != null) {
+      map['last_attempt_at'] = Variable<DateTime>(lastAttemptAt);
+    }
+    if (!nullToAbsent || terminalAt != null) {
+      map['terminal_at'] = Variable<DateTime>(terminalAt);
+    }
     return map;
   }
 
@@ -7868,10 +17694,20 @@ class OutboxOperation extends DataClass implements Insertable<OutboxOperation> {
       operationId: Value(operationId),
       eventId: Value(eventId),
       recipientDeviceId: Value(recipientDeviceId),
+      recipientUserId: Value(recipientUserId),
       batchIndex: Value(batchIndex),
       exactRecipientCiphertext: Value(exactRecipientCiphertext),
       attemptState: Value(attemptState),
       attemptCount: Value(attemptCount),
+      nextAttemptAt: nextAttemptAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(nextAttemptAt),
+      lastAttemptAt: lastAttemptAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(lastAttemptAt),
+      terminalAt: terminalAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(terminalAt),
     );
   }
 
@@ -7884,12 +17720,16 @@ class OutboxOperation extends DataClass implements Insertable<OutboxOperation> {
       operationId: serializer.fromJson<String>(json['operationId']),
       eventId: serializer.fromJson<String>(json['eventId']),
       recipientDeviceId: serializer.fromJson<String>(json['recipientDeviceId']),
+      recipientUserId: serializer.fromJson<String>(json['recipientUserId']),
       batchIndex: serializer.fromJson<int>(json['batchIndex']),
       exactRecipientCiphertext: serializer.fromJson<Uint8List>(
         json['exactRecipientCiphertext'],
       ),
       attemptState: serializer.fromJson<int>(json['attemptState']),
       attemptCount: serializer.fromJson<int>(json['attemptCount']),
+      nextAttemptAt: serializer.fromJson<DateTime?>(json['nextAttemptAt']),
+      lastAttemptAt: serializer.fromJson<DateTime?>(json['lastAttemptAt']),
+      terminalAt: serializer.fromJson<DateTime?>(json['terminalAt']),
     );
   }
   @override
@@ -7899,12 +17739,16 @@ class OutboxOperation extends DataClass implements Insertable<OutboxOperation> {
       'operationId': serializer.toJson<String>(operationId),
       'eventId': serializer.toJson<String>(eventId),
       'recipientDeviceId': serializer.toJson<String>(recipientDeviceId),
+      'recipientUserId': serializer.toJson<String>(recipientUserId),
       'batchIndex': serializer.toJson<int>(batchIndex),
       'exactRecipientCiphertext': serializer.toJson<Uint8List>(
         exactRecipientCiphertext,
       ),
       'attemptState': serializer.toJson<int>(attemptState),
       'attemptCount': serializer.toJson<int>(attemptCount),
+      'nextAttemptAt': serializer.toJson<DateTime?>(nextAttemptAt),
+      'lastAttemptAt': serializer.toJson<DateTime?>(lastAttemptAt),
+      'terminalAt': serializer.toJson<DateTime?>(terminalAt),
     };
   }
 
@@ -7912,19 +17756,31 @@ class OutboxOperation extends DataClass implements Insertable<OutboxOperation> {
     String? operationId,
     String? eventId,
     String? recipientDeviceId,
+    String? recipientUserId,
     int? batchIndex,
     Uint8List? exactRecipientCiphertext,
     int? attemptState,
     int? attemptCount,
+    Value<DateTime?> nextAttemptAt = const Value.absent(),
+    Value<DateTime?> lastAttemptAt = const Value.absent(),
+    Value<DateTime?> terminalAt = const Value.absent(),
   }) => OutboxOperation(
     operationId: operationId ?? this.operationId,
     eventId: eventId ?? this.eventId,
     recipientDeviceId: recipientDeviceId ?? this.recipientDeviceId,
+    recipientUserId: recipientUserId ?? this.recipientUserId,
     batchIndex: batchIndex ?? this.batchIndex,
     exactRecipientCiphertext:
         exactRecipientCiphertext ?? this.exactRecipientCiphertext,
     attemptState: attemptState ?? this.attemptState,
     attemptCount: attemptCount ?? this.attemptCount,
+    nextAttemptAt: nextAttemptAt.present
+        ? nextAttemptAt.value
+        : this.nextAttemptAt,
+    lastAttemptAt: lastAttemptAt.present
+        ? lastAttemptAt.value
+        : this.lastAttemptAt,
+    terminalAt: terminalAt.present ? terminalAt.value : this.terminalAt,
   );
   OutboxOperation copyWithCompanion(OutboxOperationsCompanion data) {
     return OutboxOperation(
@@ -7935,6 +17791,9 @@ class OutboxOperation extends DataClass implements Insertable<OutboxOperation> {
       recipientDeviceId: data.recipientDeviceId.present
           ? data.recipientDeviceId.value
           : this.recipientDeviceId,
+      recipientUserId: data.recipientUserId.present
+          ? data.recipientUserId.value
+          : this.recipientUserId,
       batchIndex: data.batchIndex.present
           ? data.batchIndex.value
           : this.batchIndex,
@@ -7947,6 +17806,15 @@ class OutboxOperation extends DataClass implements Insertable<OutboxOperation> {
       attemptCount: data.attemptCount.present
           ? data.attemptCount.value
           : this.attemptCount,
+      nextAttemptAt: data.nextAttemptAt.present
+          ? data.nextAttemptAt.value
+          : this.nextAttemptAt,
+      lastAttemptAt: data.lastAttemptAt.present
+          ? data.lastAttemptAt.value
+          : this.lastAttemptAt,
+      terminalAt: data.terminalAt.present
+          ? data.terminalAt.value
+          : this.terminalAt,
     );
   }
 
@@ -7956,10 +17824,14 @@ class OutboxOperation extends DataClass implements Insertable<OutboxOperation> {
           ..write('operationId: $operationId, ')
           ..write('eventId: $eventId, ')
           ..write('recipientDeviceId: $recipientDeviceId, ')
+          ..write('recipientUserId: $recipientUserId, ')
           ..write('batchIndex: $batchIndex, ')
           ..write('exactRecipientCiphertext: $exactRecipientCiphertext, ')
           ..write('attemptState: $attemptState, ')
-          ..write('attemptCount: $attemptCount')
+          ..write('attemptCount: $attemptCount, ')
+          ..write('nextAttemptAt: $nextAttemptAt, ')
+          ..write('lastAttemptAt: $lastAttemptAt, ')
+          ..write('terminalAt: $terminalAt')
           ..write(')'))
         .toString();
   }
@@ -7969,10 +17841,14 @@ class OutboxOperation extends DataClass implements Insertable<OutboxOperation> {
     operationId,
     eventId,
     recipientDeviceId,
+    recipientUserId,
     batchIndex,
     $driftBlobEquality.hash(exactRecipientCiphertext),
     attemptState,
     attemptCount,
+    nextAttemptAt,
+    lastAttemptAt,
+    terminalAt,
   );
   @override
   bool operator ==(Object other) =>
@@ -7981,42 +17857,58 @@ class OutboxOperation extends DataClass implements Insertable<OutboxOperation> {
           other.operationId == this.operationId &&
           other.eventId == this.eventId &&
           other.recipientDeviceId == this.recipientDeviceId &&
+          other.recipientUserId == this.recipientUserId &&
           other.batchIndex == this.batchIndex &&
           $driftBlobEquality.equals(
             other.exactRecipientCiphertext,
             this.exactRecipientCiphertext,
           ) &&
           other.attemptState == this.attemptState &&
-          other.attemptCount == this.attemptCount);
+          other.attemptCount == this.attemptCount &&
+          other.nextAttemptAt == this.nextAttemptAt &&
+          other.lastAttemptAt == this.lastAttemptAt &&
+          other.terminalAt == this.terminalAt);
 }
 
 class OutboxOperationsCompanion extends UpdateCompanion<OutboxOperation> {
   final Value<String> operationId;
   final Value<String> eventId;
   final Value<String> recipientDeviceId;
+  final Value<String> recipientUserId;
   final Value<int> batchIndex;
   final Value<Uint8List> exactRecipientCiphertext;
   final Value<int> attemptState;
   final Value<int> attemptCount;
+  final Value<DateTime?> nextAttemptAt;
+  final Value<DateTime?> lastAttemptAt;
+  final Value<DateTime?> terminalAt;
   final Value<int> rowid;
   const OutboxOperationsCompanion({
     this.operationId = const Value.absent(),
     this.eventId = const Value.absent(),
     this.recipientDeviceId = const Value.absent(),
+    this.recipientUserId = const Value.absent(),
     this.batchIndex = const Value.absent(),
     this.exactRecipientCiphertext = const Value.absent(),
     this.attemptState = const Value.absent(),
     this.attemptCount = const Value.absent(),
+    this.nextAttemptAt = const Value.absent(),
+    this.lastAttemptAt = const Value.absent(),
+    this.terminalAt = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   OutboxOperationsCompanion.insert({
     required String operationId,
     required String eventId,
     required String recipientDeviceId,
+    this.recipientUserId = const Value.absent(),
     required int batchIndex,
     required Uint8List exactRecipientCiphertext,
     required int attemptState,
     this.attemptCount = const Value.absent(),
+    this.nextAttemptAt = const Value.absent(),
+    this.lastAttemptAt = const Value.absent(),
+    this.terminalAt = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : operationId = Value(operationId),
        eventId = Value(eventId),
@@ -8028,21 +17920,29 @@ class OutboxOperationsCompanion extends UpdateCompanion<OutboxOperation> {
     Expression<String>? operationId,
     Expression<String>? eventId,
     Expression<String>? recipientDeviceId,
+    Expression<String>? recipientUserId,
     Expression<int>? batchIndex,
     Expression<Uint8List>? exactRecipientCiphertext,
     Expression<int>? attemptState,
     Expression<int>? attemptCount,
+    Expression<DateTime>? nextAttemptAt,
+    Expression<DateTime>? lastAttemptAt,
+    Expression<DateTime>? terminalAt,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
       if (operationId != null) 'operation_id': operationId,
       if (eventId != null) 'event_id': eventId,
       if (recipientDeviceId != null) 'recipient_device_id': recipientDeviceId,
+      if (recipientUserId != null) 'recipient_user_id': recipientUserId,
       if (batchIndex != null) 'batch_index': batchIndex,
       if (exactRecipientCiphertext != null)
         'exact_recipient_ciphertext': exactRecipientCiphertext,
       if (attemptState != null) 'attempt_state': attemptState,
       if (attemptCount != null) 'attempt_count': attemptCount,
+      if (nextAttemptAt != null) 'next_attempt_at': nextAttemptAt,
+      if (lastAttemptAt != null) 'last_attempt_at': lastAttemptAt,
+      if (terminalAt != null) 'terminal_at': terminalAt,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -8051,21 +17951,29 @@ class OutboxOperationsCompanion extends UpdateCompanion<OutboxOperation> {
     Value<String>? operationId,
     Value<String>? eventId,
     Value<String>? recipientDeviceId,
+    Value<String>? recipientUserId,
     Value<int>? batchIndex,
     Value<Uint8List>? exactRecipientCiphertext,
     Value<int>? attemptState,
     Value<int>? attemptCount,
+    Value<DateTime?>? nextAttemptAt,
+    Value<DateTime?>? lastAttemptAt,
+    Value<DateTime?>? terminalAt,
     Value<int>? rowid,
   }) {
     return OutboxOperationsCompanion(
       operationId: operationId ?? this.operationId,
       eventId: eventId ?? this.eventId,
       recipientDeviceId: recipientDeviceId ?? this.recipientDeviceId,
+      recipientUserId: recipientUserId ?? this.recipientUserId,
       batchIndex: batchIndex ?? this.batchIndex,
       exactRecipientCiphertext:
           exactRecipientCiphertext ?? this.exactRecipientCiphertext,
       attemptState: attemptState ?? this.attemptState,
       attemptCount: attemptCount ?? this.attemptCount,
+      nextAttemptAt: nextAttemptAt ?? this.nextAttemptAt,
+      lastAttemptAt: lastAttemptAt ?? this.lastAttemptAt,
+      terminalAt: terminalAt ?? this.terminalAt,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -8082,6 +17990,9 @@ class OutboxOperationsCompanion extends UpdateCompanion<OutboxOperation> {
     if (recipientDeviceId.present) {
       map['recipient_device_id'] = Variable<String>(recipientDeviceId.value);
     }
+    if (recipientUserId.present) {
+      map['recipient_user_id'] = Variable<String>(recipientUserId.value);
+    }
     if (batchIndex.present) {
       map['batch_index'] = Variable<int>(batchIndex.value);
     }
@@ -8096,6 +18007,15 @@ class OutboxOperationsCompanion extends UpdateCompanion<OutboxOperation> {
     if (attemptCount.present) {
       map['attempt_count'] = Variable<int>(attemptCount.value);
     }
+    if (nextAttemptAt.present) {
+      map['next_attempt_at'] = Variable<DateTime>(nextAttemptAt.value);
+    }
+    if (lastAttemptAt.present) {
+      map['last_attempt_at'] = Variable<DateTime>(lastAttemptAt.value);
+    }
+    if (terminalAt.present) {
+      map['terminal_at'] = Variable<DateTime>(terminalAt.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -8108,10 +18028,3267 @@ class OutboxOperationsCompanion extends UpdateCompanion<OutboxOperation> {
           ..write('operationId: $operationId, ')
           ..write('eventId: $eventId, ')
           ..write('recipientDeviceId: $recipientDeviceId, ')
+          ..write('recipientUserId: $recipientUserId, ')
           ..write('batchIndex: $batchIndex, ')
           ..write('exactRecipientCiphertext: $exactRecipientCiphertext, ')
           ..write('attemptState: $attemptState, ')
           ..write('attemptCount: $attemptCount, ')
+          ..write('nextAttemptAt: $nextAttemptAt, ')
+          ..write('lastAttemptAt: $lastAttemptAt, ')
+          ..write('terminalAt: $terminalAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $InboxEventDeduplicationsTable extends InboxEventDeduplications
+    with TableInfo<$InboxEventDeduplicationsTable, InboxEventDeduplication> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $InboxEventDeduplicationsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _opaqueEventIdMeta = const VerificationMeta(
+    'opaqueEventId',
+  );
+  @override
+  late final GeneratedColumn<String> opaqueEventId = GeneratedColumn<String>(
+    'opaque_event_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _firstEnvelopeIdMeta = const VerificationMeta(
+    'firstEnvelopeId',
+  );
+  @override
+  late final GeneratedColumn<String> firstEnvelopeId = GeneratedColumn<String>(
+    'first_envelope_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _dependencyClassMeta = const VerificationMeta(
+    'dependencyClass',
+  );
+  @override
+  late final GeneratedColumn<int> dependencyClass = GeneratedColumn<int>(
+    'dependency_class',
+    aliasedName,
+    false,
+    check: () => ComparableExpr(dependencyClass).isBetweenValues(0, 1),
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _committedAtMeta = const VerificationMeta(
+    'committedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> committedAt = GeneratedColumn<DateTime>(
+    'committed_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    opaqueEventId,
+    firstEnvelopeId,
+    dependencyClass,
+    committedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'inbox_event_deduplication';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<InboxEventDeduplication> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('opaque_event_id')) {
+      context.handle(
+        _opaqueEventIdMeta,
+        opaqueEventId.isAcceptableOrUnknown(
+          data['opaque_event_id']!,
+          _opaqueEventIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_opaqueEventIdMeta);
+    }
+    if (data.containsKey('first_envelope_id')) {
+      context.handle(
+        _firstEnvelopeIdMeta,
+        firstEnvelopeId.isAcceptableOrUnknown(
+          data['first_envelope_id']!,
+          _firstEnvelopeIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_firstEnvelopeIdMeta);
+    }
+    if (data.containsKey('dependency_class')) {
+      context.handle(
+        _dependencyClassMeta,
+        dependencyClass.isAcceptableOrUnknown(
+          data['dependency_class']!,
+          _dependencyClassMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_dependencyClassMeta);
+    }
+    if (data.containsKey('committed_at')) {
+      context.handle(
+        _committedAtMeta,
+        committedAt.isAcceptableOrUnknown(
+          data['committed_at']!,
+          _committedAtMeta,
+        ),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {opaqueEventId};
+  @override
+  InboxEventDeduplication map(
+    Map<String, dynamic> data, {
+    String? tablePrefix,
+  }) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return InboxEventDeduplication(
+      opaqueEventId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}opaque_event_id'],
+      )!,
+      firstEnvelopeId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}first_envelope_id'],
+      )!,
+      dependencyClass: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}dependency_class'],
+      )!,
+      committedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}committed_at'],
+      )!,
+    );
+  }
+
+  @override
+  $InboxEventDeduplicationsTable createAlias(String alias) {
+    return $InboxEventDeduplicationsTable(attachedDatabase, alias);
+  }
+}
+
+class InboxEventDeduplication extends DataClass
+    implements Insertable<InboxEventDeduplication> {
+  final String opaqueEventId;
+  final String firstEnvelopeId;
+  final int dependencyClass;
+  final DateTime committedAt;
+  const InboxEventDeduplication({
+    required this.opaqueEventId,
+    required this.firstEnvelopeId,
+    required this.dependencyClass,
+    required this.committedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['opaque_event_id'] = Variable<String>(opaqueEventId);
+    map['first_envelope_id'] = Variable<String>(firstEnvelopeId);
+    map['dependency_class'] = Variable<int>(dependencyClass);
+    map['committed_at'] = Variable<DateTime>(committedAt);
+    return map;
+  }
+
+  InboxEventDeduplicationsCompanion toCompanion(bool nullToAbsent) {
+    return InboxEventDeduplicationsCompanion(
+      opaqueEventId: Value(opaqueEventId),
+      firstEnvelopeId: Value(firstEnvelopeId),
+      dependencyClass: Value(dependencyClass),
+      committedAt: Value(committedAt),
+    );
+  }
+
+  factory InboxEventDeduplication.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return InboxEventDeduplication(
+      opaqueEventId: serializer.fromJson<String>(json['opaqueEventId']),
+      firstEnvelopeId: serializer.fromJson<String>(json['firstEnvelopeId']),
+      dependencyClass: serializer.fromJson<int>(json['dependencyClass']),
+      committedAt: serializer.fromJson<DateTime>(json['committedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'opaqueEventId': serializer.toJson<String>(opaqueEventId),
+      'firstEnvelopeId': serializer.toJson<String>(firstEnvelopeId),
+      'dependencyClass': serializer.toJson<int>(dependencyClass),
+      'committedAt': serializer.toJson<DateTime>(committedAt),
+    };
+  }
+
+  InboxEventDeduplication copyWith({
+    String? opaqueEventId,
+    String? firstEnvelopeId,
+    int? dependencyClass,
+    DateTime? committedAt,
+  }) => InboxEventDeduplication(
+    opaqueEventId: opaqueEventId ?? this.opaqueEventId,
+    firstEnvelopeId: firstEnvelopeId ?? this.firstEnvelopeId,
+    dependencyClass: dependencyClass ?? this.dependencyClass,
+    committedAt: committedAt ?? this.committedAt,
+  );
+  InboxEventDeduplication copyWithCompanion(
+    InboxEventDeduplicationsCompanion data,
+  ) {
+    return InboxEventDeduplication(
+      opaqueEventId: data.opaqueEventId.present
+          ? data.opaqueEventId.value
+          : this.opaqueEventId,
+      firstEnvelopeId: data.firstEnvelopeId.present
+          ? data.firstEnvelopeId.value
+          : this.firstEnvelopeId,
+      dependencyClass: data.dependencyClass.present
+          ? data.dependencyClass.value
+          : this.dependencyClass,
+      committedAt: data.committedAt.present
+          ? data.committedAt.value
+          : this.committedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('InboxEventDeduplication(')
+          ..write('opaqueEventId: $opaqueEventId, ')
+          ..write('firstEnvelopeId: $firstEnvelopeId, ')
+          ..write('dependencyClass: $dependencyClass, ')
+          ..write('committedAt: $committedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode =>
+      Object.hash(opaqueEventId, firstEnvelopeId, dependencyClass, committedAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is InboxEventDeduplication &&
+          other.opaqueEventId == this.opaqueEventId &&
+          other.firstEnvelopeId == this.firstEnvelopeId &&
+          other.dependencyClass == this.dependencyClass &&
+          other.committedAt == this.committedAt);
+}
+
+class InboxEventDeduplicationsCompanion
+    extends UpdateCompanion<InboxEventDeduplication> {
+  final Value<String> opaqueEventId;
+  final Value<String> firstEnvelopeId;
+  final Value<int> dependencyClass;
+  final Value<DateTime> committedAt;
+  final Value<int> rowid;
+  const InboxEventDeduplicationsCompanion({
+    this.opaqueEventId = const Value.absent(),
+    this.firstEnvelopeId = const Value.absent(),
+    this.dependencyClass = const Value.absent(),
+    this.committedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  InboxEventDeduplicationsCompanion.insert({
+    required String opaqueEventId,
+    required String firstEnvelopeId,
+    required int dependencyClass,
+    this.committedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : opaqueEventId = Value(opaqueEventId),
+       firstEnvelopeId = Value(firstEnvelopeId),
+       dependencyClass = Value(dependencyClass);
+  static Insertable<InboxEventDeduplication> custom({
+    Expression<String>? opaqueEventId,
+    Expression<String>? firstEnvelopeId,
+    Expression<int>? dependencyClass,
+    Expression<DateTime>? committedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (opaqueEventId != null) 'opaque_event_id': opaqueEventId,
+      if (firstEnvelopeId != null) 'first_envelope_id': firstEnvelopeId,
+      if (dependencyClass != null) 'dependency_class': dependencyClass,
+      if (committedAt != null) 'committed_at': committedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  InboxEventDeduplicationsCompanion copyWith({
+    Value<String>? opaqueEventId,
+    Value<String>? firstEnvelopeId,
+    Value<int>? dependencyClass,
+    Value<DateTime>? committedAt,
+    Value<int>? rowid,
+  }) {
+    return InboxEventDeduplicationsCompanion(
+      opaqueEventId: opaqueEventId ?? this.opaqueEventId,
+      firstEnvelopeId: firstEnvelopeId ?? this.firstEnvelopeId,
+      dependencyClass: dependencyClass ?? this.dependencyClass,
+      committedAt: committedAt ?? this.committedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (opaqueEventId.present) {
+      map['opaque_event_id'] = Variable<String>(opaqueEventId.value);
+    }
+    if (firstEnvelopeId.present) {
+      map['first_envelope_id'] = Variable<String>(firstEnvelopeId.value);
+    }
+    if (dependencyClass.present) {
+      map['dependency_class'] = Variable<int>(dependencyClass.value);
+    }
+    if (committedAt.present) {
+      map['committed_at'] = Variable<DateTime>(committedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('InboxEventDeduplicationsCompanion(')
+          ..write('opaqueEventId: $opaqueEventId, ')
+          ..write('firstEnvelopeId: $firstEnvelopeId, ')
+          ..write('dependencyClass: $dependencyClass, ')
+          ..write('committedAt: $committedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $PairwiseReplayMarkersTable extends PairwiseReplayMarkers
+    with TableInfo<$PairwiseReplayMarkersTable, PairwiseReplayMarker> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $PairwiseReplayMarkersTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _replayMarkerMeta = const VerificationMeta(
+    'replayMarker',
+  );
+  @override
+  late final GeneratedColumn<Uint8List> replayMarker =
+      GeneratedColumn<Uint8List>(
+        'replay_marker',
+        aliasedName,
+        false,
+        type: DriftSqlType.blob,
+        requiredDuringInsert: true,
+      );
+  static const VerificationMeta _sessionIdMeta = const VerificationMeta(
+    'sessionId',
+  );
+  @override
+  late final GeneratedColumn<Uint8List> sessionId = GeneratedColumn<Uint8List>(
+    'session_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.blob,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _signedPrekeyIdMeta = const VerificationMeta(
+    'signedPrekeyId',
+  );
+  @override
+  late final GeneratedColumn<int> signedPrekeyId = GeneratedColumn<int>(
+    'signed_prekey_id',
+    aliasedName,
+    true,
+    check: () =>
+        signedPrekeyId.isNull() |
+        ComparableExpr(signedPrekeyId).isBetweenValues(0, 0x7fffffff),
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _pqSignedPrekeyIdMeta = const VerificationMeta(
+    'pqSignedPrekeyId',
+  );
+  @override
+  late final GeneratedColumn<int> pqSignedPrekeyId = GeneratedColumn<int>(
+    'pq_signed_prekey_id',
+    aliasedName,
+    true,
+    check: () =>
+        pqSignedPrekeyId.isNull() |
+        ComparableExpr(pqSignedPrekeyId).isBetweenValues(0, 0x7fffffff),
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _firstEnvelopeIdMeta = const VerificationMeta(
+    'firstEnvelopeId',
+  );
+  @override
+  late final GeneratedColumn<String> firstEnvelopeId = GeneratedColumn<String>(
+    'first_envelope_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _committedAtMeta = const VerificationMeta(
+    'committedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> committedAt = GeneratedColumn<DateTime>(
+    'committed_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    replayMarker,
+    sessionId,
+    signedPrekeyId,
+    pqSignedPrekeyId,
+    firstEnvelopeId,
+    committedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'pairwise_replay_markers';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<PairwiseReplayMarker> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('replay_marker')) {
+      context.handle(
+        _replayMarkerMeta,
+        replayMarker.isAcceptableOrUnknown(
+          data['replay_marker']!,
+          _replayMarkerMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_replayMarkerMeta);
+    }
+    if (data.containsKey('session_id')) {
+      context.handle(
+        _sessionIdMeta,
+        sessionId.isAcceptableOrUnknown(data['session_id']!, _sessionIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_sessionIdMeta);
+    }
+    if (data.containsKey('signed_prekey_id')) {
+      context.handle(
+        _signedPrekeyIdMeta,
+        signedPrekeyId.isAcceptableOrUnknown(
+          data['signed_prekey_id']!,
+          _signedPrekeyIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('pq_signed_prekey_id')) {
+      context.handle(
+        _pqSignedPrekeyIdMeta,
+        pqSignedPrekeyId.isAcceptableOrUnknown(
+          data['pq_signed_prekey_id']!,
+          _pqSignedPrekeyIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('first_envelope_id')) {
+      context.handle(
+        _firstEnvelopeIdMeta,
+        firstEnvelopeId.isAcceptableOrUnknown(
+          data['first_envelope_id']!,
+          _firstEnvelopeIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_firstEnvelopeIdMeta);
+    }
+    if (data.containsKey('committed_at')) {
+      context.handle(
+        _committedAtMeta,
+        committedAt.isAcceptableOrUnknown(
+          data['committed_at']!,
+          _committedAtMeta,
+        ),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {replayMarker};
+  @override
+  PairwiseReplayMarker map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return PairwiseReplayMarker(
+      replayMarker: attachedDatabase.typeMapping.read(
+        DriftSqlType.blob,
+        data['${effectivePrefix}replay_marker'],
+      )!,
+      sessionId: attachedDatabase.typeMapping.read(
+        DriftSqlType.blob,
+        data['${effectivePrefix}session_id'],
+      )!,
+      signedPrekeyId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}signed_prekey_id'],
+      ),
+      pqSignedPrekeyId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}pq_signed_prekey_id'],
+      ),
+      firstEnvelopeId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}first_envelope_id'],
+      )!,
+      committedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}committed_at'],
+      )!,
+    );
+  }
+
+  @override
+  $PairwiseReplayMarkersTable createAlias(String alias) {
+    return $PairwiseReplayMarkersTable(attachedDatabase, alias);
+  }
+}
+
+class PairwiseReplayMarker extends DataClass
+    implements Insertable<PairwiseReplayMarker> {
+  final Uint8List replayMarker;
+  final Uint8List sessionId;
+  final int? signedPrekeyId;
+  final int? pqSignedPrekeyId;
+  final String firstEnvelopeId;
+  final DateTime committedAt;
+  const PairwiseReplayMarker({
+    required this.replayMarker,
+    required this.sessionId,
+    this.signedPrekeyId,
+    this.pqSignedPrekeyId,
+    required this.firstEnvelopeId,
+    required this.committedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['replay_marker'] = Variable<Uint8List>(replayMarker);
+    map['session_id'] = Variable<Uint8List>(sessionId);
+    if (!nullToAbsent || signedPrekeyId != null) {
+      map['signed_prekey_id'] = Variable<int>(signedPrekeyId);
+    }
+    if (!nullToAbsent || pqSignedPrekeyId != null) {
+      map['pq_signed_prekey_id'] = Variable<int>(pqSignedPrekeyId);
+    }
+    map['first_envelope_id'] = Variable<String>(firstEnvelopeId);
+    map['committed_at'] = Variable<DateTime>(committedAt);
+    return map;
+  }
+
+  PairwiseReplayMarkersCompanion toCompanion(bool nullToAbsent) {
+    return PairwiseReplayMarkersCompanion(
+      replayMarker: Value(replayMarker),
+      sessionId: Value(sessionId),
+      signedPrekeyId: signedPrekeyId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(signedPrekeyId),
+      pqSignedPrekeyId: pqSignedPrekeyId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(pqSignedPrekeyId),
+      firstEnvelopeId: Value(firstEnvelopeId),
+      committedAt: Value(committedAt),
+    );
+  }
+
+  factory PairwiseReplayMarker.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return PairwiseReplayMarker(
+      replayMarker: serializer.fromJson<Uint8List>(json['replayMarker']),
+      sessionId: serializer.fromJson<Uint8List>(json['sessionId']),
+      signedPrekeyId: serializer.fromJson<int?>(json['signedPrekeyId']),
+      pqSignedPrekeyId: serializer.fromJson<int?>(json['pqSignedPrekeyId']),
+      firstEnvelopeId: serializer.fromJson<String>(json['firstEnvelopeId']),
+      committedAt: serializer.fromJson<DateTime>(json['committedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'replayMarker': serializer.toJson<Uint8List>(replayMarker),
+      'sessionId': serializer.toJson<Uint8List>(sessionId),
+      'signedPrekeyId': serializer.toJson<int?>(signedPrekeyId),
+      'pqSignedPrekeyId': serializer.toJson<int?>(pqSignedPrekeyId),
+      'firstEnvelopeId': serializer.toJson<String>(firstEnvelopeId),
+      'committedAt': serializer.toJson<DateTime>(committedAt),
+    };
+  }
+
+  PairwiseReplayMarker copyWith({
+    Uint8List? replayMarker,
+    Uint8List? sessionId,
+    Value<int?> signedPrekeyId = const Value.absent(),
+    Value<int?> pqSignedPrekeyId = const Value.absent(),
+    String? firstEnvelopeId,
+    DateTime? committedAt,
+  }) => PairwiseReplayMarker(
+    replayMarker: replayMarker ?? this.replayMarker,
+    sessionId: sessionId ?? this.sessionId,
+    signedPrekeyId: signedPrekeyId.present
+        ? signedPrekeyId.value
+        : this.signedPrekeyId,
+    pqSignedPrekeyId: pqSignedPrekeyId.present
+        ? pqSignedPrekeyId.value
+        : this.pqSignedPrekeyId,
+    firstEnvelopeId: firstEnvelopeId ?? this.firstEnvelopeId,
+    committedAt: committedAt ?? this.committedAt,
+  );
+  PairwiseReplayMarker copyWithCompanion(PairwiseReplayMarkersCompanion data) {
+    return PairwiseReplayMarker(
+      replayMarker: data.replayMarker.present
+          ? data.replayMarker.value
+          : this.replayMarker,
+      sessionId: data.sessionId.present ? data.sessionId.value : this.sessionId,
+      signedPrekeyId: data.signedPrekeyId.present
+          ? data.signedPrekeyId.value
+          : this.signedPrekeyId,
+      pqSignedPrekeyId: data.pqSignedPrekeyId.present
+          ? data.pqSignedPrekeyId.value
+          : this.pqSignedPrekeyId,
+      firstEnvelopeId: data.firstEnvelopeId.present
+          ? data.firstEnvelopeId.value
+          : this.firstEnvelopeId,
+      committedAt: data.committedAt.present
+          ? data.committedAt.value
+          : this.committedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('PairwiseReplayMarker(')
+          ..write('replayMarker: $replayMarker, ')
+          ..write('sessionId: $sessionId, ')
+          ..write('signedPrekeyId: $signedPrekeyId, ')
+          ..write('pqSignedPrekeyId: $pqSignedPrekeyId, ')
+          ..write('firstEnvelopeId: $firstEnvelopeId, ')
+          ..write('committedAt: $committedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    $driftBlobEquality.hash(replayMarker),
+    $driftBlobEquality.hash(sessionId),
+    signedPrekeyId,
+    pqSignedPrekeyId,
+    firstEnvelopeId,
+    committedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is PairwiseReplayMarker &&
+          $driftBlobEquality.equals(other.replayMarker, this.replayMarker) &&
+          $driftBlobEquality.equals(other.sessionId, this.sessionId) &&
+          other.signedPrekeyId == this.signedPrekeyId &&
+          other.pqSignedPrekeyId == this.pqSignedPrekeyId &&
+          other.firstEnvelopeId == this.firstEnvelopeId &&
+          other.committedAt == this.committedAt);
+}
+
+class PairwiseReplayMarkersCompanion
+    extends UpdateCompanion<PairwiseReplayMarker> {
+  final Value<Uint8List> replayMarker;
+  final Value<Uint8List> sessionId;
+  final Value<int?> signedPrekeyId;
+  final Value<int?> pqSignedPrekeyId;
+  final Value<String> firstEnvelopeId;
+  final Value<DateTime> committedAt;
+  final Value<int> rowid;
+  const PairwiseReplayMarkersCompanion({
+    this.replayMarker = const Value.absent(),
+    this.sessionId = const Value.absent(),
+    this.signedPrekeyId = const Value.absent(),
+    this.pqSignedPrekeyId = const Value.absent(),
+    this.firstEnvelopeId = const Value.absent(),
+    this.committedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  PairwiseReplayMarkersCompanion.insert({
+    required Uint8List replayMarker,
+    required Uint8List sessionId,
+    this.signedPrekeyId = const Value.absent(),
+    this.pqSignedPrekeyId = const Value.absent(),
+    required String firstEnvelopeId,
+    this.committedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : replayMarker = Value(replayMarker),
+       sessionId = Value(sessionId),
+       firstEnvelopeId = Value(firstEnvelopeId);
+  static Insertable<PairwiseReplayMarker> custom({
+    Expression<Uint8List>? replayMarker,
+    Expression<Uint8List>? sessionId,
+    Expression<int>? signedPrekeyId,
+    Expression<int>? pqSignedPrekeyId,
+    Expression<String>? firstEnvelopeId,
+    Expression<DateTime>? committedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (replayMarker != null) 'replay_marker': replayMarker,
+      if (sessionId != null) 'session_id': sessionId,
+      if (signedPrekeyId != null) 'signed_prekey_id': signedPrekeyId,
+      if (pqSignedPrekeyId != null) 'pq_signed_prekey_id': pqSignedPrekeyId,
+      if (firstEnvelopeId != null) 'first_envelope_id': firstEnvelopeId,
+      if (committedAt != null) 'committed_at': committedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  PairwiseReplayMarkersCompanion copyWith({
+    Value<Uint8List>? replayMarker,
+    Value<Uint8List>? sessionId,
+    Value<int?>? signedPrekeyId,
+    Value<int?>? pqSignedPrekeyId,
+    Value<String>? firstEnvelopeId,
+    Value<DateTime>? committedAt,
+    Value<int>? rowid,
+  }) {
+    return PairwiseReplayMarkersCompanion(
+      replayMarker: replayMarker ?? this.replayMarker,
+      sessionId: sessionId ?? this.sessionId,
+      signedPrekeyId: signedPrekeyId ?? this.signedPrekeyId,
+      pqSignedPrekeyId: pqSignedPrekeyId ?? this.pqSignedPrekeyId,
+      firstEnvelopeId: firstEnvelopeId ?? this.firstEnvelopeId,
+      committedAt: committedAt ?? this.committedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (replayMarker.present) {
+      map['replay_marker'] = Variable<Uint8List>(replayMarker.value);
+    }
+    if (sessionId.present) {
+      map['session_id'] = Variable<Uint8List>(sessionId.value);
+    }
+    if (signedPrekeyId.present) {
+      map['signed_prekey_id'] = Variable<int>(signedPrekeyId.value);
+    }
+    if (pqSignedPrekeyId.present) {
+      map['pq_signed_prekey_id'] = Variable<int>(pqSignedPrekeyId.value);
+    }
+    if (firstEnvelopeId.present) {
+      map['first_envelope_id'] = Variable<String>(firstEnvelopeId.value);
+    }
+    if (committedAt.present) {
+      map['committed_at'] = Variable<DateTime>(committedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('PairwiseReplayMarkersCompanion(')
+          ..write('replayMarker: $replayMarker, ')
+          ..write('sessionId: $sessionId, ')
+          ..write('signedPrekeyId: $signedPrekeyId, ')
+          ..write('pqSignedPrekeyId: $pqSignedPrekeyId, ')
+          ..write('firstEnvelopeId: $firstEnvelopeId, ')
+          ..write('committedAt: $committedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $PairwiseOpenedPayloadsTable extends PairwiseOpenedPayloads
+    with TableInfo<$PairwiseOpenedPayloadsTable, PairwiseOpenedPayload> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $PairwiseOpenedPayloadsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _envelopeIdMeta = const VerificationMeta(
+    'envelopeId',
+  );
+  @override
+  late final GeneratedColumn<String> envelopeId = GeneratedColumn<String>(
+    'envelope_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _opaqueEventIdMeta = const VerificationMeta(
+    'opaqueEventId',
+  );
+  @override
+  late final GeneratedColumn<String> opaqueEventId = GeneratedColumn<String>(
+    'opaque_event_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _senderUserIdMeta = const VerificationMeta(
+    'senderUserId',
+  );
+  @override
+  late final GeneratedColumn<String> senderUserId = GeneratedColumn<String>(
+    'sender_user_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _senderDeviceIdMeta = const VerificationMeta(
+    'senderDeviceId',
+  );
+  @override
+  late final GeneratedColumn<String> senderDeviceId = GeneratedColumn<String>(
+    'sender_device_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _sessionIdMeta = const VerificationMeta(
+    'sessionId',
+  );
+  @override
+  late final GeneratedColumn<Uint8List> sessionId = GeneratedColumn<Uint8List>(
+    'session_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.blob,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _replayMarkerMeta = const VerificationMeta(
+    'replayMarker',
+  );
+  @override
+  late final GeneratedColumn<Uint8List> replayMarker =
+      GeneratedColumn<Uint8List>(
+        'replay_marker',
+        aliasedName,
+        false,
+        type: DriftSqlType.blob,
+        requiredDuringInsert: true,
+      );
+  static const VerificationMeta _openedOpaquePayloadMeta =
+      const VerificationMeta('openedOpaquePayload');
+  @override
+  late final GeneratedColumn<Uint8List> openedOpaquePayload =
+      GeneratedColumn<Uint8List>(
+        'opened_opaque_payload',
+        aliasedName,
+        false,
+        type: DriftSqlType.blob,
+        requiredDuringInsert: true,
+      );
+  static const VerificationMeta _applicationAppliedMeta =
+      const VerificationMeta('applicationApplied');
+  @override
+  late final GeneratedColumn<bool> applicationApplied = GeneratedColumn<bool>(
+    'application_applied',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("application_applied" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _committedAtMeta = const VerificationMeta(
+    'committedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> committedAt = GeneratedColumn<DateTime>(
+    'committed_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    envelopeId,
+    opaqueEventId,
+    senderUserId,
+    senderDeviceId,
+    sessionId,
+    replayMarker,
+    openedOpaquePayload,
+    applicationApplied,
+    committedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'pairwise_opened_payloads';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<PairwiseOpenedPayload> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('envelope_id')) {
+      context.handle(
+        _envelopeIdMeta,
+        envelopeId.isAcceptableOrUnknown(data['envelope_id']!, _envelopeIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_envelopeIdMeta);
+    }
+    if (data.containsKey('opaque_event_id')) {
+      context.handle(
+        _opaqueEventIdMeta,
+        opaqueEventId.isAcceptableOrUnknown(
+          data['opaque_event_id']!,
+          _opaqueEventIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_opaqueEventIdMeta);
+    }
+    if (data.containsKey('sender_user_id')) {
+      context.handle(
+        _senderUserIdMeta,
+        senderUserId.isAcceptableOrUnknown(
+          data['sender_user_id']!,
+          _senderUserIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_senderUserIdMeta);
+    }
+    if (data.containsKey('sender_device_id')) {
+      context.handle(
+        _senderDeviceIdMeta,
+        senderDeviceId.isAcceptableOrUnknown(
+          data['sender_device_id']!,
+          _senderDeviceIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_senderDeviceIdMeta);
+    }
+    if (data.containsKey('session_id')) {
+      context.handle(
+        _sessionIdMeta,
+        sessionId.isAcceptableOrUnknown(data['session_id']!, _sessionIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_sessionIdMeta);
+    }
+    if (data.containsKey('replay_marker')) {
+      context.handle(
+        _replayMarkerMeta,
+        replayMarker.isAcceptableOrUnknown(
+          data['replay_marker']!,
+          _replayMarkerMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_replayMarkerMeta);
+    }
+    if (data.containsKey('opened_opaque_payload')) {
+      context.handle(
+        _openedOpaquePayloadMeta,
+        openedOpaquePayload.isAcceptableOrUnknown(
+          data['opened_opaque_payload']!,
+          _openedOpaquePayloadMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_openedOpaquePayloadMeta);
+    }
+    if (data.containsKey('application_applied')) {
+      context.handle(
+        _applicationAppliedMeta,
+        applicationApplied.isAcceptableOrUnknown(
+          data['application_applied']!,
+          _applicationAppliedMeta,
+        ),
+      );
+    }
+    if (data.containsKey('committed_at')) {
+      context.handle(
+        _committedAtMeta,
+        committedAt.isAcceptableOrUnknown(
+          data['committed_at']!,
+          _committedAtMeta,
+        ),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {envelopeId};
+  @override
+  PairwiseOpenedPayload map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return PairwiseOpenedPayload(
+      envelopeId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}envelope_id'],
+      )!,
+      opaqueEventId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}opaque_event_id'],
+      )!,
+      senderUserId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}sender_user_id'],
+      )!,
+      senderDeviceId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}sender_device_id'],
+      )!,
+      sessionId: attachedDatabase.typeMapping.read(
+        DriftSqlType.blob,
+        data['${effectivePrefix}session_id'],
+      )!,
+      replayMarker: attachedDatabase.typeMapping.read(
+        DriftSqlType.blob,
+        data['${effectivePrefix}replay_marker'],
+      )!,
+      openedOpaquePayload: attachedDatabase.typeMapping.read(
+        DriftSqlType.blob,
+        data['${effectivePrefix}opened_opaque_payload'],
+      )!,
+      applicationApplied: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}application_applied'],
+      )!,
+      committedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}committed_at'],
+      )!,
+    );
+  }
+
+  @override
+  $PairwiseOpenedPayloadsTable createAlias(String alias) {
+    return $PairwiseOpenedPayloadsTable(attachedDatabase, alias);
+  }
+}
+
+class PairwiseOpenedPayload extends DataClass
+    implements Insertable<PairwiseOpenedPayload> {
+  final String envelopeId;
+  final String opaqueEventId;
+  final String senderUserId;
+  final String senderDeviceId;
+  final Uint8List sessionId;
+  final Uint8List replayMarker;
+  final Uint8List openedOpaquePayload;
+  final bool applicationApplied;
+  final DateTime committedAt;
+  const PairwiseOpenedPayload({
+    required this.envelopeId,
+    required this.opaqueEventId,
+    required this.senderUserId,
+    required this.senderDeviceId,
+    required this.sessionId,
+    required this.replayMarker,
+    required this.openedOpaquePayload,
+    required this.applicationApplied,
+    required this.committedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['envelope_id'] = Variable<String>(envelopeId);
+    map['opaque_event_id'] = Variable<String>(opaqueEventId);
+    map['sender_user_id'] = Variable<String>(senderUserId);
+    map['sender_device_id'] = Variable<String>(senderDeviceId);
+    map['session_id'] = Variable<Uint8List>(sessionId);
+    map['replay_marker'] = Variable<Uint8List>(replayMarker);
+    map['opened_opaque_payload'] = Variable<Uint8List>(openedOpaquePayload);
+    map['application_applied'] = Variable<bool>(applicationApplied);
+    map['committed_at'] = Variable<DateTime>(committedAt);
+    return map;
+  }
+
+  PairwiseOpenedPayloadsCompanion toCompanion(bool nullToAbsent) {
+    return PairwiseOpenedPayloadsCompanion(
+      envelopeId: Value(envelopeId),
+      opaqueEventId: Value(opaqueEventId),
+      senderUserId: Value(senderUserId),
+      senderDeviceId: Value(senderDeviceId),
+      sessionId: Value(sessionId),
+      replayMarker: Value(replayMarker),
+      openedOpaquePayload: Value(openedOpaquePayload),
+      applicationApplied: Value(applicationApplied),
+      committedAt: Value(committedAt),
+    );
+  }
+
+  factory PairwiseOpenedPayload.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return PairwiseOpenedPayload(
+      envelopeId: serializer.fromJson<String>(json['envelopeId']),
+      opaqueEventId: serializer.fromJson<String>(json['opaqueEventId']),
+      senderUserId: serializer.fromJson<String>(json['senderUserId']),
+      senderDeviceId: serializer.fromJson<String>(json['senderDeviceId']),
+      sessionId: serializer.fromJson<Uint8List>(json['sessionId']),
+      replayMarker: serializer.fromJson<Uint8List>(json['replayMarker']),
+      openedOpaquePayload: serializer.fromJson<Uint8List>(
+        json['openedOpaquePayload'],
+      ),
+      applicationApplied: serializer.fromJson<bool>(json['applicationApplied']),
+      committedAt: serializer.fromJson<DateTime>(json['committedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'envelopeId': serializer.toJson<String>(envelopeId),
+      'opaqueEventId': serializer.toJson<String>(opaqueEventId),
+      'senderUserId': serializer.toJson<String>(senderUserId),
+      'senderDeviceId': serializer.toJson<String>(senderDeviceId),
+      'sessionId': serializer.toJson<Uint8List>(sessionId),
+      'replayMarker': serializer.toJson<Uint8List>(replayMarker),
+      'openedOpaquePayload': serializer.toJson<Uint8List>(openedOpaquePayload),
+      'applicationApplied': serializer.toJson<bool>(applicationApplied),
+      'committedAt': serializer.toJson<DateTime>(committedAt),
+    };
+  }
+
+  PairwiseOpenedPayload copyWith({
+    String? envelopeId,
+    String? opaqueEventId,
+    String? senderUserId,
+    String? senderDeviceId,
+    Uint8List? sessionId,
+    Uint8List? replayMarker,
+    Uint8List? openedOpaquePayload,
+    bool? applicationApplied,
+    DateTime? committedAt,
+  }) => PairwiseOpenedPayload(
+    envelopeId: envelopeId ?? this.envelopeId,
+    opaqueEventId: opaqueEventId ?? this.opaqueEventId,
+    senderUserId: senderUserId ?? this.senderUserId,
+    senderDeviceId: senderDeviceId ?? this.senderDeviceId,
+    sessionId: sessionId ?? this.sessionId,
+    replayMarker: replayMarker ?? this.replayMarker,
+    openedOpaquePayload: openedOpaquePayload ?? this.openedOpaquePayload,
+    applicationApplied: applicationApplied ?? this.applicationApplied,
+    committedAt: committedAt ?? this.committedAt,
+  );
+  PairwiseOpenedPayload copyWithCompanion(
+    PairwiseOpenedPayloadsCompanion data,
+  ) {
+    return PairwiseOpenedPayload(
+      envelopeId: data.envelopeId.present
+          ? data.envelopeId.value
+          : this.envelopeId,
+      opaqueEventId: data.opaqueEventId.present
+          ? data.opaqueEventId.value
+          : this.opaqueEventId,
+      senderUserId: data.senderUserId.present
+          ? data.senderUserId.value
+          : this.senderUserId,
+      senderDeviceId: data.senderDeviceId.present
+          ? data.senderDeviceId.value
+          : this.senderDeviceId,
+      sessionId: data.sessionId.present ? data.sessionId.value : this.sessionId,
+      replayMarker: data.replayMarker.present
+          ? data.replayMarker.value
+          : this.replayMarker,
+      openedOpaquePayload: data.openedOpaquePayload.present
+          ? data.openedOpaquePayload.value
+          : this.openedOpaquePayload,
+      applicationApplied: data.applicationApplied.present
+          ? data.applicationApplied.value
+          : this.applicationApplied,
+      committedAt: data.committedAt.present
+          ? data.committedAt.value
+          : this.committedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('PairwiseOpenedPayload(')
+          ..write('envelopeId: $envelopeId, ')
+          ..write('opaqueEventId: $opaqueEventId, ')
+          ..write('senderUserId: $senderUserId, ')
+          ..write('senderDeviceId: $senderDeviceId, ')
+          ..write('sessionId: $sessionId, ')
+          ..write('replayMarker: $replayMarker, ')
+          ..write('openedOpaquePayload: $openedOpaquePayload, ')
+          ..write('applicationApplied: $applicationApplied, ')
+          ..write('committedAt: $committedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    envelopeId,
+    opaqueEventId,
+    senderUserId,
+    senderDeviceId,
+    $driftBlobEquality.hash(sessionId),
+    $driftBlobEquality.hash(replayMarker),
+    $driftBlobEquality.hash(openedOpaquePayload),
+    applicationApplied,
+    committedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is PairwiseOpenedPayload &&
+          other.envelopeId == this.envelopeId &&
+          other.opaqueEventId == this.opaqueEventId &&
+          other.senderUserId == this.senderUserId &&
+          other.senderDeviceId == this.senderDeviceId &&
+          $driftBlobEquality.equals(other.sessionId, this.sessionId) &&
+          $driftBlobEquality.equals(other.replayMarker, this.replayMarker) &&
+          $driftBlobEquality.equals(
+            other.openedOpaquePayload,
+            this.openedOpaquePayload,
+          ) &&
+          other.applicationApplied == this.applicationApplied &&
+          other.committedAt == this.committedAt);
+}
+
+class PairwiseOpenedPayloadsCompanion
+    extends UpdateCompanion<PairwiseOpenedPayload> {
+  final Value<String> envelopeId;
+  final Value<String> opaqueEventId;
+  final Value<String> senderUserId;
+  final Value<String> senderDeviceId;
+  final Value<Uint8List> sessionId;
+  final Value<Uint8List> replayMarker;
+  final Value<Uint8List> openedOpaquePayload;
+  final Value<bool> applicationApplied;
+  final Value<DateTime> committedAt;
+  final Value<int> rowid;
+  const PairwiseOpenedPayloadsCompanion({
+    this.envelopeId = const Value.absent(),
+    this.opaqueEventId = const Value.absent(),
+    this.senderUserId = const Value.absent(),
+    this.senderDeviceId = const Value.absent(),
+    this.sessionId = const Value.absent(),
+    this.replayMarker = const Value.absent(),
+    this.openedOpaquePayload = const Value.absent(),
+    this.applicationApplied = const Value.absent(),
+    this.committedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  PairwiseOpenedPayloadsCompanion.insert({
+    required String envelopeId,
+    required String opaqueEventId,
+    required String senderUserId,
+    required String senderDeviceId,
+    required Uint8List sessionId,
+    required Uint8List replayMarker,
+    required Uint8List openedOpaquePayload,
+    this.applicationApplied = const Value.absent(),
+    this.committedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : envelopeId = Value(envelopeId),
+       opaqueEventId = Value(opaqueEventId),
+       senderUserId = Value(senderUserId),
+       senderDeviceId = Value(senderDeviceId),
+       sessionId = Value(sessionId),
+       replayMarker = Value(replayMarker),
+       openedOpaquePayload = Value(openedOpaquePayload);
+  static Insertable<PairwiseOpenedPayload> custom({
+    Expression<String>? envelopeId,
+    Expression<String>? opaqueEventId,
+    Expression<String>? senderUserId,
+    Expression<String>? senderDeviceId,
+    Expression<Uint8List>? sessionId,
+    Expression<Uint8List>? replayMarker,
+    Expression<Uint8List>? openedOpaquePayload,
+    Expression<bool>? applicationApplied,
+    Expression<DateTime>? committedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (envelopeId != null) 'envelope_id': envelopeId,
+      if (opaqueEventId != null) 'opaque_event_id': opaqueEventId,
+      if (senderUserId != null) 'sender_user_id': senderUserId,
+      if (senderDeviceId != null) 'sender_device_id': senderDeviceId,
+      if (sessionId != null) 'session_id': sessionId,
+      if (replayMarker != null) 'replay_marker': replayMarker,
+      if (openedOpaquePayload != null)
+        'opened_opaque_payload': openedOpaquePayload,
+      if (applicationApplied != null) 'application_applied': applicationApplied,
+      if (committedAt != null) 'committed_at': committedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  PairwiseOpenedPayloadsCompanion copyWith({
+    Value<String>? envelopeId,
+    Value<String>? opaqueEventId,
+    Value<String>? senderUserId,
+    Value<String>? senderDeviceId,
+    Value<Uint8List>? sessionId,
+    Value<Uint8List>? replayMarker,
+    Value<Uint8List>? openedOpaquePayload,
+    Value<bool>? applicationApplied,
+    Value<DateTime>? committedAt,
+    Value<int>? rowid,
+  }) {
+    return PairwiseOpenedPayloadsCompanion(
+      envelopeId: envelopeId ?? this.envelopeId,
+      opaqueEventId: opaqueEventId ?? this.opaqueEventId,
+      senderUserId: senderUserId ?? this.senderUserId,
+      senderDeviceId: senderDeviceId ?? this.senderDeviceId,
+      sessionId: sessionId ?? this.sessionId,
+      replayMarker: replayMarker ?? this.replayMarker,
+      openedOpaquePayload: openedOpaquePayload ?? this.openedOpaquePayload,
+      applicationApplied: applicationApplied ?? this.applicationApplied,
+      committedAt: committedAt ?? this.committedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (envelopeId.present) {
+      map['envelope_id'] = Variable<String>(envelopeId.value);
+    }
+    if (opaqueEventId.present) {
+      map['opaque_event_id'] = Variable<String>(opaqueEventId.value);
+    }
+    if (senderUserId.present) {
+      map['sender_user_id'] = Variable<String>(senderUserId.value);
+    }
+    if (senderDeviceId.present) {
+      map['sender_device_id'] = Variable<String>(senderDeviceId.value);
+    }
+    if (sessionId.present) {
+      map['session_id'] = Variable<Uint8List>(sessionId.value);
+    }
+    if (replayMarker.present) {
+      map['replay_marker'] = Variable<Uint8List>(replayMarker.value);
+    }
+    if (openedOpaquePayload.present) {
+      map['opened_opaque_payload'] = Variable<Uint8List>(
+        openedOpaquePayload.value,
+      );
+    }
+    if (applicationApplied.present) {
+      map['application_applied'] = Variable<bool>(applicationApplied.value);
+    }
+    if (committedAt.present) {
+      map['committed_at'] = Variable<DateTime>(committedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('PairwiseOpenedPayloadsCompanion(')
+          ..write('envelopeId: $envelopeId, ')
+          ..write('opaqueEventId: $opaqueEventId, ')
+          ..write('senderUserId: $senderUserId, ')
+          ..write('senderDeviceId: $senderDeviceId, ')
+          ..write('sessionId: $sessionId, ')
+          ..write('replayMarker: $replayMarker, ')
+          ..write('openedOpaquePayload: $openedOpaquePayload, ')
+          ..write('applicationApplied: $applicationApplied, ')
+          ..write('committedAt: $committedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $PairwiseLocalApplicationsTable extends PairwiseLocalApplications
+    with TableInfo<$PairwiseLocalApplicationsTable, PairwiseLocalApplication> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $PairwiseLocalApplicationsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _operationIdMeta = const VerificationMeta(
+    'operationId',
+  );
+  @override
+  late final GeneratedColumn<String> operationId = GeneratedColumn<String>(
+    'operation_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _eventIdMeta = const VerificationMeta(
+    'eventId',
+  );
+  @override
+  late final GeneratedColumn<String> eventId = GeneratedColumn<String>(
+    'event_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways('UNIQUE'),
+  );
+  static const VerificationMeta _localDeviceIdMeta = const VerificationMeta(
+    'localDeviceId',
+  );
+  @override
+  late final GeneratedColumn<String> localDeviceId = GeneratedColumn<String>(
+    'local_device_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _openedOpaquePayloadMeta =
+      const VerificationMeta('openedOpaquePayload');
+  @override
+  late final GeneratedColumn<Uint8List> openedOpaquePayload =
+      GeneratedColumn<Uint8List>(
+        'opened_opaque_payload',
+        aliasedName,
+        false,
+        type: DriftSqlType.blob,
+        requiredDuringInsert: true,
+      );
+  static const VerificationMeta _applicationAppliedMeta =
+      const VerificationMeta('applicationApplied');
+  @override
+  late final GeneratedColumn<bool> applicationApplied = GeneratedColumn<bool>(
+    'application_applied',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("application_applied" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _committedAtMeta = const VerificationMeta(
+    'committedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> committedAt = GeneratedColumn<DateTime>(
+    'committed_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    operationId,
+    eventId,
+    localDeviceId,
+    openedOpaquePayload,
+    applicationApplied,
+    committedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'pairwise_local_applications';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<PairwiseLocalApplication> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('operation_id')) {
+      context.handle(
+        _operationIdMeta,
+        operationId.isAcceptableOrUnknown(
+          data['operation_id']!,
+          _operationIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_operationIdMeta);
+    }
+    if (data.containsKey('event_id')) {
+      context.handle(
+        _eventIdMeta,
+        eventId.isAcceptableOrUnknown(data['event_id']!, _eventIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_eventIdMeta);
+    }
+    if (data.containsKey('local_device_id')) {
+      context.handle(
+        _localDeviceIdMeta,
+        localDeviceId.isAcceptableOrUnknown(
+          data['local_device_id']!,
+          _localDeviceIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_localDeviceIdMeta);
+    }
+    if (data.containsKey('opened_opaque_payload')) {
+      context.handle(
+        _openedOpaquePayloadMeta,
+        openedOpaquePayload.isAcceptableOrUnknown(
+          data['opened_opaque_payload']!,
+          _openedOpaquePayloadMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_openedOpaquePayloadMeta);
+    }
+    if (data.containsKey('application_applied')) {
+      context.handle(
+        _applicationAppliedMeta,
+        applicationApplied.isAcceptableOrUnknown(
+          data['application_applied']!,
+          _applicationAppliedMeta,
+        ),
+      );
+    }
+    if (data.containsKey('committed_at')) {
+      context.handle(
+        _committedAtMeta,
+        committedAt.isAcceptableOrUnknown(
+          data['committed_at']!,
+          _committedAtMeta,
+        ),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {operationId};
+  @override
+  PairwiseLocalApplication map(
+    Map<String, dynamic> data, {
+    String? tablePrefix,
+  }) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return PairwiseLocalApplication(
+      operationId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}operation_id'],
+      )!,
+      eventId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}event_id'],
+      )!,
+      localDeviceId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}local_device_id'],
+      )!,
+      openedOpaquePayload: attachedDatabase.typeMapping.read(
+        DriftSqlType.blob,
+        data['${effectivePrefix}opened_opaque_payload'],
+      )!,
+      applicationApplied: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}application_applied'],
+      )!,
+      committedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}committed_at'],
+      )!,
+    );
+  }
+
+  @override
+  $PairwiseLocalApplicationsTable createAlias(String alias) {
+    return $PairwiseLocalApplicationsTable(attachedDatabase, alias);
+  }
+}
+
+class PairwiseLocalApplication extends DataClass
+    implements Insertable<PairwiseLocalApplication> {
+  final String operationId;
+  final String eventId;
+  final String localDeviceId;
+  final Uint8List openedOpaquePayload;
+  final bool applicationApplied;
+  final DateTime committedAt;
+  const PairwiseLocalApplication({
+    required this.operationId,
+    required this.eventId,
+    required this.localDeviceId,
+    required this.openedOpaquePayload,
+    required this.applicationApplied,
+    required this.committedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['operation_id'] = Variable<String>(operationId);
+    map['event_id'] = Variable<String>(eventId);
+    map['local_device_id'] = Variable<String>(localDeviceId);
+    map['opened_opaque_payload'] = Variable<Uint8List>(openedOpaquePayload);
+    map['application_applied'] = Variable<bool>(applicationApplied);
+    map['committed_at'] = Variable<DateTime>(committedAt);
+    return map;
+  }
+
+  PairwiseLocalApplicationsCompanion toCompanion(bool nullToAbsent) {
+    return PairwiseLocalApplicationsCompanion(
+      operationId: Value(operationId),
+      eventId: Value(eventId),
+      localDeviceId: Value(localDeviceId),
+      openedOpaquePayload: Value(openedOpaquePayload),
+      applicationApplied: Value(applicationApplied),
+      committedAt: Value(committedAt),
+    );
+  }
+
+  factory PairwiseLocalApplication.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return PairwiseLocalApplication(
+      operationId: serializer.fromJson<String>(json['operationId']),
+      eventId: serializer.fromJson<String>(json['eventId']),
+      localDeviceId: serializer.fromJson<String>(json['localDeviceId']),
+      openedOpaquePayload: serializer.fromJson<Uint8List>(
+        json['openedOpaquePayload'],
+      ),
+      applicationApplied: serializer.fromJson<bool>(json['applicationApplied']),
+      committedAt: serializer.fromJson<DateTime>(json['committedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'operationId': serializer.toJson<String>(operationId),
+      'eventId': serializer.toJson<String>(eventId),
+      'localDeviceId': serializer.toJson<String>(localDeviceId),
+      'openedOpaquePayload': serializer.toJson<Uint8List>(openedOpaquePayload),
+      'applicationApplied': serializer.toJson<bool>(applicationApplied),
+      'committedAt': serializer.toJson<DateTime>(committedAt),
+    };
+  }
+
+  PairwiseLocalApplication copyWith({
+    String? operationId,
+    String? eventId,
+    String? localDeviceId,
+    Uint8List? openedOpaquePayload,
+    bool? applicationApplied,
+    DateTime? committedAt,
+  }) => PairwiseLocalApplication(
+    operationId: operationId ?? this.operationId,
+    eventId: eventId ?? this.eventId,
+    localDeviceId: localDeviceId ?? this.localDeviceId,
+    openedOpaquePayload: openedOpaquePayload ?? this.openedOpaquePayload,
+    applicationApplied: applicationApplied ?? this.applicationApplied,
+    committedAt: committedAt ?? this.committedAt,
+  );
+  PairwiseLocalApplication copyWithCompanion(
+    PairwiseLocalApplicationsCompanion data,
+  ) {
+    return PairwiseLocalApplication(
+      operationId: data.operationId.present
+          ? data.operationId.value
+          : this.operationId,
+      eventId: data.eventId.present ? data.eventId.value : this.eventId,
+      localDeviceId: data.localDeviceId.present
+          ? data.localDeviceId.value
+          : this.localDeviceId,
+      openedOpaquePayload: data.openedOpaquePayload.present
+          ? data.openedOpaquePayload.value
+          : this.openedOpaquePayload,
+      applicationApplied: data.applicationApplied.present
+          ? data.applicationApplied.value
+          : this.applicationApplied,
+      committedAt: data.committedAt.present
+          ? data.committedAt.value
+          : this.committedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('PairwiseLocalApplication(')
+          ..write('operationId: $operationId, ')
+          ..write('eventId: $eventId, ')
+          ..write('localDeviceId: $localDeviceId, ')
+          ..write('openedOpaquePayload: $openedOpaquePayload, ')
+          ..write('applicationApplied: $applicationApplied, ')
+          ..write('committedAt: $committedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    operationId,
+    eventId,
+    localDeviceId,
+    $driftBlobEquality.hash(openedOpaquePayload),
+    applicationApplied,
+    committedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is PairwiseLocalApplication &&
+          other.operationId == this.operationId &&
+          other.eventId == this.eventId &&
+          other.localDeviceId == this.localDeviceId &&
+          $driftBlobEquality.equals(
+            other.openedOpaquePayload,
+            this.openedOpaquePayload,
+          ) &&
+          other.applicationApplied == this.applicationApplied &&
+          other.committedAt == this.committedAt);
+}
+
+class PairwiseLocalApplicationsCompanion
+    extends UpdateCompanion<PairwiseLocalApplication> {
+  final Value<String> operationId;
+  final Value<String> eventId;
+  final Value<String> localDeviceId;
+  final Value<Uint8List> openedOpaquePayload;
+  final Value<bool> applicationApplied;
+  final Value<DateTime> committedAt;
+  final Value<int> rowid;
+  const PairwiseLocalApplicationsCompanion({
+    this.operationId = const Value.absent(),
+    this.eventId = const Value.absent(),
+    this.localDeviceId = const Value.absent(),
+    this.openedOpaquePayload = const Value.absent(),
+    this.applicationApplied = const Value.absent(),
+    this.committedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  PairwiseLocalApplicationsCompanion.insert({
+    required String operationId,
+    required String eventId,
+    required String localDeviceId,
+    required Uint8List openedOpaquePayload,
+    this.applicationApplied = const Value.absent(),
+    this.committedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : operationId = Value(operationId),
+       eventId = Value(eventId),
+       localDeviceId = Value(localDeviceId),
+       openedOpaquePayload = Value(openedOpaquePayload);
+  static Insertable<PairwiseLocalApplication> custom({
+    Expression<String>? operationId,
+    Expression<String>? eventId,
+    Expression<String>? localDeviceId,
+    Expression<Uint8List>? openedOpaquePayload,
+    Expression<bool>? applicationApplied,
+    Expression<DateTime>? committedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (operationId != null) 'operation_id': operationId,
+      if (eventId != null) 'event_id': eventId,
+      if (localDeviceId != null) 'local_device_id': localDeviceId,
+      if (openedOpaquePayload != null)
+        'opened_opaque_payload': openedOpaquePayload,
+      if (applicationApplied != null) 'application_applied': applicationApplied,
+      if (committedAt != null) 'committed_at': committedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  PairwiseLocalApplicationsCompanion copyWith({
+    Value<String>? operationId,
+    Value<String>? eventId,
+    Value<String>? localDeviceId,
+    Value<Uint8List>? openedOpaquePayload,
+    Value<bool>? applicationApplied,
+    Value<DateTime>? committedAt,
+    Value<int>? rowid,
+  }) {
+    return PairwiseLocalApplicationsCompanion(
+      operationId: operationId ?? this.operationId,
+      eventId: eventId ?? this.eventId,
+      localDeviceId: localDeviceId ?? this.localDeviceId,
+      openedOpaquePayload: openedOpaquePayload ?? this.openedOpaquePayload,
+      applicationApplied: applicationApplied ?? this.applicationApplied,
+      committedAt: committedAt ?? this.committedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (operationId.present) {
+      map['operation_id'] = Variable<String>(operationId.value);
+    }
+    if (eventId.present) {
+      map['event_id'] = Variable<String>(eventId.value);
+    }
+    if (localDeviceId.present) {
+      map['local_device_id'] = Variable<String>(localDeviceId.value);
+    }
+    if (openedOpaquePayload.present) {
+      map['opened_opaque_payload'] = Variable<Uint8List>(
+        openedOpaquePayload.value,
+      );
+    }
+    if (applicationApplied.present) {
+      map['application_applied'] = Variable<bool>(applicationApplied.value);
+    }
+    if (committedAt.present) {
+      map['committed_at'] = Variable<DateTime>(committedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('PairwiseLocalApplicationsCompanion(')
+          ..write('operationId: $operationId, ')
+          ..write('eventId: $eventId, ')
+          ..write('localDeviceId: $localDeviceId, ')
+          ..write('openedOpaquePayload: $openedOpaquePayload, ')
+          ..write('applicationApplied: $applicationApplied, ')
+          ..write('committedAt: $committedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $PendingSendPreparationsTable extends PendingSendPreparations
+    with TableInfo<$PendingSendPreparationsTable, StoredSendPreparationRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $PendingSendPreparationsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _operationIdMeta = const VerificationMeta(
+    'operationId',
+  );
+  @override
+  late final GeneratedColumn<String> operationId = GeneratedColumn<String>(
+    'operation_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _eventIdMeta = const VerificationMeta(
+    'eventId',
+  );
+  @override
+  late final GeneratedColumn<String> eventId = GeneratedColumn<String>(
+    'event_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways('UNIQUE'),
+  );
+  static const VerificationMeta _localUserIdMeta = const VerificationMeta(
+    'localUserId',
+  );
+  @override
+  late final GeneratedColumn<String> localUserId = GeneratedColumn<String>(
+    'local_user_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _localDeviceIdMeta = const VerificationMeta(
+    'localDeviceId',
+  );
+  @override
+  late final GeneratedColumn<String> localDeviceId = GeneratedColumn<String>(
+    'local_device_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _peerUserIdMeta = const VerificationMeta(
+    'peerUserId',
+  );
+  @override
+  late final GeneratedColumn<String> peerUserId = GeneratedColumn<String>(
+    'peer_user_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _stateMeta = const VerificationMeta('state');
+  @override
+  late final GeneratedColumn<int> state = GeneratedColumn<int>(
+    'state',
+    aliasedName,
+    false,
+    check: () => ComparableExpr(state).isBetweenValues(0, 1),
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _attemptCountMeta = const VerificationMeta(
+    'attemptCount',
+  );
+  @override
+  late final GeneratedColumn<int> attemptCount = GeneratedColumn<int>(
+    'attempt_count',
+    aliasedName,
+    false,
+    check: () => ComparableExpr(attemptCount).isBiggerOrEqualValue(0),
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _nextAttemptAtMeta = const VerificationMeta(
+    'nextAttemptAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> nextAttemptAt =
+      GeneratedColumn<DateTime>(
+        'next_attempt_at',
+        aliasedName,
+        true,
+        type: DriftSqlType.dateTime,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    operationId,
+    eventId,
+    localUserId,
+    localDeviceId,
+    peerUserId,
+    state,
+    attemptCount,
+    nextAttemptAt,
+    createdAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'pending_send_preparations';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<StoredSendPreparationRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('operation_id')) {
+      context.handle(
+        _operationIdMeta,
+        operationId.isAcceptableOrUnknown(
+          data['operation_id']!,
+          _operationIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_operationIdMeta);
+    }
+    if (data.containsKey('event_id')) {
+      context.handle(
+        _eventIdMeta,
+        eventId.isAcceptableOrUnknown(data['event_id']!, _eventIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_eventIdMeta);
+    }
+    if (data.containsKey('local_user_id')) {
+      context.handle(
+        _localUserIdMeta,
+        localUserId.isAcceptableOrUnknown(
+          data['local_user_id']!,
+          _localUserIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_localUserIdMeta);
+    }
+    if (data.containsKey('local_device_id')) {
+      context.handle(
+        _localDeviceIdMeta,
+        localDeviceId.isAcceptableOrUnknown(
+          data['local_device_id']!,
+          _localDeviceIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_localDeviceIdMeta);
+    }
+    if (data.containsKey('peer_user_id')) {
+      context.handle(
+        _peerUserIdMeta,
+        peerUserId.isAcceptableOrUnknown(
+          data['peer_user_id']!,
+          _peerUserIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_peerUserIdMeta);
+    }
+    if (data.containsKey('state')) {
+      context.handle(
+        _stateMeta,
+        state.isAcceptableOrUnknown(data['state']!, _stateMeta),
+      );
+    }
+    if (data.containsKey('attempt_count')) {
+      context.handle(
+        _attemptCountMeta,
+        attemptCount.isAcceptableOrUnknown(
+          data['attempt_count']!,
+          _attemptCountMeta,
+        ),
+      );
+    }
+    if (data.containsKey('next_attempt_at')) {
+      context.handle(
+        _nextAttemptAtMeta,
+        nextAttemptAt.isAcceptableOrUnknown(
+          data['next_attempt_at']!,
+          _nextAttemptAtMeta,
+        ),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {operationId};
+  @override
+  StoredSendPreparationRow map(
+    Map<String, dynamic> data, {
+    String? tablePrefix,
+  }) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return StoredSendPreparationRow(
+      operationId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}operation_id'],
+      )!,
+      eventId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}event_id'],
+      )!,
+      localUserId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}local_user_id'],
+      )!,
+      localDeviceId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}local_device_id'],
+      )!,
+      peerUserId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}peer_user_id'],
+      )!,
+      state: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}state'],
+      )!,
+      attemptCount: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}attempt_count'],
+      )!,
+      nextAttemptAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}next_attempt_at'],
+      ),
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+    );
+  }
+
+  @override
+  $PendingSendPreparationsTable createAlias(String alias) {
+    return $PendingSendPreparationsTable(attachedDatabase, alias);
+  }
+}
+
+class StoredSendPreparationRow extends DataClass
+    implements Insertable<StoredSendPreparationRow> {
+  final String operationId;
+  final String eventId;
+  final String localUserId;
+  final String localDeviceId;
+  final String peerUserId;
+
+  /// 0 owed, 1 permanently failed.
+  final int state;
+  final int attemptCount;
+  final DateTime? nextAttemptAt;
+  final DateTime createdAt;
+  const StoredSendPreparationRow({
+    required this.operationId,
+    required this.eventId,
+    required this.localUserId,
+    required this.localDeviceId,
+    required this.peerUserId,
+    required this.state,
+    required this.attemptCount,
+    this.nextAttemptAt,
+    required this.createdAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['operation_id'] = Variable<String>(operationId);
+    map['event_id'] = Variable<String>(eventId);
+    map['local_user_id'] = Variable<String>(localUserId);
+    map['local_device_id'] = Variable<String>(localDeviceId);
+    map['peer_user_id'] = Variable<String>(peerUserId);
+    map['state'] = Variable<int>(state);
+    map['attempt_count'] = Variable<int>(attemptCount);
+    if (!nullToAbsent || nextAttemptAt != null) {
+      map['next_attempt_at'] = Variable<DateTime>(nextAttemptAt);
+    }
+    map['created_at'] = Variable<DateTime>(createdAt);
+    return map;
+  }
+
+  PendingSendPreparationsCompanion toCompanion(bool nullToAbsent) {
+    return PendingSendPreparationsCompanion(
+      operationId: Value(operationId),
+      eventId: Value(eventId),
+      localUserId: Value(localUserId),
+      localDeviceId: Value(localDeviceId),
+      peerUserId: Value(peerUserId),
+      state: Value(state),
+      attemptCount: Value(attemptCount),
+      nextAttemptAt: nextAttemptAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(nextAttemptAt),
+      createdAt: Value(createdAt),
+    );
+  }
+
+  factory StoredSendPreparationRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return StoredSendPreparationRow(
+      operationId: serializer.fromJson<String>(json['operationId']),
+      eventId: serializer.fromJson<String>(json['eventId']),
+      localUserId: serializer.fromJson<String>(json['localUserId']),
+      localDeviceId: serializer.fromJson<String>(json['localDeviceId']),
+      peerUserId: serializer.fromJson<String>(json['peerUserId']),
+      state: serializer.fromJson<int>(json['state']),
+      attemptCount: serializer.fromJson<int>(json['attemptCount']),
+      nextAttemptAt: serializer.fromJson<DateTime?>(json['nextAttemptAt']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'operationId': serializer.toJson<String>(operationId),
+      'eventId': serializer.toJson<String>(eventId),
+      'localUserId': serializer.toJson<String>(localUserId),
+      'localDeviceId': serializer.toJson<String>(localDeviceId),
+      'peerUserId': serializer.toJson<String>(peerUserId),
+      'state': serializer.toJson<int>(state),
+      'attemptCount': serializer.toJson<int>(attemptCount),
+      'nextAttemptAt': serializer.toJson<DateTime?>(nextAttemptAt),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+    };
+  }
+
+  StoredSendPreparationRow copyWith({
+    String? operationId,
+    String? eventId,
+    String? localUserId,
+    String? localDeviceId,
+    String? peerUserId,
+    int? state,
+    int? attemptCount,
+    Value<DateTime?> nextAttemptAt = const Value.absent(),
+    DateTime? createdAt,
+  }) => StoredSendPreparationRow(
+    operationId: operationId ?? this.operationId,
+    eventId: eventId ?? this.eventId,
+    localUserId: localUserId ?? this.localUserId,
+    localDeviceId: localDeviceId ?? this.localDeviceId,
+    peerUserId: peerUserId ?? this.peerUserId,
+    state: state ?? this.state,
+    attemptCount: attemptCount ?? this.attemptCount,
+    nextAttemptAt: nextAttemptAt.present
+        ? nextAttemptAt.value
+        : this.nextAttemptAt,
+    createdAt: createdAt ?? this.createdAt,
+  );
+  StoredSendPreparationRow copyWithCompanion(
+    PendingSendPreparationsCompanion data,
+  ) {
+    return StoredSendPreparationRow(
+      operationId: data.operationId.present
+          ? data.operationId.value
+          : this.operationId,
+      eventId: data.eventId.present ? data.eventId.value : this.eventId,
+      localUserId: data.localUserId.present
+          ? data.localUserId.value
+          : this.localUserId,
+      localDeviceId: data.localDeviceId.present
+          ? data.localDeviceId.value
+          : this.localDeviceId,
+      peerUserId: data.peerUserId.present
+          ? data.peerUserId.value
+          : this.peerUserId,
+      state: data.state.present ? data.state.value : this.state,
+      attemptCount: data.attemptCount.present
+          ? data.attemptCount.value
+          : this.attemptCount,
+      nextAttemptAt: data.nextAttemptAt.present
+          ? data.nextAttemptAt.value
+          : this.nextAttemptAt,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('StoredSendPreparationRow(')
+          ..write('operationId: $operationId, ')
+          ..write('eventId: $eventId, ')
+          ..write('localUserId: $localUserId, ')
+          ..write('localDeviceId: $localDeviceId, ')
+          ..write('peerUserId: $peerUserId, ')
+          ..write('state: $state, ')
+          ..write('attemptCount: $attemptCount, ')
+          ..write('nextAttemptAt: $nextAttemptAt, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    operationId,
+    eventId,
+    localUserId,
+    localDeviceId,
+    peerUserId,
+    state,
+    attemptCount,
+    nextAttemptAt,
+    createdAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is StoredSendPreparationRow &&
+          other.operationId == this.operationId &&
+          other.eventId == this.eventId &&
+          other.localUserId == this.localUserId &&
+          other.localDeviceId == this.localDeviceId &&
+          other.peerUserId == this.peerUserId &&
+          other.state == this.state &&
+          other.attemptCount == this.attemptCount &&
+          other.nextAttemptAt == this.nextAttemptAt &&
+          other.createdAt == this.createdAt);
+}
+
+class PendingSendPreparationsCompanion
+    extends UpdateCompanion<StoredSendPreparationRow> {
+  final Value<String> operationId;
+  final Value<String> eventId;
+  final Value<String> localUserId;
+  final Value<String> localDeviceId;
+  final Value<String> peerUserId;
+  final Value<int> state;
+  final Value<int> attemptCount;
+  final Value<DateTime?> nextAttemptAt;
+  final Value<DateTime> createdAt;
+  final Value<int> rowid;
+  const PendingSendPreparationsCompanion({
+    this.operationId = const Value.absent(),
+    this.eventId = const Value.absent(),
+    this.localUserId = const Value.absent(),
+    this.localDeviceId = const Value.absent(),
+    this.peerUserId = const Value.absent(),
+    this.state = const Value.absent(),
+    this.attemptCount = const Value.absent(),
+    this.nextAttemptAt = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  PendingSendPreparationsCompanion.insert({
+    required String operationId,
+    required String eventId,
+    required String localUserId,
+    required String localDeviceId,
+    required String peerUserId,
+    this.state = const Value.absent(),
+    this.attemptCount = const Value.absent(),
+    this.nextAttemptAt = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : operationId = Value(operationId),
+       eventId = Value(eventId),
+       localUserId = Value(localUserId),
+       localDeviceId = Value(localDeviceId),
+       peerUserId = Value(peerUserId);
+  static Insertable<StoredSendPreparationRow> custom({
+    Expression<String>? operationId,
+    Expression<String>? eventId,
+    Expression<String>? localUserId,
+    Expression<String>? localDeviceId,
+    Expression<String>? peerUserId,
+    Expression<int>? state,
+    Expression<int>? attemptCount,
+    Expression<DateTime>? nextAttemptAt,
+    Expression<DateTime>? createdAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (operationId != null) 'operation_id': operationId,
+      if (eventId != null) 'event_id': eventId,
+      if (localUserId != null) 'local_user_id': localUserId,
+      if (localDeviceId != null) 'local_device_id': localDeviceId,
+      if (peerUserId != null) 'peer_user_id': peerUserId,
+      if (state != null) 'state': state,
+      if (attemptCount != null) 'attempt_count': attemptCount,
+      if (nextAttemptAt != null) 'next_attempt_at': nextAttemptAt,
+      if (createdAt != null) 'created_at': createdAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  PendingSendPreparationsCompanion copyWith({
+    Value<String>? operationId,
+    Value<String>? eventId,
+    Value<String>? localUserId,
+    Value<String>? localDeviceId,
+    Value<String>? peerUserId,
+    Value<int>? state,
+    Value<int>? attemptCount,
+    Value<DateTime?>? nextAttemptAt,
+    Value<DateTime>? createdAt,
+    Value<int>? rowid,
+  }) {
+    return PendingSendPreparationsCompanion(
+      operationId: operationId ?? this.operationId,
+      eventId: eventId ?? this.eventId,
+      localUserId: localUserId ?? this.localUserId,
+      localDeviceId: localDeviceId ?? this.localDeviceId,
+      peerUserId: peerUserId ?? this.peerUserId,
+      state: state ?? this.state,
+      attemptCount: attemptCount ?? this.attemptCount,
+      nextAttemptAt: nextAttemptAt ?? this.nextAttemptAt,
+      createdAt: createdAt ?? this.createdAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (operationId.present) {
+      map['operation_id'] = Variable<String>(operationId.value);
+    }
+    if (eventId.present) {
+      map['event_id'] = Variable<String>(eventId.value);
+    }
+    if (localUserId.present) {
+      map['local_user_id'] = Variable<String>(localUserId.value);
+    }
+    if (localDeviceId.present) {
+      map['local_device_id'] = Variable<String>(localDeviceId.value);
+    }
+    if (peerUserId.present) {
+      map['peer_user_id'] = Variable<String>(peerUserId.value);
+    }
+    if (state.present) {
+      map['state'] = Variable<int>(state.value);
+    }
+    if (attemptCount.present) {
+      map['attempt_count'] = Variable<int>(attemptCount.value);
+    }
+    if (nextAttemptAt.present) {
+      map['next_attempt_at'] = Variable<DateTime>(nextAttemptAt.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('PendingSendPreparationsCompanion(')
+          ..write('operationId: $operationId, ')
+          ..write('eventId: $eventId, ')
+          ..write('localUserId: $localUserId, ')
+          ..write('localDeviceId: $localDeviceId, ')
+          ..write('peerUserId: $peerUserId, ')
+          ..write('state: $state, ')
+          ..write('attemptCount: $attemptCount, ')
+          ..write('nextAttemptAt: $nextAttemptAt, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $PairwiseConsumedPrekeysTable extends PairwiseConsumedPrekeys
+    with TableInfo<$PairwiseConsumedPrekeysTable, PairwiseConsumedPrekey> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $PairwiseConsumedPrekeysTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _localDeviceIdMeta = const VerificationMeta(
+    'localDeviceId',
+  );
+  @override
+  late final GeneratedColumn<String> localDeviceId = GeneratedColumn<String>(
+    'local_device_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _algorithmMeta = const VerificationMeta(
+    'algorithm',
+  );
+  @override
+  late final GeneratedColumn<int> algorithm = GeneratedColumn<int>(
+    'algorithm',
+    aliasedName,
+    false,
+    check: () => ComparableExpr(algorithm).isBetweenValues(0, 1),
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _keyIdMeta = const VerificationMeta('keyId');
+  @override
+  late final GeneratedColumn<int> keyId = GeneratedColumn<int>(
+    'key_id',
+    aliasedName,
+    false,
+    check: () => ComparableExpr(keyId).isBiggerOrEqualValue(0),
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _firstEnvelopeIdMeta = const VerificationMeta(
+    'firstEnvelopeId',
+  );
+  @override
+  late final GeneratedColumn<String> firstEnvelopeId = GeneratedColumn<String>(
+    'first_envelope_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _consumedAtMeta = const VerificationMeta(
+    'consumedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> consumedAt = GeneratedColumn<DateTime>(
+    'consumed_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    localDeviceId,
+    algorithm,
+    keyId,
+    firstEnvelopeId,
+    consumedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'pairwise_consumed_prekeys';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<PairwiseConsumedPrekey> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('local_device_id')) {
+      context.handle(
+        _localDeviceIdMeta,
+        localDeviceId.isAcceptableOrUnknown(
+          data['local_device_id']!,
+          _localDeviceIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_localDeviceIdMeta);
+    }
+    if (data.containsKey('algorithm')) {
+      context.handle(
+        _algorithmMeta,
+        algorithm.isAcceptableOrUnknown(data['algorithm']!, _algorithmMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_algorithmMeta);
+    }
+    if (data.containsKey('key_id')) {
+      context.handle(
+        _keyIdMeta,
+        keyId.isAcceptableOrUnknown(data['key_id']!, _keyIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_keyIdMeta);
+    }
+    if (data.containsKey('first_envelope_id')) {
+      context.handle(
+        _firstEnvelopeIdMeta,
+        firstEnvelopeId.isAcceptableOrUnknown(
+          data['first_envelope_id']!,
+          _firstEnvelopeIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_firstEnvelopeIdMeta);
+    }
+    if (data.containsKey('consumed_at')) {
+      context.handle(
+        _consumedAtMeta,
+        consumedAt.isAcceptableOrUnknown(data['consumed_at']!, _consumedAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {localDeviceId, algorithm, keyId};
+  @override
+  PairwiseConsumedPrekey map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return PairwiseConsumedPrekey(
+      localDeviceId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}local_device_id'],
+      )!,
+      algorithm: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}algorithm'],
+      )!,
+      keyId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}key_id'],
+      )!,
+      firstEnvelopeId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}first_envelope_id'],
+      )!,
+      consumedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}consumed_at'],
+      )!,
+    );
+  }
+
+  @override
+  $PairwiseConsumedPrekeysTable createAlias(String alias) {
+    return $PairwiseConsumedPrekeysTable(attachedDatabase, alias);
+  }
+}
+
+class PairwiseConsumedPrekey extends DataClass
+    implements Insertable<PairwiseConsumedPrekey> {
+  final String localDeviceId;
+  final int algorithm;
+  final int keyId;
+  final String firstEnvelopeId;
+  final DateTime consumedAt;
+  const PairwiseConsumedPrekey({
+    required this.localDeviceId,
+    required this.algorithm,
+    required this.keyId,
+    required this.firstEnvelopeId,
+    required this.consumedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['local_device_id'] = Variable<String>(localDeviceId);
+    map['algorithm'] = Variable<int>(algorithm);
+    map['key_id'] = Variable<int>(keyId);
+    map['first_envelope_id'] = Variable<String>(firstEnvelopeId);
+    map['consumed_at'] = Variable<DateTime>(consumedAt);
+    return map;
+  }
+
+  PairwiseConsumedPrekeysCompanion toCompanion(bool nullToAbsent) {
+    return PairwiseConsumedPrekeysCompanion(
+      localDeviceId: Value(localDeviceId),
+      algorithm: Value(algorithm),
+      keyId: Value(keyId),
+      firstEnvelopeId: Value(firstEnvelopeId),
+      consumedAt: Value(consumedAt),
+    );
+  }
+
+  factory PairwiseConsumedPrekey.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return PairwiseConsumedPrekey(
+      localDeviceId: serializer.fromJson<String>(json['localDeviceId']),
+      algorithm: serializer.fromJson<int>(json['algorithm']),
+      keyId: serializer.fromJson<int>(json['keyId']),
+      firstEnvelopeId: serializer.fromJson<String>(json['firstEnvelopeId']),
+      consumedAt: serializer.fromJson<DateTime>(json['consumedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'localDeviceId': serializer.toJson<String>(localDeviceId),
+      'algorithm': serializer.toJson<int>(algorithm),
+      'keyId': serializer.toJson<int>(keyId),
+      'firstEnvelopeId': serializer.toJson<String>(firstEnvelopeId),
+      'consumedAt': serializer.toJson<DateTime>(consumedAt),
+    };
+  }
+
+  PairwiseConsumedPrekey copyWith({
+    String? localDeviceId,
+    int? algorithm,
+    int? keyId,
+    String? firstEnvelopeId,
+    DateTime? consumedAt,
+  }) => PairwiseConsumedPrekey(
+    localDeviceId: localDeviceId ?? this.localDeviceId,
+    algorithm: algorithm ?? this.algorithm,
+    keyId: keyId ?? this.keyId,
+    firstEnvelopeId: firstEnvelopeId ?? this.firstEnvelopeId,
+    consumedAt: consumedAt ?? this.consumedAt,
+  );
+  PairwiseConsumedPrekey copyWithCompanion(
+    PairwiseConsumedPrekeysCompanion data,
+  ) {
+    return PairwiseConsumedPrekey(
+      localDeviceId: data.localDeviceId.present
+          ? data.localDeviceId.value
+          : this.localDeviceId,
+      algorithm: data.algorithm.present ? data.algorithm.value : this.algorithm,
+      keyId: data.keyId.present ? data.keyId.value : this.keyId,
+      firstEnvelopeId: data.firstEnvelopeId.present
+          ? data.firstEnvelopeId.value
+          : this.firstEnvelopeId,
+      consumedAt: data.consumedAt.present
+          ? data.consumedAt.value
+          : this.consumedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('PairwiseConsumedPrekey(')
+          ..write('localDeviceId: $localDeviceId, ')
+          ..write('algorithm: $algorithm, ')
+          ..write('keyId: $keyId, ')
+          ..write('firstEnvelopeId: $firstEnvelopeId, ')
+          ..write('consumedAt: $consumedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode =>
+      Object.hash(localDeviceId, algorithm, keyId, firstEnvelopeId, consumedAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is PairwiseConsumedPrekey &&
+          other.localDeviceId == this.localDeviceId &&
+          other.algorithm == this.algorithm &&
+          other.keyId == this.keyId &&
+          other.firstEnvelopeId == this.firstEnvelopeId &&
+          other.consumedAt == this.consumedAt);
+}
+
+class PairwiseConsumedPrekeysCompanion
+    extends UpdateCompanion<PairwiseConsumedPrekey> {
+  final Value<String> localDeviceId;
+  final Value<int> algorithm;
+  final Value<int> keyId;
+  final Value<String> firstEnvelopeId;
+  final Value<DateTime> consumedAt;
+  final Value<int> rowid;
+  const PairwiseConsumedPrekeysCompanion({
+    this.localDeviceId = const Value.absent(),
+    this.algorithm = const Value.absent(),
+    this.keyId = const Value.absent(),
+    this.firstEnvelopeId = const Value.absent(),
+    this.consumedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  PairwiseConsumedPrekeysCompanion.insert({
+    required String localDeviceId,
+    required int algorithm,
+    required int keyId,
+    required String firstEnvelopeId,
+    this.consumedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : localDeviceId = Value(localDeviceId),
+       algorithm = Value(algorithm),
+       keyId = Value(keyId),
+       firstEnvelopeId = Value(firstEnvelopeId);
+  static Insertable<PairwiseConsumedPrekey> custom({
+    Expression<String>? localDeviceId,
+    Expression<int>? algorithm,
+    Expression<int>? keyId,
+    Expression<String>? firstEnvelopeId,
+    Expression<DateTime>? consumedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (localDeviceId != null) 'local_device_id': localDeviceId,
+      if (algorithm != null) 'algorithm': algorithm,
+      if (keyId != null) 'key_id': keyId,
+      if (firstEnvelopeId != null) 'first_envelope_id': firstEnvelopeId,
+      if (consumedAt != null) 'consumed_at': consumedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  PairwiseConsumedPrekeysCompanion copyWith({
+    Value<String>? localDeviceId,
+    Value<int>? algorithm,
+    Value<int>? keyId,
+    Value<String>? firstEnvelopeId,
+    Value<DateTime>? consumedAt,
+    Value<int>? rowid,
+  }) {
+    return PairwiseConsumedPrekeysCompanion(
+      localDeviceId: localDeviceId ?? this.localDeviceId,
+      algorithm: algorithm ?? this.algorithm,
+      keyId: keyId ?? this.keyId,
+      firstEnvelopeId: firstEnvelopeId ?? this.firstEnvelopeId,
+      consumedAt: consumedAt ?? this.consumedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (localDeviceId.present) {
+      map['local_device_id'] = Variable<String>(localDeviceId.value);
+    }
+    if (algorithm.present) {
+      map['algorithm'] = Variable<int>(algorithm.value);
+    }
+    if (keyId.present) {
+      map['key_id'] = Variable<int>(keyId.value);
+    }
+    if (firstEnvelopeId.present) {
+      map['first_envelope_id'] = Variable<String>(firstEnvelopeId.value);
+    }
+    if (consumedAt.present) {
+      map['consumed_at'] = Variable<DateTime>(consumedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('PairwiseConsumedPrekeysCompanion(')
+          ..write('localDeviceId: $localDeviceId, ')
+          ..write('algorithm: $algorithm, ')
+          ..write('keyId: $keyId, ')
+          ..write('firstEnvelopeId: $firstEnvelopeId, ')
+          ..write('consumedAt: $consumedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $StaleDeviceRefreshRequestsTable extends StaleDeviceRefreshRequests
+    with
+        TableInfo<$StaleDeviceRefreshRequestsTable, StaleDeviceRefreshRequest> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $StaleDeviceRefreshRequestsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _userIdMeta = const VerificationMeta('userId');
+  @override
+  late final GeneratedColumn<String> userId = GeneratedColumn<String>(
+    'user_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _staleDeviceIdMeta = const VerificationMeta(
+    'staleDeviceId',
+  );
+  @override
+  late final GeneratedColumn<String> staleDeviceId = GeneratedColumn<String>(
+    'stale_device_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _stateMeta = const VerificationMeta('state');
+  @override
+  late final GeneratedColumn<int> state = GeneratedColumn<int>(
+    'state',
+    aliasedName,
+    false,
+    check: () => ComparableExpr(state).isBetweenValues(0, 3),
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _attemptCountMeta = const VerificationMeta(
+    'attemptCount',
+  );
+  @override
+  late final GeneratedColumn<int> attemptCount = GeneratedColumn<int>(
+    'attempt_count',
+    aliasedName,
+    false,
+    check: () => ComparableExpr(attemptCount).isBiggerOrEqualValue(0),
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _nextAttemptAtMeta = const VerificationMeta(
+    'nextAttemptAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> nextAttemptAt =
+      GeneratedColumn<DateTime>(
+        'next_attempt_at',
+        aliasedName,
+        true,
+        type: DriftSqlType.dateTime,
+        requiredDuringInsert: false,
+      );
+  @override
+  List<GeneratedColumn> get $columns => [
+    userId,
+    staleDeviceId,
+    state,
+    attemptCount,
+    nextAttemptAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'stale_device_refresh_requests';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<StaleDeviceRefreshRequest> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('user_id')) {
+      context.handle(
+        _userIdMeta,
+        userId.isAcceptableOrUnknown(data['user_id']!, _userIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_userIdMeta);
+    }
+    if (data.containsKey('stale_device_id')) {
+      context.handle(
+        _staleDeviceIdMeta,
+        staleDeviceId.isAcceptableOrUnknown(
+          data['stale_device_id']!,
+          _staleDeviceIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_staleDeviceIdMeta);
+    }
+    if (data.containsKey('state')) {
+      context.handle(
+        _stateMeta,
+        state.isAcceptableOrUnknown(data['state']!, _stateMeta),
+      );
+    }
+    if (data.containsKey('attempt_count')) {
+      context.handle(
+        _attemptCountMeta,
+        attemptCount.isAcceptableOrUnknown(
+          data['attempt_count']!,
+          _attemptCountMeta,
+        ),
+      );
+    }
+    if (data.containsKey('next_attempt_at')) {
+      context.handle(
+        _nextAttemptAtMeta,
+        nextAttemptAt.isAcceptableOrUnknown(
+          data['next_attempt_at']!,
+          _nextAttemptAtMeta,
+        ),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {userId, staleDeviceId};
+  @override
+  StaleDeviceRefreshRequest map(
+    Map<String, dynamic> data, {
+    String? tablePrefix,
+  }) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return StaleDeviceRefreshRequest(
+      userId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}user_id'],
+      )!,
+      staleDeviceId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}stale_device_id'],
+      )!,
+      state: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}state'],
+      )!,
+      attemptCount: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}attempt_count'],
+      )!,
+      nextAttemptAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}next_attempt_at'],
+      ),
+    );
+  }
+
+  @override
+  $StaleDeviceRefreshRequestsTable createAlias(String alias) {
+    return $StaleDeviceRefreshRequestsTable(attachedDatabase, alias);
+  }
+}
+
+class StaleDeviceRefreshRequest extends DataClass
+    implements Insertable<StaleDeviceRefreshRequest> {
+  final String userId;
+  final String staleDeviceId;
+  final int state;
+  final int attemptCount;
+  final DateTime? nextAttemptAt;
+  const StaleDeviceRefreshRequest({
+    required this.userId,
+    required this.staleDeviceId,
+    required this.state,
+    required this.attemptCount,
+    this.nextAttemptAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['user_id'] = Variable<String>(userId);
+    map['stale_device_id'] = Variable<String>(staleDeviceId);
+    map['state'] = Variable<int>(state);
+    map['attempt_count'] = Variable<int>(attemptCount);
+    if (!nullToAbsent || nextAttemptAt != null) {
+      map['next_attempt_at'] = Variable<DateTime>(nextAttemptAt);
+    }
+    return map;
+  }
+
+  StaleDeviceRefreshRequestsCompanion toCompanion(bool nullToAbsent) {
+    return StaleDeviceRefreshRequestsCompanion(
+      userId: Value(userId),
+      staleDeviceId: Value(staleDeviceId),
+      state: Value(state),
+      attemptCount: Value(attemptCount),
+      nextAttemptAt: nextAttemptAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(nextAttemptAt),
+    );
+  }
+
+  factory StaleDeviceRefreshRequest.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return StaleDeviceRefreshRequest(
+      userId: serializer.fromJson<String>(json['userId']),
+      staleDeviceId: serializer.fromJson<String>(json['staleDeviceId']),
+      state: serializer.fromJson<int>(json['state']),
+      attemptCount: serializer.fromJson<int>(json['attemptCount']),
+      nextAttemptAt: serializer.fromJson<DateTime?>(json['nextAttemptAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'userId': serializer.toJson<String>(userId),
+      'staleDeviceId': serializer.toJson<String>(staleDeviceId),
+      'state': serializer.toJson<int>(state),
+      'attemptCount': serializer.toJson<int>(attemptCount),
+      'nextAttemptAt': serializer.toJson<DateTime?>(nextAttemptAt),
+    };
+  }
+
+  StaleDeviceRefreshRequest copyWith({
+    String? userId,
+    String? staleDeviceId,
+    int? state,
+    int? attemptCount,
+    Value<DateTime?> nextAttemptAt = const Value.absent(),
+  }) => StaleDeviceRefreshRequest(
+    userId: userId ?? this.userId,
+    staleDeviceId: staleDeviceId ?? this.staleDeviceId,
+    state: state ?? this.state,
+    attemptCount: attemptCount ?? this.attemptCount,
+    nextAttemptAt: nextAttemptAt.present
+        ? nextAttemptAt.value
+        : this.nextAttemptAt,
+  );
+  StaleDeviceRefreshRequest copyWithCompanion(
+    StaleDeviceRefreshRequestsCompanion data,
+  ) {
+    return StaleDeviceRefreshRequest(
+      userId: data.userId.present ? data.userId.value : this.userId,
+      staleDeviceId: data.staleDeviceId.present
+          ? data.staleDeviceId.value
+          : this.staleDeviceId,
+      state: data.state.present ? data.state.value : this.state,
+      attemptCount: data.attemptCount.present
+          ? data.attemptCount.value
+          : this.attemptCount,
+      nextAttemptAt: data.nextAttemptAt.present
+          ? data.nextAttemptAt.value
+          : this.nextAttemptAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('StaleDeviceRefreshRequest(')
+          ..write('userId: $userId, ')
+          ..write('staleDeviceId: $staleDeviceId, ')
+          ..write('state: $state, ')
+          ..write('attemptCount: $attemptCount, ')
+          ..write('nextAttemptAt: $nextAttemptAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode =>
+      Object.hash(userId, staleDeviceId, state, attemptCount, nextAttemptAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is StaleDeviceRefreshRequest &&
+          other.userId == this.userId &&
+          other.staleDeviceId == this.staleDeviceId &&
+          other.state == this.state &&
+          other.attemptCount == this.attemptCount &&
+          other.nextAttemptAt == this.nextAttemptAt);
+}
+
+class StaleDeviceRefreshRequestsCompanion
+    extends UpdateCompanion<StaleDeviceRefreshRequest> {
+  final Value<String> userId;
+  final Value<String> staleDeviceId;
+  final Value<int> state;
+  final Value<int> attemptCount;
+  final Value<DateTime?> nextAttemptAt;
+  final Value<int> rowid;
+  const StaleDeviceRefreshRequestsCompanion({
+    this.userId = const Value.absent(),
+    this.staleDeviceId = const Value.absent(),
+    this.state = const Value.absent(),
+    this.attemptCount = const Value.absent(),
+    this.nextAttemptAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  StaleDeviceRefreshRequestsCompanion.insert({
+    required String userId,
+    required String staleDeviceId,
+    this.state = const Value.absent(),
+    this.attemptCount = const Value.absent(),
+    this.nextAttemptAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : userId = Value(userId),
+       staleDeviceId = Value(staleDeviceId);
+  static Insertable<StaleDeviceRefreshRequest> custom({
+    Expression<String>? userId,
+    Expression<String>? staleDeviceId,
+    Expression<int>? state,
+    Expression<int>? attemptCount,
+    Expression<DateTime>? nextAttemptAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (userId != null) 'user_id': userId,
+      if (staleDeviceId != null) 'stale_device_id': staleDeviceId,
+      if (state != null) 'state': state,
+      if (attemptCount != null) 'attempt_count': attemptCount,
+      if (nextAttemptAt != null) 'next_attempt_at': nextAttemptAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  StaleDeviceRefreshRequestsCompanion copyWith({
+    Value<String>? userId,
+    Value<String>? staleDeviceId,
+    Value<int>? state,
+    Value<int>? attemptCount,
+    Value<DateTime?>? nextAttemptAt,
+    Value<int>? rowid,
+  }) {
+    return StaleDeviceRefreshRequestsCompanion(
+      userId: userId ?? this.userId,
+      staleDeviceId: staleDeviceId ?? this.staleDeviceId,
+      state: state ?? this.state,
+      attemptCount: attemptCount ?? this.attemptCount,
+      nextAttemptAt: nextAttemptAt ?? this.nextAttemptAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (userId.present) {
+      map['user_id'] = Variable<String>(userId.value);
+    }
+    if (staleDeviceId.present) {
+      map['stale_device_id'] = Variable<String>(staleDeviceId.value);
+    }
+    if (state.present) {
+      map['state'] = Variable<int>(state.value);
+    }
+    if (attemptCount.present) {
+      map['attempt_count'] = Variable<int>(attemptCount.value);
+    }
+    if (nextAttemptAt.present) {
+      map['next_attempt_at'] = Variable<DateTime>(nextAttemptAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('StaleDeviceRefreshRequestsCompanion(')
+          ..write('userId: $userId, ')
+          ..write('staleDeviceId: $staleDeviceId, ')
+          ..write('state: $state, ')
+          ..write('attemptCount: $attemptCount, ')
+          ..write('nextAttemptAt: $nextAttemptAt, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -8512,6 +21689,403 @@ class ReceiptsCompanion extends UpdateCompanion<Receipt> {
   }
 }
 
+class $PendingApplicationReceiptsTable extends PendingApplicationReceipts
+    with
+        TableInfo<$PendingApplicationReceiptsTable, PendingApplicationReceipt> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $PendingApplicationReceiptsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _messageIdMeta = const VerificationMeta(
+    'messageId',
+  );
+  @override
+  late final GeneratedColumn<String> messageId = GeneratedColumn<String>(
+    'message_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES messages (message_id) ON DELETE CASCADE',
+    ),
+  );
+  static const VerificationMeta _conversationIdMeta = const VerificationMeta(
+    'conversationId',
+  );
+  @override
+  late final GeneratedColumn<String> conversationId = GeneratedColumn<String>(
+    'conversation_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _targetUserIdMeta = const VerificationMeta(
+    'targetUserId',
+  );
+  @override
+  late final GeneratedColumn<String> targetUserId = GeneratedColumn<String>(
+    'target_user_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _localDeviceIdMeta = const VerificationMeta(
+    'localDeviceId',
+  );
+  @override
+  late final GeneratedColumn<String> localDeviceId = GeneratedColumn<String>(
+    'local_device_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    messageId,
+    conversationId,
+    targetUserId,
+    localDeviceId,
+    createdAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'pending_application_receipts';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<PendingApplicationReceipt> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('message_id')) {
+      context.handle(
+        _messageIdMeta,
+        messageId.isAcceptableOrUnknown(data['message_id']!, _messageIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_messageIdMeta);
+    }
+    if (data.containsKey('conversation_id')) {
+      context.handle(
+        _conversationIdMeta,
+        conversationId.isAcceptableOrUnknown(
+          data['conversation_id']!,
+          _conversationIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_conversationIdMeta);
+    }
+    if (data.containsKey('target_user_id')) {
+      context.handle(
+        _targetUserIdMeta,
+        targetUserId.isAcceptableOrUnknown(
+          data['target_user_id']!,
+          _targetUserIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_targetUserIdMeta);
+    }
+    if (data.containsKey('local_device_id')) {
+      context.handle(
+        _localDeviceIdMeta,
+        localDeviceId.isAcceptableOrUnknown(
+          data['local_device_id']!,
+          _localDeviceIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_localDeviceIdMeta);
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {messageId, localDeviceId};
+  @override
+  PendingApplicationReceipt map(
+    Map<String, dynamic> data, {
+    String? tablePrefix,
+  }) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return PendingApplicationReceipt(
+      messageId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}message_id'],
+      )!,
+      conversationId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}conversation_id'],
+      )!,
+      targetUserId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}target_user_id'],
+      )!,
+      localDeviceId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}local_device_id'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+    );
+  }
+
+  @override
+  $PendingApplicationReceiptsTable createAlias(String alias) {
+    return $PendingApplicationReceiptsTable(attachedDatabase, alias);
+  }
+}
+
+class PendingApplicationReceipt extends DataClass
+    implements Insertable<PendingApplicationReceipt> {
+  final String messageId;
+  final String conversationId;
+  final String targetUserId;
+  final String localDeviceId;
+  final DateTime createdAt;
+  const PendingApplicationReceipt({
+    required this.messageId,
+    required this.conversationId,
+    required this.targetUserId,
+    required this.localDeviceId,
+    required this.createdAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['message_id'] = Variable<String>(messageId);
+    map['conversation_id'] = Variable<String>(conversationId);
+    map['target_user_id'] = Variable<String>(targetUserId);
+    map['local_device_id'] = Variable<String>(localDeviceId);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    return map;
+  }
+
+  PendingApplicationReceiptsCompanion toCompanion(bool nullToAbsent) {
+    return PendingApplicationReceiptsCompanion(
+      messageId: Value(messageId),
+      conversationId: Value(conversationId),
+      targetUserId: Value(targetUserId),
+      localDeviceId: Value(localDeviceId),
+      createdAt: Value(createdAt),
+    );
+  }
+
+  factory PendingApplicationReceipt.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return PendingApplicationReceipt(
+      messageId: serializer.fromJson<String>(json['messageId']),
+      conversationId: serializer.fromJson<String>(json['conversationId']),
+      targetUserId: serializer.fromJson<String>(json['targetUserId']),
+      localDeviceId: serializer.fromJson<String>(json['localDeviceId']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'messageId': serializer.toJson<String>(messageId),
+      'conversationId': serializer.toJson<String>(conversationId),
+      'targetUserId': serializer.toJson<String>(targetUserId),
+      'localDeviceId': serializer.toJson<String>(localDeviceId),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+    };
+  }
+
+  PendingApplicationReceipt copyWith({
+    String? messageId,
+    String? conversationId,
+    String? targetUserId,
+    String? localDeviceId,
+    DateTime? createdAt,
+  }) => PendingApplicationReceipt(
+    messageId: messageId ?? this.messageId,
+    conversationId: conversationId ?? this.conversationId,
+    targetUserId: targetUserId ?? this.targetUserId,
+    localDeviceId: localDeviceId ?? this.localDeviceId,
+    createdAt: createdAt ?? this.createdAt,
+  );
+  PendingApplicationReceipt copyWithCompanion(
+    PendingApplicationReceiptsCompanion data,
+  ) {
+    return PendingApplicationReceipt(
+      messageId: data.messageId.present ? data.messageId.value : this.messageId,
+      conversationId: data.conversationId.present
+          ? data.conversationId.value
+          : this.conversationId,
+      targetUserId: data.targetUserId.present
+          ? data.targetUserId.value
+          : this.targetUserId,
+      localDeviceId: data.localDeviceId.present
+          ? data.localDeviceId.value
+          : this.localDeviceId,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('PendingApplicationReceipt(')
+          ..write('messageId: $messageId, ')
+          ..write('conversationId: $conversationId, ')
+          ..write('targetUserId: $targetUserId, ')
+          ..write('localDeviceId: $localDeviceId, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    messageId,
+    conversationId,
+    targetUserId,
+    localDeviceId,
+    createdAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is PendingApplicationReceipt &&
+          other.messageId == this.messageId &&
+          other.conversationId == this.conversationId &&
+          other.targetUserId == this.targetUserId &&
+          other.localDeviceId == this.localDeviceId &&
+          other.createdAt == this.createdAt);
+}
+
+class PendingApplicationReceiptsCompanion
+    extends UpdateCompanion<PendingApplicationReceipt> {
+  final Value<String> messageId;
+  final Value<String> conversationId;
+  final Value<String> targetUserId;
+  final Value<String> localDeviceId;
+  final Value<DateTime> createdAt;
+  final Value<int> rowid;
+  const PendingApplicationReceiptsCompanion({
+    this.messageId = const Value.absent(),
+    this.conversationId = const Value.absent(),
+    this.targetUserId = const Value.absent(),
+    this.localDeviceId = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  PendingApplicationReceiptsCompanion.insert({
+    required String messageId,
+    required String conversationId,
+    required String targetUserId,
+    required String localDeviceId,
+    this.createdAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : messageId = Value(messageId),
+       conversationId = Value(conversationId),
+       targetUserId = Value(targetUserId),
+       localDeviceId = Value(localDeviceId);
+  static Insertable<PendingApplicationReceipt> custom({
+    Expression<String>? messageId,
+    Expression<String>? conversationId,
+    Expression<String>? targetUserId,
+    Expression<String>? localDeviceId,
+    Expression<DateTime>? createdAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (messageId != null) 'message_id': messageId,
+      if (conversationId != null) 'conversation_id': conversationId,
+      if (targetUserId != null) 'target_user_id': targetUserId,
+      if (localDeviceId != null) 'local_device_id': localDeviceId,
+      if (createdAt != null) 'created_at': createdAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  PendingApplicationReceiptsCompanion copyWith({
+    Value<String>? messageId,
+    Value<String>? conversationId,
+    Value<String>? targetUserId,
+    Value<String>? localDeviceId,
+    Value<DateTime>? createdAt,
+    Value<int>? rowid,
+  }) {
+    return PendingApplicationReceiptsCompanion(
+      messageId: messageId ?? this.messageId,
+      conversationId: conversationId ?? this.conversationId,
+      targetUserId: targetUserId ?? this.targetUserId,
+      localDeviceId: localDeviceId ?? this.localDeviceId,
+      createdAt: createdAt ?? this.createdAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (messageId.present) {
+      map['message_id'] = Variable<String>(messageId.value);
+    }
+    if (conversationId.present) {
+      map['conversation_id'] = Variable<String>(conversationId.value);
+    }
+    if (targetUserId.present) {
+      map['target_user_id'] = Variable<String>(targetUserId.value);
+    }
+    if (localDeviceId.present) {
+      map['local_device_id'] = Variable<String>(localDeviceId.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('PendingApplicationReceiptsCompanion(')
+          ..write('messageId: $messageId, ')
+          ..write('conversationId: $conversationId, ')
+          ..write('targetUserId: $targetUserId, ')
+          ..write('localDeviceId: $localDeviceId, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 class $VoiceRoomsTable extends VoiceRooms
     with TableInfo<$VoiceRoomsTable, VoiceRoom> {
   @override
@@ -8898,6 +22472,67 @@ class $HistoryTransfersTable extends HistoryTransfers
         type: DriftSqlType.blob,
         requiredDuringInsert: true,
       );
+  static const VerificationMeta _sourceDeviceIdMeta = const VerificationMeta(
+    'sourceDeviceId',
+  );
+  @override
+  late final GeneratedColumn<String> sourceDeviceId = GeneratedColumn<String>(
+    'source_device_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
+  static const VerificationMeta _targetDeviceIdMeta = const VerificationMeta(
+    'targetDeviceId',
+  );
+  @override
+  late final GeneratedColumn<String> targetDeviceId = GeneratedColumn<String>(
+    'target_device_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
+  static const VerificationMeta _directionMeta = const VerificationMeta(
+    'direction',
+  );
+  @override
+  late final GeneratedColumn<int> direction = GeneratedColumn<int>(
+    'direction',
+    aliasedName,
+    false,
+    check: () => ComparableExpr(direction).isBetweenValues(0, 1),
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _stateMeta = const VerificationMeta('state');
+  @override
+  late final GeneratedColumn<int> state = GeneratedColumn<int>(
+    'state',
+    aliasedName,
+    false,
+    check: () => ComparableExpr(state).isBetweenValues(0, 7),
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _nextBatchIndexMeta = const VerificationMeta(
+    'nextBatchIndex',
+  );
+  @override
+  late final GeneratedColumn<int> nextBatchIndex = GeneratedColumn<int>(
+    'next_batch_index',
+    aliasedName,
+    false,
+    check: () => ComparableExpr(nextBatchIndex).isBiggerOrEqualValue(0),
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
   static const VerificationMeta _eventProgressMeta = const VerificationMeta(
     'eventProgress',
   );
@@ -8922,12 +22557,62 @@ class $HistoryTransfersTable extends HistoryTransfers
     type: DriftSqlType.int,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _groupReinviteRequiredMeta =
+      const VerificationMeta('groupReinviteRequired');
+  @override
+  late final GeneratedColumn<bool> groupReinviteRequired =
+      GeneratedColumn<bool>(
+        'group_reinvite_required',
+        aliasedName,
+        false,
+        type: DriftSqlType.bool,
+        requiredDuringInsert: false,
+        defaultConstraints: GeneratedColumn.constraintIsAlways(
+          'CHECK ("group_reinvite_required" IN (0, 1))',
+        ),
+        defaultValue: const Constant(false),
+      );
+  static const VerificationMeta _queueGapRecoveryRequiredMeta =
+      const VerificationMeta('queueGapRecoveryRequired');
+  @override
+  late final GeneratedColumn<bool> queueGapRecoveryRequired =
+      GeneratedColumn<bool>(
+        'queue_gap_recovery_required',
+        aliasedName,
+        false,
+        type: DriftSqlType.bool,
+        requiredDuringInsert: false,
+        defaultConstraints: GeneratedColumn.constraintIsAlways(
+          'CHECK ("queue_gap_recovery_required" IN (0, 1))',
+        ),
+        defaultValue: const Constant(false),
+      );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
   @override
   List<GeneratedColumn> get $columns => [
     transferId,
     manifestCiphertext,
+    sourceDeviceId,
+    targetDeviceId,
+    direction,
+    state,
+    nextBatchIndex,
     eventProgress,
     sourceCompleteness,
+    groupReinviteRequired,
+    queueGapRecoveryRequired,
+    updatedAt,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -8960,6 +22645,45 @@ class $HistoryTransfersTable extends HistoryTransfers
     } else if (isInserting) {
       context.missing(_manifestCiphertextMeta);
     }
+    if (data.containsKey('source_device_id')) {
+      context.handle(
+        _sourceDeviceIdMeta,
+        sourceDeviceId.isAcceptableOrUnknown(
+          data['source_device_id']!,
+          _sourceDeviceIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('target_device_id')) {
+      context.handle(
+        _targetDeviceIdMeta,
+        targetDeviceId.isAcceptableOrUnknown(
+          data['target_device_id']!,
+          _targetDeviceIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('direction')) {
+      context.handle(
+        _directionMeta,
+        direction.isAcceptableOrUnknown(data['direction']!, _directionMeta),
+      );
+    }
+    if (data.containsKey('state')) {
+      context.handle(
+        _stateMeta,
+        state.isAcceptableOrUnknown(data['state']!, _stateMeta),
+      );
+    }
+    if (data.containsKey('next_batch_index')) {
+      context.handle(
+        _nextBatchIndexMeta,
+        nextBatchIndex.isAcceptableOrUnknown(
+          data['next_batch_index']!,
+          _nextBatchIndexMeta,
+        ),
+      );
+    }
     if (data.containsKey('event_progress')) {
       context.handle(
         _eventProgressMeta,
@@ -8980,6 +22704,30 @@ class $HistoryTransfersTable extends HistoryTransfers
     } else if (isInserting) {
       context.missing(_sourceCompletenessMeta);
     }
+    if (data.containsKey('group_reinvite_required')) {
+      context.handle(
+        _groupReinviteRequiredMeta,
+        groupReinviteRequired.isAcceptableOrUnknown(
+          data['group_reinvite_required']!,
+          _groupReinviteRequiredMeta,
+        ),
+      );
+    }
+    if (data.containsKey('queue_gap_recovery_required')) {
+      context.handle(
+        _queueGapRecoveryRequiredMeta,
+        queueGapRecoveryRequired.isAcceptableOrUnknown(
+          data['queue_gap_recovery_required']!,
+          _queueGapRecoveryRequiredMeta,
+        ),
+      );
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    }
     return context;
   }
 
@@ -8997,6 +22745,26 @@ class $HistoryTransfersTable extends HistoryTransfers
         DriftSqlType.blob,
         data['${effectivePrefix}manifest_ciphertext'],
       )!,
+      sourceDeviceId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}source_device_id'],
+      )!,
+      targetDeviceId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}target_device_id'],
+      )!,
+      direction: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}direction'],
+      )!,
+      state: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}state'],
+      )!,
+      nextBatchIndex: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}next_batch_index'],
+      )!,
       eventProgress: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}event_progress'],
@@ -9004,6 +22772,18 @@ class $HistoryTransfersTable extends HistoryTransfers
       sourceCompleteness: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}source_completeness'],
+      )!,
+      groupReinviteRequired: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}group_reinvite_required'],
+      )!,
+      queueGapRecoveryRequired: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}queue_gap_recovery_required'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
       )!,
     );
   }
@@ -9017,21 +22797,47 @@ class $HistoryTransfersTable extends HistoryTransfers
 class HistoryTransfer extends DataClass implements Insertable<HistoryTransfer> {
   final String transferId;
   final Uint8List manifestCiphertext;
+  final String sourceDeviceId;
+  final String targetDeviceId;
+  final int direction;
+  final int state;
+  final int nextBatchIndex;
   final int eventProgress;
   final int sourceCompleteness;
+  final bool groupReinviteRequired;
+  final bool queueGapRecoveryRequired;
+  final DateTime updatedAt;
   const HistoryTransfer({
     required this.transferId,
     required this.manifestCiphertext,
+    required this.sourceDeviceId,
+    required this.targetDeviceId,
+    required this.direction,
+    required this.state,
+    required this.nextBatchIndex,
     required this.eventProgress,
     required this.sourceCompleteness,
+    required this.groupReinviteRequired,
+    required this.queueGapRecoveryRequired,
+    required this.updatedAt,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
     map['transfer_id'] = Variable<String>(transferId);
     map['manifest_ciphertext'] = Variable<Uint8List>(manifestCiphertext);
+    map['source_device_id'] = Variable<String>(sourceDeviceId);
+    map['target_device_id'] = Variable<String>(targetDeviceId);
+    map['direction'] = Variable<int>(direction);
+    map['state'] = Variable<int>(state);
+    map['next_batch_index'] = Variable<int>(nextBatchIndex);
     map['event_progress'] = Variable<int>(eventProgress);
     map['source_completeness'] = Variable<int>(sourceCompleteness);
+    map['group_reinvite_required'] = Variable<bool>(groupReinviteRequired);
+    map['queue_gap_recovery_required'] = Variable<bool>(
+      queueGapRecoveryRequired,
+    );
+    map['updated_at'] = Variable<DateTime>(updatedAt);
     return map;
   }
 
@@ -9039,8 +22845,16 @@ class HistoryTransfer extends DataClass implements Insertable<HistoryTransfer> {
     return HistoryTransfersCompanion(
       transferId: Value(transferId),
       manifestCiphertext: Value(manifestCiphertext),
+      sourceDeviceId: Value(sourceDeviceId),
+      targetDeviceId: Value(targetDeviceId),
+      direction: Value(direction),
+      state: Value(state),
+      nextBatchIndex: Value(nextBatchIndex),
       eventProgress: Value(eventProgress),
       sourceCompleteness: Value(sourceCompleteness),
+      groupReinviteRequired: Value(groupReinviteRequired),
+      queueGapRecoveryRequired: Value(queueGapRecoveryRequired),
+      updatedAt: Value(updatedAt),
     );
   }
 
@@ -9054,8 +22868,20 @@ class HistoryTransfer extends DataClass implements Insertable<HistoryTransfer> {
       manifestCiphertext: serializer.fromJson<Uint8List>(
         json['manifestCiphertext'],
       ),
+      sourceDeviceId: serializer.fromJson<String>(json['sourceDeviceId']),
+      targetDeviceId: serializer.fromJson<String>(json['targetDeviceId']),
+      direction: serializer.fromJson<int>(json['direction']),
+      state: serializer.fromJson<int>(json['state']),
+      nextBatchIndex: serializer.fromJson<int>(json['nextBatchIndex']),
       eventProgress: serializer.fromJson<int>(json['eventProgress']),
       sourceCompleteness: serializer.fromJson<int>(json['sourceCompleteness']),
+      groupReinviteRequired: serializer.fromJson<bool>(
+        json['groupReinviteRequired'],
+      ),
+      queueGapRecoveryRequired: serializer.fromJson<bool>(
+        json['queueGapRecoveryRequired'],
+      ),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
     );
   }
   @override
@@ -9064,21 +22890,48 @@ class HistoryTransfer extends DataClass implements Insertable<HistoryTransfer> {
     return <String, dynamic>{
       'transferId': serializer.toJson<String>(transferId),
       'manifestCiphertext': serializer.toJson<Uint8List>(manifestCiphertext),
+      'sourceDeviceId': serializer.toJson<String>(sourceDeviceId),
+      'targetDeviceId': serializer.toJson<String>(targetDeviceId),
+      'direction': serializer.toJson<int>(direction),
+      'state': serializer.toJson<int>(state),
+      'nextBatchIndex': serializer.toJson<int>(nextBatchIndex),
       'eventProgress': serializer.toJson<int>(eventProgress),
       'sourceCompleteness': serializer.toJson<int>(sourceCompleteness),
+      'groupReinviteRequired': serializer.toJson<bool>(groupReinviteRequired),
+      'queueGapRecoveryRequired': serializer.toJson<bool>(
+        queueGapRecoveryRequired,
+      ),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
     };
   }
 
   HistoryTransfer copyWith({
     String? transferId,
     Uint8List? manifestCiphertext,
+    String? sourceDeviceId,
+    String? targetDeviceId,
+    int? direction,
+    int? state,
+    int? nextBatchIndex,
     int? eventProgress,
     int? sourceCompleteness,
+    bool? groupReinviteRequired,
+    bool? queueGapRecoveryRequired,
+    DateTime? updatedAt,
   }) => HistoryTransfer(
     transferId: transferId ?? this.transferId,
     manifestCiphertext: manifestCiphertext ?? this.manifestCiphertext,
+    sourceDeviceId: sourceDeviceId ?? this.sourceDeviceId,
+    targetDeviceId: targetDeviceId ?? this.targetDeviceId,
+    direction: direction ?? this.direction,
+    state: state ?? this.state,
+    nextBatchIndex: nextBatchIndex ?? this.nextBatchIndex,
     eventProgress: eventProgress ?? this.eventProgress,
     sourceCompleteness: sourceCompleteness ?? this.sourceCompleteness,
+    groupReinviteRequired: groupReinviteRequired ?? this.groupReinviteRequired,
+    queueGapRecoveryRequired:
+        queueGapRecoveryRequired ?? this.queueGapRecoveryRequired,
+    updatedAt: updatedAt ?? this.updatedAt,
   );
   HistoryTransfer copyWithCompanion(HistoryTransfersCompanion data) {
     return HistoryTransfer(
@@ -9088,12 +22941,30 @@ class HistoryTransfer extends DataClass implements Insertable<HistoryTransfer> {
       manifestCiphertext: data.manifestCiphertext.present
           ? data.manifestCiphertext.value
           : this.manifestCiphertext,
+      sourceDeviceId: data.sourceDeviceId.present
+          ? data.sourceDeviceId.value
+          : this.sourceDeviceId,
+      targetDeviceId: data.targetDeviceId.present
+          ? data.targetDeviceId.value
+          : this.targetDeviceId,
+      direction: data.direction.present ? data.direction.value : this.direction,
+      state: data.state.present ? data.state.value : this.state,
+      nextBatchIndex: data.nextBatchIndex.present
+          ? data.nextBatchIndex.value
+          : this.nextBatchIndex,
       eventProgress: data.eventProgress.present
           ? data.eventProgress.value
           : this.eventProgress,
       sourceCompleteness: data.sourceCompleteness.present
           ? data.sourceCompleteness.value
           : this.sourceCompleteness,
+      groupReinviteRequired: data.groupReinviteRequired.present
+          ? data.groupReinviteRequired.value
+          : this.groupReinviteRequired,
+      queueGapRecoveryRequired: data.queueGapRecoveryRequired.present
+          ? data.queueGapRecoveryRequired.value
+          : this.queueGapRecoveryRequired,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
     );
   }
 
@@ -9102,8 +22973,16 @@ class HistoryTransfer extends DataClass implements Insertable<HistoryTransfer> {
     return (StringBuffer('HistoryTransfer(')
           ..write('transferId: $transferId, ')
           ..write('manifestCiphertext: $manifestCiphertext, ')
+          ..write('sourceDeviceId: $sourceDeviceId, ')
+          ..write('targetDeviceId: $targetDeviceId, ')
+          ..write('direction: $direction, ')
+          ..write('state: $state, ')
+          ..write('nextBatchIndex: $nextBatchIndex, ')
           ..write('eventProgress: $eventProgress, ')
-          ..write('sourceCompleteness: $sourceCompleteness')
+          ..write('sourceCompleteness: $sourceCompleteness, ')
+          ..write('groupReinviteRequired: $groupReinviteRequired, ')
+          ..write('queueGapRecoveryRequired: $queueGapRecoveryRequired, ')
+          ..write('updatedAt: $updatedAt')
           ..write(')'))
         .toString();
   }
@@ -9112,8 +22991,16 @@ class HistoryTransfer extends DataClass implements Insertable<HistoryTransfer> {
   int get hashCode => Object.hash(
     transferId,
     $driftBlobEquality.hash(manifestCiphertext),
+    sourceDeviceId,
+    targetDeviceId,
+    direction,
+    state,
+    nextBatchIndex,
     eventProgress,
     sourceCompleteness,
+    groupReinviteRequired,
+    queueGapRecoveryRequired,
+    updatedAt,
   );
   @override
   bool operator ==(Object other) =>
@@ -9124,28 +23011,60 @@ class HistoryTransfer extends DataClass implements Insertable<HistoryTransfer> {
             other.manifestCiphertext,
             this.manifestCiphertext,
           ) &&
+          other.sourceDeviceId == this.sourceDeviceId &&
+          other.targetDeviceId == this.targetDeviceId &&
+          other.direction == this.direction &&
+          other.state == this.state &&
+          other.nextBatchIndex == this.nextBatchIndex &&
           other.eventProgress == this.eventProgress &&
-          other.sourceCompleteness == this.sourceCompleteness);
+          other.sourceCompleteness == this.sourceCompleteness &&
+          other.groupReinviteRequired == this.groupReinviteRequired &&
+          other.queueGapRecoveryRequired == this.queueGapRecoveryRequired &&
+          other.updatedAt == this.updatedAt);
 }
 
 class HistoryTransfersCompanion extends UpdateCompanion<HistoryTransfer> {
   final Value<String> transferId;
   final Value<Uint8List> manifestCiphertext;
+  final Value<String> sourceDeviceId;
+  final Value<String> targetDeviceId;
+  final Value<int> direction;
+  final Value<int> state;
+  final Value<int> nextBatchIndex;
   final Value<int> eventProgress;
   final Value<int> sourceCompleteness;
+  final Value<bool> groupReinviteRequired;
+  final Value<bool> queueGapRecoveryRequired;
+  final Value<DateTime> updatedAt;
   final Value<int> rowid;
   const HistoryTransfersCompanion({
     this.transferId = const Value.absent(),
     this.manifestCiphertext = const Value.absent(),
+    this.sourceDeviceId = const Value.absent(),
+    this.targetDeviceId = const Value.absent(),
+    this.direction = const Value.absent(),
+    this.state = const Value.absent(),
+    this.nextBatchIndex = const Value.absent(),
     this.eventProgress = const Value.absent(),
     this.sourceCompleteness = const Value.absent(),
+    this.groupReinviteRequired = const Value.absent(),
+    this.queueGapRecoveryRequired = const Value.absent(),
+    this.updatedAt = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   HistoryTransfersCompanion.insert({
     required String transferId,
     required Uint8List manifestCiphertext,
+    this.sourceDeviceId = const Value.absent(),
+    this.targetDeviceId = const Value.absent(),
+    this.direction = const Value.absent(),
+    this.state = const Value.absent(),
+    this.nextBatchIndex = const Value.absent(),
     this.eventProgress = const Value.absent(),
     required int sourceCompleteness,
+    this.groupReinviteRequired = const Value.absent(),
+    this.queueGapRecoveryRequired = const Value.absent(),
+    this.updatedAt = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : transferId = Value(transferId),
        manifestCiphertext = Value(manifestCiphertext),
@@ -9153,15 +23072,33 @@ class HistoryTransfersCompanion extends UpdateCompanion<HistoryTransfer> {
   static Insertable<HistoryTransfer> custom({
     Expression<String>? transferId,
     Expression<Uint8List>? manifestCiphertext,
+    Expression<String>? sourceDeviceId,
+    Expression<String>? targetDeviceId,
+    Expression<int>? direction,
+    Expression<int>? state,
+    Expression<int>? nextBatchIndex,
     Expression<int>? eventProgress,
     Expression<int>? sourceCompleteness,
+    Expression<bool>? groupReinviteRequired,
+    Expression<bool>? queueGapRecoveryRequired,
+    Expression<DateTime>? updatedAt,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
       if (transferId != null) 'transfer_id': transferId,
       if (manifestCiphertext != null) 'manifest_ciphertext': manifestCiphertext,
+      if (sourceDeviceId != null) 'source_device_id': sourceDeviceId,
+      if (targetDeviceId != null) 'target_device_id': targetDeviceId,
+      if (direction != null) 'direction': direction,
+      if (state != null) 'state': state,
+      if (nextBatchIndex != null) 'next_batch_index': nextBatchIndex,
       if (eventProgress != null) 'event_progress': eventProgress,
       if (sourceCompleteness != null) 'source_completeness': sourceCompleteness,
+      if (groupReinviteRequired != null)
+        'group_reinvite_required': groupReinviteRequired,
+      if (queueGapRecoveryRequired != null)
+        'queue_gap_recovery_required': queueGapRecoveryRequired,
+      if (updatedAt != null) 'updated_at': updatedAt,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -9169,15 +23106,33 @@ class HistoryTransfersCompanion extends UpdateCompanion<HistoryTransfer> {
   HistoryTransfersCompanion copyWith({
     Value<String>? transferId,
     Value<Uint8List>? manifestCiphertext,
+    Value<String>? sourceDeviceId,
+    Value<String>? targetDeviceId,
+    Value<int>? direction,
+    Value<int>? state,
+    Value<int>? nextBatchIndex,
     Value<int>? eventProgress,
     Value<int>? sourceCompleteness,
+    Value<bool>? groupReinviteRequired,
+    Value<bool>? queueGapRecoveryRequired,
+    Value<DateTime>? updatedAt,
     Value<int>? rowid,
   }) {
     return HistoryTransfersCompanion(
       transferId: transferId ?? this.transferId,
       manifestCiphertext: manifestCiphertext ?? this.manifestCiphertext,
+      sourceDeviceId: sourceDeviceId ?? this.sourceDeviceId,
+      targetDeviceId: targetDeviceId ?? this.targetDeviceId,
+      direction: direction ?? this.direction,
+      state: state ?? this.state,
+      nextBatchIndex: nextBatchIndex ?? this.nextBatchIndex,
       eventProgress: eventProgress ?? this.eventProgress,
       sourceCompleteness: sourceCompleteness ?? this.sourceCompleteness,
+      groupReinviteRequired:
+          groupReinviteRequired ?? this.groupReinviteRequired,
+      queueGapRecoveryRequired:
+          queueGapRecoveryRequired ?? this.queueGapRecoveryRequired,
+      updatedAt: updatedAt ?? this.updatedAt,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -9193,11 +23148,39 @@ class HistoryTransfersCompanion extends UpdateCompanion<HistoryTransfer> {
         manifestCiphertext.value,
       );
     }
+    if (sourceDeviceId.present) {
+      map['source_device_id'] = Variable<String>(sourceDeviceId.value);
+    }
+    if (targetDeviceId.present) {
+      map['target_device_id'] = Variable<String>(targetDeviceId.value);
+    }
+    if (direction.present) {
+      map['direction'] = Variable<int>(direction.value);
+    }
+    if (state.present) {
+      map['state'] = Variable<int>(state.value);
+    }
+    if (nextBatchIndex.present) {
+      map['next_batch_index'] = Variable<int>(nextBatchIndex.value);
+    }
     if (eventProgress.present) {
       map['event_progress'] = Variable<int>(eventProgress.value);
     }
     if (sourceCompleteness.present) {
       map['source_completeness'] = Variable<int>(sourceCompleteness.value);
+    }
+    if (groupReinviteRequired.present) {
+      map['group_reinvite_required'] = Variable<bool>(
+        groupReinviteRequired.value,
+      );
+    }
+    if (queueGapRecoveryRequired.present) {
+      map['queue_gap_recovery_required'] = Variable<bool>(
+        queueGapRecoveryRequired.value,
+      );
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
     }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
@@ -9210,8 +23193,415 @@ class HistoryTransfersCompanion extends UpdateCompanion<HistoryTransfer> {
     return (StringBuffer('HistoryTransfersCompanion(')
           ..write('transferId: $transferId, ')
           ..write('manifestCiphertext: $manifestCiphertext, ')
+          ..write('sourceDeviceId: $sourceDeviceId, ')
+          ..write('targetDeviceId: $targetDeviceId, ')
+          ..write('direction: $direction, ')
+          ..write('state: $state, ')
+          ..write('nextBatchIndex: $nextBatchIndex, ')
           ..write('eventProgress: $eventProgress, ')
           ..write('sourceCompleteness: $sourceCompleteness, ')
+          ..write('groupReinviteRequired: $groupReinviteRequired, ')
+          ..write('queueGapRecoveryRequired: $queueGapRecoveryRequired, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $HistoryTransferBatchesTable extends HistoryTransferBatches
+    with TableInfo<$HistoryTransferBatchesTable, HistoryTransferBatche> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $HistoryTransferBatchesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _transferIdMeta = const VerificationMeta(
+    'transferId',
+  );
+  @override
+  late final GeneratedColumn<String> transferId = GeneratedColumn<String>(
+    'transfer_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES history_transfers (transfer_id) ON DELETE CASCADE',
+    ),
+  );
+  static const VerificationMeta _batchIndexMeta = const VerificationMeta(
+    'batchIndex',
+  );
+  @override
+  late final GeneratedColumn<int> batchIndex = GeneratedColumn<int>(
+    'batch_index',
+    aliasedName,
+    false,
+    check: () => ComparableExpr(batchIndex).isBiggerOrEqualValue(0),
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _controlEventIdMeta = const VerificationMeta(
+    'controlEventId',
+  );
+  @override
+  late final GeneratedColumn<String> controlEventId = GeneratedColumn<String>(
+    'control_event_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways('UNIQUE'),
+  );
+  static const VerificationMeta _eventCountMeta = const VerificationMeta(
+    'eventCount',
+  );
+  @override
+  late final GeneratedColumn<int> eventCount = GeneratedColumn<int>(
+    'event_count',
+    aliasedName,
+    false,
+    check: () => ComparableExpr(eventCount).isBetweenValues(1, 32),
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _finalBatchMeta = const VerificationMeta(
+    'finalBatch',
+  );
+  @override
+  late final GeneratedColumn<bool> finalBatch = GeneratedColumn<bool>(
+    'final_batch',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("final_batch" IN (0, 1))',
+    ),
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    transferId,
+    batchIndex,
+    controlEventId,
+    eventCount,
+    finalBatch,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'history_transfer_batches';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<HistoryTransferBatche> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('transfer_id')) {
+      context.handle(
+        _transferIdMeta,
+        transferId.isAcceptableOrUnknown(data['transfer_id']!, _transferIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_transferIdMeta);
+    }
+    if (data.containsKey('batch_index')) {
+      context.handle(
+        _batchIndexMeta,
+        batchIndex.isAcceptableOrUnknown(data['batch_index']!, _batchIndexMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_batchIndexMeta);
+    }
+    if (data.containsKey('control_event_id')) {
+      context.handle(
+        _controlEventIdMeta,
+        controlEventId.isAcceptableOrUnknown(
+          data['control_event_id']!,
+          _controlEventIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_controlEventIdMeta);
+    }
+    if (data.containsKey('event_count')) {
+      context.handle(
+        _eventCountMeta,
+        eventCount.isAcceptableOrUnknown(data['event_count']!, _eventCountMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_eventCountMeta);
+    }
+    if (data.containsKey('final_batch')) {
+      context.handle(
+        _finalBatchMeta,
+        finalBatch.isAcceptableOrUnknown(data['final_batch']!, _finalBatchMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_finalBatchMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {transferId, batchIndex};
+  @override
+  HistoryTransferBatche map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return HistoryTransferBatche(
+      transferId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}transfer_id'],
+      )!,
+      batchIndex: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}batch_index'],
+      )!,
+      controlEventId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}control_event_id'],
+      )!,
+      eventCount: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}event_count'],
+      )!,
+      finalBatch: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}final_batch'],
+      )!,
+    );
+  }
+
+  @override
+  $HistoryTransferBatchesTable createAlias(String alias) {
+    return $HistoryTransferBatchesTable(attachedDatabase, alias);
+  }
+}
+
+class HistoryTransferBatche extends DataClass
+    implements Insertable<HistoryTransferBatche> {
+  final String transferId;
+  final int batchIndex;
+  final String controlEventId;
+  final int eventCount;
+  final bool finalBatch;
+  const HistoryTransferBatche({
+    required this.transferId,
+    required this.batchIndex,
+    required this.controlEventId,
+    required this.eventCount,
+    required this.finalBatch,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['transfer_id'] = Variable<String>(transferId);
+    map['batch_index'] = Variable<int>(batchIndex);
+    map['control_event_id'] = Variable<String>(controlEventId);
+    map['event_count'] = Variable<int>(eventCount);
+    map['final_batch'] = Variable<bool>(finalBatch);
+    return map;
+  }
+
+  HistoryTransferBatchesCompanion toCompanion(bool nullToAbsent) {
+    return HistoryTransferBatchesCompanion(
+      transferId: Value(transferId),
+      batchIndex: Value(batchIndex),
+      controlEventId: Value(controlEventId),
+      eventCount: Value(eventCount),
+      finalBatch: Value(finalBatch),
+    );
+  }
+
+  factory HistoryTransferBatche.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return HistoryTransferBatche(
+      transferId: serializer.fromJson<String>(json['transferId']),
+      batchIndex: serializer.fromJson<int>(json['batchIndex']),
+      controlEventId: serializer.fromJson<String>(json['controlEventId']),
+      eventCount: serializer.fromJson<int>(json['eventCount']),
+      finalBatch: serializer.fromJson<bool>(json['finalBatch']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'transferId': serializer.toJson<String>(transferId),
+      'batchIndex': serializer.toJson<int>(batchIndex),
+      'controlEventId': serializer.toJson<String>(controlEventId),
+      'eventCount': serializer.toJson<int>(eventCount),
+      'finalBatch': serializer.toJson<bool>(finalBatch),
+    };
+  }
+
+  HistoryTransferBatche copyWith({
+    String? transferId,
+    int? batchIndex,
+    String? controlEventId,
+    int? eventCount,
+    bool? finalBatch,
+  }) => HistoryTransferBatche(
+    transferId: transferId ?? this.transferId,
+    batchIndex: batchIndex ?? this.batchIndex,
+    controlEventId: controlEventId ?? this.controlEventId,
+    eventCount: eventCount ?? this.eventCount,
+    finalBatch: finalBatch ?? this.finalBatch,
+  );
+  HistoryTransferBatche copyWithCompanion(
+    HistoryTransferBatchesCompanion data,
+  ) {
+    return HistoryTransferBatche(
+      transferId: data.transferId.present
+          ? data.transferId.value
+          : this.transferId,
+      batchIndex: data.batchIndex.present
+          ? data.batchIndex.value
+          : this.batchIndex,
+      controlEventId: data.controlEventId.present
+          ? data.controlEventId.value
+          : this.controlEventId,
+      eventCount: data.eventCount.present
+          ? data.eventCount.value
+          : this.eventCount,
+      finalBatch: data.finalBatch.present
+          ? data.finalBatch.value
+          : this.finalBatch,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('HistoryTransferBatche(')
+          ..write('transferId: $transferId, ')
+          ..write('batchIndex: $batchIndex, ')
+          ..write('controlEventId: $controlEventId, ')
+          ..write('eventCount: $eventCount, ')
+          ..write('finalBatch: $finalBatch')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    transferId,
+    batchIndex,
+    controlEventId,
+    eventCount,
+    finalBatch,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is HistoryTransferBatche &&
+          other.transferId == this.transferId &&
+          other.batchIndex == this.batchIndex &&
+          other.controlEventId == this.controlEventId &&
+          other.eventCount == this.eventCount &&
+          other.finalBatch == this.finalBatch);
+}
+
+class HistoryTransferBatchesCompanion
+    extends UpdateCompanion<HistoryTransferBatche> {
+  final Value<String> transferId;
+  final Value<int> batchIndex;
+  final Value<String> controlEventId;
+  final Value<int> eventCount;
+  final Value<bool> finalBatch;
+  final Value<int> rowid;
+  const HistoryTransferBatchesCompanion({
+    this.transferId = const Value.absent(),
+    this.batchIndex = const Value.absent(),
+    this.controlEventId = const Value.absent(),
+    this.eventCount = const Value.absent(),
+    this.finalBatch = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  HistoryTransferBatchesCompanion.insert({
+    required String transferId,
+    required int batchIndex,
+    required String controlEventId,
+    required int eventCount,
+    required bool finalBatch,
+    this.rowid = const Value.absent(),
+  }) : transferId = Value(transferId),
+       batchIndex = Value(batchIndex),
+       controlEventId = Value(controlEventId),
+       eventCount = Value(eventCount),
+       finalBatch = Value(finalBatch);
+  static Insertable<HistoryTransferBatche> custom({
+    Expression<String>? transferId,
+    Expression<int>? batchIndex,
+    Expression<String>? controlEventId,
+    Expression<int>? eventCount,
+    Expression<bool>? finalBatch,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (transferId != null) 'transfer_id': transferId,
+      if (batchIndex != null) 'batch_index': batchIndex,
+      if (controlEventId != null) 'control_event_id': controlEventId,
+      if (eventCount != null) 'event_count': eventCount,
+      if (finalBatch != null) 'final_batch': finalBatch,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  HistoryTransferBatchesCompanion copyWith({
+    Value<String>? transferId,
+    Value<int>? batchIndex,
+    Value<String>? controlEventId,
+    Value<int>? eventCount,
+    Value<bool>? finalBatch,
+    Value<int>? rowid,
+  }) {
+    return HistoryTransferBatchesCompanion(
+      transferId: transferId ?? this.transferId,
+      batchIndex: batchIndex ?? this.batchIndex,
+      controlEventId: controlEventId ?? this.controlEventId,
+      eventCount: eventCount ?? this.eventCount,
+      finalBatch: finalBatch ?? this.finalBatch,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (transferId.present) {
+      map['transfer_id'] = Variable<String>(transferId.value);
+    }
+    if (batchIndex.present) {
+      map['batch_index'] = Variable<int>(batchIndex.value);
+    }
+    if (controlEventId.present) {
+      map['control_event_id'] = Variable<String>(controlEventId.value);
+    }
+    if (eventCount.present) {
+      map['event_count'] = Variable<int>(eventCount.value);
+    }
+    if (finalBatch.present) {
+      map['final_batch'] = Variable<bool>(finalBatch.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('HistoryTransferBatchesCompanion(')
+          ..write('transferId: $transferId, ')
+          ..write('batchIndex: $batchIndex, ')
+          ..write('controlEventId: $controlEventId, ')
+          ..write('eventCount: $eventCount, ')
+          ..write('finalBatch: $finalBatch, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -9301,6 +23691,82 @@ class $SyncCheckpointsTable extends SyncCheckpoints
     type: DriftSqlType.int,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _queueGapStateMeta = const VerificationMeta(
+    'queueGapState',
+  );
+  @override
+  late final GeneratedColumn<int> queueGapState = GeneratedColumn<int>(
+    'queue_gap_state',
+    aliasedName,
+    false,
+    check: () => ComparableExpr(queueGapState).isBetweenValues(0, 1),
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _drainRequestedMeta = const VerificationMeta(
+    'drainRequested',
+  );
+  @override
+  late final GeneratedColumn<bool> drainRequested = GeneratedColumn<bool>(
+    'drain_requested',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("drain_requested" IN (0, 1))',
+    ),
+    defaultValue: const Constant(true),
+  );
+  static const VerificationMeta _connectionPhaseMeta = const VerificationMeta(
+    'connectionPhase',
+  );
+  @override
+  late final GeneratedColumn<int> connectionPhase = GeneratedColumn<int>(
+    'connection_phase',
+    aliasedName,
+    false,
+    check: () => ComparableExpr(connectionPhase).isBetweenValues(0, 9),
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _reconnectAttemptMeta = const VerificationMeta(
+    'reconnectAttempt',
+  );
+  @override
+  late final GeneratedColumn<int> reconnectAttempt = GeneratedColumn<int>(
+    'reconnect_attempt',
+    aliasedName,
+    false,
+    check: () => ComparableExpr(reconnectAttempt).isBiggerOrEqualValue(0),
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _reconnectAtMeta = const VerificationMeta(
+    'reconnectAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> reconnectAt = GeneratedColumn<DateTime>(
+    'reconnect_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _lastSuccessfulSyncAtMeta =
+      const VerificationMeta('lastSuccessfulSyncAt');
+  @override
+  late final GeneratedColumn<DateTime> lastSuccessfulSyncAt =
+      GeneratedColumn<DateTime>(
+        'last_successful_sync_at',
+        aliasedName,
+        true,
+        type: DriftSqlType.dateTime,
+        requiredDuringInsert: false,
+      );
   @override
   List<GeneratedColumn> get $columns => [
     singletonId,
@@ -9309,6 +23775,12 @@ class $SyncCheckpointsTable extends SyncCheckpoints
     etagsCiphertext,
     retryState,
     protocolVersion,
+    queueGapState,
+    drainRequested,
+    connectionPhase,
+    reconnectAttempt,
+    reconnectAt,
+    lastSuccessfulSyncAt,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -9379,6 +23851,60 @@ class $SyncCheckpointsTable extends SyncCheckpoints
     } else if (isInserting) {
       context.missing(_protocolVersionMeta);
     }
+    if (data.containsKey('queue_gap_state')) {
+      context.handle(
+        _queueGapStateMeta,
+        queueGapState.isAcceptableOrUnknown(
+          data['queue_gap_state']!,
+          _queueGapStateMeta,
+        ),
+      );
+    }
+    if (data.containsKey('drain_requested')) {
+      context.handle(
+        _drainRequestedMeta,
+        drainRequested.isAcceptableOrUnknown(
+          data['drain_requested']!,
+          _drainRequestedMeta,
+        ),
+      );
+    }
+    if (data.containsKey('connection_phase')) {
+      context.handle(
+        _connectionPhaseMeta,
+        connectionPhase.isAcceptableOrUnknown(
+          data['connection_phase']!,
+          _connectionPhaseMeta,
+        ),
+      );
+    }
+    if (data.containsKey('reconnect_attempt')) {
+      context.handle(
+        _reconnectAttemptMeta,
+        reconnectAttempt.isAcceptableOrUnknown(
+          data['reconnect_attempt']!,
+          _reconnectAttemptMeta,
+        ),
+      );
+    }
+    if (data.containsKey('reconnect_at')) {
+      context.handle(
+        _reconnectAtMeta,
+        reconnectAt.isAcceptableOrUnknown(
+          data['reconnect_at']!,
+          _reconnectAtMeta,
+        ),
+      );
+    }
+    if (data.containsKey('last_successful_sync_at')) {
+      context.handle(
+        _lastSuccessfulSyncAtMeta,
+        lastSuccessfulSyncAt.isAcceptableOrUnknown(
+          data['last_successful_sync_at']!,
+          _lastSuccessfulSyncAtMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -9412,6 +23938,30 @@ class $SyncCheckpointsTable extends SyncCheckpoints
         DriftSqlType.int,
         data['${effectivePrefix}protocol_version'],
       )!,
+      queueGapState: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}queue_gap_state'],
+      )!,
+      drainRequested: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}drain_requested'],
+      )!,
+      connectionPhase: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}connection_phase'],
+      )!,
+      reconnectAttempt: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}reconnect_attempt'],
+      )!,
+      reconnectAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}reconnect_at'],
+      ),
+      lastSuccessfulSyncAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}last_successful_sync_at'],
+      ),
     );
   }
 
@@ -9428,6 +23978,12 @@ class SyncCheckpoint extends DataClass implements Insertable<SyncCheckpoint> {
   final Uint8List etagsCiphertext;
   final int retryState;
   final int protocolVersion;
+  final int queueGapState;
+  final bool drainRequested;
+  final int connectionPhase;
+  final int reconnectAttempt;
+  final DateTime? reconnectAt;
+  final DateTime? lastSuccessfulSyncAt;
   const SyncCheckpoint({
     required this.singletonId,
     required this.highestContiguousAckedSequence,
@@ -9435,6 +23991,12 @@ class SyncCheckpoint extends DataClass implements Insertable<SyncCheckpoint> {
     required this.etagsCiphertext,
     required this.retryState,
     required this.protocolVersion,
+    required this.queueGapState,
+    required this.drainRequested,
+    required this.connectionPhase,
+    required this.reconnectAttempt,
+    this.reconnectAt,
+    this.lastSuccessfulSyncAt,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -9447,6 +24009,16 @@ class SyncCheckpoint extends DataClass implements Insertable<SyncCheckpoint> {
     map['etags_ciphertext'] = Variable<Uint8List>(etagsCiphertext);
     map['retry_state'] = Variable<int>(retryState);
     map['protocol_version'] = Variable<int>(protocolVersion);
+    map['queue_gap_state'] = Variable<int>(queueGapState);
+    map['drain_requested'] = Variable<bool>(drainRequested);
+    map['connection_phase'] = Variable<int>(connectionPhase);
+    map['reconnect_attempt'] = Variable<int>(reconnectAttempt);
+    if (!nullToAbsent || reconnectAt != null) {
+      map['reconnect_at'] = Variable<DateTime>(reconnectAt);
+    }
+    if (!nullToAbsent || lastSuccessfulSyncAt != null) {
+      map['last_successful_sync_at'] = Variable<DateTime>(lastSuccessfulSyncAt);
+    }
     return map;
   }
 
@@ -9458,6 +24030,16 @@ class SyncCheckpoint extends DataClass implements Insertable<SyncCheckpoint> {
       etagsCiphertext: Value(etagsCiphertext),
       retryState: Value(retryState),
       protocolVersion: Value(protocolVersion),
+      queueGapState: Value(queueGapState),
+      drainRequested: Value(drainRequested),
+      connectionPhase: Value(connectionPhase),
+      reconnectAttempt: Value(reconnectAttempt),
+      reconnectAt: reconnectAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(reconnectAt),
+      lastSuccessfulSyncAt: lastSuccessfulSyncAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(lastSuccessfulSyncAt),
     );
   }
 
@@ -9475,6 +24057,14 @@ class SyncCheckpoint extends DataClass implements Insertable<SyncCheckpoint> {
       etagsCiphertext: serializer.fromJson<Uint8List>(json['etagsCiphertext']),
       retryState: serializer.fromJson<int>(json['retryState']),
       protocolVersion: serializer.fromJson<int>(json['protocolVersion']),
+      queueGapState: serializer.fromJson<int>(json['queueGapState']),
+      drainRequested: serializer.fromJson<bool>(json['drainRequested']),
+      connectionPhase: serializer.fromJson<int>(json['connectionPhase']),
+      reconnectAttempt: serializer.fromJson<int>(json['reconnectAttempt']),
+      reconnectAt: serializer.fromJson<DateTime?>(json['reconnectAt']),
+      lastSuccessfulSyncAt: serializer.fromJson<DateTime?>(
+        json['lastSuccessfulSyncAt'],
+      ),
     );
   }
   @override
@@ -9489,6 +24079,14 @@ class SyncCheckpoint extends DataClass implements Insertable<SyncCheckpoint> {
       'etagsCiphertext': serializer.toJson<Uint8List>(etagsCiphertext),
       'retryState': serializer.toJson<int>(retryState),
       'protocolVersion': serializer.toJson<int>(protocolVersion),
+      'queueGapState': serializer.toJson<int>(queueGapState),
+      'drainRequested': serializer.toJson<bool>(drainRequested),
+      'connectionPhase': serializer.toJson<int>(connectionPhase),
+      'reconnectAttempt': serializer.toJson<int>(reconnectAttempt),
+      'reconnectAt': serializer.toJson<DateTime?>(reconnectAt),
+      'lastSuccessfulSyncAt': serializer.toJson<DateTime?>(
+        lastSuccessfulSyncAt,
+      ),
     };
   }
 
@@ -9499,6 +24097,12 @@ class SyncCheckpoint extends DataClass implements Insertable<SyncCheckpoint> {
     Uint8List? etagsCiphertext,
     int? retryState,
     int? protocolVersion,
+    int? queueGapState,
+    bool? drainRequested,
+    int? connectionPhase,
+    int? reconnectAttempt,
+    Value<DateTime?> reconnectAt = const Value.absent(),
+    Value<DateTime?> lastSuccessfulSyncAt = const Value.absent(),
   }) => SyncCheckpoint(
     singletonId: singletonId ?? this.singletonId,
     highestContiguousAckedSequence:
@@ -9507,6 +24111,14 @@ class SyncCheckpoint extends DataClass implements Insertable<SyncCheckpoint> {
     etagsCiphertext: etagsCiphertext ?? this.etagsCiphertext,
     retryState: retryState ?? this.retryState,
     protocolVersion: protocolVersion ?? this.protocolVersion,
+    queueGapState: queueGapState ?? this.queueGapState,
+    drainRequested: drainRequested ?? this.drainRequested,
+    connectionPhase: connectionPhase ?? this.connectionPhase,
+    reconnectAttempt: reconnectAttempt ?? this.reconnectAttempt,
+    reconnectAt: reconnectAt.present ? reconnectAt.value : this.reconnectAt,
+    lastSuccessfulSyncAt: lastSuccessfulSyncAt.present
+        ? lastSuccessfulSyncAt.value
+        : this.lastSuccessfulSyncAt,
   );
   SyncCheckpoint copyWithCompanion(SyncCheckpointsCompanion data) {
     return SyncCheckpoint(
@@ -9529,6 +24141,24 @@ class SyncCheckpoint extends DataClass implements Insertable<SyncCheckpoint> {
       protocolVersion: data.protocolVersion.present
           ? data.protocolVersion.value
           : this.protocolVersion,
+      queueGapState: data.queueGapState.present
+          ? data.queueGapState.value
+          : this.queueGapState,
+      drainRequested: data.drainRequested.present
+          ? data.drainRequested.value
+          : this.drainRequested,
+      connectionPhase: data.connectionPhase.present
+          ? data.connectionPhase.value
+          : this.connectionPhase,
+      reconnectAttempt: data.reconnectAttempt.present
+          ? data.reconnectAttempt.value
+          : this.reconnectAttempt,
+      reconnectAt: data.reconnectAt.present
+          ? data.reconnectAt.value
+          : this.reconnectAt,
+      lastSuccessfulSyncAt: data.lastSuccessfulSyncAt.present
+          ? data.lastSuccessfulSyncAt.value
+          : this.lastSuccessfulSyncAt,
     );
   }
 
@@ -9542,7 +24172,13 @@ class SyncCheckpoint extends DataClass implements Insertable<SyncCheckpoint> {
           ..write('prunedThrough: $prunedThrough, ')
           ..write('etagsCiphertext: $etagsCiphertext, ')
           ..write('retryState: $retryState, ')
-          ..write('protocolVersion: $protocolVersion')
+          ..write('protocolVersion: $protocolVersion, ')
+          ..write('queueGapState: $queueGapState, ')
+          ..write('drainRequested: $drainRequested, ')
+          ..write('connectionPhase: $connectionPhase, ')
+          ..write('reconnectAttempt: $reconnectAttempt, ')
+          ..write('reconnectAt: $reconnectAt, ')
+          ..write('lastSuccessfulSyncAt: $lastSuccessfulSyncAt')
           ..write(')'))
         .toString();
   }
@@ -9555,6 +24191,12 @@ class SyncCheckpoint extends DataClass implements Insertable<SyncCheckpoint> {
     $driftBlobEquality.hash(etagsCiphertext),
     retryState,
     protocolVersion,
+    queueGapState,
+    drainRequested,
+    connectionPhase,
+    reconnectAttempt,
+    reconnectAt,
+    lastSuccessfulSyncAt,
   );
   @override
   bool operator ==(Object other) =>
@@ -9569,7 +24211,13 @@ class SyncCheckpoint extends DataClass implements Insertable<SyncCheckpoint> {
             this.etagsCiphertext,
           ) &&
           other.retryState == this.retryState &&
-          other.protocolVersion == this.protocolVersion);
+          other.protocolVersion == this.protocolVersion &&
+          other.queueGapState == this.queueGapState &&
+          other.drainRequested == this.drainRequested &&
+          other.connectionPhase == this.connectionPhase &&
+          other.reconnectAttempt == this.reconnectAttempt &&
+          other.reconnectAt == this.reconnectAt &&
+          other.lastSuccessfulSyncAt == this.lastSuccessfulSyncAt);
 }
 
 class SyncCheckpointsCompanion extends UpdateCompanion<SyncCheckpoint> {
@@ -9579,6 +24227,12 @@ class SyncCheckpointsCompanion extends UpdateCompanion<SyncCheckpoint> {
   final Value<Uint8List> etagsCiphertext;
   final Value<int> retryState;
   final Value<int> protocolVersion;
+  final Value<int> queueGapState;
+  final Value<bool> drainRequested;
+  final Value<int> connectionPhase;
+  final Value<int> reconnectAttempt;
+  final Value<DateTime?> reconnectAt;
+  final Value<DateTime?> lastSuccessfulSyncAt;
   const SyncCheckpointsCompanion({
     this.singletonId = const Value.absent(),
     this.highestContiguousAckedSequence = const Value.absent(),
@@ -9586,6 +24240,12 @@ class SyncCheckpointsCompanion extends UpdateCompanion<SyncCheckpoint> {
     this.etagsCiphertext = const Value.absent(),
     this.retryState = const Value.absent(),
     this.protocolVersion = const Value.absent(),
+    this.queueGapState = const Value.absent(),
+    this.drainRequested = const Value.absent(),
+    this.connectionPhase = const Value.absent(),
+    this.reconnectAttempt = const Value.absent(),
+    this.reconnectAt = const Value.absent(),
+    this.lastSuccessfulSyncAt = const Value.absent(),
   });
   SyncCheckpointsCompanion.insert({
     this.singletonId = const Value.absent(),
@@ -9594,6 +24254,12 @@ class SyncCheckpointsCompanion extends UpdateCompanion<SyncCheckpoint> {
     required Uint8List etagsCiphertext,
     required int retryState,
     required int protocolVersion,
+    this.queueGapState = const Value.absent(),
+    this.drainRequested = const Value.absent(),
+    this.connectionPhase = const Value.absent(),
+    this.reconnectAttempt = const Value.absent(),
+    this.reconnectAt = const Value.absent(),
+    this.lastSuccessfulSyncAt = const Value.absent(),
   }) : etagsCiphertext = Value(etagsCiphertext),
        retryState = Value(retryState),
        protocolVersion = Value(protocolVersion);
@@ -9604,6 +24270,12 @@ class SyncCheckpointsCompanion extends UpdateCompanion<SyncCheckpoint> {
     Expression<Uint8List>? etagsCiphertext,
     Expression<int>? retryState,
     Expression<int>? protocolVersion,
+    Expression<int>? queueGapState,
+    Expression<bool>? drainRequested,
+    Expression<int>? connectionPhase,
+    Expression<int>? reconnectAttempt,
+    Expression<DateTime>? reconnectAt,
+    Expression<DateTime>? lastSuccessfulSyncAt,
   }) {
     return RawValuesInsertable({
       if (singletonId != null) 'singleton_id': singletonId,
@@ -9613,6 +24285,13 @@ class SyncCheckpointsCompanion extends UpdateCompanion<SyncCheckpoint> {
       if (etagsCiphertext != null) 'etags_ciphertext': etagsCiphertext,
       if (retryState != null) 'retry_state': retryState,
       if (protocolVersion != null) 'protocol_version': protocolVersion,
+      if (queueGapState != null) 'queue_gap_state': queueGapState,
+      if (drainRequested != null) 'drain_requested': drainRequested,
+      if (connectionPhase != null) 'connection_phase': connectionPhase,
+      if (reconnectAttempt != null) 'reconnect_attempt': reconnectAttempt,
+      if (reconnectAt != null) 'reconnect_at': reconnectAt,
+      if (lastSuccessfulSyncAt != null)
+        'last_successful_sync_at': lastSuccessfulSyncAt,
     });
   }
 
@@ -9623,6 +24302,12 @@ class SyncCheckpointsCompanion extends UpdateCompanion<SyncCheckpoint> {
     Value<Uint8List>? etagsCiphertext,
     Value<int>? retryState,
     Value<int>? protocolVersion,
+    Value<int>? queueGapState,
+    Value<bool>? drainRequested,
+    Value<int>? connectionPhase,
+    Value<int>? reconnectAttempt,
+    Value<DateTime?>? reconnectAt,
+    Value<DateTime?>? lastSuccessfulSyncAt,
   }) {
     return SyncCheckpointsCompanion(
       singletonId: singletonId ?? this.singletonId,
@@ -9632,6 +24317,12 @@ class SyncCheckpointsCompanion extends UpdateCompanion<SyncCheckpoint> {
       etagsCiphertext: etagsCiphertext ?? this.etagsCiphertext,
       retryState: retryState ?? this.retryState,
       protocolVersion: protocolVersion ?? this.protocolVersion,
+      queueGapState: queueGapState ?? this.queueGapState,
+      drainRequested: drainRequested ?? this.drainRequested,
+      connectionPhase: connectionPhase ?? this.connectionPhase,
+      reconnectAttempt: reconnectAttempt ?? this.reconnectAttempt,
+      reconnectAt: reconnectAt ?? this.reconnectAt,
+      lastSuccessfulSyncAt: lastSuccessfulSyncAt ?? this.lastSuccessfulSyncAt,
     );
   }
 
@@ -9658,6 +24349,26 @@ class SyncCheckpointsCompanion extends UpdateCompanion<SyncCheckpoint> {
     if (protocolVersion.present) {
       map['protocol_version'] = Variable<int>(protocolVersion.value);
     }
+    if (queueGapState.present) {
+      map['queue_gap_state'] = Variable<int>(queueGapState.value);
+    }
+    if (drainRequested.present) {
+      map['drain_requested'] = Variable<bool>(drainRequested.value);
+    }
+    if (connectionPhase.present) {
+      map['connection_phase'] = Variable<int>(connectionPhase.value);
+    }
+    if (reconnectAttempt.present) {
+      map['reconnect_attempt'] = Variable<int>(reconnectAttempt.value);
+    }
+    if (reconnectAt.present) {
+      map['reconnect_at'] = Variable<DateTime>(reconnectAt.value);
+    }
+    if (lastSuccessfulSyncAt.present) {
+      map['last_successful_sync_at'] = Variable<DateTime>(
+        lastSuccessfulSyncAt.value,
+      );
+    }
     return map;
   }
 
@@ -9671,7 +24382,13 @@ class SyncCheckpointsCompanion extends UpdateCompanion<SyncCheckpoint> {
           ..write('prunedThrough: $prunedThrough, ')
           ..write('etagsCiphertext: $etagsCiphertext, ')
           ..write('retryState: $retryState, ')
-          ..write('protocolVersion: $protocolVersion')
+          ..write('protocolVersion: $protocolVersion, ')
+          ..write('queueGapState: $queueGapState, ')
+          ..write('drainRequested: $drainRequested, ')
+          ..write('connectionPhase: $connectionPhase, ')
+          ..write('reconnectAttempt: $reconnectAttempt, ')
+          ..write('reconnectAt: $reconnectAt, ')
+          ..write('lastSuccessfulSyncAt: $lastSuccessfulSyncAt')
           ..write(')'))
         .toString();
   }
@@ -10311,25 +25028,69 @@ abstract class _$LocalDatabase extends GeneratedDatabase {
   late final $DeviceLogRecordsTable deviceLogRecords = $DeviceLogRecordsTable(
     this,
   );
+  late final $DeviceLogMutationsTable deviceLogMutations =
+      $DeviceLogMutationsTable(this);
+  late final $SecurityPosturesTable securityPostures = $SecurityPosturesTable(
+    this,
+  );
   late final $PairwiseSessionsTable pairwiseSessions = $PairwiseSessionsTable(
     this,
   );
+  late final $PairwiseSessionAlternatesTable pairwiseSessionAlternates =
+      $PairwiseSessionAlternatesTable(this);
   late final $PrekeysTable prekeys = $PrekeysTable(this);
+  late final $PrekeyMaintenancePlansTable prekeyMaintenancePlans =
+      $PrekeyMaintenancePlansTable(this);
+  late final $MlsKeyPackageMaintenanceStatesTable
+  mlsKeyPackageMaintenanceStates = $MlsKeyPackageMaintenanceStatesTable(this);
   late final $MlsGroupsTable mlsGroups = $MlsGroupsTable(this);
+  late final $GroupControlEventsTable groupControlEvents =
+      $GroupControlEventsTable(this);
+  late final $GroupOutboundObjectsTable groupOutboundObjects =
+      $GroupOutboundObjectsTable(this);
   late final $ConversationsTable conversations = $ConversationsTable(this);
   late final $MembershipsTable memberships = $MembershipsTable(this);
   late final $MessagesTable messages = $MessagesTable(this);
   late final $MessageEventsTable messageEvents = $MessageEventsTable(this);
+  late final $StoredApplicationEventsTable storedApplicationEvents =
+      $StoredApplicationEventsTable(this);
+  late final $ApplicationEventTargetsTable applicationEventTargets =
+      $ApplicationEventTargetsTable(this);
+  late final $UnsupportedApplicationEventsTable unsupportedApplicationEvents =
+      $UnsupportedApplicationEventsTable(this);
+  late final $ApplicationSenderCountersTable applicationSenderCounters =
+      $ApplicationSenderCountersTable(this);
+  late final $MessageReactionsTable messageReactions = $MessageReactionsTable(
+    this,
+  );
   late final $AttachmentsTable attachments = $AttachmentsTable(this);
   late final $InboxEnvelopesTable inboxEnvelopes = $InboxEnvelopesTable(this);
   late final $OutboxOperationsTable outboxOperations = $OutboxOperationsTable(
     this,
   );
+  late final $InboxEventDeduplicationsTable inboxEventDeduplications =
+      $InboxEventDeduplicationsTable(this);
+  late final $PairwiseReplayMarkersTable pairwiseReplayMarkers =
+      $PairwiseReplayMarkersTable(this);
+  late final $PairwiseOpenedPayloadsTable pairwiseOpenedPayloads =
+      $PairwiseOpenedPayloadsTable(this);
+  late final $PairwiseLocalApplicationsTable pairwiseLocalApplications =
+      $PairwiseLocalApplicationsTable(this);
+  late final $PendingSendPreparationsTable pendingSendPreparations =
+      $PendingSendPreparationsTable(this);
+  late final $PairwiseConsumedPrekeysTable pairwiseConsumedPrekeys =
+      $PairwiseConsumedPrekeysTable(this);
+  late final $StaleDeviceRefreshRequestsTable staleDeviceRefreshRequests =
+      $StaleDeviceRefreshRequestsTable(this);
   late final $ReceiptsTable receipts = $ReceiptsTable(this);
+  late final $PendingApplicationReceiptsTable pendingApplicationReceipts =
+      $PendingApplicationReceiptsTable(this);
   late final $VoiceRoomsTable voiceRooms = $VoiceRoomsTable(this);
   late final $HistoryTransfersTable historyTransfers = $HistoryTransfersTable(
     this,
   );
+  late final $HistoryTransferBatchesTable historyTransferBatches =
+      $HistoryTransferBatchesTable(this);
   late final $SyncCheckpointsTable syncCheckpoints = $SyncCheckpointsTable(
     this,
   );
@@ -10338,6 +25099,34 @@ abstract class _$LocalDatabase extends GeneratedDatabase {
   );
   late final $QuarantineRecordsTable quarantineRecords =
       $QuarantineRecordsTable(this);
+  late final Index messagesConversationOrdering = Index(
+    'messages_conversation_ordering',
+    'CREATE INDEX IF NOT EXISTS messages_conversation_ordering ON messages (conversation_id, ordering_ms, ordering_event_id, message_id)',
+  );
+  late final Index messagesPinnedByConversation = Index(
+    'messages_pinned_by_conversation',
+    'CREATE INDEX IF NOT EXISTS messages_pinned_by_conversation ON messages (conversation_id, message_id) WHERE pinned',
+  );
+  late final Index messagesUnreadByConversation = Index(
+    'messages_unread_by_conversation',
+    'CREATE INDEX IF NOT EXISTS messages_unread_by_conversation ON messages (conversation_id, unread) WHERE unread',
+  );
+  late final Index applicationEventsConversationApplyState = Index(
+    'application_events_conversation_apply_state',
+    'CREATE INDEX IF NOT EXISTS application_events_conversation_apply_state ON application_events (conversation_id, apply_state)',
+  );
+  late final Index applicationEventsSenderCounter = Index(
+    'application_events_sender_counter',
+    'CREATE INDEX IF NOT EXISTS application_events_sender_counter ON application_events (sender_device_id, sender_counter)',
+  );
+  late final Index attachmentsByMessage = Index(
+    'attachments_by_message',
+    'CREATE INDEX IF NOT EXISTS attachments_by_message ON attachments (message_id)',
+  );
+  late final Index outboxOperationsByEvent = Index(
+    'outbox_operations_by_event',
+    'CREATE INDEX IF NOT EXISTS outbox_operations_by_event ON outbox_operations (event_id)',
+  );
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -10351,22 +25140,50 @@ abstract class _$LocalDatabase extends GeneratedDatabase {
     profiles,
     devices,
     deviceLogRecords,
+    deviceLogMutations,
+    securityPostures,
     pairwiseSessions,
+    pairwiseSessionAlternates,
     prekeys,
+    prekeyMaintenancePlans,
+    mlsKeyPackageMaintenanceStates,
     mlsGroups,
+    groupControlEvents,
+    groupOutboundObjects,
     conversations,
     memberships,
     messages,
     messageEvents,
+    storedApplicationEvents,
+    applicationEventTargets,
+    unsupportedApplicationEvents,
+    applicationSenderCounters,
+    messageReactions,
     attachments,
     inboxEnvelopes,
     outboxOperations,
+    inboxEventDeduplications,
+    pairwiseReplayMarkers,
+    pairwiseOpenedPayloads,
+    pairwiseLocalApplications,
+    pendingSendPreparations,
+    pairwiseConsumedPrekeys,
+    staleDeviceRefreshRequests,
     receipts,
+    pendingApplicationReceipts,
     voiceRooms,
     historyTransfers,
+    historyTransferBatches,
     syncCheckpoints,
     localPreferences,
     quarantineRecords,
+    messagesConversationOrdering,
+    messagesPinnedByConversation,
+    messagesUnreadByConversation,
+    applicationEventsConversationApplyState,
+    applicationEventsSenderCounter,
+    attachmentsByMessage,
+    outboxOperationsByEvent,
   ];
   @override
   StreamQueryUpdateRules get streamUpdateRules => const StreamQueryUpdateRules([
@@ -10390,6 +25207,20 @@ abstract class _$LocalDatabase extends GeneratedDatabase {
         limitUpdateKind: UpdateKind.delete,
       ),
       result: [TableUpdate('device_log', kind: UpdateKind.delete)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'mls_groups',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('group_control_events', kind: UpdateKind.delete)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'mls_groups',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('group_outbound_objects', kind: UpdateKind.delete)],
     ),
     WritePropagation(
       on: TableUpdateQuery.onTableName(
@@ -10424,6 +25255,13 @@ abstract class _$LocalDatabase extends GeneratedDatabase {
         'messages',
         limitUpdateKind: UpdateKind.delete,
       ),
+      result: [TableUpdate('message_reactions', kind: UpdateKind.delete)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'messages',
+        limitUpdateKind: UpdateKind.delete,
+      ),
       result: [TableUpdate('attachments', kind: UpdateKind.delete)],
     ),
     WritePropagation(
@@ -10432,6 +25270,24 @@ abstract class _$LocalDatabase extends GeneratedDatabase {
         limitUpdateKind: UpdateKind.delete,
       ),
       result: [TableUpdate('receipts', kind: UpdateKind.delete)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'messages',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [
+        TableUpdate('pending_application_receipts', kind: UpdateKind.delete),
+      ],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'history_transfers',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [
+        TableUpdate('history_transfer_batches', kind: UpdateKind.delete),
+      ],
     ),
   ]);
 }
@@ -10691,6 +25547,7 @@ typedef $$SecureSecretsTableCreateCompanionBuilder =
       required int kind,
       required Uint8List wrappedCiphertextOrOpaqueHandle,
       required int formatVersion,
+      Value<int> stateRevision,
       Value<int> rowid,
     });
 typedef $$SecureSecretsTableUpdateCompanionBuilder =
@@ -10700,6 +25557,7 @@ typedef $$SecureSecretsTableUpdateCompanionBuilder =
       Value<int> kind,
       Value<Uint8List> wrappedCiphertextOrOpaqueHandle,
       Value<int> formatVersion,
+      Value<int> stateRevision,
       Value<int> rowid,
     });
 
@@ -10735,6 +25593,11 @@ class $$SecureSecretsTableFilterComposer
 
   ColumnFilters<int> get formatVersion => $composableBuilder(
     column: $table.formatVersion,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get stateRevision => $composableBuilder(
+    column: $table.stateRevision,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -10773,6 +25636,11 @@ class $$SecureSecretsTableOrderingComposer
     column: $table.formatVersion,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<int> get stateRevision => $composableBuilder(
+    column: $table.stateRevision,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$SecureSecretsTableAnnotationComposer
@@ -10801,6 +25669,11 @@ class $$SecureSecretsTableAnnotationComposer
 
   GeneratedColumn<int> get formatVersion => $composableBuilder(
     column: $table.formatVersion,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get stateRevision => $composableBuilder(
+    column: $table.stateRevision,
     builder: (column) => column,
   );
 }
@@ -10844,6 +25717,7 @@ class $$SecureSecretsTableTableManager
                 Value<Uint8List> wrappedCiphertextOrOpaqueHandle =
                     const Value.absent(),
                 Value<int> formatVersion = const Value.absent(),
+                Value<int> stateRevision = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => SecureSecretsCompanion(
                 createdAt: createdAt,
@@ -10852,6 +25726,7 @@ class $$SecureSecretsTableTableManager
                 wrappedCiphertextOrOpaqueHandle:
                     wrappedCiphertextOrOpaqueHandle,
                 formatVersion: formatVersion,
+                stateRevision: stateRevision,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -10861,6 +25736,7 @@ class $$SecureSecretsTableTableManager
                 required int kind,
                 required Uint8List wrappedCiphertextOrOpaqueHandle,
                 required int formatVersion,
+                Value<int> stateRevision = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => SecureSecretsCompanion.insert(
                 createdAt: createdAt,
@@ -10869,6 +25745,7 @@ class $$SecureSecretsTableTableManager
                 wrappedCiphertextOrOpaqueHandle:
                     wrappedCiphertextOrOpaqueHandle,
                 formatVersion: formatVersion,
+                stateRevision: stateRevision,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
@@ -12432,8 +27309,14 @@ typedef $$DevicesTableCreateCompanionBuilder =
       required Uint8List publicBundle,
       Value<Uint8List?> etagCiphertext,
       Value<Uint8List?> labelCiphertext,
+      Value<String?> decryptedLabel,
       required int revocationState,
       Value<int?> bundleVersion,
+      Value<int> lastSignedPrekeyRotationUnixDay,
+      Value<String?> createdDate,
+      Value<String?> lastActiveDate,
+      Value<bool> isCurrentDevice,
+      Value<bool> ownerListing,
       Value<int> rowid,
     });
 typedef $$DevicesTableUpdateCompanionBuilder =
@@ -12443,8 +27326,14 @@ typedef $$DevicesTableUpdateCompanionBuilder =
       Value<Uint8List> publicBundle,
       Value<Uint8List?> etagCiphertext,
       Value<Uint8List?> labelCiphertext,
+      Value<String?> decryptedLabel,
       Value<int> revocationState,
       Value<int?> bundleVersion,
+      Value<int> lastSignedPrekeyRotationUnixDay,
+      Value<String?> createdDate,
+      Value<String?> lastActiveDate,
+      Value<bool> isCurrentDevice,
+      Value<bool> ownerListing,
       Value<int> rowid,
     });
 
@@ -12499,6 +27388,11 @@ class $$DevicesTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
+  ColumnFilters<String> get decryptedLabel => $composableBuilder(
+    column: $table.decryptedLabel,
+    builder: (column) => ColumnFilters(column),
+  );
+
   ColumnFilters<int> get revocationState => $composableBuilder(
     column: $table.revocationState,
     builder: (column) => ColumnFilters(column),
@@ -12506,6 +27400,31 @@ class $$DevicesTableFilterComposer
 
   ColumnFilters<int> get bundleVersion => $composableBuilder(
     column: $table.bundleVersion,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get lastSignedPrekeyRotationUnixDay => $composableBuilder(
+    column: $table.lastSignedPrekeyRotationUnixDay,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get createdDate => $composableBuilder(
+    column: $table.createdDate,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get lastActiveDate => $composableBuilder(
+    column: $table.lastActiveDate,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get isCurrentDevice => $composableBuilder(
+    column: $table.isCurrentDevice,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get ownerListing => $composableBuilder(
+    column: $table.ownerListing,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -12562,6 +27481,11 @@ class $$DevicesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get decryptedLabel => $composableBuilder(
+    column: $table.decryptedLabel,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<int> get revocationState => $composableBuilder(
     column: $table.revocationState,
     builder: (column) => ColumnOrderings(column),
@@ -12569,6 +27493,32 @@ class $$DevicesTableOrderingComposer
 
   ColumnOrderings<int> get bundleVersion => $composableBuilder(
     column: $table.bundleVersion,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get lastSignedPrekeyRotationUnixDay =>
+      $composableBuilder(
+        column: $table.lastSignedPrekeyRotationUnixDay,
+        builder: (column) => ColumnOrderings(column),
+      );
+
+  ColumnOrderings<String> get createdDate => $composableBuilder(
+    column: $table.createdDate,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get lastActiveDate => $composableBuilder(
+    column: $table.lastActiveDate,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get isCurrentDevice => $composableBuilder(
+    column: $table.isCurrentDevice,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get ownerListing => $composableBuilder(
+    column: $table.ownerListing,
     builder: (column) => ColumnOrderings(column),
   );
 
@@ -12623,6 +27573,11 @@ class $$DevicesTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<String> get decryptedLabel => $composableBuilder(
+    column: $table.decryptedLabel,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<int> get revocationState => $composableBuilder(
     column: $table.revocationState,
     builder: (column) => column,
@@ -12630,6 +27585,32 @@ class $$DevicesTableAnnotationComposer
 
   GeneratedColumn<int> get bundleVersion => $composableBuilder(
     column: $table.bundleVersion,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get lastSignedPrekeyRotationUnixDay =>
+      $composableBuilder(
+        column: $table.lastSignedPrekeyRotationUnixDay,
+        builder: (column) => column,
+      );
+
+  GeneratedColumn<String> get createdDate => $composableBuilder(
+    column: $table.createdDate,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get lastActiveDate => $composableBuilder(
+    column: $table.lastActiveDate,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get isCurrentDevice => $composableBuilder(
+    column: $table.isCurrentDevice,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get ownerListing => $composableBuilder(
+    column: $table.ownerListing,
     builder: (column) => column,
   );
 
@@ -12690,8 +27671,15 @@ class $$DevicesTableTableManager
                 Value<Uint8List> publicBundle = const Value.absent(),
                 Value<Uint8List?> etagCiphertext = const Value.absent(),
                 Value<Uint8List?> labelCiphertext = const Value.absent(),
+                Value<String?> decryptedLabel = const Value.absent(),
                 Value<int> revocationState = const Value.absent(),
                 Value<int?> bundleVersion = const Value.absent(),
+                Value<int> lastSignedPrekeyRotationUnixDay =
+                    const Value.absent(),
+                Value<String?> createdDate = const Value.absent(),
+                Value<String?> lastActiveDate = const Value.absent(),
+                Value<bool> isCurrentDevice = const Value.absent(),
+                Value<bool> ownerListing = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => DevicesCompanion(
                 deviceId: deviceId,
@@ -12699,8 +27687,15 @@ class $$DevicesTableTableManager
                 publicBundle: publicBundle,
                 etagCiphertext: etagCiphertext,
                 labelCiphertext: labelCiphertext,
+                decryptedLabel: decryptedLabel,
                 revocationState: revocationState,
                 bundleVersion: bundleVersion,
+                lastSignedPrekeyRotationUnixDay:
+                    lastSignedPrekeyRotationUnixDay,
+                createdDate: createdDate,
+                lastActiveDate: lastActiveDate,
+                isCurrentDevice: isCurrentDevice,
+                ownerListing: ownerListing,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -12710,8 +27705,15 @@ class $$DevicesTableTableManager
                 required Uint8List publicBundle,
                 Value<Uint8List?> etagCiphertext = const Value.absent(),
                 Value<Uint8List?> labelCiphertext = const Value.absent(),
+                Value<String?> decryptedLabel = const Value.absent(),
                 required int revocationState,
                 Value<int?> bundleVersion = const Value.absent(),
+                Value<int> lastSignedPrekeyRotationUnixDay =
+                    const Value.absent(),
+                Value<String?> createdDate = const Value.absent(),
+                Value<String?> lastActiveDate = const Value.absent(),
+                Value<bool> isCurrentDevice = const Value.absent(),
+                Value<bool> ownerListing = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => DevicesCompanion.insert(
                 deviceId: deviceId,
@@ -12719,8 +27721,15 @@ class $$DevicesTableTableManager
                 publicBundle: publicBundle,
                 etagCiphertext: etagCiphertext,
                 labelCiphertext: labelCiphertext,
+                decryptedLabel: decryptedLabel,
                 revocationState: revocationState,
                 bundleVersion: bundleVersion,
+                lastSignedPrekeyRotationUnixDay:
+                    lastSignedPrekeyRotationUnixDay,
+                createdDate: createdDate,
+                lastActiveDate: lastActiveDate,
+                isCurrentDevice: isCurrentDevice,
+                ownerListing: ownerListing,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
@@ -13145,20 +28154,526 @@ typedef $$DeviceLogRecordsTableProcessedTableManager =
       DeviceLogRecord,
       PrefetchHooks Function({bool userId})
     >;
+typedef $$DeviceLogMutationsTableCreateCompanionBuilder =
+    DeviceLogMutationsCompanion Function({
+      required String operationId,
+      required String userId,
+      required int mutationKind,
+      Value<String?> targetDeviceId,
+      required int expectedSequence,
+      required Uint8List previousHeadHash,
+      required Uint8List exactRecord,
+      required int state,
+      Value<DateTime> updatedAt,
+      Value<int> rowid,
+    });
+typedef $$DeviceLogMutationsTableUpdateCompanionBuilder =
+    DeviceLogMutationsCompanion Function({
+      Value<String> operationId,
+      Value<String> userId,
+      Value<int> mutationKind,
+      Value<String?> targetDeviceId,
+      Value<int> expectedSequence,
+      Value<Uint8List> previousHeadHash,
+      Value<Uint8List> exactRecord,
+      Value<int> state,
+      Value<DateTime> updatedAt,
+      Value<int> rowid,
+    });
+
+class $$DeviceLogMutationsTableFilterComposer
+    extends Composer<_$LocalDatabase, $DeviceLogMutationsTable> {
+  $$DeviceLogMutationsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get operationId => $composableBuilder(
+    column: $table.operationId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get userId => $composableBuilder(
+    column: $table.userId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get mutationKind => $composableBuilder(
+    column: $table.mutationKind,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get targetDeviceId => $composableBuilder(
+    column: $table.targetDeviceId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get expectedSequence => $composableBuilder(
+    column: $table.expectedSequence,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<Uint8List> get previousHeadHash => $composableBuilder(
+    column: $table.previousHeadHash,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<Uint8List> get exactRecord => $composableBuilder(
+    column: $table.exactRecord,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get state => $composableBuilder(
+    column: $table.state,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$DeviceLogMutationsTableOrderingComposer
+    extends Composer<_$LocalDatabase, $DeviceLogMutationsTable> {
+  $$DeviceLogMutationsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get operationId => $composableBuilder(
+    column: $table.operationId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get userId => $composableBuilder(
+    column: $table.userId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get mutationKind => $composableBuilder(
+    column: $table.mutationKind,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get targetDeviceId => $composableBuilder(
+    column: $table.targetDeviceId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get expectedSequence => $composableBuilder(
+    column: $table.expectedSequence,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<Uint8List> get previousHeadHash => $composableBuilder(
+    column: $table.previousHeadHash,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<Uint8List> get exactRecord => $composableBuilder(
+    column: $table.exactRecord,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get state => $composableBuilder(
+    column: $table.state,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$DeviceLogMutationsTableAnnotationComposer
+    extends Composer<_$LocalDatabase, $DeviceLogMutationsTable> {
+  $$DeviceLogMutationsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get operationId => $composableBuilder(
+    column: $table.operationId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get userId =>
+      $composableBuilder(column: $table.userId, builder: (column) => column);
+
+  GeneratedColumn<int> get mutationKind => $composableBuilder(
+    column: $table.mutationKind,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get targetDeviceId => $composableBuilder(
+    column: $table.targetDeviceId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get expectedSequence => $composableBuilder(
+    column: $table.expectedSequence,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<Uint8List> get previousHeadHash => $composableBuilder(
+    column: $table.previousHeadHash,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<Uint8List> get exactRecord => $composableBuilder(
+    column: $table.exactRecord,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get state =>
+      $composableBuilder(column: $table.state, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+}
+
+class $$DeviceLogMutationsTableTableManager
+    extends
+        RootTableManager<
+          _$LocalDatabase,
+          $DeviceLogMutationsTable,
+          DeviceLogMutation,
+          $$DeviceLogMutationsTableFilterComposer,
+          $$DeviceLogMutationsTableOrderingComposer,
+          $$DeviceLogMutationsTableAnnotationComposer,
+          $$DeviceLogMutationsTableCreateCompanionBuilder,
+          $$DeviceLogMutationsTableUpdateCompanionBuilder,
+          (
+            DeviceLogMutation,
+            BaseReferences<
+              _$LocalDatabase,
+              $DeviceLogMutationsTable,
+              DeviceLogMutation
+            >,
+          ),
+          DeviceLogMutation,
+          PrefetchHooks Function()
+        > {
+  $$DeviceLogMutationsTableTableManager(
+    _$LocalDatabase db,
+    $DeviceLogMutationsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$DeviceLogMutationsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$DeviceLogMutationsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$DeviceLogMutationsTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> operationId = const Value.absent(),
+                Value<String> userId = const Value.absent(),
+                Value<int> mutationKind = const Value.absent(),
+                Value<String?> targetDeviceId = const Value.absent(),
+                Value<int> expectedSequence = const Value.absent(),
+                Value<Uint8List> previousHeadHash = const Value.absent(),
+                Value<Uint8List> exactRecord = const Value.absent(),
+                Value<int> state = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => DeviceLogMutationsCompanion(
+                operationId: operationId,
+                userId: userId,
+                mutationKind: mutationKind,
+                targetDeviceId: targetDeviceId,
+                expectedSequence: expectedSequence,
+                previousHeadHash: previousHeadHash,
+                exactRecord: exactRecord,
+                state: state,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String operationId,
+                required String userId,
+                required int mutationKind,
+                Value<String?> targetDeviceId = const Value.absent(),
+                required int expectedSequence,
+                required Uint8List previousHeadHash,
+                required Uint8List exactRecord,
+                required int state,
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => DeviceLogMutationsCompanion.insert(
+                operationId: operationId,
+                userId: userId,
+                mutationKind: mutationKind,
+                targetDeviceId: targetDeviceId,
+                expectedSequence: expectedSequence,
+                previousHeadHash: previousHeadHash,
+                exactRecord: exactRecord,
+                state: state,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$DeviceLogMutationsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$LocalDatabase,
+      $DeviceLogMutationsTable,
+      DeviceLogMutation,
+      $$DeviceLogMutationsTableFilterComposer,
+      $$DeviceLogMutationsTableOrderingComposer,
+      $$DeviceLogMutationsTableAnnotationComposer,
+      $$DeviceLogMutationsTableCreateCompanionBuilder,
+      $$DeviceLogMutationsTableUpdateCompanionBuilder,
+      (
+        DeviceLogMutation,
+        BaseReferences<
+          _$LocalDatabase,
+          $DeviceLogMutationsTable,
+          DeviceLogMutation
+        >,
+      ),
+      DeviceLogMutation,
+      PrefetchHooks Function()
+    >;
+typedef $$SecurityPosturesTableCreateCompanionBuilder =
+    SecurityPosturesCompanion Function({
+      Value<int> singletonId,
+      required int state,
+      Value<int?> evidenceKind,
+      Value<DateTime?> detectedAt,
+    });
+typedef $$SecurityPosturesTableUpdateCompanionBuilder =
+    SecurityPosturesCompanion Function({
+      Value<int> singletonId,
+      Value<int> state,
+      Value<int?> evidenceKind,
+      Value<DateTime?> detectedAt,
+    });
+
+class $$SecurityPosturesTableFilterComposer
+    extends Composer<_$LocalDatabase, $SecurityPosturesTable> {
+  $$SecurityPosturesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get singletonId => $composableBuilder(
+    column: $table.singletonId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get state => $composableBuilder(
+    column: $table.state,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get evidenceKind => $composableBuilder(
+    column: $table.evidenceKind,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get detectedAt => $composableBuilder(
+    column: $table.detectedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$SecurityPosturesTableOrderingComposer
+    extends Composer<_$LocalDatabase, $SecurityPosturesTable> {
+  $$SecurityPosturesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get singletonId => $composableBuilder(
+    column: $table.singletonId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get state => $composableBuilder(
+    column: $table.state,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get evidenceKind => $composableBuilder(
+    column: $table.evidenceKind,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get detectedAt => $composableBuilder(
+    column: $table.detectedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$SecurityPosturesTableAnnotationComposer
+    extends Composer<_$LocalDatabase, $SecurityPosturesTable> {
+  $$SecurityPosturesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get singletonId => $composableBuilder(
+    column: $table.singletonId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get state =>
+      $composableBuilder(column: $table.state, builder: (column) => column);
+
+  GeneratedColumn<int> get evidenceKind => $composableBuilder(
+    column: $table.evidenceKind,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get detectedAt => $composableBuilder(
+    column: $table.detectedAt,
+    builder: (column) => column,
+  );
+}
+
+class $$SecurityPosturesTableTableManager
+    extends
+        RootTableManager<
+          _$LocalDatabase,
+          $SecurityPosturesTable,
+          SecurityPosture,
+          $$SecurityPosturesTableFilterComposer,
+          $$SecurityPosturesTableOrderingComposer,
+          $$SecurityPosturesTableAnnotationComposer,
+          $$SecurityPosturesTableCreateCompanionBuilder,
+          $$SecurityPosturesTableUpdateCompanionBuilder,
+          (
+            SecurityPosture,
+            BaseReferences<
+              _$LocalDatabase,
+              $SecurityPosturesTable,
+              SecurityPosture
+            >,
+          ),
+          SecurityPosture,
+          PrefetchHooks Function()
+        > {
+  $$SecurityPosturesTableTableManager(
+    _$LocalDatabase db,
+    $SecurityPosturesTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$SecurityPosturesTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$SecurityPosturesTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$SecurityPosturesTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<int> singletonId = const Value.absent(),
+                Value<int> state = const Value.absent(),
+                Value<int?> evidenceKind = const Value.absent(),
+                Value<DateTime?> detectedAt = const Value.absent(),
+              }) => SecurityPosturesCompanion(
+                singletonId: singletonId,
+                state: state,
+                evidenceKind: evidenceKind,
+                detectedAt: detectedAt,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> singletonId = const Value.absent(),
+                required int state,
+                Value<int?> evidenceKind = const Value.absent(),
+                Value<DateTime?> detectedAt = const Value.absent(),
+              }) => SecurityPosturesCompanion.insert(
+                singletonId: singletonId,
+                state: state,
+                evidenceKind: evidenceKind,
+                detectedAt: detectedAt,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$SecurityPosturesTableProcessedTableManager =
+    ProcessedTableManager<
+      _$LocalDatabase,
+      $SecurityPosturesTable,
+      SecurityPosture,
+      $$SecurityPosturesTableFilterComposer,
+      $$SecurityPosturesTableOrderingComposer,
+      $$SecurityPosturesTableAnnotationComposer,
+      $$SecurityPosturesTableCreateCompanionBuilder,
+      $$SecurityPosturesTableUpdateCompanionBuilder,
+      (
+        SecurityPosture,
+        BaseReferences<
+          _$LocalDatabase,
+          $SecurityPosturesTable,
+          SecurityPosture
+        >,
+      ),
+      SecurityPosture,
+      PrefetchHooks Function()
+    >;
 typedef $$PairwiseSessionsTableCreateCompanionBuilder =
     PairwiseSessionsCompanion Function({
       required String localDeviceId,
+      Value<String> remoteUserId,
       required String remoteDeviceId,
+      Value<Uint8List?> sessionId,
       required Uint8List opaqueCryptoStateHandle,
       required int stateVersion,
+      Value<int> skippedKeyCount,
+      Value<int> disposition,
+      Value<int> repairState,
+      Value<Uint8List?> repairAuthorization,
+      Value<DateTime?> lastAuthenticatedAt,
       Value<int> rowid,
     });
 typedef $$PairwiseSessionsTableUpdateCompanionBuilder =
     PairwiseSessionsCompanion Function({
       Value<String> localDeviceId,
+      Value<String> remoteUserId,
       Value<String> remoteDeviceId,
+      Value<Uint8List?> sessionId,
       Value<Uint8List> opaqueCryptoStateHandle,
       Value<int> stateVersion,
+      Value<int> skippedKeyCount,
+      Value<int> disposition,
+      Value<int> repairState,
+      Value<Uint8List?> repairAuthorization,
+      Value<DateTime?> lastAuthenticatedAt,
       Value<int> rowid,
     });
 
@@ -13176,8 +28691,18 @@ class $$PairwiseSessionsTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
+  ColumnFilters<String> get remoteUserId => $composableBuilder(
+    column: $table.remoteUserId,
+    builder: (column) => ColumnFilters(column),
+  );
+
   ColumnFilters<String> get remoteDeviceId => $composableBuilder(
     column: $table.remoteDeviceId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<Uint8List> get sessionId => $composableBuilder(
+    column: $table.sessionId,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -13188,6 +28713,31 @@ class $$PairwiseSessionsTableFilterComposer
 
   ColumnFilters<int> get stateVersion => $composableBuilder(
     column: $table.stateVersion,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get skippedKeyCount => $composableBuilder(
+    column: $table.skippedKeyCount,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get disposition => $composableBuilder(
+    column: $table.disposition,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get repairState => $composableBuilder(
+    column: $table.repairState,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<Uint8List> get repairAuthorization => $composableBuilder(
+    column: $table.repairAuthorization,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get lastAuthenticatedAt => $composableBuilder(
+    column: $table.lastAuthenticatedAt,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -13206,8 +28756,18 @@ class $$PairwiseSessionsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get remoteUserId => $composableBuilder(
+    column: $table.remoteUserId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get remoteDeviceId => $composableBuilder(
     column: $table.remoteDeviceId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<Uint8List> get sessionId => $composableBuilder(
+    column: $table.sessionId,
     builder: (column) => ColumnOrderings(column),
   );
 
@@ -13218,6 +28778,31 @@ class $$PairwiseSessionsTableOrderingComposer
 
   ColumnOrderings<int> get stateVersion => $composableBuilder(
     column: $table.stateVersion,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get skippedKeyCount => $composableBuilder(
+    column: $table.skippedKeyCount,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get disposition => $composableBuilder(
+    column: $table.disposition,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get repairState => $composableBuilder(
+    column: $table.repairState,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<Uint8List> get repairAuthorization => $composableBuilder(
+    column: $table.repairAuthorization,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get lastAuthenticatedAt => $composableBuilder(
+    column: $table.lastAuthenticatedAt,
     builder: (column) => ColumnOrderings(column),
   );
 }
@@ -13236,10 +28821,18 @@ class $$PairwiseSessionsTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<String> get remoteUserId => $composableBuilder(
+    column: $table.remoteUserId,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<String> get remoteDeviceId => $composableBuilder(
     column: $table.remoteDeviceId,
     builder: (column) => column,
   );
+
+  GeneratedColumn<Uint8List> get sessionId =>
+      $composableBuilder(column: $table.sessionId, builder: (column) => column);
 
   GeneratedColumn<Uint8List> get opaqueCryptoStateHandle => $composableBuilder(
     column: $table.opaqueCryptoStateHandle,
@@ -13248,6 +28841,31 @@ class $$PairwiseSessionsTableAnnotationComposer
 
   GeneratedColumn<int> get stateVersion => $composableBuilder(
     column: $table.stateVersion,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get skippedKeyCount => $composableBuilder(
+    column: $table.skippedKeyCount,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get disposition => $composableBuilder(
+    column: $table.disposition,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get repairState => $composableBuilder(
+    column: $table.repairState,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<Uint8List> get repairAuthorization => $composableBuilder(
+    column: $table.repairAuthorization,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get lastAuthenticatedAt => $composableBuilder(
+    column: $table.lastAuthenticatedAt,
     builder: (column) => column,
   );
 }
@@ -13290,29 +28908,57 @@ class $$PairwiseSessionsTableTableManager
           updateCompanionCallback:
               ({
                 Value<String> localDeviceId = const Value.absent(),
+                Value<String> remoteUserId = const Value.absent(),
                 Value<String> remoteDeviceId = const Value.absent(),
+                Value<Uint8List?> sessionId = const Value.absent(),
                 Value<Uint8List> opaqueCryptoStateHandle = const Value.absent(),
                 Value<int> stateVersion = const Value.absent(),
+                Value<int> skippedKeyCount = const Value.absent(),
+                Value<int> disposition = const Value.absent(),
+                Value<int> repairState = const Value.absent(),
+                Value<Uint8List?> repairAuthorization = const Value.absent(),
+                Value<DateTime?> lastAuthenticatedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => PairwiseSessionsCompanion(
                 localDeviceId: localDeviceId,
+                remoteUserId: remoteUserId,
                 remoteDeviceId: remoteDeviceId,
+                sessionId: sessionId,
                 opaqueCryptoStateHandle: opaqueCryptoStateHandle,
                 stateVersion: stateVersion,
+                skippedKeyCount: skippedKeyCount,
+                disposition: disposition,
+                repairState: repairState,
+                repairAuthorization: repairAuthorization,
+                lastAuthenticatedAt: lastAuthenticatedAt,
                 rowid: rowid,
               ),
           createCompanionCallback:
               ({
                 required String localDeviceId,
+                Value<String> remoteUserId = const Value.absent(),
                 required String remoteDeviceId,
+                Value<Uint8List?> sessionId = const Value.absent(),
                 required Uint8List opaqueCryptoStateHandle,
                 required int stateVersion,
+                Value<int> skippedKeyCount = const Value.absent(),
+                Value<int> disposition = const Value.absent(),
+                Value<int> repairState = const Value.absent(),
+                Value<Uint8List?> repairAuthorization = const Value.absent(),
+                Value<DateTime?> lastAuthenticatedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => PairwiseSessionsCompanion.insert(
                 localDeviceId: localDeviceId,
+                remoteUserId: remoteUserId,
                 remoteDeviceId: remoteDeviceId,
+                sessionId: sessionId,
                 opaqueCryptoStateHandle: opaqueCryptoStateHandle,
                 stateVersion: stateVersion,
+                skippedKeyCount: skippedKeyCount,
+                disposition: disposition,
+                repairState: repairState,
+                repairAuthorization: repairAuthorization,
+                lastAuthenticatedAt: lastAuthenticatedAt,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
@@ -13342,6 +28988,357 @@ typedef $$PairwiseSessionsTableProcessedTableManager =
         >,
       ),
       PairwiseSession,
+      PrefetchHooks Function()
+    >;
+typedef $$PairwiseSessionAlternatesTableCreateCompanionBuilder =
+    PairwiseSessionAlternatesCompanion Function({
+      required Uint8List sessionId,
+      required String localDeviceId,
+      required String remoteUserId,
+      required String remoteDeviceId,
+      required Uint8List opaqueCryptoStateHandle,
+      required int stateVersion,
+      required int skippedKeyCount,
+      required int repairState,
+      Value<Uint8List?> repairAuthorization,
+      Value<DateTime> createdAt,
+      Value<DateTime?> lastAuthenticatedAt,
+      Value<int> rowid,
+    });
+typedef $$PairwiseSessionAlternatesTableUpdateCompanionBuilder =
+    PairwiseSessionAlternatesCompanion Function({
+      Value<Uint8List> sessionId,
+      Value<String> localDeviceId,
+      Value<String> remoteUserId,
+      Value<String> remoteDeviceId,
+      Value<Uint8List> opaqueCryptoStateHandle,
+      Value<int> stateVersion,
+      Value<int> skippedKeyCount,
+      Value<int> repairState,
+      Value<Uint8List?> repairAuthorization,
+      Value<DateTime> createdAt,
+      Value<DateTime?> lastAuthenticatedAt,
+      Value<int> rowid,
+    });
+
+class $$PairwiseSessionAlternatesTableFilterComposer
+    extends Composer<_$LocalDatabase, $PairwiseSessionAlternatesTable> {
+  $$PairwiseSessionAlternatesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<Uint8List> get sessionId => $composableBuilder(
+    column: $table.sessionId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get localDeviceId => $composableBuilder(
+    column: $table.localDeviceId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get remoteUserId => $composableBuilder(
+    column: $table.remoteUserId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get remoteDeviceId => $composableBuilder(
+    column: $table.remoteDeviceId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<Uint8List> get opaqueCryptoStateHandle => $composableBuilder(
+    column: $table.opaqueCryptoStateHandle,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get stateVersion => $composableBuilder(
+    column: $table.stateVersion,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get skippedKeyCount => $composableBuilder(
+    column: $table.skippedKeyCount,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get repairState => $composableBuilder(
+    column: $table.repairState,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<Uint8List> get repairAuthorization => $composableBuilder(
+    column: $table.repairAuthorization,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get lastAuthenticatedAt => $composableBuilder(
+    column: $table.lastAuthenticatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$PairwiseSessionAlternatesTableOrderingComposer
+    extends Composer<_$LocalDatabase, $PairwiseSessionAlternatesTable> {
+  $$PairwiseSessionAlternatesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<Uint8List> get sessionId => $composableBuilder(
+    column: $table.sessionId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get localDeviceId => $composableBuilder(
+    column: $table.localDeviceId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get remoteUserId => $composableBuilder(
+    column: $table.remoteUserId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get remoteDeviceId => $composableBuilder(
+    column: $table.remoteDeviceId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<Uint8List> get opaqueCryptoStateHandle => $composableBuilder(
+    column: $table.opaqueCryptoStateHandle,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get stateVersion => $composableBuilder(
+    column: $table.stateVersion,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get skippedKeyCount => $composableBuilder(
+    column: $table.skippedKeyCount,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get repairState => $composableBuilder(
+    column: $table.repairState,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<Uint8List> get repairAuthorization => $composableBuilder(
+    column: $table.repairAuthorization,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get lastAuthenticatedAt => $composableBuilder(
+    column: $table.lastAuthenticatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$PairwiseSessionAlternatesTableAnnotationComposer
+    extends Composer<_$LocalDatabase, $PairwiseSessionAlternatesTable> {
+  $$PairwiseSessionAlternatesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<Uint8List> get sessionId =>
+      $composableBuilder(column: $table.sessionId, builder: (column) => column);
+
+  GeneratedColumn<String> get localDeviceId => $composableBuilder(
+    column: $table.localDeviceId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get remoteUserId => $composableBuilder(
+    column: $table.remoteUserId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get remoteDeviceId => $composableBuilder(
+    column: $table.remoteDeviceId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<Uint8List> get opaqueCryptoStateHandle => $composableBuilder(
+    column: $table.opaqueCryptoStateHandle,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get stateVersion => $composableBuilder(
+    column: $table.stateVersion,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get skippedKeyCount => $composableBuilder(
+    column: $table.skippedKeyCount,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get repairState => $composableBuilder(
+    column: $table.repairState,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<Uint8List> get repairAuthorization => $composableBuilder(
+    column: $table.repairAuthorization,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get lastAuthenticatedAt => $composableBuilder(
+    column: $table.lastAuthenticatedAt,
+    builder: (column) => column,
+  );
+}
+
+class $$PairwiseSessionAlternatesTableTableManager
+    extends
+        RootTableManager<
+          _$LocalDatabase,
+          $PairwiseSessionAlternatesTable,
+          PairwiseSessionAlternate,
+          $$PairwiseSessionAlternatesTableFilterComposer,
+          $$PairwiseSessionAlternatesTableOrderingComposer,
+          $$PairwiseSessionAlternatesTableAnnotationComposer,
+          $$PairwiseSessionAlternatesTableCreateCompanionBuilder,
+          $$PairwiseSessionAlternatesTableUpdateCompanionBuilder,
+          (
+            PairwiseSessionAlternate,
+            BaseReferences<
+              _$LocalDatabase,
+              $PairwiseSessionAlternatesTable,
+              PairwiseSessionAlternate
+            >,
+          ),
+          PairwiseSessionAlternate,
+          PrefetchHooks Function()
+        > {
+  $$PairwiseSessionAlternatesTableTableManager(
+    _$LocalDatabase db,
+    $PairwiseSessionAlternatesTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$PairwiseSessionAlternatesTableFilterComposer(
+                $db: db,
+                $table: table,
+              ),
+          createOrderingComposer: () =>
+              $$PairwiseSessionAlternatesTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$PairwiseSessionAlternatesTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<Uint8List> sessionId = const Value.absent(),
+                Value<String> localDeviceId = const Value.absent(),
+                Value<String> remoteUserId = const Value.absent(),
+                Value<String> remoteDeviceId = const Value.absent(),
+                Value<Uint8List> opaqueCryptoStateHandle = const Value.absent(),
+                Value<int> stateVersion = const Value.absent(),
+                Value<int> skippedKeyCount = const Value.absent(),
+                Value<int> repairState = const Value.absent(),
+                Value<Uint8List?> repairAuthorization = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime?> lastAuthenticatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => PairwiseSessionAlternatesCompanion(
+                sessionId: sessionId,
+                localDeviceId: localDeviceId,
+                remoteUserId: remoteUserId,
+                remoteDeviceId: remoteDeviceId,
+                opaqueCryptoStateHandle: opaqueCryptoStateHandle,
+                stateVersion: stateVersion,
+                skippedKeyCount: skippedKeyCount,
+                repairState: repairState,
+                repairAuthorization: repairAuthorization,
+                createdAt: createdAt,
+                lastAuthenticatedAt: lastAuthenticatedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required Uint8List sessionId,
+                required String localDeviceId,
+                required String remoteUserId,
+                required String remoteDeviceId,
+                required Uint8List opaqueCryptoStateHandle,
+                required int stateVersion,
+                required int skippedKeyCount,
+                required int repairState,
+                Value<Uint8List?> repairAuthorization = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime?> lastAuthenticatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => PairwiseSessionAlternatesCompanion.insert(
+                sessionId: sessionId,
+                localDeviceId: localDeviceId,
+                remoteUserId: remoteUserId,
+                remoteDeviceId: remoteDeviceId,
+                opaqueCryptoStateHandle: opaqueCryptoStateHandle,
+                stateVersion: stateVersion,
+                skippedKeyCount: skippedKeyCount,
+                repairState: repairState,
+                repairAuthorization: repairAuthorization,
+                createdAt: createdAt,
+                lastAuthenticatedAt: lastAuthenticatedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$PairwiseSessionAlternatesTableProcessedTableManager =
+    ProcessedTableManager<
+      _$LocalDatabase,
+      $PairwiseSessionAlternatesTable,
+      PairwiseSessionAlternate,
+      $$PairwiseSessionAlternatesTableFilterComposer,
+      $$PairwiseSessionAlternatesTableOrderingComposer,
+      $$PairwiseSessionAlternatesTableAnnotationComposer,
+      $$PairwiseSessionAlternatesTableCreateCompanionBuilder,
+      $$PairwiseSessionAlternatesTableUpdateCompanionBuilder,
+      (
+        PairwiseSessionAlternate,
+        BaseReferences<
+          _$LocalDatabase,
+          $PairwiseSessionAlternatesTable,
+          PairwiseSessionAlternate
+        >,
+      ),
+      PairwiseSessionAlternate,
       PrefetchHooks Function()
     >;
 typedef $$PrekeysTableCreateCompanionBuilder =
@@ -13542,12 +29539,657 @@ typedef $$PrekeysTableProcessedTableManager =
       Prekey,
       PrefetchHooks Function()
     >;
+typedef $$PrekeyMaintenancePlansTableCreateCompanionBuilder =
+    PrekeyMaintenancePlansCompanion Function({
+      required String deviceId,
+      required int stage,
+      required int expectedStateRevision,
+      required int preparedUnixDay,
+      required int bundleVersion,
+      required int currentSignedPrekeyCreatedUnixDay,
+      required Uint8List batchId,
+      required Uint8List nativeUploadProjection,
+      Value<Uint8List?> exactLogRecord,
+      Value<int?> expectedLogSequence,
+      Value<Uint8List?> previousLogHead,
+      Value<DateTime> updatedAt,
+      Value<int> rowid,
+    });
+typedef $$PrekeyMaintenancePlansTableUpdateCompanionBuilder =
+    PrekeyMaintenancePlansCompanion Function({
+      Value<String> deviceId,
+      Value<int> stage,
+      Value<int> expectedStateRevision,
+      Value<int> preparedUnixDay,
+      Value<int> bundleVersion,
+      Value<int> currentSignedPrekeyCreatedUnixDay,
+      Value<Uint8List> batchId,
+      Value<Uint8List> nativeUploadProjection,
+      Value<Uint8List?> exactLogRecord,
+      Value<int?> expectedLogSequence,
+      Value<Uint8List?> previousLogHead,
+      Value<DateTime> updatedAt,
+      Value<int> rowid,
+    });
+
+class $$PrekeyMaintenancePlansTableFilterComposer
+    extends Composer<_$LocalDatabase, $PrekeyMaintenancePlansTable> {
+  $$PrekeyMaintenancePlansTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get deviceId => $composableBuilder(
+    column: $table.deviceId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get stage => $composableBuilder(
+    column: $table.stage,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get expectedStateRevision => $composableBuilder(
+    column: $table.expectedStateRevision,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get preparedUnixDay => $composableBuilder(
+    column: $table.preparedUnixDay,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get bundleVersion => $composableBuilder(
+    column: $table.bundleVersion,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get currentSignedPrekeyCreatedUnixDay =>
+      $composableBuilder(
+        column: $table.currentSignedPrekeyCreatedUnixDay,
+        builder: (column) => ColumnFilters(column),
+      );
+
+  ColumnFilters<Uint8List> get batchId => $composableBuilder(
+    column: $table.batchId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<Uint8List> get nativeUploadProjection => $composableBuilder(
+    column: $table.nativeUploadProjection,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<Uint8List> get exactLogRecord => $composableBuilder(
+    column: $table.exactLogRecord,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get expectedLogSequence => $composableBuilder(
+    column: $table.expectedLogSequence,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<Uint8List> get previousLogHead => $composableBuilder(
+    column: $table.previousLogHead,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$PrekeyMaintenancePlansTableOrderingComposer
+    extends Composer<_$LocalDatabase, $PrekeyMaintenancePlansTable> {
+  $$PrekeyMaintenancePlansTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get deviceId => $composableBuilder(
+    column: $table.deviceId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get stage => $composableBuilder(
+    column: $table.stage,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get expectedStateRevision => $composableBuilder(
+    column: $table.expectedStateRevision,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get preparedUnixDay => $composableBuilder(
+    column: $table.preparedUnixDay,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get bundleVersion => $composableBuilder(
+    column: $table.bundleVersion,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get currentSignedPrekeyCreatedUnixDay =>
+      $composableBuilder(
+        column: $table.currentSignedPrekeyCreatedUnixDay,
+        builder: (column) => ColumnOrderings(column),
+      );
+
+  ColumnOrderings<Uint8List> get batchId => $composableBuilder(
+    column: $table.batchId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<Uint8List> get nativeUploadProjection => $composableBuilder(
+    column: $table.nativeUploadProjection,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<Uint8List> get exactLogRecord => $composableBuilder(
+    column: $table.exactLogRecord,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get expectedLogSequence => $composableBuilder(
+    column: $table.expectedLogSequence,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<Uint8List> get previousLogHead => $composableBuilder(
+    column: $table.previousLogHead,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$PrekeyMaintenancePlansTableAnnotationComposer
+    extends Composer<_$LocalDatabase, $PrekeyMaintenancePlansTable> {
+  $$PrekeyMaintenancePlansTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get deviceId =>
+      $composableBuilder(column: $table.deviceId, builder: (column) => column);
+
+  GeneratedColumn<int> get stage =>
+      $composableBuilder(column: $table.stage, builder: (column) => column);
+
+  GeneratedColumn<int> get expectedStateRevision => $composableBuilder(
+    column: $table.expectedStateRevision,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get preparedUnixDay => $composableBuilder(
+    column: $table.preparedUnixDay,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get bundleVersion => $composableBuilder(
+    column: $table.bundleVersion,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get currentSignedPrekeyCreatedUnixDay =>
+      $composableBuilder(
+        column: $table.currentSignedPrekeyCreatedUnixDay,
+        builder: (column) => column,
+      );
+
+  GeneratedColumn<Uint8List> get batchId =>
+      $composableBuilder(column: $table.batchId, builder: (column) => column);
+
+  GeneratedColumn<Uint8List> get nativeUploadProjection => $composableBuilder(
+    column: $table.nativeUploadProjection,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<Uint8List> get exactLogRecord => $composableBuilder(
+    column: $table.exactLogRecord,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get expectedLogSequence => $composableBuilder(
+    column: $table.expectedLogSequence,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<Uint8List> get previousLogHead => $composableBuilder(
+    column: $table.previousLogHead,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+}
+
+class $$PrekeyMaintenancePlansTableTableManager
+    extends
+        RootTableManager<
+          _$LocalDatabase,
+          $PrekeyMaintenancePlansTable,
+          StoredPrekeyMaintenancePlan,
+          $$PrekeyMaintenancePlansTableFilterComposer,
+          $$PrekeyMaintenancePlansTableOrderingComposer,
+          $$PrekeyMaintenancePlansTableAnnotationComposer,
+          $$PrekeyMaintenancePlansTableCreateCompanionBuilder,
+          $$PrekeyMaintenancePlansTableUpdateCompanionBuilder,
+          (
+            StoredPrekeyMaintenancePlan,
+            BaseReferences<
+              _$LocalDatabase,
+              $PrekeyMaintenancePlansTable,
+              StoredPrekeyMaintenancePlan
+            >,
+          ),
+          StoredPrekeyMaintenancePlan,
+          PrefetchHooks Function()
+        > {
+  $$PrekeyMaintenancePlansTableTableManager(
+    _$LocalDatabase db,
+    $PrekeyMaintenancePlansTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$PrekeyMaintenancePlansTableFilterComposer(
+                $db: db,
+                $table: table,
+              ),
+          createOrderingComposer: () =>
+              $$PrekeyMaintenancePlansTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$PrekeyMaintenancePlansTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> deviceId = const Value.absent(),
+                Value<int> stage = const Value.absent(),
+                Value<int> expectedStateRevision = const Value.absent(),
+                Value<int> preparedUnixDay = const Value.absent(),
+                Value<int> bundleVersion = const Value.absent(),
+                Value<int> currentSignedPrekeyCreatedUnixDay =
+                    const Value.absent(),
+                Value<Uint8List> batchId = const Value.absent(),
+                Value<Uint8List> nativeUploadProjection = const Value.absent(),
+                Value<Uint8List?> exactLogRecord = const Value.absent(),
+                Value<int?> expectedLogSequence = const Value.absent(),
+                Value<Uint8List?> previousLogHead = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => PrekeyMaintenancePlansCompanion(
+                deviceId: deviceId,
+                stage: stage,
+                expectedStateRevision: expectedStateRevision,
+                preparedUnixDay: preparedUnixDay,
+                bundleVersion: bundleVersion,
+                currentSignedPrekeyCreatedUnixDay:
+                    currentSignedPrekeyCreatedUnixDay,
+                batchId: batchId,
+                nativeUploadProjection: nativeUploadProjection,
+                exactLogRecord: exactLogRecord,
+                expectedLogSequence: expectedLogSequence,
+                previousLogHead: previousLogHead,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String deviceId,
+                required int stage,
+                required int expectedStateRevision,
+                required int preparedUnixDay,
+                required int bundleVersion,
+                required int currentSignedPrekeyCreatedUnixDay,
+                required Uint8List batchId,
+                required Uint8List nativeUploadProjection,
+                Value<Uint8List?> exactLogRecord = const Value.absent(),
+                Value<int?> expectedLogSequence = const Value.absent(),
+                Value<Uint8List?> previousLogHead = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => PrekeyMaintenancePlansCompanion.insert(
+                deviceId: deviceId,
+                stage: stage,
+                expectedStateRevision: expectedStateRevision,
+                preparedUnixDay: preparedUnixDay,
+                bundleVersion: bundleVersion,
+                currentSignedPrekeyCreatedUnixDay:
+                    currentSignedPrekeyCreatedUnixDay,
+                batchId: batchId,
+                nativeUploadProjection: nativeUploadProjection,
+                exactLogRecord: exactLogRecord,
+                expectedLogSequence: expectedLogSequence,
+                previousLogHead: previousLogHead,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$PrekeyMaintenancePlansTableProcessedTableManager =
+    ProcessedTableManager<
+      _$LocalDatabase,
+      $PrekeyMaintenancePlansTable,
+      StoredPrekeyMaintenancePlan,
+      $$PrekeyMaintenancePlansTableFilterComposer,
+      $$PrekeyMaintenancePlansTableOrderingComposer,
+      $$PrekeyMaintenancePlansTableAnnotationComposer,
+      $$PrekeyMaintenancePlansTableCreateCompanionBuilder,
+      $$PrekeyMaintenancePlansTableUpdateCompanionBuilder,
+      (
+        StoredPrekeyMaintenancePlan,
+        BaseReferences<
+          _$LocalDatabase,
+          $PrekeyMaintenancePlansTable,
+          StoredPrekeyMaintenancePlan
+        >,
+      ),
+      StoredPrekeyMaintenancePlan,
+      PrefetchHooks Function()
+    >;
+typedef $$MlsKeyPackageMaintenanceStatesTableCreateCompanionBuilder =
+    MlsKeyPackageMaintenanceStatesCompanion Function({
+      required String deviceId,
+      required int stage,
+      Value<int> expectedStateRevision,
+      Value<int?> plannedKind,
+      Value<Uint8List?> exactUploadProjection,
+      Value<bool> lastResortUploaded,
+      Value<DateTime> updatedAt,
+      Value<int> rowid,
+    });
+typedef $$MlsKeyPackageMaintenanceStatesTableUpdateCompanionBuilder =
+    MlsKeyPackageMaintenanceStatesCompanion Function({
+      Value<String> deviceId,
+      Value<int> stage,
+      Value<int> expectedStateRevision,
+      Value<int?> plannedKind,
+      Value<Uint8List?> exactUploadProjection,
+      Value<bool> lastResortUploaded,
+      Value<DateTime> updatedAt,
+      Value<int> rowid,
+    });
+
+class $$MlsKeyPackageMaintenanceStatesTableFilterComposer
+    extends Composer<_$LocalDatabase, $MlsKeyPackageMaintenanceStatesTable> {
+  $$MlsKeyPackageMaintenanceStatesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get deviceId => $composableBuilder(
+    column: $table.deviceId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get stage => $composableBuilder(
+    column: $table.stage,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get expectedStateRevision => $composableBuilder(
+    column: $table.expectedStateRevision,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get plannedKind => $composableBuilder(
+    column: $table.plannedKind,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<Uint8List> get exactUploadProjection => $composableBuilder(
+    column: $table.exactUploadProjection,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get lastResortUploaded => $composableBuilder(
+    column: $table.lastResortUploaded,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$MlsKeyPackageMaintenanceStatesTableOrderingComposer
+    extends Composer<_$LocalDatabase, $MlsKeyPackageMaintenanceStatesTable> {
+  $$MlsKeyPackageMaintenanceStatesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get deviceId => $composableBuilder(
+    column: $table.deviceId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get stage => $composableBuilder(
+    column: $table.stage,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get expectedStateRevision => $composableBuilder(
+    column: $table.expectedStateRevision,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get plannedKind => $composableBuilder(
+    column: $table.plannedKind,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<Uint8List> get exactUploadProjection => $composableBuilder(
+    column: $table.exactUploadProjection,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get lastResortUploaded => $composableBuilder(
+    column: $table.lastResortUploaded,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$MlsKeyPackageMaintenanceStatesTableAnnotationComposer
+    extends Composer<_$LocalDatabase, $MlsKeyPackageMaintenanceStatesTable> {
+  $$MlsKeyPackageMaintenanceStatesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get deviceId =>
+      $composableBuilder(column: $table.deviceId, builder: (column) => column);
+
+  GeneratedColumn<int> get stage =>
+      $composableBuilder(column: $table.stage, builder: (column) => column);
+
+  GeneratedColumn<int> get expectedStateRevision => $composableBuilder(
+    column: $table.expectedStateRevision,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get plannedKind => $composableBuilder(
+    column: $table.plannedKind,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<Uint8List> get exactUploadProjection => $composableBuilder(
+    column: $table.exactUploadProjection,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get lastResortUploaded => $composableBuilder(
+    column: $table.lastResortUploaded,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+}
+
+class $$MlsKeyPackageMaintenanceStatesTableTableManager
+    extends
+        RootTableManager<
+          _$LocalDatabase,
+          $MlsKeyPackageMaintenanceStatesTable,
+          StoredMlsKeyPackageMaintenanceState,
+          $$MlsKeyPackageMaintenanceStatesTableFilterComposer,
+          $$MlsKeyPackageMaintenanceStatesTableOrderingComposer,
+          $$MlsKeyPackageMaintenanceStatesTableAnnotationComposer,
+          $$MlsKeyPackageMaintenanceStatesTableCreateCompanionBuilder,
+          $$MlsKeyPackageMaintenanceStatesTableUpdateCompanionBuilder,
+          (
+            StoredMlsKeyPackageMaintenanceState,
+            BaseReferences<
+              _$LocalDatabase,
+              $MlsKeyPackageMaintenanceStatesTable,
+              StoredMlsKeyPackageMaintenanceState
+            >,
+          ),
+          StoredMlsKeyPackageMaintenanceState,
+          PrefetchHooks Function()
+        > {
+  $$MlsKeyPackageMaintenanceStatesTableTableManager(
+    _$LocalDatabase db,
+    $MlsKeyPackageMaintenanceStatesTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$MlsKeyPackageMaintenanceStatesTableFilterComposer(
+                $db: db,
+                $table: table,
+              ),
+          createOrderingComposer: () =>
+              $$MlsKeyPackageMaintenanceStatesTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$MlsKeyPackageMaintenanceStatesTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> deviceId = const Value.absent(),
+                Value<int> stage = const Value.absent(),
+                Value<int> expectedStateRevision = const Value.absent(),
+                Value<int?> plannedKind = const Value.absent(),
+                Value<Uint8List?> exactUploadProjection = const Value.absent(),
+                Value<bool> lastResortUploaded = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => MlsKeyPackageMaintenanceStatesCompanion(
+                deviceId: deviceId,
+                stage: stage,
+                expectedStateRevision: expectedStateRevision,
+                plannedKind: plannedKind,
+                exactUploadProjection: exactUploadProjection,
+                lastResortUploaded: lastResortUploaded,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String deviceId,
+                required int stage,
+                Value<int> expectedStateRevision = const Value.absent(),
+                Value<int?> plannedKind = const Value.absent(),
+                Value<Uint8List?> exactUploadProjection = const Value.absent(),
+                Value<bool> lastResortUploaded = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => MlsKeyPackageMaintenanceStatesCompanion.insert(
+                deviceId: deviceId,
+                stage: stage,
+                expectedStateRevision: expectedStateRevision,
+                plannedKind: plannedKind,
+                exactUploadProjection: exactUploadProjection,
+                lastResortUploaded: lastResortUploaded,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$MlsKeyPackageMaintenanceStatesTableProcessedTableManager =
+    ProcessedTableManager<
+      _$LocalDatabase,
+      $MlsKeyPackageMaintenanceStatesTable,
+      StoredMlsKeyPackageMaintenanceState,
+      $$MlsKeyPackageMaintenanceStatesTableFilterComposer,
+      $$MlsKeyPackageMaintenanceStatesTableOrderingComposer,
+      $$MlsKeyPackageMaintenanceStatesTableAnnotationComposer,
+      $$MlsKeyPackageMaintenanceStatesTableCreateCompanionBuilder,
+      $$MlsKeyPackageMaintenanceStatesTableUpdateCompanionBuilder,
+      (
+        StoredMlsKeyPackageMaintenanceState,
+        BaseReferences<
+          _$LocalDatabase,
+          $MlsKeyPackageMaintenanceStatesTable,
+          StoredMlsKeyPackageMaintenanceState
+        >,
+      ),
+      StoredMlsKeyPackageMaintenanceState,
+      PrefetchHooks Function()
+    >;
 typedef $$MlsGroupsTableCreateCompanionBuilder =
     MlsGroupsCompanion Function({
       required String groupId,
       required Uint8List opaqueCryptoStateHandle,
       required int acceptedEpoch,
       required int stateVersion,
+      Value<int> queueGapRecoveryState,
+      Value<Uint8List?> controlProjectionCiphertext,
+      Value<int> controlRevision,
+      Value<Uint8List?> controlStateHash,
+      Value<int> lifecycle,
+      Value<String?> pendingMutationId,
       Value<int> rowid,
     });
 typedef $$MlsGroupsTableUpdateCompanionBuilder =
@@ -13556,8 +30198,74 @@ typedef $$MlsGroupsTableUpdateCompanionBuilder =
       Value<Uint8List> opaqueCryptoStateHandle,
       Value<int> acceptedEpoch,
       Value<int> stateVersion,
+      Value<int> queueGapRecoveryState,
+      Value<Uint8List?> controlProjectionCiphertext,
+      Value<int> controlRevision,
+      Value<Uint8List?> controlStateHash,
+      Value<int> lifecycle,
+      Value<String?> pendingMutationId,
       Value<int> rowid,
     });
+
+final class $$MlsGroupsTableReferences
+    extends BaseReferences<_$LocalDatabase, $MlsGroupsTable, MlsGroup> {
+  $$MlsGroupsTableReferences(super.$_db, super.$_table, super.$_typedResult);
+
+  static MultiTypedResultKey<
+    $GroupControlEventsTable,
+    List<StoredGroupControlEventRow>
+  >
+  _groupControlEventsRefsTable(_$LocalDatabase db) =>
+      MultiTypedResultKey.fromTable(
+        db.groupControlEvents,
+        aliasName: 'mls_groups__group_id__group_control_events__group_id',
+      );
+
+  $$GroupControlEventsTableProcessedTableManager get groupControlEventsRefs {
+    final manager =
+        $$GroupControlEventsTableTableManager(
+          $_db,
+          $_db.groupControlEvents,
+        ).filter(
+          (f) => f.groupId.groupId.sqlEquals($_itemColumn<String>('group_id')!),
+        );
+
+    final cache = $_typedResult.readTableOrNull(
+      _groupControlEventsRefsTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<
+    $GroupOutboundObjectsTable,
+    List<StoredGroupOutboundObjectRow>
+  >
+  _groupOutboundObjectsRefsTable(_$LocalDatabase db) =>
+      MultiTypedResultKey.fromTable(
+        db.groupOutboundObjects,
+        aliasName: 'mls_groups__group_id__group_outbound_objects__group_id',
+      );
+
+  $$GroupOutboundObjectsTableProcessedTableManager
+  get groupOutboundObjectsRefs {
+    final manager =
+        $$GroupOutboundObjectsTableTableManager(
+          $_db,
+          $_db.groupOutboundObjects,
+        ).filter(
+          (f) => f.groupId.groupId.sqlEquals($_itemColumn<String>('group_id')!),
+        );
+
+    final cache = $_typedResult.readTableOrNull(
+      _groupOutboundObjectsRefsTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+}
 
 class $$MlsGroupsTableFilterComposer
     extends Composer<_$LocalDatabase, $MlsGroupsTable> {
@@ -13587,6 +30295,87 @@ class $$MlsGroupsTableFilterComposer
     column: $table.stateVersion,
     builder: (column) => ColumnFilters(column),
   );
+
+  ColumnFilters<int> get queueGapRecoveryState => $composableBuilder(
+    column: $table.queueGapRecoveryState,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<Uint8List> get controlProjectionCiphertext =>
+      $composableBuilder(
+        column: $table.controlProjectionCiphertext,
+        builder: (column) => ColumnFilters(column),
+      );
+
+  ColumnFilters<int> get controlRevision => $composableBuilder(
+    column: $table.controlRevision,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<Uint8List> get controlStateHash => $composableBuilder(
+    column: $table.controlStateHash,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get lifecycle => $composableBuilder(
+    column: $table.lifecycle,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get pendingMutationId => $composableBuilder(
+    column: $table.pendingMutationId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  Expression<bool> groupControlEventsRefs(
+    Expression<bool> Function($$GroupControlEventsTableFilterComposer f) f,
+  ) {
+    final $$GroupControlEventsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.groupId,
+      referencedTable: $db.groupControlEvents,
+      getReferencedColumn: (t) => t.groupId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$GroupControlEventsTableFilterComposer(
+            $db: $db,
+            $table: $db.groupControlEvents,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> groupOutboundObjectsRefs(
+    Expression<bool> Function($$GroupOutboundObjectsTableFilterComposer f) f,
+  ) {
+    final $$GroupOutboundObjectsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.groupId,
+      referencedTable: $db.groupOutboundObjects,
+      getReferencedColumn: (t) => t.groupId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$GroupOutboundObjectsTableFilterComposer(
+            $db: $db,
+            $table: $db.groupOutboundObjects,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
 }
 
 class $$MlsGroupsTableOrderingComposer
@@ -13617,6 +30406,37 @@ class $$MlsGroupsTableOrderingComposer
     column: $table.stateVersion,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<int> get queueGapRecoveryState => $composableBuilder(
+    column: $table.queueGapRecoveryState,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<Uint8List> get controlProjectionCiphertext =>
+      $composableBuilder(
+        column: $table.controlProjectionCiphertext,
+        builder: (column) => ColumnOrderings(column),
+      );
+
+  ColumnOrderings<int> get controlRevision => $composableBuilder(
+    column: $table.controlRevision,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<Uint8List> get controlStateHash => $composableBuilder(
+    column: $table.controlStateHash,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get lifecycle => $composableBuilder(
+    column: $table.lifecycle,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get pendingMutationId => $composableBuilder(
+    column: $table.pendingMutationId,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$MlsGroupsTableAnnotationComposer
@@ -13645,6 +30465,87 @@ class $$MlsGroupsTableAnnotationComposer
     column: $table.stateVersion,
     builder: (column) => column,
   );
+
+  GeneratedColumn<int> get queueGapRecoveryState => $composableBuilder(
+    column: $table.queueGapRecoveryState,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<Uint8List> get controlProjectionCiphertext =>
+      $composableBuilder(
+        column: $table.controlProjectionCiphertext,
+        builder: (column) => column,
+      );
+
+  GeneratedColumn<int> get controlRevision => $composableBuilder(
+    column: $table.controlRevision,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<Uint8List> get controlStateHash => $composableBuilder(
+    column: $table.controlStateHash,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get lifecycle =>
+      $composableBuilder(column: $table.lifecycle, builder: (column) => column);
+
+  GeneratedColumn<String> get pendingMutationId => $composableBuilder(
+    column: $table.pendingMutationId,
+    builder: (column) => column,
+  );
+
+  Expression<T> groupControlEventsRefs<T extends Object>(
+    Expression<T> Function($$GroupControlEventsTableAnnotationComposer a) f,
+  ) {
+    final $$GroupControlEventsTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.groupId,
+          referencedTable: $db.groupControlEvents,
+          getReferencedColumn: (t) => t.groupId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$GroupControlEventsTableAnnotationComposer(
+                $db: $db,
+                $table: $db.groupControlEvents,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
+
+  Expression<T> groupOutboundObjectsRefs<T extends Object>(
+    Expression<T> Function($$GroupOutboundObjectsTableAnnotationComposer a) f,
+  ) {
+    final $$GroupOutboundObjectsTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.groupId,
+          referencedTable: $db.groupOutboundObjects,
+          getReferencedColumn: (t) => t.groupId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$GroupOutboundObjectsTableAnnotationComposer(
+                $db: $db,
+                $table: $db.groupOutboundObjects,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
 }
 
 class $$MlsGroupsTableTableManager
@@ -13658,12 +30559,12 @@ class $$MlsGroupsTableTableManager
           $$MlsGroupsTableAnnotationComposer,
           $$MlsGroupsTableCreateCompanionBuilder,
           $$MlsGroupsTableUpdateCompanionBuilder,
-          (
-            MlsGroup,
-            BaseReferences<_$LocalDatabase, $MlsGroupsTable, MlsGroup>,
-          ),
+          (MlsGroup, $$MlsGroupsTableReferences),
           MlsGroup,
-          PrefetchHooks Function()
+          PrefetchHooks Function({
+            bool groupControlEventsRefs,
+            bool groupOutboundObjectsRefs,
+          })
         > {
   $$MlsGroupsTableTableManager(_$LocalDatabase db, $MlsGroupsTable table)
     : super(
@@ -13682,12 +30583,25 @@ class $$MlsGroupsTableTableManager
                 Value<Uint8List> opaqueCryptoStateHandle = const Value.absent(),
                 Value<int> acceptedEpoch = const Value.absent(),
                 Value<int> stateVersion = const Value.absent(),
+                Value<int> queueGapRecoveryState = const Value.absent(),
+                Value<Uint8List?> controlProjectionCiphertext =
+                    const Value.absent(),
+                Value<int> controlRevision = const Value.absent(),
+                Value<Uint8List?> controlStateHash = const Value.absent(),
+                Value<int> lifecycle = const Value.absent(),
+                Value<String?> pendingMutationId = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => MlsGroupsCompanion(
                 groupId: groupId,
                 opaqueCryptoStateHandle: opaqueCryptoStateHandle,
                 acceptedEpoch: acceptedEpoch,
                 stateVersion: stateVersion,
+                queueGapRecoveryState: queueGapRecoveryState,
+                controlProjectionCiphertext: controlProjectionCiphertext,
+                controlRevision: controlRevision,
+                controlStateHash: controlStateHash,
+                lifecycle: lifecycle,
+                pendingMutationId: pendingMutationId,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -13696,18 +30610,95 @@ class $$MlsGroupsTableTableManager
                 required Uint8List opaqueCryptoStateHandle,
                 required int acceptedEpoch,
                 required int stateVersion,
+                Value<int> queueGapRecoveryState = const Value.absent(),
+                Value<Uint8List?> controlProjectionCiphertext =
+                    const Value.absent(),
+                Value<int> controlRevision = const Value.absent(),
+                Value<Uint8List?> controlStateHash = const Value.absent(),
+                Value<int> lifecycle = const Value.absent(),
+                Value<String?> pendingMutationId = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => MlsGroupsCompanion.insert(
                 groupId: groupId,
                 opaqueCryptoStateHandle: opaqueCryptoStateHandle,
                 acceptedEpoch: acceptedEpoch,
                 stateVersion: stateVersion,
+                queueGapRecoveryState: queueGapRecoveryState,
+                controlProjectionCiphertext: controlProjectionCiphertext,
+                controlRevision: controlRevision,
+                controlStateHash: controlStateHash,
+                lifecycle: lifecycle,
+                pendingMutationId: pendingMutationId,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$MlsGroupsTableReferences(db, table, e),
+                ),
+              )
               .toList(),
-          prefetchHooksCallback: null,
+          prefetchHooksCallback:
+              ({
+                groupControlEventsRefs = false,
+                groupOutboundObjectsRefs = false,
+              }) {
+                return PrefetchHooks(
+                  db: db,
+                  explicitlyWatchedTables: [
+                    if (groupControlEventsRefs) db.groupControlEvents,
+                    if (groupOutboundObjectsRefs) db.groupOutboundObjects,
+                  ],
+                  addJoins: null,
+                  getPrefetchedDataCallback: (items) async {
+                    return [
+                      if (groupControlEventsRefs)
+                        await $_getPrefetchedData<
+                          MlsGroup,
+                          $MlsGroupsTable,
+                          StoredGroupControlEventRow
+                        >(
+                          currentTable: table,
+                          referencedTable: $$MlsGroupsTableReferences
+                              ._groupControlEventsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$MlsGroupsTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).groupControlEventsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.groupId == item.groupId,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (groupOutboundObjectsRefs)
+                        await $_getPrefetchedData<
+                          MlsGroup,
+                          $MlsGroupsTable,
+                          StoredGroupOutboundObjectRow
+                        >(
+                          currentTable: table,
+                          referencedTable: $$MlsGroupsTableReferences
+                              ._groupOutboundObjectsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$MlsGroupsTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).groupOutboundObjectsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.groupId == item.groupId,
+                              ),
+                          typedResults: items,
+                        ),
+                    ];
+                  },
+                );
+              },
         ),
       );
 }
@@ -13722,9 +30713,1000 @@ typedef $$MlsGroupsTableProcessedTableManager =
       $$MlsGroupsTableAnnotationComposer,
       $$MlsGroupsTableCreateCompanionBuilder,
       $$MlsGroupsTableUpdateCompanionBuilder,
-      (MlsGroup, BaseReferences<_$LocalDatabase, $MlsGroupsTable, MlsGroup>),
+      (MlsGroup, $$MlsGroupsTableReferences),
       MlsGroup,
-      PrefetchHooks Function()
+      PrefetchHooks Function({
+        bool groupControlEventsRefs,
+        bool groupOutboundObjectsRefs,
+      })
+    >;
+typedef $$GroupControlEventsTableCreateCompanionBuilder =
+    GroupControlEventsCompanion Function({
+      required String eventId,
+      required String groupId,
+      required int revision,
+      Value<Uint8List?> previousControlStateHash,
+      required Uint8List controlStateHash,
+      Value<Uint8List?> mlsCommitHash,
+      required int epoch,
+      required String signerUserId,
+      required String signerDeviceId,
+      required int operationKind,
+      Value<String?> deterministicProjection,
+      required Uint8List canonicalControl,
+      required Uint8List signature,
+      Value<Uint8List?> signedPayload,
+      Value<Uint8List?> signerAuthenticationProof,
+      required int applyState,
+      required int createdMs,
+      Value<int> rowid,
+    });
+typedef $$GroupControlEventsTableUpdateCompanionBuilder =
+    GroupControlEventsCompanion Function({
+      Value<String> eventId,
+      Value<String> groupId,
+      Value<int> revision,
+      Value<Uint8List?> previousControlStateHash,
+      Value<Uint8List> controlStateHash,
+      Value<Uint8List?> mlsCommitHash,
+      Value<int> epoch,
+      Value<String> signerUserId,
+      Value<String> signerDeviceId,
+      Value<int> operationKind,
+      Value<String?> deterministicProjection,
+      Value<Uint8List> canonicalControl,
+      Value<Uint8List> signature,
+      Value<Uint8List?> signedPayload,
+      Value<Uint8List?> signerAuthenticationProof,
+      Value<int> applyState,
+      Value<int> createdMs,
+      Value<int> rowid,
+    });
+
+final class $$GroupControlEventsTableReferences
+    extends
+        BaseReferences<
+          _$LocalDatabase,
+          $GroupControlEventsTable,
+          StoredGroupControlEventRow
+        > {
+  $$GroupControlEventsTableReferences(
+    super.$_db,
+    super.$_table,
+    super.$_typedResult,
+  );
+
+  static $MlsGroupsTable _groupIdTable(_$LocalDatabase db) => db.mlsGroups
+      .createAlias('group_control_events__group_id__mls_groups__group_id');
+
+  $$MlsGroupsTableProcessedTableManager get groupId {
+    final $_column = $_itemColumn<String>('group_id')!;
+
+    final manager = $$MlsGroupsTableTableManager(
+      $_db,
+      $_db.mlsGroups,
+    ).filter((f) => f.groupId.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_groupIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+}
+
+class $$GroupControlEventsTableFilterComposer
+    extends Composer<_$LocalDatabase, $GroupControlEventsTable> {
+  $$GroupControlEventsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get eventId => $composableBuilder(
+    column: $table.eventId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get revision => $composableBuilder(
+    column: $table.revision,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<Uint8List> get previousControlStateHash => $composableBuilder(
+    column: $table.previousControlStateHash,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<Uint8List> get controlStateHash => $composableBuilder(
+    column: $table.controlStateHash,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<Uint8List> get mlsCommitHash => $composableBuilder(
+    column: $table.mlsCommitHash,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get epoch => $composableBuilder(
+    column: $table.epoch,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get signerUserId => $composableBuilder(
+    column: $table.signerUserId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get signerDeviceId => $composableBuilder(
+    column: $table.signerDeviceId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get operationKind => $composableBuilder(
+    column: $table.operationKind,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get deterministicProjection => $composableBuilder(
+    column: $table.deterministicProjection,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<Uint8List> get canonicalControl => $composableBuilder(
+    column: $table.canonicalControl,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<Uint8List> get signature => $composableBuilder(
+    column: $table.signature,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<Uint8List> get signedPayload => $composableBuilder(
+    column: $table.signedPayload,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<Uint8List> get signerAuthenticationProof => $composableBuilder(
+    column: $table.signerAuthenticationProof,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get applyState => $composableBuilder(
+    column: $table.applyState,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get createdMs => $composableBuilder(
+    column: $table.createdMs,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$MlsGroupsTableFilterComposer get groupId {
+    final $$MlsGroupsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.groupId,
+      referencedTable: $db.mlsGroups,
+      getReferencedColumn: (t) => t.groupId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$MlsGroupsTableFilterComposer(
+            $db: $db,
+            $table: $db.mlsGroups,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$GroupControlEventsTableOrderingComposer
+    extends Composer<_$LocalDatabase, $GroupControlEventsTable> {
+  $$GroupControlEventsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get eventId => $composableBuilder(
+    column: $table.eventId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get revision => $composableBuilder(
+    column: $table.revision,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<Uint8List> get previousControlStateHash => $composableBuilder(
+    column: $table.previousControlStateHash,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<Uint8List> get controlStateHash => $composableBuilder(
+    column: $table.controlStateHash,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<Uint8List> get mlsCommitHash => $composableBuilder(
+    column: $table.mlsCommitHash,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get epoch => $composableBuilder(
+    column: $table.epoch,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get signerUserId => $composableBuilder(
+    column: $table.signerUserId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get signerDeviceId => $composableBuilder(
+    column: $table.signerDeviceId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get operationKind => $composableBuilder(
+    column: $table.operationKind,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get deterministicProjection => $composableBuilder(
+    column: $table.deterministicProjection,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<Uint8List> get canonicalControl => $composableBuilder(
+    column: $table.canonicalControl,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<Uint8List> get signature => $composableBuilder(
+    column: $table.signature,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<Uint8List> get signedPayload => $composableBuilder(
+    column: $table.signedPayload,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<Uint8List> get signerAuthenticationProof =>
+      $composableBuilder(
+        column: $table.signerAuthenticationProof,
+        builder: (column) => ColumnOrderings(column),
+      );
+
+  ColumnOrderings<int> get applyState => $composableBuilder(
+    column: $table.applyState,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get createdMs => $composableBuilder(
+    column: $table.createdMs,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$MlsGroupsTableOrderingComposer get groupId {
+    final $$MlsGroupsTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.groupId,
+      referencedTable: $db.mlsGroups,
+      getReferencedColumn: (t) => t.groupId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$MlsGroupsTableOrderingComposer(
+            $db: $db,
+            $table: $db.mlsGroups,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$GroupControlEventsTableAnnotationComposer
+    extends Composer<_$LocalDatabase, $GroupControlEventsTable> {
+  $$GroupControlEventsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get eventId =>
+      $composableBuilder(column: $table.eventId, builder: (column) => column);
+
+  GeneratedColumn<int> get revision =>
+      $composableBuilder(column: $table.revision, builder: (column) => column);
+
+  GeneratedColumn<Uint8List> get previousControlStateHash => $composableBuilder(
+    column: $table.previousControlStateHash,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<Uint8List> get controlStateHash => $composableBuilder(
+    column: $table.controlStateHash,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<Uint8List> get mlsCommitHash => $composableBuilder(
+    column: $table.mlsCommitHash,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get epoch =>
+      $composableBuilder(column: $table.epoch, builder: (column) => column);
+
+  GeneratedColumn<String> get signerUserId => $composableBuilder(
+    column: $table.signerUserId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get signerDeviceId => $composableBuilder(
+    column: $table.signerDeviceId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get operationKind => $composableBuilder(
+    column: $table.operationKind,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get deterministicProjection => $composableBuilder(
+    column: $table.deterministicProjection,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<Uint8List> get canonicalControl => $composableBuilder(
+    column: $table.canonicalControl,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<Uint8List> get signature =>
+      $composableBuilder(column: $table.signature, builder: (column) => column);
+
+  GeneratedColumn<Uint8List> get signedPayload => $composableBuilder(
+    column: $table.signedPayload,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<Uint8List> get signerAuthenticationProof =>
+      $composableBuilder(
+        column: $table.signerAuthenticationProof,
+        builder: (column) => column,
+      );
+
+  GeneratedColumn<int> get applyState => $composableBuilder(
+    column: $table.applyState,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get createdMs =>
+      $composableBuilder(column: $table.createdMs, builder: (column) => column);
+
+  $$MlsGroupsTableAnnotationComposer get groupId {
+    final $$MlsGroupsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.groupId,
+      referencedTable: $db.mlsGroups,
+      getReferencedColumn: (t) => t.groupId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$MlsGroupsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.mlsGroups,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$GroupControlEventsTableTableManager
+    extends
+        RootTableManager<
+          _$LocalDatabase,
+          $GroupControlEventsTable,
+          StoredGroupControlEventRow,
+          $$GroupControlEventsTableFilterComposer,
+          $$GroupControlEventsTableOrderingComposer,
+          $$GroupControlEventsTableAnnotationComposer,
+          $$GroupControlEventsTableCreateCompanionBuilder,
+          $$GroupControlEventsTableUpdateCompanionBuilder,
+          (StoredGroupControlEventRow, $$GroupControlEventsTableReferences),
+          StoredGroupControlEventRow,
+          PrefetchHooks Function({bool groupId})
+        > {
+  $$GroupControlEventsTableTableManager(
+    _$LocalDatabase db,
+    $GroupControlEventsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$GroupControlEventsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$GroupControlEventsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$GroupControlEventsTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> eventId = const Value.absent(),
+                Value<String> groupId = const Value.absent(),
+                Value<int> revision = const Value.absent(),
+                Value<Uint8List?> previousControlStateHash =
+                    const Value.absent(),
+                Value<Uint8List> controlStateHash = const Value.absent(),
+                Value<Uint8List?> mlsCommitHash = const Value.absent(),
+                Value<int> epoch = const Value.absent(),
+                Value<String> signerUserId = const Value.absent(),
+                Value<String> signerDeviceId = const Value.absent(),
+                Value<int> operationKind = const Value.absent(),
+                Value<String?> deterministicProjection = const Value.absent(),
+                Value<Uint8List> canonicalControl = const Value.absent(),
+                Value<Uint8List> signature = const Value.absent(),
+                Value<Uint8List?> signedPayload = const Value.absent(),
+                Value<Uint8List?> signerAuthenticationProof =
+                    const Value.absent(),
+                Value<int> applyState = const Value.absent(),
+                Value<int> createdMs = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => GroupControlEventsCompanion(
+                eventId: eventId,
+                groupId: groupId,
+                revision: revision,
+                previousControlStateHash: previousControlStateHash,
+                controlStateHash: controlStateHash,
+                mlsCommitHash: mlsCommitHash,
+                epoch: epoch,
+                signerUserId: signerUserId,
+                signerDeviceId: signerDeviceId,
+                operationKind: operationKind,
+                deterministicProjection: deterministicProjection,
+                canonicalControl: canonicalControl,
+                signature: signature,
+                signedPayload: signedPayload,
+                signerAuthenticationProof: signerAuthenticationProof,
+                applyState: applyState,
+                createdMs: createdMs,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String eventId,
+                required String groupId,
+                required int revision,
+                Value<Uint8List?> previousControlStateHash =
+                    const Value.absent(),
+                required Uint8List controlStateHash,
+                Value<Uint8List?> mlsCommitHash = const Value.absent(),
+                required int epoch,
+                required String signerUserId,
+                required String signerDeviceId,
+                required int operationKind,
+                Value<String?> deterministicProjection = const Value.absent(),
+                required Uint8List canonicalControl,
+                required Uint8List signature,
+                Value<Uint8List?> signedPayload = const Value.absent(),
+                Value<Uint8List?> signerAuthenticationProof =
+                    const Value.absent(),
+                required int applyState,
+                required int createdMs,
+                Value<int> rowid = const Value.absent(),
+              }) => GroupControlEventsCompanion.insert(
+                eventId: eventId,
+                groupId: groupId,
+                revision: revision,
+                previousControlStateHash: previousControlStateHash,
+                controlStateHash: controlStateHash,
+                mlsCommitHash: mlsCommitHash,
+                epoch: epoch,
+                signerUserId: signerUserId,
+                signerDeviceId: signerDeviceId,
+                operationKind: operationKind,
+                deterministicProjection: deterministicProjection,
+                canonicalControl: canonicalControl,
+                signature: signature,
+                signedPayload: signedPayload,
+                signerAuthenticationProof: signerAuthenticationProof,
+                applyState: applyState,
+                createdMs: createdMs,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$GroupControlEventsTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: ({groupId = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [],
+              addJoins:
+                  <
+                    T extends TableManagerState<
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic
+                    >
+                  >(state) {
+                    if (groupId) {
+                      state =
+                          state.withJoin(
+                                currentTable: table,
+                                currentColumn: table.groupId,
+                                referencedTable:
+                                    $$GroupControlEventsTableReferences
+                                        ._groupIdTable(db),
+                                referencedColumn:
+                                    $$GroupControlEventsTableReferences
+                                        ._groupIdTable(db)
+                                        .groupId,
+                              )
+                              as T;
+                    }
+
+                    return state;
+                  },
+              getPrefetchedDataCallback: (items) async {
+                return [];
+              },
+            );
+          },
+        ),
+      );
+}
+
+typedef $$GroupControlEventsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$LocalDatabase,
+      $GroupControlEventsTable,
+      StoredGroupControlEventRow,
+      $$GroupControlEventsTableFilterComposer,
+      $$GroupControlEventsTableOrderingComposer,
+      $$GroupControlEventsTableAnnotationComposer,
+      $$GroupControlEventsTableCreateCompanionBuilder,
+      $$GroupControlEventsTableUpdateCompanionBuilder,
+      (StoredGroupControlEventRow, $$GroupControlEventsTableReferences),
+      StoredGroupControlEventRow,
+      PrefetchHooks Function({bool groupId})
+    >;
+typedef $$GroupOutboundObjectsTableCreateCompanionBuilder =
+    GroupOutboundObjectsCompanion Function({
+      required String operationId,
+      required String groupId,
+      required String eventId,
+      required int epoch,
+      required Uint8List mlsObject,
+      Value<String> recipientUserIdsJson,
+      required int deliveryState,
+      Value<DateTime> createdAt,
+      Value<int> rowid,
+    });
+typedef $$GroupOutboundObjectsTableUpdateCompanionBuilder =
+    GroupOutboundObjectsCompanion Function({
+      Value<String> operationId,
+      Value<String> groupId,
+      Value<String> eventId,
+      Value<int> epoch,
+      Value<Uint8List> mlsObject,
+      Value<String> recipientUserIdsJson,
+      Value<int> deliveryState,
+      Value<DateTime> createdAt,
+      Value<int> rowid,
+    });
+
+final class $$GroupOutboundObjectsTableReferences
+    extends
+        BaseReferences<
+          _$LocalDatabase,
+          $GroupOutboundObjectsTable,
+          StoredGroupOutboundObjectRow
+        > {
+  $$GroupOutboundObjectsTableReferences(
+    super.$_db,
+    super.$_table,
+    super.$_typedResult,
+  );
+
+  static $MlsGroupsTable _groupIdTable(_$LocalDatabase db) => db.mlsGroups
+      .createAlias('group_outbound_objects__group_id__mls_groups__group_id');
+
+  $$MlsGroupsTableProcessedTableManager get groupId {
+    final $_column = $_itemColumn<String>('group_id')!;
+
+    final manager = $$MlsGroupsTableTableManager(
+      $_db,
+      $_db.mlsGroups,
+    ).filter((f) => f.groupId.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_groupIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+}
+
+class $$GroupOutboundObjectsTableFilterComposer
+    extends Composer<_$LocalDatabase, $GroupOutboundObjectsTable> {
+  $$GroupOutboundObjectsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get operationId => $composableBuilder(
+    column: $table.operationId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get eventId => $composableBuilder(
+    column: $table.eventId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get epoch => $composableBuilder(
+    column: $table.epoch,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<Uint8List> get mlsObject => $composableBuilder(
+    column: $table.mlsObject,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get recipientUserIdsJson => $composableBuilder(
+    column: $table.recipientUserIdsJson,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get deliveryState => $composableBuilder(
+    column: $table.deliveryState,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$MlsGroupsTableFilterComposer get groupId {
+    final $$MlsGroupsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.groupId,
+      referencedTable: $db.mlsGroups,
+      getReferencedColumn: (t) => t.groupId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$MlsGroupsTableFilterComposer(
+            $db: $db,
+            $table: $db.mlsGroups,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$GroupOutboundObjectsTableOrderingComposer
+    extends Composer<_$LocalDatabase, $GroupOutboundObjectsTable> {
+  $$GroupOutboundObjectsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get operationId => $composableBuilder(
+    column: $table.operationId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get eventId => $composableBuilder(
+    column: $table.eventId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get epoch => $composableBuilder(
+    column: $table.epoch,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<Uint8List> get mlsObject => $composableBuilder(
+    column: $table.mlsObject,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get recipientUserIdsJson => $composableBuilder(
+    column: $table.recipientUserIdsJson,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get deliveryState => $composableBuilder(
+    column: $table.deliveryState,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$MlsGroupsTableOrderingComposer get groupId {
+    final $$MlsGroupsTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.groupId,
+      referencedTable: $db.mlsGroups,
+      getReferencedColumn: (t) => t.groupId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$MlsGroupsTableOrderingComposer(
+            $db: $db,
+            $table: $db.mlsGroups,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$GroupOutboundObjectsTableAnnotationComposer
+    extends Composer<_$LocalDatabase, $GroupOutboundObjectsTable> {
+  $$GroupOutboundObjectsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get operationId => $composableBuilder(
+    column: $table.operationId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get eventId =>
+      $composableBuilder(column: $table.eventId, builder: (column) => column);
+
+  GeneratedColumn<int> get epoch =>
+      $composableBuilder(column: $table.epoch, builder: (column) => column);
+
+  GeneratedColumn<Uint8List> get mlsObject =>
+      $composableBuilder(column: $table.mlsObject, builder: (column) => column);
+
+  GeneratedColumn<String> get recipientUserIdsJson => $composableBuilder(
+    column: $table.recipientUserIdsJson,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get deliveryState => $composableBuilder(
+    column: $table.deliveryState,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  $$MlsGroupsTableAnnotationComposer get groupId {
+    final $$MlsGroupsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.groupId,
+      referencedTable: $db.mlsGroups,
+      getReferencedColumn: (t) => t.groupId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$MlsGroupsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.mlsGroups,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$GroupOutboundObjectsTableTableManager
+    extends
+        RootTableManager<
+          _$LocalDatabase,
+          $GroupOutboundObjectsTable,
+          StoredGroupOutboundObjectRow,
+          $$GroupOutboundObjectsTableFilterComposer,
+          $$GroupOutboundObjectsTableOrderingComposer,
+          $$GroupOutboundObjectsTableAnnotationComposer,
+          $$GroupOutboundObjectsTableCreateCompanionBuilder,
+          $$GroupOutboundObjectsTableUpdateCompanionBuilder,
+          (StoredGroupOutboundObjectRow, $$GroupOutboundObjectsTableReferences),
+          StoredGroupOutboundObjectRow,
+          PrefetchHooks Function({bool groupId})
+        > {
+  $$GroupOutboundObjectsTableTableManager(
+    _$LocalDatabase db,
+    $GroupOutboundObjectsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$GroupOutboundObjectsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$GroupOutboundObjectsTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$GroupOutboundObjectsTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> operationId = const Value.absent(),
+                Value<String> groupId = const Value.absent(),
+                Value<String> eventId = const Value.absent(),
+                Value<int> epoch = const Value.absent(),
+                Value<Uint8List> mlsObject = const Value.absent(),
+                Value<String> recipientUserIdsJson = const Value.absent(),
+                Value<int> deliveryState = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => GroupOutboundObjectsCompanion(
+                operationId: operationId,
+                groupId: groupId,
+                eventId: eventId,
+                epoch: epoch,
+                mlsObject: mlsObject,
+                recipientUserIdsJson: recipientUserIdsJson,
+                deliveryState: deliveryState,
+                createdAt: createdAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String operationId,
+                required String groupId,
+                required String eventId,
+                required int epoch,
+                required Uint8List mlsObject,
+                Value<String> recipientUserIdsJson = const Value.absent(),
+                required int deliveryState,
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => GroupOutboundObjectsCompanion.insert(
+                operationId: operationId,
+                groupId: groupId,
+                eventId: eventId,
+                epoch: epoch,
+                mlsObject: mlsObject,
+                recipientUserIdsJson: recipientUserIdsJson,
+                deliveryState: deliveryState,
+                createdAt: createdAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$GroupOutboundObjectsTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: ({groupId = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [],
+              addJoins:
+                  <
+                    T extends TableManagerState<
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic
+                    >
+                  >(state) {
+                    if (groupId) {
+                      state =
+                          state.withJoin(
+                                currentTable: table,
+                                currentColumn: table.groupId,
+                                referencedTable:
+                                    $$GroupOutboundObjectsTableReferences
+                                        ._groupIdTable(db),
+                                referencedColumn:
+                                    $$GroupOutboundObjectsTableReferences
+                                        ._groupIdTable(db)
+                                        .groupId,
+                              )
+                              as T;
+                    }
+
+                    return state;
+                  },
+              getPrefetchedDataCallback: (items) async {
+                return [];
+              },
+            );
+          },
+        ),
+      );
+}
+
+typedef $$GroupOutboundObjectsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$LocalDatabase,
+      $GroupOutboundObjectsTable,
+      StoredGroupOutboundObjectRow,
+      $$GroupOutboundObjectsTableFilterComposer,
+      $$GroupOutboundObjectsTableOrderingComposer,
+      $$GroupOutboundObjectsTableAnnotationComposer,
+      $$GroupOutboundObjectsTableCreateCompanionBuilder,
+      $$GroupOutboundObjectsTableUpdateCompanionBuilder,
+      (StoredGroupOutboundObjectRow, $$GroupOutboundObjectsTableReferences),
+      StoredGroupOutboundObjectRow,
+      PrefetchHooks Function({bool groupId})
     >;
 typedef $$ConversationsTableCreateCompanionBuilder =
     ConversationsCompanion Function({
@@ -13733,6 +31715,13 @@ typedef $$ConversationsTableCreateCompanionBuilder =
       required Uint8List listProjectionCiphertext,
       required int sortKey,
       Value<bool> tombstoned,
+      Value<bool> pinned,
+      Value<String?> peerUserId,
+      Value<String?> lastActivityEventId,
+      Value<int> unreadCount,
+      Value<DateTime?> mutedUntil,
+      Value<Uint8List?> draftCiphertext,
+      Value<Uint8List?> displayTitleCiphertext,
       Value<int> rowid,
     });
 typedef $$ConversationsTableUpdateCompanionBuilder =
@@ -13742,6 +31731,13 @@ typedef $$ConversationsTableUpdateCompanionBuilder =
       Value<Uint8List> listProjectionCiphertext,
       Value<int> sortKey,
       Value<bool> tombstoned,
+      Value<bool> pinned,
+      Value<String?> peerUserId,
+      Value<String?> lastActivityEventId,
+      Value<int> unreadCount,
+      Value<DateTime?> mutedUntil,
+      Value<Uint8List?> draftCiphertext,
+      Value<Uint8List?> displayTitleCiphertext,
       Value<int> rowid,
     });
 
@@ -13846,6 +31842,41 @@ class $$ConversationsTableFilterComposer
 
   ColumnFilters<bool> get tombstoned => $composableBuilder(
     column: $table.tombstoned,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get pinned => $composableBuilder(
+    column: $table.pinned,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get peerUserId => $composableBuilder(
+    column: $table.peerUserId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get lastActivityEventId => $composableBuilder(
+    column: $table.lastActivityEventId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get unreadCount => $composableBuilder(
+    column: $table.unreadCount,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get mutedUntil => $composableBuilder(
+    column: $table.mutedUntil,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<Uint8List> get draftCiphertext => $composableBuilder(
+    column: $table.draftCiphertext,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<Uint8List> get displayTitleCiphertext => $composableBuilder(
+    column: $table.displayTitleCiphertext,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -13958,6 +31989,41 @@ class $$ConversationsTableOrderingComposer
     column: $table.tombstoned,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<bool> get pinned => $composableBuilder(
+    column: $table.pinned,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get peerUserId => $composableBuilder(
+    column: $table.peerUserId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get lastActivityEventId => $composableBuilder(
+    column: $table.lastActivityEventId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get unreadCount => $composableBuilder(
+    column: $table.unreadCount,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get mutedUntil => $composableBuilder(
+    column: $table.mutedUntil,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<Uint8List> get draftCiphertext => $composableBuilder(
+    column: $table.draftCiphertext,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<Uint8List> get displayTitleCiphertext => $composableBuilder(
+    column: $table.displayTitleCiphertext,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$ConversationsTableAnnotationComposer
@@ -13987,6 +32053,39 @@ class $$ConversationsTableAnnotationComposer
 
   GeneratedColumn<bool> get tombstoned => $composableBuilder(
     column: $table.tombstoned,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get pinned =>
+      $composableBuilder(column: $table.pinned, builder: (column) => column);
+
+  GeneratedColumn<String> get peerUserId => $composableBuilder(
+    column: $table.peerUserId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get lastActivityEventId => $composableBuilder(
+    column: $table.lastActivityEventId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get unreadCount => $composableBuilder(
+    column: $table.unreadCount,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get mutedUntil => $composableBuilder(
+    column: $table.mutedUntil,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<Uint8List> get draftCiphertext => $composableBuilder(
+    column: $table.draftCiphertext,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<Uint8List> get displayTitleCiphertext => $composableBuilder(
+    column: $table.displayTitleCiphertext,
     builder: (column) => column,
   );
 
@@ -14106,6 +32205,13 @@ class $$ConversationsTableTableManager
                     const Value.absent(),
                 Value<int> sortKey = const Value.absent(),
                 Value<bool> tombstoned = const Value.absent(),
+                Value<bool> pinned = const Value.absent(),
+                Value<String?> peerUserId = const Value.absent(),
+                Value<String?> lastActivityEventId = const Value.absent(),
+                Value<int> unreadCount = const Value.absent(),
+                Value<DateTime?> mutedUntil = const Value.absent(),
+                Value<Uint8List?> draftCiphertext = const Value.absent(),
+                Value<Uint8List?> displayTitleCiphertext = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => ConversationsCompanion(
                 conversationId: conversationId,
@@ -14113,6 +32219,13 @@ class $$ConversationsTableTableManager
                 listProjectionCiphertext: listProjectionCiphertext,
                 sortKey: sortKey,
                 tombstoned: tombstoned,
+                pinned: pinned,
+                peerUserId: peerUserId,
+                lastActivityEventId: lastActivityEventId,
+                unreadCount: unreadCount,
+                mutedUntil: mutedUntil,
+                draftCiphertext: draftCiphertext,
+                displayTitleCiphertext: displayTitleCiphertext,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -14122,6 +32235,13 @@ class $$ConversationsTableTableManager
                 required Uint8List listProjectionCiphertext,
                 required int sortKey,
                 Value<bool> tombstoned = const Value.absent(),
+                Value<bool> pinned = const Value.absent(),
+                Value<String?> peerUserId = const Value.absent(),
+                Value<String?> lastActivityEventId = const Value.absent(),
+                Value<int> unreadCount = const Value.absent(),
+                Value<DateTime?> mutedUntil = const Value.absent(),
+                Value<Uint8List?> draftCiphertext = const Value.absent(),
+                Value<Uint8List?> displayTitleCiphertext = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => ConversationsCompanion.insert(
                 conversationId: conversationId,
@@ -14129,6 +32249,13 @@ class $$ConversationsTableTableManager
                 listProjectionCiphertext: listProjectionCiphertext,
                 sortKey: sortKey,
                 tombstoned: tombstoned,
+                pinned: pinned,
+                peerUserId: peerUserId,
+                lastActivityEventId: lastActivityEventId,
+                unreadCount: unreadCount,
+                mutedUntil: mutedUntil,
+                draftCiphertext: draftCiphertext,
+                displayTitleCiphertext: displayTitleCiphertext,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
@@ -14626,6 +32753,20 @@ typedef $$MessagesTableCreateCompanionBuilder =
       required int status,
       required int revision,
       required DateTime createdAt,
+      Value<String> senderUserId,
+      Value<String> senderDeviceId,
+      Value<String?> replyToMessageId,
+      Value<Uint8List?> quoteFallbackCiphertext,
+      Value<int> orderingMs,
+      Value<String> orderingEventId,
+      Value<int> timestampState,
+      Value<bool> deletedForEveryone,
+      Value<bool> deletedForMe,
+      Value<bool> pinned,
+      Value<bool> starred,
+      Value<bool> unread,
+      Value<bool> alerted,
+      Value<bool> deliveredReceiptSent,
       Value<int> rowid,
     });
 typedef $$MessagesTableUpdateCompanionBuilder =
@@ -14637,6 +32778,20 @@ typedef $$MessagesTableUpdateCompanionBuilder =
       Value<int> status,
       Value<int> revision,
       Value<DateTime> createdAt,
+      Value<String> senderUserId,
+      Value<String> senderDeviceId,
+      Value<String?> replyToMessageId,
+      Value<Uint8List?> quoteFallbackCiphertext,
+      Value<int> orderingMs,
+      Value<String> orderingEventId,
+      Value<int> timestampState,
+      Value<bool> deletedForEveryone,
+      Value<bool> deletedForMe,
+      Value<bool> pinned,
+      Value<bool> starred,
+      Value<bool> unread,
+      Value<bool> alerted,
+      Value<bool> deliveredReceiptSent,
       Value<int> rowid,
     });
 
@@ -14659,6 +32814,29 @@ final class $$MessagesTableReferences
     if (item == null) return manager;
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static MultiTypedResultKey<$MessageReactionsTable, List<MessageReaction>>
+  _messageReactionsRefsTable(_$LocalDatabase db) =>
+      MultiTypedResultKey.fromTable(
+        db.messageReactions,
+        aliasName: 'messages__message_id__message_reactions__message_id',
+      );
+
+  $$MessageReactionsTableProcessedTableManager get messageReactionsRefs {
+    final manager =
+        $$MessageReactionsTableTableManager($_db, $_db.messageReactions).filter(
+          (f) => f.messageId.messageId.sqlEquals(
+            $_itemColumn<String>('message_id')!,
+          ),
+        );
+
+    final cache = $_typedResult.readTableOrNull(
+      _messageReactionsRefsTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
     );
   }
 
@@ -14696,6 +32874,37 @@ final class $$MessagesTableReferences
     );
 
     final cache = $_typedResult.readTableOrNull(_receiptsRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<
+    $PendingApplicationReceiptsTable,
+    List<PendingApplicationReceipt>
+  >
+  _pendingApplicationReceiptsRefsTable(_$LocalDatabase db) =>
+      MultiTypedResultKey.fromTable(
+        db.pendingApplicationReceipts,
+        aliasName:
+            'messages__message_id__pending_application_receipts__message_id',
+      );
+
+  $$PendingApplicationReceiptsTableProcessedTableManager
+  get pendingApplicationReceiptsRefs {
+    final manager =
+        $$PendingApplicationReceiptsTableTableManager(
+          $_db,
+          $_db.pendingApplicationReceipts,
+        ).filter(
+          (f) => f.messageId.messageId.sqlEquals(
+            $_itemColumn<String>('message_id')!,
+          ),
+        );
+
+    final cache = $_typedResult.readTableOrNull(
+      _pendingApplicationReceiptsRefsTable($_db),
+    );
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: cache),
     );
@@ -14741,6 +32950,76 @@ class $$MessagesTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
+  ColumnFilters<String> get senderUserId => $composableBuilder(
+    column: $table.senderUserId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get senderDeviceId => $composableBuilder(
+    column: $table.senderDeviceId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get replyToMessageId => $composableBuilder(
+    column: $table.replyToMessageId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<Uint8List> get quoteFallbackCiphertext => $composableBuilder(
+    column: $table.quoteFallbackCiphertext,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get orderingMs => $composableBuilder(
+    column: $table.orderingMs,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get orderingEventId => $composableBuilder(
+    column: $table.orderingEventId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get timestampState => $composableBuilder(
+    column: $table.timestampState,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get deletedForEveryone => $composableBuilder(
+    column: $table.deletedForEveryone,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get deletedForMe => $composableBuilder(
+    column: $table.deletedForMe,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get pinned => $composableBuilder(
+    column: $table.pinned,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get starred => $composableBuilder(
+    column: $table.starred,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get unread => $composableBuilder(
+    column: $table.unread,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get alerted => $composableBuilder(
+    column: $table.alerted,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get deliveredReceiptSent => $composableBuilder(
+    column: $table.deliveredReceiptSent,
+    builder: (column) => ColumnFilters(column),
+  );
+
   $$ConversationsTableFilterComposer get conversationId {
     final $$ConversationsTableFilterComposer composer = $composerBuilder(
       composer: this,
@@ -14762,6 +33041,31 @@ class $$MessagesTableFilterComposer
           ),
     );
     return composer;
+  }
+
+  Expression<bool> messageReactionsRefs(
+    Expression<bool> Function($$MessageReactionsTableFilterComposer f) f,
+  ) {
+    final $$MessageReactionsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.messageId,
+      referencedTable: $db.messageReactions,
+      getReferencedColumn: (t) => t.messageId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$MessageReactionsTableFilterComposer(
+            $db: $db,
+            $table: $db.messageReactions,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
   }
 
   Expression<bool> attachmentsRefs(
@@ -14813,6 +33117,33 @@ class $$MessagesTableFilterComposer
     );
     return f(composer);
   }
+
+  Expression<bool> pendingApplicationReceiptsRefs(
+    Expression<bool> Function($$PendingApplicationReceiptsTableFilterComposer f)
+    f,
+  ) {
+    final $$PendingApplicationReceiptsTableFilterComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.messageId,
+          referencedTable: $db.pendingApplicationReceipts,
+          getReferencedColumn: (t) => t.messageId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$PendingApplicationReceiptsTableFilterComposer(
+                $db: $db,
+                $table: $db.pendingApplicationReceipts,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
 }
 
 class $$MessagesTableOrderingComposer
@@ -14851,6 +33182,76 @@ class $$MessagesTableOrderingComposer
 
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get senderUserId => $composableBuilder(
+    column: $table.senderUserId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get senderDeviceId => $composableBuilder(
+    column: $table.senderDeviceId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get replyToMessageId => $composableBuilder(
+    column: $table.replyToMessageId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<Uint8List> get quoteFallbackCiphertext => $composableBuilder(
+    column: $table.quoteFallbackCiphertext,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get orderingMs => $composableBuilder(
+    column: $table.orderingMs,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get orderingEventId => $composableBuilder(
+    column: $table.orderingEventId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get timestampState => $composableBuilder(
+    column: $table.timestampState,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get deletedForEveryone => $composableBuilder(
+    column: $table.deletedForEveryone,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get deletedForMe => $composableBuilder(
+    column: $table.deletedForMe,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get pinned => $composableBuilder(
+    column: $table.pinned,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get starred => $composableBuilder(
+    column: $table.starred,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get unread => $composableBuilder(
+    column: $table.unread,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get alerted => $composableBuilder(
+    column: $table.alerted,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get deliveredReceiptSent => $composableBuilder(
+    column: $table.deliveredReceiptSent,
     builder: (column) => ColumnOrderings(column),
   );
 
@@ -14909,6 +33310,68 @@ class $$MessagesTableAnnotationComposer
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
 
+  GeneratedColumn<String> get senderUserId => $composableBuilder(
+    column: $table.senderUserId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get senderDeviceId => $composableBuilder(
+    column: $table.senderDeviceId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get replyToMessageId => $composableBuilder(
+    column: $table.replyToMessageId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<Uint8List> get quoteFallbackCiphertext => $composableBuilder(
+    column: $table.quoteFallbackCiphertext,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get orderingMs => $composableBuilder(
+    column: $table.orderingMs,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get orderingEventId => $composableBuilder(
+    column: $table.orderingEventId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get timestampState => $composableBuilder(
+    column: $table.timestampState,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get deletedForEveryone => $composableBuilder(
+    column: $table.deletedForEveryone,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get deletedForMe => $composableBuilder(
+    column: $table.deletedForMe,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get pinned =>
+      $composableBuilder(column: $table.pinned, builder: (column) => column);
+
+  GeneratedColumn<bool> get starred =>
+      $composableBuilder(column: $table.starred, builder: (column) => column);
+
+  GeneratedColumn<bool> get unread =>
+      $composableBuilder(column: $table.unread, builder: (column) => column);
+
+  GeneratedColumn<bool> get alerted =>
+      $composableBuilder(column: $table.alerted, builder: (column) => column);
+
+  GeneratedColumn<bool> get deliveredReceiptSent => $composableBuilder(
+    column: $table.deliveredReceiptSent,
+    builder: (column) => column,
+  );
+
   $$ConversationsTableAnnotationComposer get conversationId {
     final $$ConversationsTableAnnotationComposer composer = $composerBuilder(
       composer: this,
@@ -14930,6 +33393,31 @@ class $$MessagesTableAnnotationComposer
           ),
     );
     return composer;
+  }
+
+  Expression<T> messageReactionsRefs<T extends Object>(
+    Expression<T> Function($$MessageReactionsTableAnnotationComposer a) f,
+  ) {
+    final $$MessageReactionsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.messageId,
+      referencedTable: $db.messageReactions,
+      getReferencedColumn: (t) => t.messageId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$MessageReactionsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.messageReactions,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
   }
 
   Expression<T> attachmentsRefs<T extends Object>(
@@ -14981,6 +33469,35 @@ class $$MessagesTableAnnotationComposer
     );
     return f(composer);
   }
+
+  Expression<T> pendingApplicationReceiptsRefs<T extends Object>(
+    Expression<T> Function(
+      $$PendingApplicationReceiptsTableAnnotationComposer a,
+    )
+    f,
+  ) {
+    final $$PendingApplicationReceiptsTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.messageId,
+          referencedTable: $db.pendingApplicationReceipts,
+          getReferencedColumn: (t) => t.messageId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$PendingApplicationReceiptsTableAnnotationComposer(
+                $db: $db,
+                $table: $db.pendingApplicationReceipts,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
 }
 
 class $$MessagesTableTableManager
@@ -14998,8 +33515,10 @@ class $$MessagesTableTableManager
           Message,
           PrefetchHooks Function({
             bool conversationId,
+            bool messageReactionsRefs,
             bool attachmentsRefs,
             bool receiptsRefs,
+            bool pendingApplicationReceiptsRefs,
           })
         > {
   $$MessagesTableTableManager(_$LocalDatabase db, $MessagesTable table)
@@ -15022,6 +33541,21 @@ class $$MessagesTableTableManager
                 Value<int> status = const Value.absent(),
                 Value<int> revision = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
+                Value<String> senderUserId = const Value.absent(),
+                Value<String> senderDeviceId = const Value.absent(),
+                Value<String?> replyToMessageId = const Value.absent(),
+                Value<Uint8List?> quoteFallbackCiphertext =
+                    const Value.absent(),
+                Value<int> orderingMs = const Value.absent(),
+                Value<String> orderingEventId = const Value.absent(),
+                Value<int> timestampState = const Value.absent(),
+                Value<bool> deletedForEveryone = const Value.absent(),
+                Value<bool> deletedForMe = const Value.absent(),
+                Value<bool> pinned = const Value.absent(),
+                Value<bool> starred = const Value.absent(),
+                Value<bool> unread = const Value.absent(),
+                Value<bool> alerted = const Value.absent(),
+                Value<bool> deliveredReceiptSent = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => MessagesCompanion(
                 messageId: messageId,
@@ -15031,6 +33565,20 @@ class $$MessagesTableTableManager
                 status: status,
                 revision: revision,
                 createdAt: createdAt,
+                senderUserId: senderUserId,
+                senderDeviceId: senderDeviceId,
+                replyToMessageId: replyToMessageId,
+                quoteFallbackCiphertext: quoteFallbackCiphertext,
+                orderingMs: orderingMs,
+                orderingEventId: orderingEventId,
+                timestampState: timestampState,
+                deletedForEveryone: deletedForEveryone,
+                deletedForMe: deletedForMe,
+                pinned: pinned,
+                starred: starred,
+                unread: unread,
+                alerted: alerted,
+                deliveredReceiptSent: deliveredReceiptSent,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -15042,6 +33590,21 @@ class $$MessagesTableTableManager
                 required int status,
                 required int revision,
                 required DateTime createdAt,
+                Value<String> senderUserId = const Value.absent(),
+                Value<String> senderDeviceId = const Value.absent(),
+                Value<String?> replyToMessageId = const Value.absent(),
+                Value<Uint8List?> quoteFallbackCiphertext =
+                    const Value.absent(),
+                Value<int> orderingMs = const Value.absent(),
+                Value<String> orderingEventId = const Value.absent(),
+                Value<int> timestampState = const Value.absent(),
+                Value<bool> deletedForEveryone = const Value.absent(),
+                Value<bool> deletedForMe = const Value.absent(),
+                Value<bool> pinned = const Value.absent(),
+                Value<bool> starred = const Value.absent(),
+                Value<bool> unread = const Value.absent(),
+                Value<bool> alerted = const Value.absent(),
+                Value<bool> deliveredReceiptSent = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => MessagesCompanion.insert(
                 messageId: messageId,
@@ -15051,6 +33614,20 @@ class $$MessagesTableTableManager
                 status: status,
                 revision: revision,
                 createdAt: createdAt,
+                senderUserId: senderUserId,
+                senderDeviceId: senderDeviceId,
+                replyToMessageId: replyToMessageId,
+                quoteFallbackCiphertext: quoteFallbackCiphertext,
+                orderingMs: orderingMs,
+                orderingEventId: orderingEventId,
+                timestampState: timestampState,
+                deletedForEveryone: deletedForEveryone,
+                deletedForMe: deletedForMe,
+                pinned: pinned,
+                starred: starred,
+                unread: unread,
+                alerted: alerted,
+                deliveredReceiptSent: deliveredReceiptSent,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
@@ -15064,14 +33641,19 @@ class $$MessagesTableTableManager
           prefetchHooksCallback:
               ({
                 conversationId = false,
+                messageReactionsRefs = false,
                 attachmentsRefs = false,
                 receiptsRefs = false,
+                pendingApplicationReceiptsRefs = false,
               }) {
                 return PrefetchHooks(
                   db: db,
                   explicitlyWatchedTables: [
+                    if (messageReactionsRefs) db.messageReactions,
                     if (attachmentsRefs) db.attachments,
                     if (receiptsRefs) db.receipts,
+                    if (pendingApplicationReceiptsRefs)
+                      db.pendingApplicationReceipts,
                   ],
                   addJoins:
                       <
@@ -15107,6 +33689,27 @@ class $$MessagesTableTableManager
                       },
                   getPrefetchedDataCallback: (items) async {
                     return [
+                      if (messageReactionsRefs)
+                        await $_getPrefetchedData<
+                          Message,
+                          $MessagesTable,
+                          MessageReaction
+                        >(
+                          currentTable: table,
+                          referencedTable: $$MessagesTableReferences
+                              ._messageReactionsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$MessagesTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).messageReactionsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.messageId == item.messageId,
+                              ),
+                          typedResults: items,
+                        ),
                       if (attachmentsRefs)
                         await $_getPrefetchedData<
                           Message,
@@ -15149,6 +33752,27 @@ class $$MessagesTableTableManager
                               ),
                           typedResults: items,
                         ),
+                      if (pendingApplicationReceiptsRefs)
+                        await $_getPrefetchedData<
+                          Message,
+                          $MessagesTable,
+                          PendingApplicationReceipt
+                        >(
+                          currentTable: table,
+                          referencedTable: $$MessagesTableReferences
+                              ._pendingApplicationReceiptsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$MessagesTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).pendingApplicationReceiptsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.messageId == item.messageId,
+                              ),
+                          typedResults: items,
+                        ),
                     ];
                   },
                 );
@@ -15171,8 +33795,10 @@ typedef $$MessagesTableProcessedTableManager =
       Message,
       PrefetchHooks Function({
         bool conversationId,
+        bool messageReactionsRefs,
         bool attachmentsRefs,
         bool receiptsRefs,
+        bool pendingApplicationReceiptsRefs,
       })
     >;
 typedef $$MessageEventsTableCreateCompanionBuilder =
@@ -15520,6 +34146,1446 @@ typedef $$MessageEventsTableProcessedTableManager =
       (MessageEvent, $$MessageEventsTableReferences),
       MessageEvent,
       PrefetchHooks Function({bool conversationId})
+    >;
+typedef $$StoredApplicationEventsTableCreateCompanionBuilder =
+    StoredApplicationEventsCompanion Function({
+      required String eventId,
+      required String conversationId,
+      required int kind,
+      required String senderUserId,
+      required String senderDeviceId,
+      required int senderCounter,
+      required int createdMs,
+      required int orderingMs,
+      required Uint8List canonicalEvent,
+      required Uint8List bodyProjection,
+      required int applyState,
+      Value<bool> localOrigin,
+      Value<String> localDeviceId,
+      Value<String?> targetMessageId,
+      Value<int?> revision,
+      Value<DateTime> authenticatedAt,
+      Value<int> rowid,
+    });
+typedef $$StoredApplicationEventsTableUpdateCompanionBuilder =
+    StoredApplicationEventsCompanion Function({
+      Value<String> eventId,
+      Value<String> conversationId,
+      Value<int> kind,
+      Value<String> senderUserId,
+      Value<String> senderDeviceId,
+      Value<int> senderCounter,
+      Value<int> createdMs,
+      Value<int> orderingMs,
+      Value<Uint8List> canonicalEvent,
+      Value<Uint8List> bodyProjection,
+      Value<int> applyState,
+      Value<bool> localOrigin,
+      Value<String> localDeviceId,
+      Value<String?> targetMessageId,
+      Value<int?> revision,
+      Value<DateTime> authenticatedAt,
+      Value<int> rowid,
+    });
+
+class $$StoredApplicationEventsTableFilterComposer
+    extends Composer<_$LocalDatabase, $StoredApplicationEventsTable> {
+  $$StoredApplicationEventsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get eventId => $composableBuilder(
+    column: $table.eventId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get conversationId => $composableBuilder(
+    column: $table.conversationId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get kind => $composableBuilder(
+    column: $table.kind,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get senderUserId => $composableBuilder(
+    column: $table.senderUserId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get senderDeviceId => $composableBuilder(
+    column: $table.senderDeviceId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get senderCounter => $composableBuilder(
+    column: $table.senderCounter,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get createdMs => $composableBuilder(
+    column: $table.createdMs,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get orderingMs => $composableBuilder(
+    column: $table.orderingMs,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<Uint8List> get canonicalEvent => $composableBuilder(
+    column: $table.canonicalEvent,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<Uint8List> get bodyProjection => $composableBuilder(
+    column: $table.bodyProjection,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get applyState => $composableBuilder(
+    column: $table.applyState,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get localOrigin => $composableBuilder(
+    column: $table.localOrigin,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get localDeviceId => $composableBuilder(
+    column: $table.localDeviceId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get targetMessageId => $composableBuilder(
+    column: $table.targetMessageId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get revision => $composableBuilder(
+    column: $table.revision,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get authenticatedAt => $composableBuilder(
+    column: $table.authenticatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$StoredApplicationEventsTableOrderingComposer
+    extends Composer<_$LocalDatabase, $StoredApplicationEventsTable> {
+  $$StoredApplicationEventsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get eventId => $composableBuilder(
+    column: $table.eventId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get conversationId => $composableBuilder(
+    column: $table.conversationId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get kind => $composableBuilder(
+    column: $table.kind,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get senderUserId => $composableBuilder(
+    column: $table.senderUserId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get senderDeviceId => $composableBuilder(
+    column: $table.senderDeviceId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get senderCounter => $composableBuilder(
+    column: $table.senderCounter,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get createdMs => $composableBuilder(
+    column: $table.createdMs,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get orderingMs => $composableBuilder(
+    column: $table.orderingMs,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<Uint8List> get canonicalEvent => $composableBuilder(
+    column: $table.canonicalEvent,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<Uint8List> get bodyProjection => $composableBuilder(
+    column: $table.bodyProjection,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get applyState => $composableBuilder(
+    column: $table.applyState,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get localOrigin => $composableBuilder(
+    column: $table.localOrigin,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get localDeviceId => $composableBuilder(
+    column: $table.localDeviceId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get targetMessageId => $composableBuilder(
+    column: $table.targetMessageId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get revision => $composableBuilder(
+    column: $table.revision,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get authenticatedAt => $composableBuilder(
+    column: $table.authenticatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$StoredApplicationEventsTableAnnotationComposer
+    extends Composer<_$LocalDatabase, $StoredApplicationEventsTable> {
+  $$StoredApplicationEventsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get eventId =>
+      $composableBuilder(column: $table.eventId, builder: (column) => column);
+
+  GeneratedColumn<String> get conversationId => $composableBuilder(
+    column: $table.conversationId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get kind =>
+      $composableBuilder(column: $table.kind, builder: (column) => column);
+
+  GeneratedColumn<String> get senderUserId => $composableBuilder(
+    column: $table.senderUserId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get senderDeviceId => $composableBuilder(
+    column: $table.senderDeviceId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get senderCounter => $composableBuilder(
+    column: $table.senderCounter,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get createdMs =>
+      $composableBuilder(column: $table.createdMs, builder: (column) => column);
+
+  GeneratedColumn<int> get orderingMs => $composableBuilder(
+    column: $table.orderingMs,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<Uint8List> get canonicalEvent => $composableBuilder(
+    column: $table.canonicalEvent,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<Uint8List> get bodyProjection => $composableBuilder(
+    column: $table.bodyProjection,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get applyState => $composableBuilder(
+    column: $table.applyState,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get localOrigin => $composableBuilder(
+    column: $table.localOrigin,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get localDeviceId => $composableBuilder(
+    column: $table.localDeviceId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get targetMessageId => $composableBuilder(
+    column: $table.targetMessageId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get revision =>
+      $composableBuilder(column: $table.revision, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get authenticatedAt => $composableBuilder(
+    column: $table.authenticatedAt,
+    builder: (column) => column,
+  );
+}
+
+class $$StoredApplicationEventsTableTableManager
+    extends
+        RootTableManager<
+          _$LocalDatabase,
+          $StoredApplicationEventsTable,
+          StoredApplicationEvent,
+          $$StoredApplicationEventsTableFilterComposer,
+          $$StoredApplicationEventsTableOrderingComposer,
+          $$StoredApplicationEventsTableAnnotationComposer,
+          $$StoredApplicationEventsTableCreateCompanionBuilder,
+          $$StoredApplicationEventsTableUpdateCompanionBuilder,
+          (
+            StoredApplicationEvent,
+            BaseReferences<
+              _$LocalDatabase,
+              $StoredApplicationEventsTable,
+              StoredApplicationEvent
+            >,
+          ),
+          StoredApplicationEvent,
+          PrefetchHooks Function()
+        > {
+  $$StoredApplicationEventsTableTableManager(
+    _$LocalDatabase db,
+    $StoredApplicationEventsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$StoredApplicationEventsTableFilterComposer(
+                $db: db,
+                $table: table,
+              ),
+          createOrderingComposer: () =>
+              $$StoredApplicationEventsTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$StoredApplicationEventsTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> eventId = const Value.absent(),
+                Value<String> conversationId = const Value.absent(),
+                Value<int> kind = const Value.absent(),
+                Value<String> senderUserId = const Value.absent(),
+                Value<String> senderDeviceId = const Value.absent(),
+                Value<int> senderCounter = const Value.absent(),
+                Value<int> createdMs = const Value.absent(),
+                Value<int> orderingMs = const Value.absent(),
+                Value<Uint8List> canonicalEvent = const Value.absent(),
+                Value<Uint8List> bodyProjection = const Value.absent(),
+                Value<int> applyState = const Value.absent(),
+                Value<bool> localOrigin = const Value.absent(),
+                Value<String> localDeviceId = const Value.absent(),
+                Value<String?> targetMessageId = const Value.absent(),
+                Value<int?> revision = const Value.absent(),
+                Value<DateTime> authenticatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => StoredApplicationEventsCompanion(
+                eventId: eventId,
+                conversationId: conversationId,
+                kind: kind,
+                senderUserId: senderUserId,
+                senderDeviceId: senderDeviceId,
+                senderCounter: senderCounter,
+                createdMs: createdMs,
+                orderingMs: orderingMs,
+                canonicalEvent: canonicalEvent,
+                bodyProjection: bodyProjection,
+                applyState: applyState,
+                localOrigin: localOrigin,
+                localDeviceId: localDeviceId,
+                targetMessageId: targetMessageId,
+                revision: revision,
+                authenticatedAt: authenticatedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String eventId,
+                required String conversationId,
+                required int kind,
+                required String senderUserId,
+                required String senderDeviceId,
+                required int senderCounter,
+                required int createdMs,
+                required int orderingMs,
+                required Uint8List canonicalEvent,
+                required Uint8List bodyProjection,
+                required int applyState,
+                Value<bool> localOrigin = const Value.absent(),
+                Value<String> localDeviceId = const Value.absent(),
+                Value<String?> targetMessageId = const Value.absent(),
+                Value<int?> revision = const Value.absent(),
+                Value<DateTime> authenticatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => StoredApplicationEventsCompanion.insert(
+                eventId: eventId,
+                conversationId: conversationId,
+                kind: kind,
+                senderUserId: senderUserId,
+                senderDeviceId: senderDeviceId,
+                senderCounter: senderCounter,
+                createdMs: createdMs,
+                orderingMs: orderingMs,
+                canonicalEvent: canonicalEvent,
+                bodyProjection: bodyProjection,
+                applyState: applyState,
+                localOrigin: localOrigin,
+                localDeviceId: localDeviceId,
+                targetMessageId: targetMessageId,
+                revision: revision,
+                authenticatedAt: authenticatedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$StoredApplicationEventsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$LocalDatabase,
+      $StoredApplicationEventsTable,
+      StoredApplicationEvent,
+      $$StoredApplicationEventsTableFilterComposer,
+      $$StoredApplicationEventsTableOrderingComposer,
+      $$StoredApplicationEventsTableAnnotationComposer,
+      $$StoredApplicationEventsTableCreateCompanionBuilder,
+      $$StoredApplicationEventsTableUpdateCompanionBuilder,
+      (
+        StoredApplicationEvent,
+        BaseReferences<
+          _$LocalDatabase,
+          $StoredApplicationEventsTable,
+          StoredApplicationEvent
+        >,
+      ),
+      StoredApplicationEvent,
+      PrefetchHooks Function()
+    >;
+typedef $$ApplicationEventTargetsTableCreateCompanionBuilder =
+    ApplicationEventTargetsCompanion Function({
+      required String messageId,
+      required String eventId,
+      Value<int> rowid,
+    });
+typedef $$ApplicationEventTargetsTableUpdateCompanionBuilder =
+    ApplicationEventTargetsCompanion Function({
+      Value<String> messageId,
+      Value<String> eventId,
+      Value<int> rowid,
+    });
+
+class $$ApplicationEventTargetsTableFilterComposer
+    extends Composer<_$LocalDatabase, $ApplicationEventTargetsTable> {
+  $$ApplicationEventTargetsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get messageId => $composableBuilder(
+    column: $table.messageId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get eventId => $composableBuilder(
+    column: $table.eventId,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$ApplicationEventTargetsTableOrderingComposer
+    extends Composer<_$LocalDatabase, $ApplicationEventTargetsTable> {
+  $$ApplicationEventTargetsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get messageId => $composableBuilder(
+    column: $table.messageId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get eventId => $composableBuilder(
+    column: $table.eventId,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$ApplicationEventTargetsTableAnnotationComposer
+    extends Composer<_$LocalDatabase, $ApplicationEventTargetsTable> {
+  $$ApplicationEventTargetsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get messageId =>
+      $composableBuilder(column: $table.messageId, builder: (column) => column);
+
+  GeneratedColumn<String> get eventId =>
+      $composableBuilder(column: $table.eventId, builder: (column) => column);
+}
+
+class $$ApplicationEventTargetsTableTableManager
+    extends
+        RootTableManager<
+          _$LocalDatabase,
+          $ApplicationEventTargetsTable,
+          ApplicationEventTarget,
+          $$ApplicationEventTargetsTableFilterComposer,
+          $$ApplicationEventTargetsTableOrderingComposer,
+          $$ApplicationEventTargetsTableAnnotationComposer,
+          $$ApplicationEventTargetsTableCreateCompanionBuilder,
+          $$ApplicationEventTargetsTableUpdateCompanionBuilder,
+          (
+            ApplicationEventTarget,
+            BaseReferences<
+              _$LocalDatabase,
+              $ApplicationEventTargetsTable,
+              ApplicationEventTarget
+            >,
+          ),
+          ApplicationEventTarget,
+          PrefetchHooks Function()
+        > {
+  $$ApplicationEventTargetsTableTableManager(
+    _$LocalDatabase db,
+    $ApplicationEventTargetsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$ApplicationEventTargetsTableFilterComposer(
+                $db: db,
+                $table: table,
+              ),
+          createOrderingComposer: () =>
+              $$ApplicationEventTargetsTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$ApplicationEventTargetsTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> messageId = const Value.absent(),
+                Value<String> eventId = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => ApplicationEventTargetsCompanion(
+                messageId: messageId,
+                eventId: eventId,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String messageId,
+                required String eventId,
+                Value<int> rowid = const Value.absent(),
+              }) => ApplicationEventTargetsCompanion.insert(
+                messageId: messageId,
+                eventId: eventId,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$ApplicationEventTargetsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$LocalDatabase,
+      $ApplicationEventTargetsTable,
+      ApplicationEventTarget,
+      $$ApplicationEventTargetsTableFilterComposer,
+      $$ApplicationEventTargetsTableOrderingComposer,
+      $$ApplicationEventTargetsTableAnnotationComposer,
+      $$ApplicationEventTargetsTableCreateCompanionBuilder,
+      $$ApplicationEventTargetsTableUpdateCompanionBuilder,
+      (
+        ApplicationEventTarget,
+        BaseReferences<
+          _$LocalDatabase,
+          $ApplicationEventTargetsTable,
+          ApplicationEventTarget
+        >,
+      ),
+      ApplicationEventTarget,
+      PrefetchHooks Function()
+    >;
+typedef $$UnsupportedApplicationEventsTableCreateCompanionBuilder =
+    UnsupportedApplicationEventsCompanion Function({
+      required String recordKey,
+      Value<String?> eventId,
+      Value<String?> conversationId,
+      required int version,
+      Value<int?> kind,
+      required String senderUserId,
+      required String senderDeviceId,
+      Value<int?> senderCounter,
+      Value<int> applyState,
+      required Uint8List retainedPayload,
+      Value<DateTime> authenticatedAt,
+      Value<int> rowid,
+    });
+typedef $$UnsupportedApplicationEventsTableUpdateCompanionBuilder =
+    UnsupportedApplicationEventsCompanion Function({
+      Value<String> recordKey,
+      Value<String?> eventId,
+      Value<String?> conversationId,
+      Value<int> version,
+      Value<int?> kind,
+      Value<String> senderUserId,
+      Value<String> senderDeviceId,
+      Value<int?> senderCounter,
+      Value<int> applyState,
+      Value<Uint8List> retainedPayload,
+      Value<DateTime> authenticatedAt,
+      Value<int> rowid,
+    });
+
+class $$UnsupportedApplicationEventsTableFilterComposer
+    extends Composer<_$LocalDatabase, $UnsupportedApplicationEventsTable> {
+  $$UnsupportedApplicationEventsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get recordKey => $composableBuilder(
+    column: $table.recordKey,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get eventId => $composableBuilder(
+    column: $table.eventId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get conversationId => $composableBuilder(
+    column: $table.conversationId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get version => $composableBuilder(
+    column: $table.version,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get kind => $composableBuilder(
+    column: $table.kind,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get senderUserId => $composableBuilder(
+    column: $table.senderUserId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get senderDeviceId => $composableBuilder(
+    column: $table.senderDeviceId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get senderCounter => $composableBuilder(
+    column: $table.senderCounter,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get applyState => $composableBuilder(
+    column: $table.applyState,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<Uint8List> get retainedPayload => $composableBuilder(
+    column: $table.retainedPayload,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get authenticatedAt => $composableBuilder(
+    column: $table.authenticatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$UnsupportedApplicationEventsTableOrderingComposer
+    extends Composer<_$LocalDatabase, $UnsupportedApplicationEventsTable> {
+  $$UnsupportedApplicationEventsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get recordKey => $composableBuilder(
+    column: $table.recordKey,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get eventId => $composableBuilder(
+    column: $table.eventId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get conversationId => $composableBuilder(
+    column: $table.conversationId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get version => $composableBuilder(
+    column: $table.version,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get kind => $composableBuilder(
+    column: $table.kind,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get senderUserId => $composableBuilder(
+    column: $table.senderUserId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get senderDeviceId => $composableBuilder(
+    column: $table.senderDeviceId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get senderCounter => $composableBuilder(
+    column: $table.senderCounter,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get applyState => $composableBuilder(
+    column: $table.applyState,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<Uint8List> get retainedPayload => $composableBuilder(
+    column: $table.retainedPayload,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get authenticatedAt => $composableBuilder(
+    column: $table.authenticatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$UnsupportedApplicationEventsTableAnnotationComposer
+    extends Composer<_$LocalDatabase, $UnsupportedApplicationEventsTable> {
+  $$UnsupportedApplicationEventsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get recordKey =>
+      $composableBuilder(column: $table.recordKey, builder: (column) => column);
+
+  GeneratedColumn<String> get eventId =>
+      $composableBuilder(column: $table.eventId, builder: (column) => column);
+
+  GeneratedColumn<String> get conversationId => $composableBuilder(
+    column: $table.conversationId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get version =>
+      $composableBuilder(column: $table.version, builder: (column) => column);
+
+  GeneratedColumn<int> get kind =>
+      $composableBuilder(column: $table.kind, builder: (column) => column);
+
+  GeneratedColumn<String> get senderUserId => $composableBuilder(
+    column: $table.senderUserId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get senderDeviceId => $composableBuilder(
+    column: $table.senderDeviceId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get senderCounter => $composableBuilder(
+    column: $table.senderCounter,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get applyState => $composableBuilder(
+    column: $table.applyState,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<Uint8List> get retainedPayload => $composableBuilder(
+    column: $table.retainedPayload,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get authenticatedAt => $composableBuilder(
+    column: $table.authenticatedAt,
+    builder: (column) => column,
+  );
+}
+
+class $$UnsupportedApplicationEventsTableTableManager
+    extends
+        RootTableManager<
+          _$LocalDatabase,
+          $UnsupportedApplicationEventsTable,
+          UnsupportedApplicationEvent,
+          $$UnsupportedApplicationEventsTableFilterComposer,
+          $$UnsupportedApplicationEventsTableOrderingComposer,
+          $$UnsupportedApplicationEventsTableAnnotationComposer,
+          $$UnsupportedApplicationEventsTableCreateCompanionBuilder,
+          $$UnsupportedApplicationEventsTableUpdateCompanionBuilder,
+          (
+            UnsupportedApplicationEvent,
+            BaseReferences<
+              _$LocalDatabase,
+              $UnsupportedApplicationEventsTable,
+              UnsupportedApplicationEvent
+            >,
+          ),
+          UnsupportedApplicationEvent,
+          PrefetchHooks Function()
+        > {
+  $$UnsupportedApplicationEventsTableTableManager(
+    _$LocalDatabase db,
+    $UnsupportedApplicationEventsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$UnsupportedApplicationEventsTableFilterComposer(
+                $db: db,
+                $table: table,
+              ),
+          createOrderingComposer: () =>
+              $$UnsupportedApplicationEventsTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$UnsupportedApplicationEventsTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> recordKey = const Value.absent(),
+                Value<String?> eventId = const Value.absent(),
+                Value<String?> conversationId = const Value.absent(),
+                Value<int> version = const Value.absent(),
+                Value<int?> kind = const Value.absent(),
+                Value<String> senderUserId = const Value.absent(),
+                Value<String> senderDeviceId = const Value.absent(),
+                Value<int?> senderCounter = const Value.absent(),
+                Value<int> applyState = const Value.absent(),
+                Value<Uint8List> retainedPayload = const Value.absent(),
+                Value<DateTime> authenticatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => UnsupportedApplicationEventsCompanion(
+                recordKey: recordKey,
+                eventId: eventId,
+                conversationId: conversationId,
+                version: version,
+                kind: kind,
+                senderUserId: senderUserId,
+                senderDeviceId: senderDeviceId,
+                senderCounter: senderCounter,
+                applyState: applyState,
+                retainedPayload: retainedPayload,
+                authenticatedAt: authenticatedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String recordKey,
+                Value<String?> eventId = const Value.absent(),
+                Value<String?> conversationId = const Value.absent(),
+                required int version,
+                Value<int?> kind = const Value.absent(),
+                required String senderUserId,
+                required String senderDeviceId,
+                Value<int?> senderCounter = const Value.absent(),
+                Value<int> applyState = const Value.absent(),
+                required Uint8List retainedPayload,
+                Value<DateTime> authenticatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => UnsupportedApplicationEventsCompanion.insert(
+                recordKey: recordKey,
+                eventId: eventId,
+                conversationId: conversationId,
+                version: version,
+                kind: kind,
+                senderUserId: senderUserId,
+                senderDeviceId: senderDeviceId,
+                senderCounter: senderCounter,
+                applyState: applyState,
+                retainedPayload: retainedPayload,
+                authenticatedAt: authenticatedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$UnsupportedApplicationEventsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$LocalDatabase,
+      $UnsupportedApplicationEventsTable,
+      UnsupportedApplicationEvent,
+      $$UnsupportedApplicationEventsTableFilterComposer,
+      $$UnsupportedApplicationEventsTableOrderingComposer,
+      $$UnsupportedApplicationEventsTableAnnotationComposer,
+      $$UnsupportedApplicationEventsTableCreateCompanionBuilder,
+      $$UnsupportedApplicationEventsTableUpdateCompanionBuilder,
+      (
+        UnsupportedApplicationEvent,
+        BaseReferences<
+          _$LocalDatabase,
+          $UnsupportedApplicationEventsTable,
+          UnsupportedApplicationEvent
+        >,
+      ),
+      UnsupportedApplicationEvent,
+      PrefetchHooks Function()
+    >;
+typedef $$ApplicationSenderCountersTableCreateCompanionBuilder =
+    ApplicationSenderCountersCompanion Function({
+      required String deviceId,
+      Value<int> lastCounter,
+      Value<int> rowid,
+    });
+typedef $$ApplicationSenderCountersTableUpdateCompanionBuilder =
+    ApplicationSenderCountersCompanion Function({
+      Value<String> deviceId,
+      Value<int> lastCounter,
+      Value<int> rowid,
+    });
+
+class $$ApplicationSenderCountersTableFilterComposer
+    extends Composer<_$LocalDatabase, $ApplicationSenderCountersTable> {
+  $$ApplicationSenderCountersTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get deviceId => $composableBuilder(
+    column: $table.deviceId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get lastCounter => $composableBuilder(
+    column: $table.lastCounter,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$ApplicationSenderCountersTableOrderingComposer
+    extends Composer<_$LocalDatabase, $ApplicationSenderCountersTable> {
+  $$ApplicationSenderCountersTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get deviceId => $composableBuilder(
+    column: $table.deviceId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get lastCounter => $composableBuilder(
+    column: $table.lastCounter,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$ApplicationSenderCountersTableAnnotationComposer
+    extends Composer<_$LocalDatabase, $ApplicationSenderCountersTable> {
+  $$ApplicationSenderCountersTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get deviceId =>
+      $composableBuilder(column: $table.deviceId, builder: (column) => column);
+
+  GeneratedColumn<int> get lastCounter => $composableBuilder(
+    column: $table.lastCounter,
+    builder: (column) => column,
+  );
+}
+
+class $$ApplicationSenderCountersTableTableManager
+    extends
+        RootTableManager<
+          _$LocalDatabase,
+          $ApplicationSenderCountersTable,
+          ApplicationSenderCounter,
+          $$ApplicationSenderCountersTableFilterComposer,
+          $$ApplicationSenderCountersTableOrderingComposer,
+          $$ApplicationSenderCountersTableAnnotationComposer,
+          $$ApplicationSenderCountersTableCreateCompanionBuilder,
+          $$ApplicationSenderCountersTableUpdateCompanionBuilder,
+          (
+            ApplicationSenderCounter,
+            BaseReferences<
+              _$LocalDatabase,
+              $ApplicationSenderCountersTable,
+              ApplicationSenderCounter
+            >,
+          ),
+          ApplicationSenderCounter,
+          PrefetchHooks Function()
+        > {
+  $$ApplicationSenderCountersTableTableManager(
+    _$LocalDatabase db,
+    $ApplicationSenderCountersTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$ApplicationSenderCountersTableFilterComposer(
+                $db: db,
+                $table: table,
+              ),
+          createOrderingComposer: () =>
+              $$ApplicationSenderCountersTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$ApplicationSenderCountersTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> deviceId = const Value.absent(),
+                Value<int> lastCounter = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => ApplicationSenderCountersCompanion(
+                deviceId: deviceId,
+                lastCounter: lastCounter,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String deviceId,
+                Value<int> lastCounter = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => ApplicationSenderCountersCompanion.insert(
+                deviceId: deviceId,
+                lastCounter: lastCounter,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$ApplicationSenderCountersTableProcessedTableManager =
+    ProcessedTableManager<
+      _$LocalDatabase,
+      $ApplicationSenderCountersTable,
+      ApplicationSenderCounter,
+      $$ApplicationSenderCountersTableFilterComposer,
+      $$ApplicationSenderCountersTableOrderingComposer,
+      $$ApplicationSenderCountersTableAnnotationComposer,
+      $$ApplicationSenderCountersTableCreateCompanionBuilder,
+      $$ApplicationSenderCountersTableUpdateCompanionBuilder,
+      (
+        ApplicationSenderCounter,
+        BaseReferences<
+          _$LocalDatabase,
+          $ApplicationSenderCountersTable,
+          ApplicationSenderCounter
+        >,
+      ),
+      ApplicationSenderCounter,
+      PrefetchHooks Function()
+    >;
+typedef $$MessageReactionsTableCreateCompanionBuilder =
+    MessageReactionsCompanion Function({
+      required String messageId,
+      required String reactingUserId,
+      required String eventId,
+      Value<Uint8List?> emojiCiphertext,
+      Value<int> rowid,
+    });
+typedef $$MessageReactionsTableUpdateCompanionBuilder =
+    MessageReactionsCompanion Function({
+      Value<String> messageId,
+      Value<String> reactingUserId,
+      Value<String> eventId,
+      Value<Uint8List?> emojiCiphertext,
+      Value<int> rowid,
+    });
+
+final class $$MessageReactionsTableReferences
+    extends
+        BaseReferences<
+          _$LocalDatabase,
+          $MessageReactionsTable,
+          MessageReaction
+        > {
+  $$MessageReactionsTableReferences(
+    super.$_db,
+    super.$_table,
+    super.$_typedResult,
+  );
+
+  static $MessagesTable _messageIdTable(_$LocalDatabase db) => db.messages
+      .createAlias('message_reactions__message_id__messages__message_id');
+
+  $$MessagesTableProcessedTableManager get messageId {
+    final $_column = $_itemColumn<String>('message_id')!;
+
+    final manager = $$MessagesTableTableManager(
+      $_db,
+      $_db.messages,
+    ).filter((f) => f.messageId.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_messageIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+}
+
+class $$MessageReactionsTableFilterComposer
+    extends Composer<_$LocalDatabase, $MessageReactionsTable> {
+  $$MessageReactionsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get reactingUserId => $composableBuilder(
+    column: $table.reactingUserId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get eventId => $composableBuilder(
+    column: $table.eventId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<Uint8List> get emojiCiphertext => $composableBuilder(
+    column: $table.emojiCiphertext,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$MessagesTableFilterComposer get messageId {
+    final $$MessagesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.messageId,
+      referencedTable: $db.messages,
+      getReferencedColumn: (t) => t.messageId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$MessagesTableFilterComposer(
+            $db: $db,
+            $table: $db.messages,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$MessageReactionsTableOrderingComposer
+    extends Composer<_$LocalDatabase, $MessageReactionsTable> {
+  $$MessageReactionsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get reactingUserId => $composableBuilder(
+    column: $table.reactingUserId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get eventId => $composableBuilder(
+    column: $table.eventId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<Uint8List> get emojiCiphertext => $composableBuilder(
+    column: $table.emojiCiphertext,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$MessagesTableOrderingComposer get messageId {
+    final $$MessagesTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.messageId,
+      referencedTable: $db.messages,
+      getReferencedColumn: (t) => t.messageId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$MessagesTableOrderingComposer(
+            $db: $db,
+            $table: $db.messages,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$MessageReactionsTableAnnotationComposer
+    extends Composer<_$LocalDatabase, $MessageReactionsTable> {
+  $$MessageReactionsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get reactingUserId => $composableBuilder(
+    column: $table.reactingUserId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get eventId =>
+      $composableBuilder(column: $table.eventId, builder: (column) => column);
+
+  GeneratedColumn<Uint8List> get emojiCiphertext => $composableBuilder(
+    column: $table.emojiCiphertext,
+    builder: (column) => column,
+  );
+
+  $$MessagesTableAnnotationComposer get messageId {
+    final $$MessagesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.messageId,
+      referencedTable: $db.messages,
+      getReferencedColumn: (t) => t.messageId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$MessagesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.messages,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$MessageReactionsTableTableManager
+    extends
+        RootTableManager<
+          _$LocalDatabase,
+          $MessageReactionsTable,
+          MessageReaction,
+          $$MessageReactionsTableFilterComposer,
+          $$MessageReactionsTableOrderingComposer,
+          $$MessageReactionsTableAnnotationComposer,
+          $$MessageReactionsTableCreateCompanionBuilder,
+          $$MessageReactionsTableUpdateCompanionBuilder,
+          (MessageReaction, $$MessageReactionsTableReferences),
+          MessageReaction,
+          PrefetchHooks Function({bool messageId})
+        > {
+  $$MessageReactionsTableTableManager(
+    _$LocalDatabase db,
+    $MessageReactionsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$MessageReactionsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$MessageReactionsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$MessageReactionsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> messageId = const Value.absent(),
+                Value<String> reactingUserId = const Value.absent(),
+                Value<String> eventId = const Value.absent(),
+                Value<Uint8List?> emojiCiphertext = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => MessageReactionsCompanion(
+                messageId: messageId,
+                reactingUserId: reactingUserId,
+                eventId: eventId,
+                emojiCiphertext: emojiCiphertext,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String messageId,
+                required String reactingUserId,
+                required String eventId,
+                Value<Uint8List?> emojiCiphertext = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => MessageReactionsCompanion.insert(
+                messageId: messageId,
+                reactingUserId: reactingUserId,
+                eventId: eventId,
+                emojiCiphertext: emojiCiphertext,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$MessageReactionsTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: ({messageId = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [],
+              addJoins:
+                  <
+                    T extends TableManagerState<
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic
+                    >
+                  >(state) {
+                    if (messageId) {
+                      state =
+                          state.withJoin(
+                                currentTable: table,
+                                currentColumn: table.messageId,
+                                referencedTable:
+                                    $$MessageReactionsTableReferences
+                                        ._messageIdTable(db),
+                                referencedColumn:
+                                    $$MessageReactionsTableReferences
+                                        ._messageIdTable(db)
+                                        .messageId,
+                              )
+                              as T;
+                    }
+
+                    return state;
+                  },
+              getPrefetchedDataCallback: (items) async {
+                return [];
+              },
+            );
+          },
+        ),
+      );
+}
+
+typedef $$MessageReactionsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$LocalDatabase,
+      $MessageReactionsTable,
+      MessageReaction,
+      $$MessageReactionsTableFilterComposer,
+      $$MessageReactionsTableOrderingComposer,
+      $$MessageReactionsTableAnnotationComposer,
+      $$MessageReactionsTableCreateCompanionBuilder,
+      $$MessageReactionsTableUpdateCompanionBuilder,
+      (MessageReaction, $$MessageReactionsTableReferences),
+      MessageReaction,
+      PrefetchHooks Function({bool messageId})
     >;
 typedef $$AttachmentsTableCreateCompanionBuilder =
     AttachmentsCompanion Function({
@@ -15879,6 +35945,11 @@ typedef $$InboxEnvelopesTableCreateCompanionBuilder =
       required Uint8List envelopeCiphertext,
       required int processingState,
       Value<bool> readyToAcknowledge,
+      Value<String?> opaqueEventId,
+      Value<int?> dependencyClass,
+      Value<int> attemptCount,
+      Value<int> inspectionFailures,
+      Value<DateTime?> nextAttemptAt,
       Value<int> rowid,
     });
 typedef $$InboxEnvelopesTableUpdateCompanionBuilder =
@@ -15888,6 +35959,11 @@ typedef $$InboxEnvelopesTableUpdateCompanionBuilder =
       Value<Uint8List> envelopeCiphertext,
       Value<int> processingState,
       Value<bool> readyToAcknowledge,
+      Value<String?> opaqueEventId,
+      Value<int?> dependencyClass,
+      Value<int> attemptCount,
+      Value<int> inspectionFailures,
+      Value<DateTime?> nextAttemptAt,
       Value<int> rowid,
     });
 
@@ -15922,6 +35998,31 @@ class $$InboxEnvelopesTableFilterComposer
 
   ColumnFilters<bool> get readyToAcknowledge => $composableBuilder(
     column: $table.readyToAcknowledge,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get opaqueEventId => $composableBuilder(
+    column: $table.opaqueEventId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get dependencyClass => $composableBuilder(
+    column: $table.dependencyClass,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get attemptCount => $composableBuilder(
+    column: $table.attemptCount,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get inspectionFailures => $composableBuilder(
+    column: $table.inspectionFailures,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get nextAttemptAt => $composableBuilder(
+    column: $table.nextAttemptAt,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -15959,6 +36060,31 @@ class $$InboxEnvelopesTableOrderingComposer
     column: $table.readyToAcknowledge,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<String> get opaqueEventId => $composableBuilder(
+    column: $table.opaqueEventId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get dependencyClass => $composableBuilder(
+    column: $table.dependencyClass,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get attemptCount => $composableBuilder(
+    column: $table.attemptCount,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get inspectionFailures => $composableBuilder(
+    column: $table.inspectionFailures,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get nextAttemptAt => $composableBuilder(
+    column: $table.nextAttemptAt,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$InboxEnvelopesTableAnnotationComposer
@@ -15990,6 +36116,31 @@ class $$InboxEnvelopesTableAnnotationComposer
 
   GeneratedColumn<bool> get readyToAcknowledge => $composableBuilder(
     column: $table.readyToAcknowledge,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get opaqueEventId => $composableBuilder(
+    column: $table.opaqueEventId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get dependencyClass => $composableBuilder(
+    column: $table.dependencyClass,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get attemptCount => $composableBuilder(
+    column: $table.attemptCount,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get inspectionFailures => $composableBuilder(
+    column: $table.inspectionFailures,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get nextAttemptAt => $composableBuilder(
+    column: $table.nextAttemptAt,
     builder: (column) => column,
   );
 }
@@ -16036,6 +36187,11 @@ class $$InboxEnvelopesTableTableManager
                 Value<Uint8List> envelopeCiphertext = const Value.absent(),
                 Value<int> processingState = const Value.absent(),
                 Value<bool> readyToAcknowledge = const Value.absent(),
+                Value<String?> opaqueEventId = const Value.absent(),
+                Value<int?> dependencyClass = const Value.absent(),
+                Value<int> attemptCount = const Value.absent(),
+                Value<int> inspectionFailures = const Value.absent(),
+                Value<DateTime?> nextAttemptAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => InboxEnvelopesCompanion(
                 envelopeId: envelopeId,
@@ -16043,6 +36199,11 @@ class $$InboxEnvelopesTableTableManager
                 envelopeCiphertext: envelopeCiphertext,
                 processingState: processingState,
                 readyToAcknowledge: readyToAcknowledge,
+                opaqueEventId: opaqueEventId,
+                dependencyClass: dependencyClass,
+                attemptCount: attemptCount,
+                inspectionFailures: inspectionFailures,
+                nextAttemptAt: nextAttemptAt,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -16052,6 +36213,11 @@ class $$InboxEnvelopesTableTableManager
                 required Uint8List envelopeCiphertext,
                 required int processingState,
                 Value<bool> readyToAcknowledge = const Value.absent(),
+                Value<String?> opaqueEventId = const Value.absent(),
+                Value<int?> dependencyClass = const Value.absent(),
+                Value<int> attemptCount = const Value.absent(),
+                Value<int> inspectionFailures = const Value.absent(),
+                Value<DateTime?> nextAttemptAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => InboxEnvelopesCompanion.insert(
                 envelopeId: envelopeId,
@@ -16059,6 +36225,11 @@ class $$InboxEnvelopesTableTableManager
                 envelopeCiphertext: envelopeCiphertext,
                 processingState: processingState,
                 readyToAcknowledge: readyToAcknowledge,
+                opaqueEventId: opaqueEventId,
+                dependencyClass: dependencyClass,
+                attemptCount: attemptCount,
+                inspectionFailures: inspectionFailures,
+                nextAttemptAt: nextAttemptAt,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
@@ -16091,10 +36262,14 @@ typedef $$OutboxOperationsTableCreateCompanionBuilder =
       required String operationId,
       required String eventId,
       required String recipientDeviceId,
+      Value<String> recipientUserId,
       required int batchIndex,
       required Uint8List exactRecipientCiphertext,
       required int attemptState,
       Value<int> attemptCount,
+      Value<DateTime?> nextAttemptAt,
+      Value<DateTime?> lastAttemptAt,
+      Value<DateTime?> terminalAt,
       Value<int> rowid,
     });
 typedef $$OutboxOperationsTableUpdateCompanionBuilder =
@@ -16102,10 +36277,14 @@ typedef $$OutboxOperationsTableUpdateCompanionBuilder =
       Value<String> operationId,
       Value<String> eventId,
       Value<String> recipientDeviceId,
+      Value<String> recipientUserId,
       Value<int> batchIndex,
       Value<Uint8List> exactRecipientCiphertext,
       Value<int> attemptState,
       Value<int> attemptCount,
+      Value<DateTime?> nextAttemptAt,
+      Value<DateTime?> lastAttemptAt,
+      Value<DateTime?> terminalAt,
       Value<int> rowid,
     });
 
@@ -16133,6 +36312,11 @@ class $$OutboxOperationsTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
+  ColumnFilters<String> get recipientUserId => $composableBuilder(
+    column: $table.recipientUserId,
+    builder: (column) => ColumnFilters(column),
+  );
+
   ColumnFilters<int> get batchIndex => $composableBuilder(
     column: $table.batchIndex,
     builder: (column) => ColumnFilters(column),
@@ -16150,6 +36334,21 @@ class $$OutboxOperationsTableFilterComposer
 
   ColumnFilters<int> get attemptCount => $composableBuilder(
     column: $table.attemptCount,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get nextAttemptAt => $composableBuilder(
+    column: $table.nextAttemptAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get lastAttemptAt => $composableBuilder(
+    column: $table.lastAttemptAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get terminalAt => $composableBuilder(
+    column: $table.terminalAt,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -16178,6 +36377,11 @@ class $$OutboxOperationsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get recipientUserId => $composableBuilder(
+    column: $table.recipientUserId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<int> get batchIndex => $composableBuilder(
     column: $table.batchIndex,
     builder: (column) => ColumnOrderings(column),
@@ -16195,6 +36399,21 @@ class $$OutboxOperationsTableOrderingComposer
 
   ColumnOrderings<int> get attemptCount => $composableBuilder(
     column: $table.attemptCount,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get nextAttemptAt => $composableBuilder(
+    column: $table.nextAttemptAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get lastAttemptAt => $composableBuilder(
+    column: $table.lastAttemptAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get terminalAt => $composableBuilder(
+    column: $table.terminalAt,
     builder: (column) => ColumnOrderings(column),
   );
 }
@@ -16221,6 +36440,11 @@ class $$OutboxOperationsTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<String> get recipientUserId => $composableBuilder(
+    column: $table.recipientUserId,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<int> get batchIndex => $composableBuilder(
     column: $table.batchIndex,
     builder: (column) => column,
@@ -16238,6 +36462,21 @@ class $$OutboxOperationsTableAnnotationComposer
 
   GeneratedColumn<int> get attemptCount => $composableBuilder(
     column: $table.attemptCount,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get nextAttemptAt => $composableBuilder(
+    column: $table.nextAttemptAt,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get lastAttemptAt => $composableBuilder(
+    column: $table.lastAttemptAt,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get terminalAt => $composableBuilder(
+    column: $table.terminalAt,
     builder: (column) => column,
   );
 }
@@ -16282,20 +36521,28 @@ class $$OutboxOperationsTableTableManager
                 Value<String> operationId = const Value.absent(),
                 Value<String> eventId = const Value.absent(),
                 Value<String> recipientDeviceId = const Value.absent(),
+                Value<String> recipientUserId = const Value.absent(),
                 Value<int> batchIndex = const Value.absent(),
                 Value<Uint8List> exactRecipientCiphertext =
                     const Value.absent(),
                 Value<int> attemptState = const Value.absent(),
                 Value<int> attemptCount = const Value.absent(),
+                Value<DateTime?> nextAttemptAt = const Value.absent(),
+                Value<DateTime?> lastAttemptAt = const Value.absent(),
+                Value<DateTime?> terminalAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => OutboxOperationsCompanion(
                 operationId: operationId,
                 eventId: eventId,
                 recipientDeviceId: recipientDeviceId,
+                recipientUserId: recipientUserId,
                 batchIndex: batchIndex,
                 exactRecipientCiphertext: exactRecipientCiphertext,
                 attemptState: attemptState,
                 attemptCount: attemptCount,
+                nextAttemptAt: nextAttemptAt,
+                lastAttemptAt: lastAttemptAt,
+                terminalAt: terminalAt,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -16303,19 +36550,27 @@ class $$OutboxOperationsTableTableManager
                 required String operationId,
                 required String eventId,
                 required String recipientDeviceId,
+                Value<String> recipientUserId = const Value.absent(),
                 required int batchIndex,
                 required Uint8List exactRecipientCiphertext,
                 required int attemptState,
                 Value<int> attemptCount = const Value.absent(),
+                Value<DateTime?> nextAttemptAt = const Value.absent(),
+                Value<DateTime?> lastAttemptAt = const Value.absent(),
+                Value<DateTime?> terminalAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => OutboxOperationsCompanion.insert(
                 operationId: operationId,
                 eventId: eventId,
                 recipientDeviceId: recipientDeviceId,
+                recipientUserId: recipientUserId,
                 batchIndex: batchIndex,
                 exactRecipientCiphertext: exactRecipientCiphertext,
                 attemptState: attemptState,
                 attemptCount: attemptCount,
+                nextAttemptAt: nextAttemptAt,
+                lastAttemptAt: lastAttemptAt,
+                terminalAt: terminalAt,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
@@ -16345,6 +36600,1778 @@ typedef $$OutboxOperationsTableProcessedTableManager =
         >,
       ),
       OutboxOperation,
+      PrefetchHooks Function()
+    >;
+typedef $$InboxEventDeduplicationsTableCreateCompanionBuilder =
+    InboxEventDeduplicationsCompanion Function({
+      required String opaqueEventId,
+      required String firstEnvelopeId,
+      required int dependencyClass,
+      Value<DateTime> committedAt,
+      Value<int> rowid,
+    });
+typedef $$InboxEventDeduplicationsTableUpdateCompanionBuilder =
+    InboxEventDeduplicationsCompanion Function({
+      Value<String> opaqueEventId,
+      Value<String> firstEnvelopeId,
+      Value<int> dependencyClass,
+      Value<DateTime> committedAt,
+      Value<int> rowid,
+    });
+
+class $$InboxEventDeduplicationsTableFilterComposer
+    extends Composer<_$LocalDatabase, $InboxEventDeduplicationsTable> {
+  $$InboxEventDeduplicationsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get opaqueEventId => $composableBuilder(
+    column: $table.opaqueEventId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get firstEnvelopeId => $composableBuilder(
+    column: $table.firstEnvelopeId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get dependencyClass => $composableBuilder(
+    column: $table.dependencyClass,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get committedAt => $composableBuilder(
+    column: $table.committedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$InboxEventDeduplicationsTableOrderingComposer
+    extends Composer<_$LocalDatabase, $InboxEventDeduplicationsTable> {
+  $$InboxEventDeduplicationsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get opaqueEventId => $composableBuilder(
+    column: $table.opaqueEventId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get firstEnvelopeId => $composableBuilder(
+    column: $table.firstEnvelopeId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get dependencyClass => $composableBuilder(
+    column: $table.dependencyClass,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get committedAt => $composableBuilder(
+    column: $table.committedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$InboxEventDeduplicationsTableAnnotationComposer
+    extends Composer<_$LocalDatabase, $InboxEventDeduplicationsTable> {
+  $$InboxEventDeduplicationsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get opaqueEventId => $composableBuilder(
+    column: $table.opaqueEventId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get firstEnvelopeId => $composableBuilder(
+    column: $table.firstEnvelopeId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get dependencyClass => $composableBuilder(
+    column: $table.dependencyClass,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get committedAt => $composableBuilder(
+    column: $table.committedAt,
+    builder: (column) => column,
+  );
+}
+
+class $$InboxEventDeduplicationsTableTableManager
+    extends
+        RootTableManager<
+          _$LocalDatabase,
+          $InboxEventDeduplicationsTable,
+          InboxEventDeduplication,
+          $$InboxEventDeduplicationsTableFilterComposer,
+          $$InboxEventDeduplicationsTableOrderingComposer,
+          $$InboxEventDeduplicationsTableAnnotationComposer,
+          $$InboxEventDeduplicationsTableCreateCompanionBuilder,
+          $$InboxEventDeduplicationsTableUpdateCompanionBuilder,
+          (
+            InboxEventDeduplication,
+            BaseReferences<
+              _$LocalDatabase,
+              $InboxEventDeduplicationsTable,
+              InboxEventDeduplication
+            >,
+          ),
+          InboxEventDeduplication,
+          PrefetchHooks Function()
+        > {
+  $$InboxEventDeduplicationsTableTableManager(
+    _$LocalDatabase db,
+    $InboxEventDeduplicationsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$InboxEventDeduplicationsTableFilterComposer(
+                $db: db,
+                $table: table,
+              ),
+          createOrderingComposer: () =>
+              $$InboxEventDeduplicationsTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$InboxEventDeduplicationsTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> opaqueEventId = const Value.absent(),
+                Value<String> firstEnvelopeId = const Value.absent(),
+                Value<int> dependencyClass = const Value.absent(),
+                Value<DateTime> committedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => InboxEventDeduplicationsCompanion(
+                opaqueEventId: opaqueEventId,
+                firstEnvelopeId: firstEnvelopeId,
+                dependencyClass: dependencyClass,
+                committedAt: committedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String opaqueEventId,
+                required String firstEnvelopeId,
+                required int dependencyClass,
+                Value<DateTime> committedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => InboxEventDeduplicationsCompanion.insert(
+                opaqueEventId: opaqueEventId,
+                firstEnvelopeId: firstEnvelopeId,
+                dependencyClass: dependencyClass,
+                committedAt: committedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$InboxEventDeduplicationsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$LocalDatabase,
+      $InboxEventDeduplicationsTable,
+      InboxEventDeduplication,
+      $$InboxEventDeduplicationsTableFilterComposer,
+      $$InboxEventDeduplicationsTableOrderingComposer,
+      $$InboxEventDeduplicationsTableAnnotationComposer,
+      $$InboxEventDeduplicationsTableCreateCompanionBuilder,
+      $$InboxEventDeduplicationsTableUpdateCompanionBuilder,
+      (
+        InboxEventDeduplication,
+        BaseReferences<
+          _$LocalDatabase,
+          $InboxEventDeduplicationsTable,
+          InboxEventDeduplication
+        >,
+      ),
+      InboxEventDeduplication,
+      PrefetchHooks Function()
+    >;
+typedef $$PairwiseReplayMarkersTableCreateCompanionBuilder =
+    PairwiseReplayMarkersCompanion Function({
+      required Uint8List replayMarker,
+      required Uint8List sessionId,
+      Value<int?> signedPrekeyId,
+      Value<int?> pqSignedPrekeyId,
+      required String firstEnvelopeId,
+      Value<DateTime> committedAt,
+      Value<int> rowid,
+    });
+typedef $$PairwiseReplayMarkersTableUpdateCompanionBuilder =
+    PairwiseReplayMarkersCompanion Function({
+      Value<Uint8List> replayMarker,
+      Value<Uint8List> sessionId,
+      Value<int?> signedPrekeyId,
+      Value<int?> pqSignedPrekeyId,
+      Value<String> firstEnvelopeId,
+      Value<DateTime> committedAt,
+      Value<int> rowid,
+    });
+
+class $$PairwiseReplayMarkersTableFilterComposer
+    extends Composer<_$LocalDatabase, $PairwiseReplayMarkersTable> {
+  $$PairwiseReplayMarkersTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<Uint8List> get replayMarker => $composableBuilder(
+    column: $table.replayMarker,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<Uint8List> get sessionId => $composableBuilder(
+    column: $table.sessionId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get signedPrekeyId => $composableBuilder(
+    column: $table.signedPrekeyId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get pqSignedPrekeyId => $composableBuilder(
+    column: $table.pqSignedPrekeyId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get firstEnvelopeId => $composableBuilder(
+    column: $table.firstEnvelopeId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get committedAt => $composableBuilder(
+    column: $table.committedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$PairwiseReplayMarkersTableOrderingComposer
+    extends Composer<_$LocalDatabase, $PairwiseReplayMarkersTable> {
+  $$PairwiseReplayMarkersTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<Uint8List> get replayMarker => $composableBuilder(
+    column: $table.replayMarker,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<Uint8List> get sessionId => $composableBuilder(
+    column: $table.sessionId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get signedPrekeyId => $composableBuilder(
+    column: $table.signedPrekeyId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get pqSignedPrekeyId => $composableBuilder(
+    column: $table.pqSignedPrekeyId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get firstEnvelopeId => $composableBuilder(
+    column: $table.firstEnvelopeId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get committedAt => $composableBuilder(
+    column: $table.committedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$PairwiseReplayMarkersTableAnnotationComposer
+    extends Composer<_$LocalDatabase, $PairwiseReplayMarkersTable> {
+  $$PairwiseReplayMarkersTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<Uint8List> get replayMarker => $composableBuilder(
+    column: $table.replayMarker,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<Uint8List> get sessionId =>
+      $composableBuilder(column: $table.sessionId, builder: (column) => column);
+
+  GeneratedColumn<int> get signedPrekeyId => $composableBuilder(
+    column: $table.signedPrekeyId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get pqSignedPrekeyId => $composableBuilder(
+    column: $table.pqSignedPrekeyId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get firstEnvelopeId => $composableBuilder(
+    column: $table.firstEnvelopeId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get committedAt => $composableBuilder(
+    column: $table.committedAt,
+    builder: (column) => column,
+  );
+}
+
+class $$PairwiseReplayMarkersTableTableManager
+    extends
+        RootTableManager<
+          _$LocalDatabase,
+          $PairwiseReplayMarkersTable,
+          PairwiseReplayMarker,
+          $$PairwiseReplayMarkersTableFilterComposer,
+          $$PairwiseReplayMarkersTableOrderingComposer,
+          $$PairwiseReplayMarkersTableAnnotationComposer,
+          $$PairwiseReplayMarkersTableCreateCompanionBuilder,
+          $$PairwiseReplayMarkersTableUpdateCompanionBuilder,
+          (
+            PairwiseReplayMarker,
+            BaseReferences<
+              _$LocalDatabase,
+              $PairwiseReplayMarkersTable,
+              PairwiseReplayMarker
+            >,
+          ),
+          PairwiseReplayMarker,
+          PrefetchHooks Function()
+        > {
+  $$PairwiseReplayMarkersTableTableManager(
+    _$LocalDatabase db,
+    $PairwiseReplayMarkersTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$PairwiseReplayMarkersTableFilterComposer(
+                $db: db,
+                $table: table,
+              ),
+          createOrderingComposer: () =>
+              $$PairwiseReplayMarkersTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$PairwiseReplayMarkersTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<Uint8List> replayMarker = const Value.absent(),
+                Value<Uint8List> sessionId = const Value.absent(),
+                Value<int?> signedPrekeyId = const Value.absent(),
+                Value<int?> pqSignedPrekeyId = const Value.absent(),
+                Value<String> firstEnvelopeId = const Value.absent(),
+                Value<DateTime> committedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => PairwiseReplayMarkersCompanion(
+                replayMarker: replayMarker,
+                sessionId: sessionId,
+                signedPrekeyId: signedPrekeyId,
+                pqSignedPrekeyId: pqSignedPrekeyId,
+                firstEnvelopeId: firstEnvelopeId,
+                committedAt: committedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required Uint8List replayMarker,
+                required Uint8List sessionId,
+                Value<int?> signedPrekeyId = const Value.absent(),
+                Value<int?> pqSignedPrekeyId = const Value.absent(),
+                required String firstEnvelopeId,
+                Value<DateTime> committedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => PairwiseReplayMarkersCompanion.insert(
+                replayMarker: replayMarker,
+                sessionId: sessionId,
+                signedPrekeyId: signedPrekeyId,
+                pqSignedPrekeyId: pqSignedPrekeyId,
+                firstEnvelopeId: firstEnvelopeId,
+                committedAt: committedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$PairwiseReplayMarkersTableProcessedTableManager =
+    ProcessedTableManager<
+      _$LocalDatabase,
+      $PairwiseReplayMarkersTable,
+      PairwiseReplayMarker,
+      $$PairwiseReplayMarkersTableFilterComposer,
+      $$PairwiseReplayMarkersTableOrderingComposer,
+      $$PairwiseReplayMarkersTableAnnotationComposer,
+      $$PairwiseReplayMarkersTableCreateCompanionBuilder,
+      $$PairwiseReplayMarkersTableUpdateCompanionBuilder,
+      (
+        PairwiseReplayMarker,
+        BaseReferences<
+          _$LocalDatabase,
+          $PairwiseReplayMarkersTable,
+          PairwiseReplayMarker
+        >,
+      ),
+      PairwiseReplayMarker,
+      PrefetchHooks Function()
+    >;
+typedef $$PairwiseOpenedPayloadsTableCreateCompanionBuilder =
+    PairwiseOpenedPayloadsCompanion Function({
+      required String envelopeId,
+      required String opaqueEventId,
+      required String senderUserId,
+      required String senderDeviceId,
+      required Uint8List sessionId,
+      required Uint8List replayMarker,
+      required Uint8List openedOpaquePayload,
+      Value<bool> applicationApplied,
+      Value<DateTime> committedAt,
+      Value<int> rowid,
+    });
+typedef $$PairwiseOpenedPayloadsTableUpdateCompanionBuilder =
+    PairwiseOpenedPayloadsCompanion Function({
+      Value<String> envelopeId,
+      Value<String> opaqueEventId,
+      Value<String> senderUserId,
+      Value<String> senderDeviceId,
+      Value<Uint8List> sessionId,
+      Value<Uint8List> replayMarker,
+      Value<Uint8List> openedOpaquePayload,
+      Value<bool> applicationApplied,
+      Value<DateTime> committedAt,
+      Value<int> rowid,
+    });
+
+class $$PairwiseOpenedPayloadsTableFilterComposer
+    extends Composer<_$LocalDatabase, $PairwiseOpenedPayloadsTable> {
+  $$PairwiseOpenedPayloadsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get envelopeId => $composableBuilder(
+    column: $table.envelopeId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get opaqueEventId => $composableBuilder(
+    column: $table.opaqueEventId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get senderUserId => $composableBuilder(
+    column: $table.senderUserId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get senderDeviceId => $composableBuilder(
+    column: $table.senderDeviceId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<Uint8List> get sessionId => $composableBuilder(
+    column: $table.sessionId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<Uint8List> get replayMarker => $composableBuilder(
+    column: $table.replayMarker,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<Uint8List> get openedOpaquePayload => $composableBuilder(
+    column: $table.openedOpaquePayload,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get applicationApplied => $composableBuilder(
+    column: $table.applicationApplied,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get committedAt => $composableBuilder(
+    column: $table.committedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$PairwiseOpenedPayloadsTableOrderingComposer
+    extends Composer<_$LocalDatabase, $PairwiseOpenedPayloadsTable> {
+  $$PairwiseOpenedPayloadsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get envelopeId => $composableBuilder(
+    column: $table.envelopeId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get opaqueEventId => $composableBuilder(
+    column: $table.opaqueEventId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get senderUserId => $composableBuilder(
+    column: $table.senderUserId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get senderDeviceId => $composableBuilder(
+    column: $table.senderDeviceId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<Uint8List> get sessionId => $composableBuilder(
+    column: $table.sessionId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<Uint8List> get replayMarker => $composableBuilder(
+    column: $table.replayMarker,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<Uint8List> get openedOpaquePayload => $composableBuilder(
+    column: $table.openedOpaquePayload,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get applicationApplied => $composableBuilder(
+    column: $table.applicationApplied,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get committedAt => $composableBuilder(
+    column: $table.committedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$PairwiseOpenedPayloadsTableAnnotationComposer
+    extends Composer<_$LocalDatabase, $PairwiseOpenedPayloadsTable> {
+  $$PairwiseOpenedPayloadsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get envelopeId => $composableBuilder(
+    column: $table.envelopeId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get opaqueEventId => $composableBuilder(
+    column: $table.opaqueEventId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get senderUserId => $composableBuilder(
+    column: $table.senderUserId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get senderDeviceId => $composableBuilder(
+    column: $table.senderDeviceId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<Uint8List> get sessionId =>
+      $composableBuilder(column: $table.sessionId, builder: (column) => column);
+
+  GeneratedColumn<Uint8List> get replayMarker => $composableBuilder(
+    column: $table.replayMarker,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<Uint8List> get openedOpaquePayload => $composableBuilder(
+    column: $table.openedOpaquePayload,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get applicationApplied => $composableBuilder(
+    column: $table.applicationApplied,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get committedAt => $composableBuilder(
+    column: $table.committedAt,
+    builder: (column) => column,
+  );
+}
+
+class $$PairwiseOpenedPayloadsTableTableManager
+    extends
+        RootTableManager<
+          _$LocalDatabase,
+          $PairwiseOpenedPayloadsTable,
+          PairwiseOpenedPayload,
+          $$PairwiseOpenedPayloadsTableFilterComposer,
+          $$PairwiseOpenedPayloadsTableOrderingComposer,
+          $$PairwiseOpenedPayloadsTableAnnotationComposer,
+          $$PairwiseOpenedPayloadsTableCreateCompanionBuilder,
+          $$PairwiseOpenedPayloadsTableUpdateCompanionBuilder,
+          (
+            PairwiseOpenedPayload,
+            BaseReferences<
+              _$LocalDatabase,
+              $PairwiseOpenedPayloadsTable,
+              PairwiseOpenedPayload
+            >,
+          ),
+          PairwiseOpenedPayload,
+          PrefetchHooks Function()
+        > {
+  $$PairwiseOpenedPayloadsTableTableManager(
+    _$LocalDatabase db,
+    $PairwiseOpenedPayloadsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$PairwiseOpenedPayloadsTableFilterComposer(
+                $db: db,
+                $table: table,
+              ),
+          createOrderingComposer: () =>
+              $$PairwiseOpenedPayloadsTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$PairwiseOpenedPayloadsTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> envelopeId = const Value.absent(),
+                Value<String> opaqueEventId = const Value.absent(),
+                Value<String> senderUserId = const Value.absent(),
+                Value<String> senderDeviceId = const Value.absent(),
+                Value<Uint8List> sessionId = const Value.absent(),
+                Value<Uint8List> replayMarker = const Value.absent(),
+                Value<Uint8List> openedOpaquePayload = const Value.absent(),
+                Value<bool> applicationApplied = const Value.absent(),
+                Value<DateTime> committedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => PairwiseOpenedPayloadsCompanion(
+                envelopeId: envelopeId,
+                opaqueEventId: opaqueEventId,
+                senderUserId: senderUserId,
+                senderDeviceId: senderDeviceId,
+                sessionId: sessionId,
+                replayMarker: replayMarker,
+                openedOpaquePayload: openedOpaquePayload,
+                applicationApplied: applicationApplied,
+                committedAt: committedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String envelopeId,
+                required String opaqueEventId,
+                required String senderUserId,
+                required String senderDeviceId,
+                required Uint8List sessionId,
+                required Uint8List replayMarker,
+                required Uint8List openedOpaquePayload,
+                Value<bool> applicationApplied = const Value.absent(),
+                Value<DateTime> committedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => PairwiseOpenedPayloadsCompanion.insert(
+                envelopeId: envelopeId,
+                opaqueEventId: opaqueEventId,
+                senderUserId: senderUserId,
+                senderDeviceId: senderDeviceId,
+                sessionId: sessionId,
+                replayMarker: replayMarker,
+                openedOpaquePayload: openedOpaquePayload,
+                applicationApplied: applicationApplied,
+                committedAt: committedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$PairwiseOpenedPayloadsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$LocalDatabase,
+      $PairwiseOpenedPayloadsTable,
+      PairwiseOpenedPayload,
+      $$PairwiseOpenedPayloadsTableFilterComposer,
+      $$PairwiseOpenedPayloadsTableOrderingComposer,
+      $$PairwiseOpenedPayloadsTableAnnotationComposer,
+      $$PairwiseOpenedPayloadsTableCreateCompanionBuilder,
+      $$PairwiseOpenedPayloadsTableUpdateCompanionBuilder,
+      (
+        PairwiseOpenedPayload,
+        BaseReferences<
+          _$LocalDatabase,
+          $PairwiseOpenedPayloadsTable,
+          PairwiseOpenedPayload
+        >,
+      ),
+      PairwiseOpenedPayload,
+      PrefetchHooks Function()
+    >;
+typedef $$PairwiseLocalApplicationsTableCreateCompanionBuilder =
+    PairwiseLocalApplicationsCompanion Function({
+      required String operationId,
+      required String eventId,
+      required String localDeviceId,
+      required Uint8List openedOpaquePayload,
+      Value<bool> applicationApplied,
+      Value<DateTime> committedAt,
+      Value<int> rowid,
+    });
+typedef $$PairwiseLocalApplicationsTableUpdateCompanionBuilder =
+    PairwiseLocalApplicationsCompanion Function({
+      Value<String> operationId,
+      Value<String> eventId,
+      Value<String> localDeviceId,
+      Value<Uint8List> openedOpaquePayload,
+      Value<bool> applicationApplied,
+      Value<DateTime> committedAt,
+      Value<int> rowid,
+    });
+
+class $$PairwiseLocalApplicationsTableFilterComposer
+    extends Composer<_$LocalDatabase, $PairwiseLocalApplicationsTable> {
+  $$PairwiseLocalApplicationsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get operationId => $composableBuilder(
+    column: $table.operationId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get eventId => $composableBuilder(
+    column: $table.eventId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get localDeviceId => $composableBuilder(
+    column: $table.localDeviceId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<Uint8List> get openedOpaquePayload => $composableBuilder(
+    column: $table.openedOpaquePayload,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get applicationApplied => $composableBuilder(
+    column: $table.applicationApplied,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get committedAt => $composableBuilder(
+    column: $table.committedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$PairwiseLocalApplicationsTableOrderingComposer
+    extends Composer<_$LocalDatabase, $PairwiseLocalApplicationsTable> {
+  $$PairwiseLocalApplicationsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get operationId => $composableBuilder(
+    column: $table.operationId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get eventId => $composableBuilder(
+    column: $table.eventId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get localDeviceId => $composableBuilder(
+    column: $table.localDeviceId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<Uint8List> get openedOpaquePayload => $composableBuilder(
+    column: $table.openedOpaquePayload,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get applicationApplied => $composableBuilder(
+    column: $table.applicationApplied,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get committedAt => $composableBuilder(
+    column: $table.committedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$PairwiseLocalApplicationsTableAnnotationComposer
+    extends Composer<_$LocalDatabase, $PairwiseLocalApplicationsTable> {
+  $$PairwiseLocalApplicationsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get operationId => $composableBuilder(
+    column: $table.operationId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get eventId =>
+      $composableBuilder(column: $table.eventId, builder: (column) => column);
+
+  GeneratedColumn<String> get localDeviceId => $composableBuilder(
+    column: $table.localDeviceId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<Uint8List> get openedOpaquePayload => $composableBuilder(
+    column: $table.openedOpaquePayload,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get applicationApplied => $composableBuilder(
+    column: $table.applicationApplied,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get committedAt => $composableBuilder(
+    column: $table.committedAt,
+    builder: (column) => column,
+  );
+}
+
+class $$PairwiseLocalApplicationsTableTableManager
+    extends
+        RootTableManager<
+          _$LocalDatabase,
+          $PairwiseLocalApplicationsTable,
+          PairwiseLocalApplication,
+          $$PairwiseLocalApplicationsTableFilterComposer,
+          $$PairwiseLocalApplicationsTableOrderingComposer,
+          $$PairwiseLocalApplicationsTableAnnotationComposer,
+          $$PairwiseLocalApplicationsTableCreateCompanionBuilder,
+          $$PairwiseLocalApplicationsTableUpdateCompanionBuilder,
+          (
+            PairwiseLocalApplication,
+            BaseReferences<
+              _$LocalDatabase,
+              $PairwiseLocalApplicationsTable,
+              PairwiseLocalApplication
+            >,
+          ),
+          PairwiseLocalApplication,
+          PrefetchHooks Function()
+        > {
+  $$PairwiseLocalApplicationsTableTableManager(
+    _$LocalDatabase db,
+    $PairwiseLocalApplicationsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$PairwiseLocalApplicationsTableFilterComposer(
+                $db: db,
+                $table: table,
+              ),
+          createOrderingComposer: () =>
+              $$PairwiseLocalApplicationsTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$PairwiseLocalApplicationsTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> operationId = const Value.absent(),
+                Value<String> eventId = const Value.absent(),
+                Value<String> localDeviceId = const Value.absent(),
+                Value<Uint8List> openedOpaquePayload = const Value.absent(),
+                Value<bool> applicationApplied = const Value.absent(),
+                Value<DateTime> committedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => PairwiseLocalApplicationsCompanion(
+                operationId: operationId,
+                eventId: eventId,
+                localDeviceId: localDeviceId,
+                openedOpaquePayload: openedOpaquePayload,
+                applicationApplied: applicationApplied,
+                committedAt: committedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String operationId,
+                required String eventId,
+                required String localDeviceId,
+                required Uint8List openedOpaquePayload,
+                Value<bool> applicationApplied = const Value.absent(),
+                Value<DateTime> committedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => PairwiseLocalApplicationsCompanion.insert(
+                operationId: operationId,
+                eventId: eventId,
+                localDeviceId: localDeviceId,
+                openedOpaquePayload: openedOpaquePayload,
+                applicationApplied: applicationApplied,
+                committedAt: committedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$PairwiseLocalApplicationsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$LocalDatabase,
+      $PairwiseLocalApplicationsTable,
+      PairwiseLocalApplication,
+      $$PairwiseLocalApplicationsTableFilterComposer,
+      $$PairwiseLocalApplicationsTableOrderingComposer,
+      $$PairwiseLocalApplicationsTableAnnotationComposer,
+      $$PairwiseLocalApplicationsTableCreateCompanionBuilder,
+      $$PairwiseLocalApplicationsTableUpdateCompanionBuilder,
+      (
+        PairwiseLocalApplication,
+        BaseReferences<
+          _$LocalDatabase,
+          $PairwiseLocalApplicationsTable,
+          PairwiseLocalApplication
+        >,
+      ),
+      PairwiseLocalApplication,
+      PrefetchHooks Function()
+    >;
+typedef $$PendingSendPreparationsTableCreateCompanionBuilder =
+    PendingSendPreparationsCompanion Function({
+      required String operationId,
+      required String eventId,
+      required String localUserId,
+      required String localDeviceId,
+      required String peerUserId,
+      Value<int> state,
+      Value<int> attemptCount,
+      Value<DateTime?> nextAttemptAt,
+      Value<DateTime> createdAt,
+      Value<int> rowid,
+    });
+typedef $$PendingSendPreparationsTableUpdateCompanionBuilder =
+    PendingSendPreparationsCompanion Function({
+      Value<String> operationId,
+      Value<String> eventId,
+      Value<String> localUserId,
+      Value<String> localDeviceId,
+      Value<String> peerUserId,
+      Value<int> state,
+      Value<int> attemptCount,
+      Value<DateTime?> nextAttemptAt,
+      Value<DateTime> createdAt,
+      Value<int> rowid,
+    });
+
+class $$PendingSendPreparationsTableFilterComposer
+    extends Composer<_$LocalDatabase, $PendingSendPreparationsTable> {
+  $$PendingSendPreparationsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get operationId => $composableBuilder(
+    column: $table.operationId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get eventId => $composableBuilder(
+    column: $table.eventId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get localUserId => $composableBuilder(
+    column: $table.localUserId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get localDeviceId => $composableBuilder(
+    column: $table.localDeviceId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get peerUserId => $composableBuilder(
+    column: $table.peerUserId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get state => $composableBuilder(
+    column: $table.state,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get attemptCount => $composableBuilder(
+    column: $table.attemptCount,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get nextAttemptAt => $composableBuilder(
+    column: $table.nextAttemptAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$PendingSendPreparationsTableOrderingComposer
+    extends Composer<_$LocalDatabase, $PendingSendPreparationsTable> {
+  $$PendingSendPreparationsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get operationId => $composableBuilder(
+    column: $table.operationId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get eventId => $composableBuilder(
+    column: $table.eventId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get localUserId => $composableBuilder(
+    column: $table.localUserId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get localDeviceId => $composableBuilder(
+    column: $table.localDeviceId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get peerUserId => $composableBuilder(
+    column: $table.peerUserId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get state => $composableBuilder(
+    column: $table.state,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get attemptCount => $composableBuilder(
+    column: $table.attemptCount,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get nextAttemptAt => $composableBuilder(
+    column: $table.nextAttemptAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$PendingSendPreparationsTableAnnotationComposer
+    extends Composer<_$LocalDatabase, $PendingSendPreparationsTable> {
+  $$PendingSendPreparationsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get operationId => $composableBuilder(
+    column: $table.operationId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get eventId =>
+      $composableBuilder(column: $table.eventId, builder: (column) => column);
+
+  GeneratedColumn<String> get localUserId => $composableBuilder(
+    column: $table.localUserId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get localDeviceId => $composableBuilder(
+    column: $table.localDeviceId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get peerUserId => $composableBuilder(
+    column: $table.peerUserId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get state =>
+      $composableBuilder(column: $table.state, builder: (column) => column);
+
+  GeneratedColumn<int> get attemptCount => $composableBuilder(
+    column: $table.attemptCount,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get nextAttemptAt => $composableBuilder(
+    column: $table.nextAttemptAt,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+}
+
+class $$PendingSendPreparationsTableTableManager
+    extends
+        RootTableManager<
+          _$LocalDatabase,
+          $PendingSendPreparationsTable,
+          StoredSendPreparationRow,
+          $$PendingSendPreparationsTableFilterComposer,
+          $$PendingSendPreparationsTableOrderingComposer,
+          $$PendingSendPreparationsTableAnnotationComposer,
+          $$PendingSendPreparationsTableCreateCompanionBuilder,
+          $$PendingSendPreparationsTableUpdateCompanionBuilder,
+          (
+            StoredSendPreparationRow,
+            BaseReferences<
+              _$LocalDatabase,
+              $PendingSendPreparationsTable,
+              StoredSendPreparationRow
+            >,
+          ),
+          StoredSendPreparationRow,
+          PrefetchHooks Function()
+        > {
+  $$PendingSendPreparationsTableTableManager(
+    _$LocalDatabase db,
+    $PendingSendPreparationsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$PendingSendPreparationsTableFilterComposer(
+                $db: db,
+                $table: table,
+              ),
+          createOrderingComposer: () =>
+              $$PendingSendPreparationsTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$PendingSendPreparationsTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> operationId = const Value.absent(),
+                Value<String> eventId = const Value.absent(),
+                Value<String> localUserId = const Value.absent(),
+                Value<String> localDeviceId = const Value.absent(),
+                Value<String> peerUserId = const Value.absent(),
+                Value<int> state = const Value.absent(),
+                Value<int> attemptCount = const Value.absent(),
+                Value<DateTime?> nextAttemptAt = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => PendingSendPreparationsCompanion(
+                operationId: operationId,
+                eventId: eventId,
+                localUserId: localUserId,
+                localDeviceId: localDeviceId,
+                peerUserId: peerUserId,
+                state: state,
+                attemptCount: attemptCount,
+                nextAttemptAt: nextAttemptAt,
+                createdAt: createdAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String operationId,
+                required String eventId,
+                required String localUserId,
+                required String localDeviceId,
+                required String peerUserId,
+                Value<int> state = const Value.absent(),
+                Value<int> attemptCount = const Value.absent(),
+                Value<DateTime?> nextAttemptAt = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => PendingSendPreparationsCompanion.insert(
+                operationId: operationId,
+                eventId: eventId,
+                localUserId: localUserId,
+                localDeviceId: localDeviceId,
+                peerUserId: peerUserId,
+                state: state,
+                attemptCount: attemptCount,
+                nextAttemptAt: nextAttemptAt,
+                createdAt: createdAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$PendingSendPreparationsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$LocalDatabase,
+      $PendingSendPreparationsTable,
+      StoredSendPreparationRow,
+      $$PendingSendPreparationsTableFilterComposer,
+      $$PendingSendPreparationsTableOrderingComposer,
+      $$PendingSendPreparationsTableAnnotationComposer,
+      $$PendingSendPreparationsTableCreateCompanionBuilder,
+      $$PendingSendPreparationsTableUpdateCompanionBuilder,
+      (
+        StoredSendPreparationRow,
+        BaseReferences<
+          _$LocalDatabase,
+          $PendingSendPreparationsTable,
+          StoredSendPreparationRow
+        >,
+      ),
+      StoredSendPreparationRow,
+      PrefetchHooks Function()
+    >;
+typedef $$PairwiseConsumedPrekeysTableCreateCompanionBuilder =
+    PairwiseConsumedPrekeysCompanion Function({
+      required String localDeviceId,
+      required int algorithm,
+      required int keyId,
+      required String firstEnvelopeId,
+      Value<DateTime> consumedAt,
+      Value<int> rowid,
+    });
+typedef $$PairwiseConsumedPrekeysTableUpdateCompanionBuilder =
+    PairwiseConsumedPrekeysCompanion Function({
+      Value<String> localDeviceId,
+      Value<int> algorithm,
+      Value<int> keyId,
+      Value<String> firstEnvelopeId,
+      Value<DateTime> consumedAt,
+      Value<int> rowid,
+    });
+
+class $$PairwiseConsumedPrekeysTableFilterComposer
+    extends Composer<_$LocalDatabase, $PairwiseConsumedPrekeysTable> {
+  $$PairwiseConsumedPrekeysTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get localDeviceId => $composableBuilder(
+    column: $table.localDeviceId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get algorithm => $composableBuilder(
+    column: $table.algorithm,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get keyId => $composableBuilder(
+    column: $table.keyId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get firstEnvelopeId => $composableBuilder(
+    column: $table.firstEnvelopeId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get consumedAt => $composableBuilder(
+    column: $table.consumedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$PairwiseConsumedPrekeysTableOrderingComposer
+    extends Composer<_$LocalDatabase, $PairwiseConsumedPrekeysTable> {
+  $$PairwiseConsumedPrekeysTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get localDeviceId => $composableBuilder(
+    column: $table.localDeviceId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get algorithm => $composableBuilder(
+    column: $table.algorithm,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get keyId => $composableBuilder(
+    column: $table.keyId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get firstEnvelopeId => $composableBuilder(
+    column: $table.firstEnvelopeId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get consumedAt => $composableBuilder(
+    column: $table.consumedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$PairwiseConsumedPrekeysTableAnnotationComposer
+    extends Composer<_$LocalDatabase, $PairwiseConsumedPrekeysTable> {
+  $$PairwiseConsumedPrekeysTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get localDeviceId => $composableBuilder(
+    column: $table.localDeviceId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get algorithm =>
+      $composableBuilder(column: $table.algorithm, builder: (column) => column);
+
+  GeneratedColumn<int> get keyId =>
+      $composableBuilder(column: $table.keyId, builder: (column) => column);
+
+  GeneratedColumn<String> get firstEnvelopeId => $composableBuilder(
+    column: $table.firstEnvelopeId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get consumedAt => $composableBuilder(
+    column: $table.consumedAt,
+    builder: (column) => column,
+  );
+}
+
+class $$PairwiseConsumedPrekeysTableTableManager
+    extends
+        RootTableManager<
+          _$LocalDatabase,
+          $PairwiseConsumedPrekeysTable,
+          PairwiseConsumedPrekey,
+          $$PairwiseConsumedPrekeysTableFilterComposer,
+          $$PairwiseConsumedPrekeysTableOrderingComposer,
+          $$PairwiseConsumedPrekeysTableAnnotationComposer,
+          $$PairwiseConsumedPrekeysTableCreateCompanionBuilder,
+          $$PairwiseConsumedPrekeysTableUpdateCompanionBuilder,
+          (
+            PairwiseConsumedPrekey,
+            BaseReferences<
+              _$LocalDatabase,
+              $PairwiseConsumedPrekeysTable,
+              PairwiseConsumedPrekey
+            >,
+          ),
+          PairwiseConsumedPrekey,
+          PrefetchHooks Function()
+        > {
+  $$PairwiseConsumedPrekeysTableTableManager(
+    _$LocalDatabase db,
+    $PairwiseConsumedPrekeysTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$PairwiseConsumedPrekeysTableFilterComposer(
+                $db: db,
+                $table: table,
+              ),
+          createOrderingComposer: () =>
+              $$PairwiseConsumedPrekeysTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$PairwiseConsumedPrekeysTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> localDeviceId = const Value.absent(),
+                Value<int> algorithm = const Value.absent(),
+                Value<int> keyId = const Value.absent(),
+                Value<String> firstEnvelopeId = const Value.absent(),
+                Value<DateTime> consumedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => PairwiseConsumedPrekeysCompanion(
+                localDeviceId: localDeviceId,
+                algorithm: algorithm,
+                keyId: keyId,
+                firstEnvelopeId: firstEnvelopeId,
+                consumedAt: consumedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String localDeviceId,
+                required int algorithm,
+                required int keyId,
+                required String firstEnvelopeId,
+                Value<DateTime> consumedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => PairwiseConsumedPrekeysCompanion.insert(
+                localDeviceId: localDeviceId,
+                algorithm: algorithm,
+                keyId: keyId,
+                firstEnvelopeId: firstEnvelopeId,
+                consumedAt: consumedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$PairwiseConsumedPrekeysTableProcessedTableManager =
+    ProcessedTableManager<
+      _$LocalDatabase,
+      $PairwiseConsumedPrekeysTable,
+      PairwiseConsumedPrekey,
+      $$PairwiseConsumedPrekeysTableFilterComposer,
+      $$PairwiseConsumedPrekeysTableOrderingComposer,
+      $$PairwiseConsumedPrekeysTableAnnotationComposer,
+      $$PairwiseConsumedPrekeysTableCreateCompanionBuilder,
+      $$PairwiseConsumedPrekeysTableUpdateCompanionBuilder,
+      (
+        PairwiseConsumedPrekey,
+        BaseReferences<
+          _$LocalDatabase,
+          $PairwiseConsumedPrekeysTable,
+          PairwiseConsumedPrekey
+        >,
+      ),
+      PairwiseConsumedPrekey,
+      PrefetchHooks Function()
+    >;
+typedef $$StaleDeviceRefreshRequestsTableCreateCompanionBuilder =
+    StaleDeviceRefreshRequestsCompanion Function({
+      required String userId,
+      required String staleDeviceId,
+      Value<int> state,
+      Value<int> attemptCount,
+      Value<DateTime?> nextAttemptAt,
+      Value<int> rowid,
+    });
+typedef $$StaleDeviceRefreshRequestsTableUpdateCompanionBuilder =
+    StaleDeviceRefreshRequestsCompanion Function({
+      Value<String> userId,
+      Value<String> staleDeviceId,
+      Value<int> state,
+      Value<int> attemptCount,
+      Value<DateTime?> nextAttemptAt,
+      Value<int> rowid,
+    });
+
+class $$StaleDeviceRefreshRequestsTableFilterComposer
+    extends Composer<_$LocalDatabase, $StaleDeviceRefreshRequestsTable> {
+  $$StaleDeviceRefreshRequestsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get userId => $composableBuilder(
+    column: $table.userId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get staleDeviceId => $composableBuilder(
+    column: $table.staleDeviceId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get state => $composableBuilder(
+    column: $table.state,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get attemptCount => $composableBuilder(
+    column: $table.attemptCount,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get nextAttemptAt => $composableBuilder(
+    column: $table.nextAttemptAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$StaleDeviceRefreshRequestsTableOrderingComposer
+    extends Composer<_$LocalDatabase, $StaleDeviceRefreshRequestsTable> {
+  $$StaleDeviceRefreshRequestsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get userId => $composableBuilder(
+    column: $table.userId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get staleDeviceId => $composableBuilder(
+    column: $table.staleDeviceId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get state => $composableBuilder(
+    column: $table.state,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get attemptCount => $composableBuilder(
+    column: $table.attemptCount,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get nextAttemptAt => $composableBuilder(
+    column: $table.nextAttemptAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$StaleDeviceRefreshRequestsTableAnnotationComposer
+    extends Composer<_$LocalDatabase, $StaleDeviceRefreshRequestsTable> {
+  $$StaleDeviceRefreshRequestsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get userId =>
+      $composableBuilder(column: $table.userId, builder: (column) => column);
+
+  GeneratedColumn<String> get staleDeviceId => $composableBuilder(
+    column: $table.staleDeviceId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get state =>
+      $composableBuilder(column: $table.state, builder: (column) => column);
+
+  GeneratedColumn<int> get attemptCount => $composableBuilder(
+    column: $table.attemptCount,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get nextAttemptAt => $composableBuilder(
+    column: $table.nextAttemptAt,
+    builder: (column) => column,
+  );
+}
+
+class $$StaleDeviceRefreshRequestsTableTableManager
+    extends
+        RootTableManager<
+          _$LocalDatabase,
+          $StaleDeviceRefreshRequestsTable,
+          StaleDeviceRefreshRequest,
+          $$StaleDeviceRefreshRequestsTableFilterComposer,
+          $$StaleDeviceRefreshRequestsTableOrderingComposer,
+          $$StaleDeviceRefreshRequestsTableAnnotationComposer,
+          $$StaleDeviceRefreshRequestsTableCreateCompanionBuilder,
+          $$StaleDeviceRefreshRequestsTableUpdateCompanionBuilder,
+          (
+            StaleDeviceRefreshRequest,
+            BaseReferences<
+              _$LocalDatabase,
+              $StaleDeviceRefreshRequestsTable,
+              StaleDeviceRefreshRequest
+            >,
+          ),
+          StaleDeviceRefreshRequest,
+          PrefetchHooks Function()
+        > {
+  $$StaleDeviceRefreshRequestsTableTableManager(
+    _$LocalDatabase db,
+    $StaleDeviceRefreshRequestsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$StaleDeviceRefreshRequestsTableFilterComposer(
+                $db: db,
+                $table: table,
+              ),
+          createOrderingComposer: () =>
+              $$StaleDeviceRefreshRequestsTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$StaleDeviceRefreshRequestsTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> userId = const Value.absent(),
+                Value<String> staleDeviceId = const Value.absent(),
+                Value<int> state = const Value.absent(),
+                Value<int> attemptCount = const Value.absent(),
+                Value<DateTime?> nextAttemptAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => StaleDeviceRefreshRequestsCompanion(
+                userId: userId,
+                staleDeviceId: staleDeviceId,
+                state: state,
+                attemptCount: attemptCount,
+                nextAttemptAt: nextAttemptAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String userId,
+                required String staleDeviceId,
+                Value<int> state = const Value.absent(),
+                Value<int> attemptCount = const Value.absent(),
+                Value<DateTime?> nextAttemptAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => StaleDeviceRefreshRequestsCompanion.insert(
+                userId: userId,
+                staleDeviceId: staleDeviceId,
+                state: state,
+                attemptCount: attemptCount,
+                nextAttemptAt: nextAttemptAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$StaleDeviceRefreshRequestsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$LocalDatabase,
+      $StaleDeviceRefreshRequestsTable,
+      StaleDeviceRefreshRequest,
+      $$StaleDeviceRefreshRequestsTableFilterComposer,
+      $$StaleDeviceRefreshRequestsTableOrderingComposer,
+      $$StaleDeviceRefreshRequestsTableAnnotationComposer,
+      $$StaleDeviceRefreshRequestsTableCreateCompanionBuilder,
+      $$StaleDeviceRefreshRequestsTableUpdateCompanionBuilder,
+      (
+        StaleDeviceRefreshRequest,
+        BaseReferences<
+          _$LocalDatabase,
+          $StaleDeviceRefreshRequestsTable,
+          StaleDeviceRefreshRequest
+        >,
+      ),
+      StaleDeviceRefreshRequest,
       PrefetchHooks Function()
     >;
 typedef $$ReceiptsTableCreateCompanionBuilder =
@@ -16668,6 +38695,356 @@ typedef $$ReceiptsTableProcessedTableManager =
       Receipt,
       PrefetchHooks Function({bool messageId})
     >;
+typedef $$PendingApplicationReceiptsTableCreateCompanionBuilder =
+    PendingApplicationReceiptsCompanion Function({
+      required String messageId,
+      required String conversationId,
+      required String targetUserId,
+      required String localDeviceId,
+      Value<DateTime> createdAt,
+      Value<int> rowid,
+    });
+typedef $$PendingApplicationReceiptsTableUpdateCompanionBuilder =
+    PendingApplicationReceiptsCompanion Function({
+      Value<String> messageId,
+      Value<String> conversationId,
+      Value<String> targetUserId,
+      Value<String> localDeviceId,
+      Value<DateTime> createdAt,
+      Value<int> rowid,
+    });
+
+final class $$PendingApplicationReceiptsTableReferences
+    extends
+        BaseReferences<
+          _$LocalDatabase,
+          $PendingApplicationReceiptsTable,
+          PendingApplicationReceipt
+        > {
+  $$PendingApplicationReceiptsTableReferences(
+    super.$_db,
+    super.$_table,
+    super.$_typedResult,
+  );
+
+  static $MessagesTable _messageIdTable(_$LocalDatabase db) =>
+      db.messages.createAlias(
+        'pending_application_receipts__message_id__messages__message_id',
+      );
+
+  $$MessagesTableProcessedTableManager get messageId {
+    final $_column = $_itemColumn<String>('message_id')!;
+
+    final manager = $$MessagesTableTableManager(
+      $_db,
+      $_db.messages,
+    ).filter((f) => f.messageId.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_messageIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+}
+
+class $$PendingApplicationReceiptsTableFilterComposer
+    extends Composer<_$LocalDatabase, $PendingApplicationReceiptsTable> {
+  $$PendingApplicationReceiptsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get conversationId => $composableBuilder(
+    column: $table.conversationId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get targetUserId => $composableBuilder(
+    column: $table.targetUserId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get localDeviceId => $composableBuilder(
+    column: $table.localDeviceId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$MessagesTableFilterComposer get messageId {
+    final $$MessagesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.messageId,
+      referencedTable: $db.messages,
+      getReferencedColumn: (t) => t.messageId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$MessagesTableFilterComposer(
+            $db: $db,
+            $table: $db.messages,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$PendingApplicationReceiptsTableOrderingComposer
+    extends Composer<_$LocalDatabase, $PendingApplicationReceiptsTable> {
+  $$PendingApplicationReceiptsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get conversationId => $composableBuilder(
+    column: $table.conversationId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get targetUserId => $composableBuilder(
+    column: $table.targetUserId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get localDeviceId => $composableBuilder(
+    column: $table.localDeviceId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$MessagesTableOrderingComposer get messageId {
+    final $$MessagesTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.messageId,
+      referencedTable: $db.messages,
+      getReferencedColumn: (t) => t.messageId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$MessagesTableOrderingComposer(
+            $db: $db,
+            $table: $db.messages,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$PendingApplicationReceiptsTableAnnotationComposer
+    extends Composer<_$LocalDatabase, $PendingApplicationReceiptsTable> {
+  $$PendingApplicationReceiptsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get conversationId => $composableBuilder(
+    column: $table.conversationId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get targetUserId => $composableBuilder(
+    column: $table.targetUserId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get localDeviceId => $composableBuilder(
+    column: $table.localDeviceId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  $$MessagesTableAnnotationComposer get messageId {
+    final $$MessagesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.messageId,
+      referencedTable: $db.messages,
+      getReferencedColumn: (t) => t.messageId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$MessagesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.messages,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$PendingApplicationReceiptsTableTableManager
+    extends
+        RootTableManager<
+          _$LocalDatabase,
+          $PendingApplicationReceiptsTable,
+          PendingApplicationReceipt,
+          $$PendingApplicationReceiptsTableFilterComposer,
+          $$PendingApplicationReceiptsTableOrderingComposer,
+          $$PendingApplicationReceiptsTableAnnotationComposer,
+          $$PendingApplicationReceiptsTableCreateCompanionBuilder,
+          $$PendingApplicationReceiptsTableUpdateCompanionBuilder,
+          (
+            PendingApplicationReceipt,
+            $$PendingApplicationReceiptsTableReferences,
+          ),
+          PendingApplicationReceipt,
+          PrefetchHooks Function({bool messageId})
+        > {
+  $$PendingApplicationReceiptsTableTableManager(
+    _$LocalDatabase db,
+    $PendingApplicationReceiptsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$PendingApplicationReceiptsTableFilterComposer(
+                $db: db,
+                $table: table,
+              ),
+          createOrderingComposer: () =>
+              $$PendingApplicationReceiptsTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$PendingApplicationReceiptsTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> messageId = const Value.absent(),
+                Value<String> conversationId = const Value.absent(),
+                Value<String> targetUserId = const Value.absent(),
+                Value<String> localDeviceId = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => PendingApplicationReceiptsCompanion(
+                messageId: messageId,
+                conversationId: conversationId,
+                targetUserId: targetUserId,
+                localDeviceId: localDeviceId,
+                createdAt: createdAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String messageId,
+                required String conversationId,
+                required String targetUserId,
+                required String localDeviceId,
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => PendingApplicationReceiptsCompanion.insert(
+                messageId: messageId,
+                conversationId: conversationId,
+                targetUserId: targetUserId,
+                localDeviceId: localDeviceId,
+                createdAt: createdAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$PendingApplicationReceiptsTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: ({messageId = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [],
+              addJoins:
+                  <
+                    T extends TableManagerState<
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic
+                    >
+                  >(state) {
+                    if (messageId) {
+                      state =
+                          state.withJoin(
+                                currentTable: table,
+                                currentColumn: table.messageId,
+                                referencedTable:
+                                    $$PendingApplicationReceiptsTableReferences
+                                        ._messageIdTable(db),
+                                referencedColumn:
+                                    $$PendingApplicationReceiptsTableReferences
+                                        ._messageIdTable(db)
+                                        .messageId,
+                              )
+                              as T;
+                    }
+
+                    return state;
+                  },
+              getPrefetchedDataCallback: (items) async {
+                return [];
+              },
+            );
+          },
+        ),
+      );
+}
+
+typedef $$PendingApplicationReceiptsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$LocalDatabase,
+      $PendingApplicationReceiptsTable,
+      PendingApplicationReceipt,
+      $$PendingApplicationReceiptsTableFilterComposer,
+      $$PendingApplicationReceiptsTableOrderingComposer,
+      $$PendingApplicationReceiptsTableAnnotationComposer,
+      $$PendingApplicationReceiptsTableCreateCompanionBuilder,
+      $$PendingApplicationReceiptsTableUpdateCompanionBuilder,
+      (PendingApplicationReceipt, $$PendingApplicationReceiptsTableReferences),
+      PendingApplicationReceipt,
+      PrefetchHooks Function({bool messageId})
+    >;
 typedef $$VoiceRoomsTableCreateCompanionBuilder =
     VoiceRoomsCompanion Function({
       required String localRoomId,
@@ -16856,18 +39233,80 @@ typedef $$HistoryTransfersTableCreateCompanionBuilder =
     HistoryTransfersCompanion Function({
       required String transferId,
       required Uint8List manifestCiphertext,
+      Value<String> sourceDeviceId,
+      Value<String> targetDeviceId,
+      Value<int> direction,
+      Value<int> state,
+      Value<int> nextBatchIndex,
       Value<int> eventProgress,
       required int sourceCompleteness,
+      Value<bool> groupReinviteRequired,
+      Value<bool> queueGapRecoveryRequired,
+      Value<DateTime> updatedAt,
       Value<int> rowid,
     });
 typedef $$HistoryTransfersTableUpdateCompanionBuilder =
     HistoryTransfersCompanion Function({
       Value<String> transferId,
       Value<Uint8List> manifestCiphertext,
+      Value<String> sourceDeviceId,
+      Value<String> targetDeviceId,
+      Value<int> direction,
+      Value<int> state,
+      Value<int> nextBatchIndex,
       Value<int> eventProgress,
       Value<int> sourceCompleteness,
+      Value<bool> groupReinviteRequired,
+      Value<bool> queueGapRecoveryRequired,
+      Value<DateTime> updatedAt,
       Value<int> rowid,
     });
+
+final class $$HistoryTransfersTableReferences
+    extends
+        BaseReferences<
+          _$LocalDatabase,
+          $HistoryTransfersTable,
+          HistoryTransfer
+        > {
+  $$HistoryTransfersTableReferences(
+    super.$_db,
+    super.$_table,
+    super.$_typedResult,
+  );
+
+  static MultiTypedResultKey<
+    $HistoryTransferBatchesTable,
+    List<HistoryTransferBatche>
+  >
+  _historyTransferBatchesRefsTable(
+    _$LocalDatabase db,
+  ) => MultiTypedResultKey.fromTable(
+    db.historyTransferBatches,
+    aliasName:
+        'history_transfers__transfer_id__history_transfer_batches__transfer_id',
+  );
+
+  $$HistoryTransferBatchesTableProcessedTableManager
+  get historyTransferBatchesRefs {
+    final manager =
+        $$HistoryTransferBatchesTableTableManager(
+          $_db,
+          $_db.historyTransferBatches,
+        ).filter(
+          (f) => f.transferId.transferId.sqlEquals(
+            $_itemColumn<String>('transfer_id')!,
+          ),
+        );
+
+    final cache = $_typedResult.readTableOrNull(
+      _historyTransferBatchesRefsTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+}
 
 class $$HistoryTransfersTableFilterComposer
     extends Composer<_$LocalDatabase, $HistoryTransfersTable> {
@@ -16888,6 +39327,31 @@ class $$HistoryTransfersTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
+  ColumnFilters<String> get sourceDeviceId => $composableBuilder(
+    column: $table.sourceDeviceId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get targetDeviceId => $composableBuilder(
+    column: $table.targetDeviceId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get direction => $composableBuilder(
+    column: $table.direction,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get state => $composableBuilder(
+    column: $table.state,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get nextBatchIndex => $composableBuilder(
+    column: $table.nextBatchIndex,
+    builder: (column) => ColumnFilters(column),
+  );
+
   ColumnFilters<int> get eventProgress => $composableBuilder(
     column: $table.eventProgress,
     builder: (column) => ColumnFilters(column),
@@ -16897,6 +39361,47 @@ class $$HistoryTransfersTableFilterComposer
     column: $table.sourceCompleteness,
     builder: (column) => ColumnFilters(column),
   );
+
+  ColumnFilters<bool> get groupReinviteRequired => $composableBuilder(
+    column: $table.groupReinviteRequired,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get queueGapRecoveryRequired => $composableBuilder(
+    column: $table.queueGapRecoveryRequired,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  Expression<bool> historyTransferBatchesRefs(
+    Expression<bool> Function($$HistoryTransferBatchesTableFilterComposer f) f,
+  ) {
+    final $$HistoryTransferBatchesTableFilterComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.transferId,
+          referencedTable: $db.historyTransferBatches,
+          getReferencedColumn: (t) => t.transferId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$HistoryTransferBatchesTableFilterComposer(
+                $db: $db,
+                $table: $db.historyTransferBatches,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
 }
 
 class $$HistoryTransfersTableOrderingComposer
@@ -16918,6 +39423,31 @@ class $$HistoryTransfersTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get sourceDeviceId => $composableBuilder(
+    column: $table.sourceDeviceId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get targetDeviceId => $composableBuilder(
+    column: $table.targetDeviceId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get direction => $composableBuilder(
+    column: $table.direction,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get state => $composableBuilder(
+    column: $table.state,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get nextBatchIndex => $composableBuilder(
+    column: $table.nextBatchIndex,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<int> get eventProgress => $composableBuilder(
     column: $table.eventProgress,
     builder: (column) => ColumnOrderings(column),
@@ -16925,6 +39455,21 @@ class $$HistoryTransfersTableOrderingComposer
 
   ColumnOrderings<int> get sourceCompleteness => $composableBuilder(
     column: $table.sourceCompleteness,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get groupReinviteRequired => $composableBuilder(
+    column: $table.groupReinviteRequired,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get queueGapRecoveryRequired => $composableBuilder(
+    column: $table.queueGapRecoveryRequired,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
     builder: (column) => ColumnOrderings(column),
   );
 }
@@ -16948,6 +39493,27 @@ class $$HistoryTransfersTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<String> get sourceDeviceId => $composableBuilder(
+    column: $table.sourceDeviceId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get targetDeviceId => $composableBuilder(
+    column: $table.targetDeviceId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get direction =>
+      $composableBuilder(column: $table.direction, builder: (column) => column);
+
+  GeneratedColumn<int> get state =>
+      $composableBuilder(column: $table.state, builder: (column) => column);
+
+  GeneratedColumn<int> get nextBatchIndex => $composableBuilder(
+    column: $table.nextBatchIndex,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<int> get eventProgress => $composableBuilder(
     column: $table.eventProgress,
     builder: (column) => column,
@@ -16957,6 +39523,45 @@ class $$HistoryTransfersTableAnnotationComposer
     column: $table.sourceCompleteness,
     builder: (column) => column,
   );
+
+  GeneratedColumn<bool> get groupReinviteRequired => $composableBuilder(
+    column: $table.groupReinviteRequired,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get queueGapRecoveryRequired => $composableBuilder(
+    column: $table.queueGapRecoveryRequired,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  Expression<T> historyTransferBatchesRefs<T extends Object>(
+    Expression<T> Function($$HistoryTransferBatchesTableAnnotationComposer a) f,
+  ) {
+    final $$HistoryTransferBatchesTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.transferId,
+          referencedTable: $db.historyTransferBatches,
+          getReferencedColumn: (t) => t.transferId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$HistoryTransferBatchesTableAnnotationComposer(
+                $db: $db,
+                $table: $db.historyTransferBatches,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
 }
 
 class $$HistoryTransfersTableTableManager
@@ -16970,16 +39575,9 @@ class $$HistoryTransfersTableTableManager
           $$HistoryTransfersTableAnnotationComposer,
           $$HistoryTransfersTableCreateCompanionBuilder,
           $$HistoryTransfersTableUpdateCompanionBuilder,
-          (
-            HistoryTransfer,
-            BaseReferences<
-              _$LocalDatabase,
-              $HistoryTransfersTable,
-              HistoryTransfer
-            >,
-          ),
+          (HistoryTransfer, $$HistoryTransfersTableReferences),
           HistoryTransfer,
-          PrefetchHooks Function()
+          PrefetchHooks Function({bool historyTransferBatchesRefs})
         > {
   $$HistoryTransfersTableTableManager(
     _$LocalDatabase db,
@@ -16998,34 +39596,104 @@ class $$HistoryTransfersTableTableManager
               ({
                 Value<String> transferId = const Value.absent(),
                 Value<Uint8List> manifestCiphertext = const Value.absent(),
+                Value<String> sourceDeviceId = const Value.absent(),
+                Value<String> targetDeviceId = const Value.absent(),
+                Value<int> direction = const Value.absent(),
+                Value<int> state = const Value.absent(),
+                Value<int> nextBatchIndex = const Value.absent(),
                 Value<int> eventProgress = const Value.absent(),
                 Value<int> sourceCompleteness = const Value.absent(),
+                Value<bool> groupReinviteRequired = const Value.absent(),
+                Value<bool> queueGapRecoveryRequired = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => HistoryTransfersCompanion(
                 transferId: transferId,
                 manifestCiphertext: manifestCiphertext,
+                sourceDeviceId: sourceDeviceId,
+                targetDeviceId: targetDeviceId,
+                direction: direction,
+                state: state,
+                nextBatchIndex: nextBatchIndex,
                 eventProgress: eventProgress,
                 sourceCompleteness: sourceCompleteness,
+                groupReinviteRequired: groupReinviteRequired,
+                queueGapRecoveryRequired: queueGapRecoveryRequired,
+                updatedAt: updatedAt,
                 rowid: rowid,
               ),
           createCompanionCallback:
               ({
                 required String transferId,
                 required Uint8List manifestCiphertext,
+                Value<String> sourceDeviceId = const Value.absent(),
+                Value<String> targetDeviceId = const Value.absent(),
+                Value<int> direction = const Value.absent(),
+                Value<int> state = const Value.absent(),
+                Value<int> nextBatchIndex = const Value.absent(),
                 Value<int> eventProgress = const Value.absent(),
                 required int sourceCompleteness,
+                Value<bool> groupReinviteRequired = const Value.absent(),
+                Value<bool> queueGapRecoveryRequired = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => HistoryTransfersCompanion.insert(
                 transferId: transferId,
                 manifestCiphertext: manifestCiphertext,
+                sourceDeviceId: sourceDeviceId,
+                targetDeviceId: targetDeviceId,
+                direction: direction,
+                state: state,
+                nextBatchIndex: nextBatchIndex,
                 eventProgress: eventProgress,
                 sourceCompleteness: sourceCompleteness,
+                groupReinviteRequired: groupReinviteRequired,
+                queueGapRecoveryRequired: queueGapRecoveryRequired,
+                updatedAt: updatedAt,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$HistoryTransfersTableReferences(db, table, e),
+                ),
+              )
               .toList(),
-          prefetchHooksCallback: null,
+          prefetchHooksCallback: ({historyTransferBatchesRefs = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [
+                if (historyTransferBatchesRefs) db.historyTransferBatches,
+              ],
+              addJoins: null,
+              getPrefetchedDataCallback: (items) async {
+                return [
+                  if (historyTransferBatchesRefs)
+                    await $_getPrefetchedData<
+                      HistoryTransfer,
+                      $HistoryTransfersTable,
+                      HistoryTransferBatche
+                    >(
+                      currentTable: table,
+                      referencedTable: $$HistoryTransfersTableReferences
+                          ._historyTransferBatchesRefsTable(db),
+                      managerFromTypedResult: (p0) =>
+                          $$HistoryTransfersTableReferences(
+                            db,
+                            table,
+                            p0,
+                          ).historyTransferBatchesRefs,
+                      referencedItemsForCurrentItem: (item, referencedItems) =>
+                          referencedItems.where(
+                            (e) => e.transferId == item.transferId,
+                          ),
+                      typedResults: items,
+                    ),
+                ];
+              },
+            );
+          },
         ),
       );
 }
@@ -17040,16 +39708,358 @@ typedef $$HistoryTransfersTableProcessedTableManager =
       $$HistoryTransfersTableAnnotationComposer,
       $$HistoryTransfersTableCreateCompanionBuilder,
       $$HistoryTransfersTableUpdateCompanionBuilder,
-      (
-        HistoryTransfer,
+      (HistoryTransfer, $$HistoryTransfersTableReferences),
+      HistoryTransfer,
+      PrefetchHooks Function({bool historyTransferBatchesRefs})
+    >;
+typedef $$HistoryTransferBatchesTableCreateCompanionBuilder =
+    HistoryTransferBatchesCompanion Function({
+      required String transferId,
+      required int batchIndex,
+      required String controlEventId,
+      required int eventCount,
+      required bool finalBatch,
+      Value<int> rowid,
+    });
+typedef $$HistoryTransferBatchesTableUpdateCompanionBuilder =
+    HistoryTransferBatchesCompanion Function({
+      Value<String> transferId,
+      Value<int> batchIndex,
+      Value<String> controlEventId,
+      Value<int> eventCount,
+      Value<bool> finalBatch,
+      Value<int> rowid,
+    });
+
+final class $$HistoryTransferBatchesTableReferences
+    extends
         BaseReferences<
           _$LocalDatabase,
-          $HistoryTransfersTable,
-          HistoryTransfer
-        >,
-      ),
-      HistoryTransfer,
-      PrefetchHooks Function()
+          $HistoryTransferBatchesTable,
+          HistoryTransferBatche
+        > {
+  $$HistoryTransferBatchesTableReferences(
+    super.$_db,
+    super.$_table,
+    super.$_typedResult,
+  );
+
+  static $HistoryTransfersTable _transferIdTable(_$LocalDatabase db) =>
+      db.historyTransfers.createAlias(
+        'history_transfer_batches__transfer_id__history_transfers__transfer_id',
+      );
+
+  $$HistoryTransfersTableProcessedTableManager get transferId {
+    final $_column = $_itemColumn<String>('transfer_id')!;
+
+    final manager = $$HistoryTransfersTableTableManager(
+      $_db,
+      $_db.historyTransfers,
+    ).filter((f) => f.transferId.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_transferIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+}
+
+class $$HistoryTransferBatchesTableFilterComposer
+    extends Composer<_$LocalDatabase, $HistoryTransferBatchesTable> {
+  $$HistoryTransferBatchesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get batchIndex => $composableBuilder(
+    column: $table.batchIndex,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get controlEventId => $composableBuilder(
+    column: $table.controlEventId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get eventCount => $composableBuilder(
+    column: $table.eventCount,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get finalBatch => $composableBuilder(
+    column: $table.finalBatch,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$HistoryTransfersTableFilterComposer get transferId {
+    final $$HistoryTransfersTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.transferId,
+      referencedTable: $db.historyTransfers,
+      getReferencedColumn: (t) => t.transferId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$HistoryTransfersTableFilterComposer(
+            $db: $db,
+            $table: $db.historyTransfers,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$HistoryTransferBatchesTableOrderingComposer
+    extends Composer<_$LocalDatabase, $HistoryTransferBatchesTable> {
+  $$HistoryTransferBatchesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get batchIndex => $composableBuilder(
+    column: $table.batchIndex,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get controlEventId => $composableBuilder(
+    column: $table.controlEventId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get eventCount => $composableBuilder(
+    column: $table.eventCount,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get finalBatch => $composableBuilder(
+    column: $table.finalBatch,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$HistoryTransfersTableOrderingComposer get transferId {
+    final $$HistoryTransfersTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.transferId,
+      referencedTable: $db.historyTransfers,
+      getReferencedColumn: (t) => t.transferId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$HistoryTransfersTableOrderingComposer(
+            $db: $db,
+            $table: $db.historyTransfers,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$HistoryTransferBatchesTableAnnotationComposer
+    extends Composer<_$LocalDatabase, $HistoryTransferBatchesTable> {
+  $$HistoryTransferBatchesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get batchIndex => $composableBuilder(
+    column: $table.batchIndex,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get controlEventId => $composableBuilder(
+    column: $table.controlEventId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get eventCount => $composableBuilder(
+    column: $table.eventCount,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get finalBatch => $composableBuilder(
+    column: $table.finalBatch,
+    builder: (column) => column,
+  );
+
+  $$HistoryTransfersTableAnnotationComposer get transferId {
+    final $$HistoryTransfersTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.transferId,
+      referencedTable: $db.historyTransfers,
+      getReferencedColumn: (t) => t.transferId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$HistoryTransfersTableAnnotationComposer(
+            $db: $db,
+            $table: $db.historyTransfers,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$HistoryTransferBatchesTableTableManager
+    extends
+        RootTableManager<
+          _$LocalDatabase,
+          $HistoryTransferBatchesTable,
+          HistoryTransferBatche,
+          $$HistoryTransferBatchesTableFilterComposer,
+          $$HistoryTransferBatchesTableOrderingComposer,
+          $$HistoryTransferBatchesTableAnnotationComposer,
+          $$HistoryTransferBatchesTableCreateCompanionBuilder,
+          $$HistoryTransferBatchesTableUpdateCompanionBuilder,
+          (HistoryTransferBatche, $$HistoryTransferBatchesTableReferences),
+          HistoryTransferBatche,
+          PrefetchHooks Function({bool transferId})
+        > {
+  $$HistoryTransferBatchesTableTableManager(
+    _$LocalDatabase db,
+    $HistoryTransferBatchesTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$HistoryTransferBatchesTableFilterComposer(
+                $db: db,
+                $table: table,
+              ),
+          createOrderingComposer: () =>
+              $$HistoryTransferBatchesTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$HistoryTransferBatchesTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> transferId = const Value.absent(),
+                Value<int> batchIndex = const Value.absent(),
+                Value<String> controlEventId = const Value.absent(),
+                Value<int> eventCount = const Value.absent(),
+                Value<bool> finalBatch = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => HistoryTransferBatchesCompanion(
+                transferId: transferId,
+                batchIndex: batchIndex,
+                controlEventId: controlEventId,
+                eventCount: eventCount,
+                finalBatch: finalBatch,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String transferId,
+                required int batchIndex,
+                required String controlEventId,
+                required int eventCount,
+                required bool finalBatch,
+                Value<int> rowid = const Value.absent(),
+              }) => HistoryTransferBatchesCompanion.insert(
+                transferId: transferId,
+                batchIndex: batchIndex,
+                controlEventId: controlEventId,
+                eventCount: eventCount,
+                finalBatch: finalBatch,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$HistoryTransferBatchesTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: ({transferId = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [],
+              addJoins:
+                  <
+                    T extends TableManagerState<
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic
+                    >
+                  >(state) {
+                    if (transferId) {
+                      state =
+                          state.withJoin(
+                                currentTable: table,
+                                currentColumn: table.transferId,
+                                referencedTable:
+                                    $$HistoryTransferBatchesTableReferences
+                                        ._transferIdTable(db),
+                                referencedColumn:
+                                    $$HistoryTransferBatchesTableReferences
+                                        ._transferIdTable(db)
+                                        .transferId,
+                              )
+                              as T;
+                    }
+
+                    return state;
+                  },
+              getPrefetchedDataCallback: (items) async {
+                return [];
+              },
+            );
+          },
+        ),
+      );
+}
+
+typedef $$HistoryTransferBatchesTableProcessedTableManager =
+    ProcessedTableManager<
+      _$LocalDatabase,
+      $HistoryTransferBatchesTable,
+      HistoryTransferBatche,
+      $$HistoryTransferBatchesTableFilterComposer,
+      $$HistoryTransferBatchesTableOrderingComposer,
+      $$HistoryTransferBatchesTableAnnotationComposer,
+      $$HistoryTransferBatchesTableCreateCompanionBuilder,
+      $$HistoryTransferBatchesTableUpdateCompanionBuilder,
+      (HistoryTransferBatche, $$HistoryTransferBatchesTableReferences),
+      HistoryTransferBatche,
+      PrefetchHooks Function({bool transferId})
     >;
 typedef $$SyncCheckpointsTableCreateCompanionBuilder =
     SyncCheckpointsCompanion Function({
@@ -17059,6 +40069,12 @@ typedef $$SyncCheckpointsTableCreateCompanionBuilder =
       required Uint8List etagsCiphertext,
       required int retryState,
       required int protocolVersion,
+      Value<int> queueGapState,
+      Value<bool> drainRequested,
+      Value<int> connectionPhase,
+      Value<int> reconnectAttempt,
+      Value<DateTime?> reconnectAt,
+      Value<DateTime?> lastSuccessfulSyncAt,
     });
 typedef $$SyncCheckpointsTableUpdateCompanionBuilder =
     SyncCheckpointsCompanion Function({
@@ -17068,6 +40084,12 @@ typedef $$SyncCheckpointsTableUpdateCompanionBuilder =
       Value<Uint8List> etagsCiphertext,
       Value<int> retryState,
       Value<int> protocolVersion,
+      Value<int> queueGapState,
+      Value<bool> drainRequested,
+      Value<int> connectionPhase,
+      Value<int> reconnectAttempt,
+      Value<DateTime?> reconnectAt,
+      Value<DateTime?> lastSuccessfulSyncAt,
     });
 
 class $$SyncCheckpointsTableFilterComposer
@@ -17106,6 +40128,36 @@ class $$SyncCheckpointsTableFilterComposer
 
   ColumnFilters<int> get protocolVersion => $composableBuilder(
     column: $table.protocolVersion,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get queueGapState => $composableBuilder(
+    column: $table.queueGapState,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get drainRequested => $composableBuilder(
+    column: $table.drainRequested,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get connectionPhase => $composableBuilder(
+    column: $table.connectionPhase,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get reconnectAttempt => $composableBuilder(
+    column: $table.reconnectAttempt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get reconnectAt => $composableBuilder(
+    column: $table.reconnectAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get lastSuccessfulSyncAt => $composableBuilder(
+    column: $table.lastSuccessfulSyncAt,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -17148,6 +40200,36 @@ class $$SyncCheckpointsTableOrderingComposer
     column: $table.protocolVersion,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<int> get queueGapState => $composableBuilder(
+    column: $table.queueGapState,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get drainRequested => $composableBuilder(
+    column: $table.drainRequested,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get connectionPhase => $composableBuilder(
+    column: $table.connectionPhase,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get reconnectAttempt => $composableBuilder(
+    column: $table.reconnectAttempt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get reconnectAt => $composableBuilder(
+    column: $table.reconnectAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get lastSuccessfulSyncAt => $composableBuilder(
+    column: $table.lastSuccessfulSyncAt,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$SyncCheckpointsTableAnnotationComposer
@@ -17186,6 +40268,36 @@ class $$SyncCheckpointsTableAnnotationComposer
 
   GeneratedColumn<int> get protocolVersion => $composableBuilder(
     column: $table.protocolVersion,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get queueGapState => $composableBuilder(
+    column: $table.queueGapState,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get drainRequested => $composableBuilder(
+    column: $table.drainRequested,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get connectionPhase => $composableBuilder(
+    column: $table.connectionPhase,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get reconnectAttempt => $composableBuilder(
+    column: $table.reconnectAttempt,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get reconnectAt => $composableBuilder(
+    column: $table.reconnectAt,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get lastSuccessfulSyncAt => $composableBuilder(
+    column: $table.lastSuccessfulSyncAt,
     builder: (column) => column,
   );
 }
@@ -17234,6 +40346,12 @@ class $$SyncCheckpointsTableTableManager
                 Value<Uint8List> etagsCiphertext = const Value.absent(),
                 Value<int> retryState = const Value.absent(),
                 Value<int> protocolVersion = const Value.absent(),
+                Value<int> queueGapState = const Value.absent(),
+                Value<bool> drainRequested = const Value.absent(),
+                Value<int> connectionPhase = const Value.absent(),
+                Value<int> reconnectAttempt = const Value.absent(),
+                Value<DateTime?> reconnectAt = const Value.absent(),
+                Value<DateTime?> lastSuccessfulSyncAt = const Value.absent(),
               }) => SyncCheckpointsCompanion(
                 singletonId: singletonId,
                 highestContiguousAckedSequence: highestContiguousAckedSequence,
@@ -17241,6 +40359,12 @@ class $$SyncCheckpointsTableTableManager
                 etagsCiphertext: etagsCiphertext,
                 retryState: retryState,
                 protocolVersion: protocolVersion,
+                queueGapState: queueGapState,
+                drainRequested: drainRequested,
+                connectionPhase: connectionPhase,
+                reconnectAttempt: reconnectAttempt,
+                reconnectAt: reconnectAt,
+                lastSuccessfulSyncAt: lastSuccessfulSyncAt,
               ),
           createCompanionCallback:
               ({
@@ -17251,6 +40375,12 @@ class $$SyncCheckpointsTableTableManager
                 required Uint8List etagsCiphertext,
                 required int retryState,
                 required int protocolVersion,
+                Value<int> queueGapState = const Value.absent(),
+                Value<bool> drainRequested = const Value.absent(),
+                Value<int> connectionPhase = const Value.absent(),
+                Value<int> reconnectAttempt = const Value.absent(),
+                Value<DateTime?> reconnectAt = const Value.absent(),
+                Value<DateTime?> lastSuccessfulSyncAt = const Value.absent(),
               }) => SyncCheckpointsCompanion.insert(
                 singletonId: singletonId,
                 highestContiguousAckedSequence: highestContiguousAckedSequence,
@@ -17258,6 +40388,12 @@ class $$SyncCheckpointsTableTableManager
                 etagsCiphertext: etagsCiphertext,
                 retryState: retryState,
                 protocolVersion: protocolVersion,
+                queueGapState: queueGapState,
+                drainRequested: drainRequested,
+                connectionPhase: connectionPhase,
+                reconnectAttempt: reconnectAttempt,
+                reconnectAt: reconnectAt,
+                lastSuccessfulSyncAt: lastSuccessfulSyncAt,
               ),
           withReferenceMapper: (p0) => p0
               .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
@@ -17676,12 +40812,36 @@ class $LocalDatabaseManager {
       $$DevicesTableTableManager(_db, _db.devices);
   $$DeviceLogRecordsTableTableManager get deviceLogRecords =>
       $$DeviceLogRecordsTableTableManager(_db, _db.deviceLogRecords);
+  $$DeviceLogMutationsTableTableManager get deviceLogMutations =>
+      $$DeviceLogMutationsTableTableManager(_db, _db.deviceLogMutations);
+  $$SecurityPosturesTableTableManager get securityPostures =>
+      $$SecurityPosturesTableTableManager(_db, _db.securityPostures);
   $$PairwiseSessionsTableTableManager get pairwiseSessions =>
       $$PairwiseSessionsTableTableManager(_db, _db.pairwiseSessions);
+  $$PairwiseSessionAlternatesTableTableManager get pairwiseSessionAlternates =>
+      $$PairwiseSessionAlternatesTableTableManager(
+        _db,
+        _db.pairwiseSessionAlternates,
+      );
   $$PrekeysTableTableManager get prekeys =>
       $$PrekeysTableTableManager(_db, _db.prekeys);
+  $$PrekeyMaintenancePlansTableTableManager get prekeyMaintenancePlans =>
+      $$PrekeyMaintenancePlansTableTableManager(
+        _db,
+        _db.prekeyMaintenancePlans,
+      );
+  $$MlsKeyPackageMaintenanceStatesTableTableManager
+  get mlsKeyPackageMaintenanceStates =>
+      $$MlsKeyPackageMaintenanceStatesTableTableManager(
+        _db,
+        _db.mlsKeyPackageMaintenanceStates,
+      );
   $$MlsGroupsTableTableManager get mlsGroups =>
       $$MlsGroupsTableTableManager(_db, _db.mlsGroups);
+  $$GroupControlEventsTableTableManager get groupControlEvents =>
+      $$GroupControlEventsTableTableManager(_db, _db.groupControlEvents);
+  $$GroupOutboundObjectsTableTableManager get groupOutboundObjects =>
+      $$GroupOutboundObjectsTableTableManager(_db, _db.groupOutboundObjects);
   $$ConversationsTableTableManager get conversations =>
       $$ConversationsTableTableManager(_db, _db.conversations);
   $$MembershipsTableTableManager get memberships =>
@@ -17690,18 +40850,85 @@ class $LocalDatabaseManager {
       $$MessagesTableTableManager(_db, _db.messages);
   $$MessageEventsTableTableManager get messageEvents =>
       $$MessageEventsTableTableManager(_db, _db.messageEvents);
+  $$StoredApplicationEventsTableTableManager get storedApplicationEvents =>
+      $$StoredApplicationEventsTableTableManager(
+        _db,
+        _db.storedApplicationEvents,
+      );
+  $$ApplicationEventTargetsTableTableManager get applicationEventTargets =>
+      $$ApplicationEventTargetsTableTableManager(
+        _db,
+        _db.applicationEventTargets,
+      );
+  $$UnsupportedApplicationEventsTableTableManager
+  get unsupportedApplicationEvents =>
+      $$UnsupportedApplicationEventsTableTableManager(
+        _db,
+        _db.unsupportedApplicationEvents,
+      );
+  $$ApplicationSenderCountersTableTableManager get applicationSenderCounters =>
+      $$ApplicationSenderCountersTableTableManager(
+        _db,
+        _db.applicationSenderCounters,
+      );
+  $$MessageReactionsTableTableManager get messageReactions =>
+      $$MessageReactionsTableTableManager(_db, _db.messageReactions);
   $$AttachmentsTableTableManager get attachments =>
       $$AttachmentsTableTableManager(_db, _db.attachments);
   $$InboxEnvelopesTableTableManager get inboxEnvelopes =>
       $$InboxEnvelopesTableTableManager(_db, _db.inboxEnvelopes);
   $$OutboxOperationsTableTableManager get outboxOperations =>
       $$OutboxOperationsTableTableManager(_db, _db.outboxOperations);
+  $$InboxEventDeduplicationsTableTableManager get inboxEventDeduplications =>
+      $$InboxEventDeduplicationsTableTableManager(
+        _db,
+        _db.inboxEventDeduplications,
+      );
+  $$PairwiseReplayMarkersTableTableManager get pairwiseReplayMarkers =>
+      $$PairwiseReplayMarkersTableTableManager(_db, _db.pairwiseReplayMarkers);
+  $$PairwiseOpenedPayloadsTableTableManager get pairwiseOpenedPayloads =>
+      $$PairwiseOpenedPayloadsTableTableManager(
+        _db,
+        _db.pairwiseOpenedPayloads,
+      );
+  $$PairwiseLocalApplicationsTableTableManager get pairwiseLocalApplications =>
+      $$PairwiseLocalApplicationsTableTableManager(
+        _db,
+        _db.pairwiseLocalApplications,
+      );
+  $$PendingSendPreparationsTableTableManager get pendingSendPreparations =>
+      $$PendingSendPreparationsTableTableManager(
+        _db,
+        _db.pendingSendPreparations,
+      );
+  $$PairwiseConsumedPrekeysTableTableManager get pairwiseConsumedPrekeys =>
+      $$PairwiseConsumedPrekeysTableTableManager(
+        _db,
+        _db.pairwiseConsumedPrekeys,
+      );
+  $$StaleDeviceRefreshRequestsTableTableManager
+  get staleDeviceRefreshRequests =>
+      $$StaleDeviceRefreshRequestsTableTableManager(
+        _db,
+        _db.staleDeviceRefreshRequests,
+      );
   $$ReceiptsTableTableManager get receipts =>
       $$ReceiptsTableTableManager(_db, _db.receipts);
+  $$PendingApplicationReceiptsTableTableManager
+  get pendingApplicationReceipts =>
+      $$PendingApplicationReceiptsTableTableManager(
+        _db,
+        _db.pendingApplicationReceipts,
+      );
   $$VoiceRoomsTableTableManager get voiceRooms =>
       $$VoiceRoomsTableTableManager(_db, _db.voiceRooms);
   $$HistoryTransfersTableTableManager get historyTransfers =>
       $$HistoryTransfersTableTableManager(_db, _db.historyTransfers);
+  $$HistoryTransferBatchesTableTableManager get historyTransferBatches =>
+      $$HistoryTransferBatchesTableTableManager(
+        _db,
+        _db.historyTransferBatches,
+      );
   $$SyncCheckpointsTableTableManager get syncCheckpoints =>
       $$SyncCheckpointsTableTableManager(_db, _db.syncCheckpoints);
   $$LocalPreferencesTableTableManager get localPreferences =>

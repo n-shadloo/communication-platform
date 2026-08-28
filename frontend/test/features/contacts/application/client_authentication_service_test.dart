@@ -98,7 +98,7 @@ void main() {
     );
 
     test(
-      'device-list change without a new transparency head is a fork',
+      'concurrent device-list change waits for its signed head extension',
       () async {
         final harness = _Harness();
         harness.local
@@ -114,10 +114,11 @@ void main() {
             logHeadHash: _bytes(32, 11),
           );
         harness.remote.devices = [
+          _device(),
           PeerPublicDevice(
-            deviceId: _peerDeviceId,
+            deviceId: '55555555-5555-4555-8555-555555555555',
             identityPublic: _bytes(64, 8),
-            registrationId: 9,
+            registrationId: 10,
             crossSignature: _bytes(64, 4),
             bundleVersion: 1,
           ),
@@ -129,7 +130,117 @@ void main() {
         );
 
         expect(result, isA<FailureResult<AuthenticatedPeer>>());
+        expect(
+          (result as FailureResult<AuthenticatedPeer>).failure,
+          isA<SecurityFailure>().having(
+            (failure) => failure.kind,
+            'kind',
+            SecurityFailureKind.policyBlocked,
+          ),
+        );
+        expect(harness.local.trust?.state, ContactTrustState.verified);
+        expect(harness.remote.claimCalls, 0);
+      },
+    );
+
+    test('malicious server rollback persists a global peer fork', () async {
+      final harness = _Harness();
+      harness.local
+        ..devices = [_device()]
+        ..trust = ContactTrustRecord(
+          userId: _peerUserId,
+          state: ContactTrustState.verified,
+          identity: harness.remote.identity,
+          confirmedMasterPublic: harness.remote.identity.masterPublic,
+          attestation: UserSigningAttestation(_bytes(64, 5)),
+          etag: '"newer"',
+          logHeadSequence: 1,
+          logHeadHash: _bytes(32, 13),
+        );
+
+      final result = await harness.service.refreshPeer(
+        userId: _peerUserId,
+        requirePrekeys: true,
+      );
+
+      expect(result, isA<FailureResult<AuthenticatedPeer>>());
+      expect(harness.local.trust?.state, ContactTrustState.deviceLogFork);
+      expect(harness.remote.logCalls, 0);
+      expect(harness.remote.claimCalls, 0);
+    });
+
+    test(
+      'non-extending predicted sequence is treated as equivocation',
+      () async {
+        final harness = _Harness();
+        harness.local
+          ..devices = [_device()]
+          ..trust = ContactTrustRecord(
+            userId: _peerUserId,
+            state: ContactTrustState.verified,
+            identity: harness.remote.identity,
+            confirmedMasterPublic: harness.remote.identity.masterPublic,
+            attestation: UserSigningAttestation(_bytes(64, 5)),
+            etag: '"old"',
+            logHeadSequence: 0,
+            logHeadHash: _bytes(32, 11),
+          );
+        harness.remote
+          ..advertisedHead = 1
+          ..logHead = 1
+          ..logRecords = [
+            PeerDeviceLogRecord(sequence: 1, blob: _bytes(8, 14)),
+          ];
+
+        final result = await harness.service.refreshPeer(
+          userId: _peerUserId,
+          requirePrekeys: true,
+        );
+
+        expect(result, isA<FailureResult<AuthenticatedPeer>>());
         expect(harness.local.trust?.state, ContactTrustState.deviceLogFork);
+        expect(harness.remote.claimCalls, 0);
+      },
+    );
+
+    test(
+      'verified monotonic prekey rotation waits for its device-log append',
+      () async {
+        final harness = _Harness();
+        final originalTrust = ContactTrustRecord(
+          userId: _peerUserId,
+          state: ContactTrustState.verified,
+          identity: harness.remote.identity,
+          confirmedMasterPublic: harness.remote.identity.masterPublic,
+          attestation: UserSigningAttestation(_bytes(64, 5)),
+          etag: '"old"',
+          logHeadSequence: 0,
+          logHeadHash: _bytes(32, 11),
+        );
+        harness.local
+          ..devices = [_device()]
+          ..trust = originalTrust;
+        harness.remote.devices = [
+          PeerPublicDevice(
+            deviceId: _peerDeviceId,
+            identityPublic: _bytes(64, 7),
+            registrationId: 9,
+            crossSignature: _bytes(64, 6),
+            bundleVersion: 2,
+          ),
+        ];
+
+        final result = await harness.service.refreshPeer(
+          userId: _peerUserId,
+          requirePrekeys: true,
+        );
+
+        expect(result, isA<FailureResult<AuthenticatedPeer>>());
+        expect(
+          (result as FailureResult<AuthenticatedPeer>).failure,
+          const SecurityFailure(SecurityFailureKind.policyBlocked),
+        );
+        expect(harness.local.trust, same(originalTrust));
         expect(harness.remote.claimCalls, 0);
       },
     );
@@ -148,6 +259,61 @@ void main() {
         expect(harness.remote.identityCalls, 0);
       },
     );
+
+    test('out-of-band confirmation consumes no one-time prekeys', () async {
+      final harness = _Harness();
+
+      final result = await harness.service.confirmOutOfBand(
+        userId: _peerUserId,
+        exactMasterPublic: harness.remote.identity.masterPublic,
+      );
+
+      expect(result, isA<Success<ContactTrustRecord>>());
+      expect(harness.remote.claimCalls, 0);
+    });
+
+    test(
+      'selective refresh claims only the explicitly requested live device',
+      () async {
+        final harness = _Harness();
+        harness.remote.devices = [
+          _device(),
+          PeerPublicDevice(
+            deviceId: '55555555-5555-4555-8555-555555555555',
+            identityPublic: _bytes(64, 8),
+            registrationId: 10,
+            crossSignature: _bytes(64, 6),
+            bundleVersion: 1,
+          ),
+        ];
+
+        final result = await harness.service.refreshPeerForDevices(
+          userId: _peerUserId,
+          deviceIds: const [_peerDeviceId],
+        );
+
+        expect(result, isA<Success<AuthenticatedPeer>>());
+        final peer = (result as Success<AuthenticatedPeer>).value;
+        expect(peer.devices, hasLength(2));
+        expect(peer.claimedBundles, hasLength(1));
+        expect(peer.canPerformSensitiveActions, isFalse);
+        expect(harness.remote.claimedDeviceIds, [
+          const [_peerDeviceId],
+        ]);
+      },
+    );
+
+    test('own-device claims reject substituted own account identity', () async {
+      final harness = _Harness()..remote.identity = _identity(master: 99);
+
+      final result = await harness.service.refreshPeerForDevices(
+        userId: _localUserId,
+        deviceIds: const [_peerDeviceId],
+      );
+
+      expect(result, isA<FailureResult<AuthenticatedPeer>>());
+      expect(harness.remote.claimCalls, 0);
+    });
   });
 }
 
@@ -214,7 +380,13 @@ final class _Remote implements PeerIdentityRemotePort {
   var identityCalls = 0;
   var deviceCalls = 0;
   var claimCalls = 0;
+  final claimedDeviceIds = <List<String>>[];
   var logCalls = 0;
+  var advertisedHead = 0;
+  var logHead = 0;
+  List<PeerDeviceLogRecord> logRecords = [
+    PeerDeviceLogRecord(sequence: 0, blob: _bytes(8, 12)),
+  ];
   final etags = <String?>[];
 
   @override
@@ -237,7 +409,7 @@ final class _Remote implements PeerIdentityRemotePort {
       PeerDevicesUpdated(
         devices: devices,
         etag: '"devices-v1"',
-        logHeadSequence: 0,
+        logHeadSequence: advertisedHead,
       ),
     );
   }
@@ -248,6 +420,7 @@ final class _Remote implements PeerIdentityRemotePort {
     required List<String> deviceIds,
   }) async {
     claimCalls += 1;
+    claimedDeviceIds.add(List.unmodifiable(deviceIds));
     return Result.success([_bundle()]);
   }
 
@@ -259,9 +432,9 @@ final class _Remote implements PeerIdentityRemotePort {
     logCalls += 1;
     return Result.success(
       PeerDeviceLogPage(
-        records: [PeerDeviceLogRecord(sequence: 0, blob: _bytes(8, 12))],
+        records: logRecords,
         hasMore: false,
-        headSequence: 0,
+        headSequence: logHead,
       ),
     );
   }

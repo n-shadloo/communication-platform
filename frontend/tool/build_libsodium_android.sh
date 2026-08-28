@@ -90,8 +90,17 @@ build_abi() {
   local source_root="$source_parent/libsodium-stable"
   local install_root="$abi_root/install"
   local static_library="$install_root/lib/libsodium.a"
+  # `libsodium-sys-stable` 1.24.0 selects its link name with
+  # `cfg!(target_env = "msvc")`, which a build script evaluates against the HOST
+  # it was compiled for rather than the cross-compilation target. An MSVC host
+  # building for Android therefore emits `-l static=libsodium` and rustc looks
+  # for `liblibsodium.a`. Installing the identical archive under both names
+  # keeps this Android build host-agnostic instead of silently requiring a
+  # windows-gnu host. Remove once upstream reads CARGO_CFG_TARGET_ENV.
+  local host_alias_library="$install_root/lib/liblibsodium.a"
 
   if [[ -f "$static_library" ]]; then
+    cp -f "$static_library" "$host_alias_library"
     return
   fi
 
@@ -129,6 +138,7 @@ build_abi() {
     echo "libsodium did not produce the expected library for $abi." >&2
     exit 4
   fi
+  cp -f "$static_library" "$host_alias_library"
 }
 
 requested_abi="${1:-all}"

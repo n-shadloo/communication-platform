@@ -114,6 +114,22 @@ final class CoordinatedAuthenticationSession
 
   @override
   Future<Result<AccountSessionBoundary>> restore() async {
+    try {
+      return await _restore();
+    } on Object {
+      // The restore screen has no button and no timeout, so a throw escaping
+      // this method does not surface as an error: the caller starts it with
+      // `unawaited`, the controller stays in `restoring` forever, and the
+      // router holds the spinner over an application that is otherwise
+      // reachable. Reporting the failure sends the user to sign-in, which they
+      // can act on. `acceptLogin` above already fails closed the same way.
+      return const Result.failure(
+        StorageFailure(StorageFailureKind.unavailable),
+      );
+    }
+  }
+
+  Future<Result<AccountSessionBoundary>> _restore() async {
     final before = await tokens.read();
     if (before == null ||
         before.accessToken.scope != SessionScope.full ||

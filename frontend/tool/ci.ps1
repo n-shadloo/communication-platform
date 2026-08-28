@@ -51,6 +51,15 @@ try {
         '--target',
         'lib/main_production.dart'
     )
+    # Production must keep building and stay verifiable, while remaining
+    # undistributable: unsigned, correctly identified, and free of the Beta MLS
+    # core. Flutter copies this artifact without the "-unsigned" suffix the
+    # Android build gave it, so the name alone is never evidence.
+    Invoke-CheckedCommand 'bash' @(
+        './tool/verify_release_apk.sh',
+        '--production',
+        'build/app/outputs/flutter-apk/app-production-release.apk'
+    )
     Invoke-CheckedCommand 'flutter' @(
         'build',
         'web',

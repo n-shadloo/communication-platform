@@ -22,11 +22,16 @@ void main() {
           'pq_spk',
           'otpks',
           'pq_otpks',
+          'keypackages',
         ]);
         expect(json, isNot(containsPair('cross_sig', anything)));
         expect(json, isNot(containsPair('bundle_version', anything)));
         expect((json['otpks']! as List<Object?>), hasLength(2));
         expect((json['pq_otpks']! as List<Object?>), hasLength(1));
+        // Required by the endpoint even with nothing to send: omitting it is a
+        // `400`, which fails the very first call of enrollment and leaves the
+        // account with no device.
+        expect(json['keypackages'], isEmpty);
       },
     );
 

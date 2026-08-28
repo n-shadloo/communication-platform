@@ -1,0 +1,54 @@
+; Communication Platform application-message protocol, major version 1.
+; Integer map keys are registered and emitted in ascending order.
+
+application-event-v1 = {
+  0: 1,                         ; v
+  1: bstr .size 16,             ; event_id
+  2: bstr .size 32,             ; conversation_id
+  3: application-kind-v1,
+  4: bstr .size 16,             ; sender_user_id
+  5: bstr .size 16,             ; sender_device_id
+  6: uint .gt 0,                ; sender_counter
+  7: uint,                      ; created_ms
+  8: [* 0..64 bstr .size 16],   ; references
+  9: application-body-v1
+}
+
+application-kind-v1 =
+    1  ; message.create
+  / 2  ; message.edit
+  / 3  ; message.delete
+  / 4  ; message.reaction_set
+  / 5  ; message.pin_set
+  / 6  ; receipt.delivered
+  / 7  ; receipt.read
+  / 8  ; typing.set (volatile signal only)
+
+application-body-v1 =
+    message-create-v1
+  / message-edit-v1
+  / message-delete-v1
+  / reaction-set-v1
+  / pin-set-v1
+  / receipt-v1
+  / typing-set-v1
+
+message-create-v1 = {
+  0: bstr .size 16,             ; message_id
+  1: 0,                         ; content type: UTF-8 text
+  2: tstr,                      ; <= 65,536 bytes and 16,384 scalars
+  3: bstr .size 16 / null,      ; reply_to_message_id
+  4: tstr / null                ; bounded quote fallback
+}
+
+message-edit-v1 = {
+  0: bstr .size 16,             ; target_message_id
+  1: tstr,                      ; replacement text
+  2: uint .gt 0                 ; revision
+}
+
+message-delete-v1 = {0: bstr .size 16}
+reaction-set-v1 = {0: bstr .size 16, 1: tstr / null}
+pin-set-v1 = {0: bstr .size 16, 1: bool}
+receipt-v1 = {0: [* 1..64 bstr .size 16]}
+typing-set-v1 = {0: bool, 1: uint}

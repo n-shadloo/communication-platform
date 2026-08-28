@@ -37,6 +37,7 @@ pub const DEVICE_LOG_BUCKET_BYTES: usize = 256;
 pub const DEVICE_LOG_INSPECTION_BYTES: usize = 72;
 pub const PEER_DEVICE_LOG_INSPECTION_BYTES: usize = 108;
 pub const SAFETY_FINGERPRINT_BYTES: usize = 32;
+pub const DEVICE_LABEL_BUCKET_BYTES: usize = 256;
 
 const DEVICE_PACKAGE_MAGIC: &[u8; 8] = b"CPDVV001";
 const IDENTITY_PACKAGE_MAGIC: &[u8; 8] = b"CPIDV001";
@@ -47,6 +48,10 @@ const BACKUP_DOMAIN: &[u8] = b"chat:v1:identity-backup";
 const DEVICE_LOG_DOMAIN: &[u8] = b"chat:v1:device-log-record";
 const SAFETY_FINGERPRINT_DOMAIN: &[u8] = b"chat:v1:safety-fingerprint";
 const USER_ATTESTATION_DOMAIN: &[u8] = b"chat:v1:user-signing-attestation";
+const DEVICE_LABEL_MAGIC: &[u8; 8] = b"CPLBV001";
+const DEVICE_LABEL_PLAINTEXT_MAGIC: &[u8; 8] = b"CPLPV001";
+const DEVICE_LABEL_DOMAIN: &[u8] = b"chat:v1:device-label";
+const DEVICE_LABEL_KEY_DOMAIN: &[u8] = b"chat:v1:device-label-key";
 const VERIFY_IDENTITY_MAGIC: &[u8; 8] = b"CPIRV001";
 const VERIFY_BUNDLE_MAGIC: &[u8; 8] = b"CPBRV001";
 const VERIFY_LOG_MAGIC: &[u8; 8] = b"CPDLR001";
@@ -74,6 +79,9 @@ const DEVICE_FIXED_PUBLIC_BYTES: usize = 8
 const RECOVERY_ENTROPY_BYTES: usize = 32;
 const RECOVERY_CHECKSUM_BYTES: usize = 2;
 const RECOVERY_PAYLOAD_BYTES: usize = RECOVERY_ENTROPY_BYTES + RECOVERY_CHECKSUM_BYTES;
+const DEVICE_LABEL_PLAINTEXT_BYTES: usize = 160;
+const DEVICE_LABEL_MAX_BYTES: usize = 128;
+const DEVICE_LABEL_MAX_SCALARS: usize = 64;
 const CROCKFORD_ALPHABET: &[u8; 32] = b"0123456789ABCDEFGHJKMNPQRSTVWXYZ";
 
 struct IdentitySecrets {
@@ -113,6 +121,15 @@ struct ParsedDevicePackage<'a> {
     spk_public: [u8; X25519_PUBLIC_BYTES],
     pq_spk_public: [u8; MLKEM768_PUBLIC_BYTES],
     _remainder: &'a [u8],
+}
+
+#[cfg_attr(not(feature = "beta-pq-mls"), allow(dead_code))]
+pub(crate) struct VerifiedClaimedDeviceBundle {
+    pub user_id: [u8; 16],
+    pub device_id: [u8; 16],
+    pub canonical_bundle: Vec<u8>,
+    pub signing_public: [u8; ED25519_PUBLIC_BYTES],
+    pub cross_signature: [u8; ED25519_SIGNATURE_BYTES],
 }
 
 pub fn prepare_device() -> impl FnOnce(&[u8]) -> CryptoResult<Vec<u8>> {
@@ -162,7 +179,6 @@ pub fn prepare_device_with_provider<P: CryptoProvider>(
     let mut registration_bytes = [0u8; 4];
     provider.random_bytes(&mut registration_bytes)?;
     let registration_id = u32::from_be_bytes(registration_bytes) & 0x7fff_ffff;
-    let registration_id = registration_id.max(1);
     let fingerprint = provider.sha256(ik_public.as_bytes())?;
 
     let mut classical_public =
@@ -293,6 +309,184 @@ pub fn sanitize_identity_package(package: &[u8]) -> CryptoResult<Vec<u8>> {
         &[],
         &[],
     )
+}
+
+/// Re-wraps the *same* cross-signing identity under a freshly generated
+/// recovery secret and returns a package carrying both, for one display.
+///
+/// This is the replacement half of recovery: an already-saved secret is never
+/// re-shown, because the application does not retain one, so the only honest
+/// remedy for a lost or exposed secret is a new one over the identity that
+/// already exists. Generating a *new* identity would invalidate every device
+/// cross-signature and every peer attestation of the master key, which is why
+/// the caller may not reach for `prepare_first_identity` here.
+///
+/// No construction changes. The entropy, the Crockford encoding and the
+/// Argon2id/XChaCha20-Poly1305 backup are exactly the ones the first upload
+/// used, and the encoded package is byte-identical to the original apart from
+/// the recovery and backup fields — the master signature included, because
+/// Ed25519 signing is deterministic over the same key and message. The old
+/// secret stops being usable when the server accepts the higher backup
+/// version, not here: this function does not touch the network.
+pub fn rotate_recovery_secret(identity_package: &[u8]) -> CryptoResult<Vec<u8>> {
+    rotate_recovery_secret_with_provider(&RustCryptoProvider::default(), identity_package)
+}
+
+pub fn rotate_recovery_secret_with_provider<P: CryptoProvider>(
+    provider: &P,
+    identity_package: &[u8],
+) -> CryptoResult<Vec<u8>> {
+    let parsed = parse_identity_package(identity_package)?;
+    let mut recovery_entropy = [0u8; RECOVERY_ENTROPY_BYTES];
+    provider.random_bytes(&mut recovery_entropy)?;
+    let recovery_secret = encode_recovery_secret(provider, &recovery_entropy)?;
+    recovery_entropy.zeroize();
+    let backup = encrypt_backup(
+        provider,
+        &parsed.user_id,
+        &parsed.secrets,
+        recovery_secret.as_bytes(),
+    )?;
+    encode_identity_package(
+        provider,
+        parsed.user_id,
+        &parsed.secrets,
+        recovery_secret.as_bytes(),
+        &backup,
+    )
+}
+
+/// Encrypts an account-private device label into the backend's smallest label bucket.
+///
+/// The key is domain-separated from the self-signing seed shared through recovery.
+/// The device id is authenticated associated data so the server cannot swap labels
+/// between two otherwise authorized devices.
+pub fn seal_device_label(
+    identity_package: &[u8],
+    user_id: &[u8],
+    device_id: &[u8],
+    label: &[u8],
+) -> CryptoResult<Vec<u8>> {
+    let provider = RustCryptoProvider::default();
+    let identity = parse_identity_package(identity_package)?;
+    let user_id = raw_uuid(user_id)?;
+    let device_id = raw_uuid(device_id)?;
+    if identity.user_id != user_id
+        || label.is_empty()
+        || label.len() > DEVICE_LABEL_MAX_BYTES
+        || std::str::from_utf8(label)
+            .map_err(|_| CryptoError::MalformedInput)?
+            .chars()
+            .count()
+            > DEVICE_LABEL_MAX_SCALARS
+    {
+        return Err(CryptoError::InvalidArgument);
+    }
+    let key_material = SecretVec::from_slice(&identity.secrets.self_signing, 32)?;
+    let derived =
+        provider.hkdf_sha256(user_id.as_bytes(), &key_material, DEVICE_LABEL_KEY_DOMAIN)?;
+    let key = SecretBytes::new(
+        derived
+            .expose()
+            .try_into()
+            .map_err(|_| CryptoError::InternalFailure)?,
+    );
+    let mut nonce = [0_u8; XCHACHA_NONCE_BYTES];
+    provider.random_bytes(&mut nonce)?;
+    let mut plaintext = Vec::with_capacity(DEVICE_LABEL_PLAINTEXT_BYTES);
+    plaintext.extend_from_slice(DEVICE_LABEL_PLAINTEXT_MAGIC);
+    push_u16(&mut plaintext, u16::try_from(label.len())?);
+    plaintext.extend_from_slice(label);
+    plaintext.resize(DEVICE_LABEL_PLAINTEXT_BYTES, 0);
+    provider.random_bytes(&mut plaintext[10 + label.len()..])?;
+    let plaintext = SecretVec::from_vec(plaintext, DEVICE_LABEL_PLAINTEXT_BYTES)?;
+    let mut header = Vec::with_capacity(8 + 1 + XCHACHA_NONCE_BYTES + 2);
+    header.extend_from_slice(DEVICE_LABEL_MAGIC);
+    header.push(1);
+    header.extend_from_slice(&nonce);
+    push_u16(
+        &mut header,
+        u16::try_from(DEVICE_LABEL_PLAINTEXT_BYTES + 16)?,
+    );
+    let aad = device_label_aad(&header, &user_id, &device_id);
+    let ciphertext = provider.xchacha20poly1305_encrypt(&key, &nonce, &plaintext, &aad)?;
+    let mut output = Vec::with_capacity(DEVICE_LABEL_BUCKET_BYTES);
+    output.extend_from_slice(&header);
+    output.extend_from_slice(&ciphertext);
+    let used = output.len();
+    output.resize(DEVICE_LABEL_BUCKET_BYTES, 0);
+    provider.random_bytes(&mut output[used..])?;
+    Ok(output)
+}
+
+pub fn open_device_label(
+    identity_package: &[u8],
+    user_id: &[u8],
+    device_id: &[u8],
+    blob: &[u8],
+) -> CryptoResult<Vec<u8>> {
+    if blob.len() != DEVICE_LABEL_BUCKET_BYTES {
+        return Err(CryptoError::MalformedInput);
+    }
+    let provider = RustCryptoProvider::default();
+    let identity = parse_identity_package(identity_package)?;
+    let user_id = raw_uuid(user_id)?;
+    let device_id = raw_uuid(device_id)?;
+    if identity.user_id != user_id {
+        return Err(CryptoError::AuthenticationFailed);
+    }
+    let mut reader = Reader::new(blob);
+    if reader.take(DEVICE_LABEL_MAGIC.len())? != DEVICE_LABEL_MAGIC {
+        return Err(CryptoError::MalformedInput);
+    }
+    if reader.u8()? != 1 {
+        return Err(CryptoError::UnsupportedVersion);
+    }
+    let nonce: [u8; XCHACHA_NONCE_BYTES] = reader.array()?;
+    let ciphertext_len = usize::from(reader.u16()?);
+    if ciphertext_len != DEVICE_LABEL_PLAINTEXT_BYTES + 16 {
+        return Err(CryptoError::MalformedInput);
+    }
+    let header_len = reader.position;
+    let ciphertext = reader.take(ciphertext_len)?;
+    let key_material = SecretVec::from_slice(&identity.secrets.self_signing, 32)?;
+    let derived =
+        provider.hkdf_sha256(user_id.as_bytes(), &key_material, DEVICE_LABEL_KEY_DOMAIN)?;
+    let key = SecretBytes::new(
+        derived
+            .expose()
+            .try_into()
+            .map_err(|_| CryptoError::InternalFailure)?,
+    );
+    let aad = device_label_aad(&blob[..header_len], &user_id, &device_id);
+    let plaintext = provider.xchacha20poly1305_decrypt(&key, &nonce, ciphertext, &aad)?;
+    let mut plaintext_reader = Reader::new(plaintext.expose());
+    if plaintext_reader.take(DEVICE_LABEL_PLAINTEXT_MAGIC.len())? != DEVICE_LABEL_PLAINTEXT_MAGIC {
+        return Err(CryptoError::MalformedInput);
+    }
+    let label_len = usize::from(plaintext_reader.u16()?);
+    if label_len == 0 || label_len > DEVICE_LABEL_MAX_BYTES {
+        return Err(CryptoError::MalformedInput);
+    }
+    let label = plaintext_reader.take(label_len)?;
+    if std::str::from_utf8(label)
+        .map_err(|_| CryptoError::MalformedInput)?
+        .chars()
+        .count()
+        > DEVICE_LABEL_MAX_SCALARS
+    {
+        return Err(CryptoError::MalformedInput);
+    }
+    Ok(label.to_vec())
+}
+
+fn device_label_aad(header: &[u8], user_id: &RawUuid, device_id: &RawUuid) -> Vec<u8> {
+    let mut aad = Vec::with_capacity(DEVICE_LABEL_DOMAIN.len() + header.len() + 32);
+    aad.extend_from_slice(DEVICE_LABEL_DOMAIN);
+    aad.extend_from_slice(header);
+    aad.extend_from_slice(user_id.as_bytes());
+    aad.extend_from_slice(device_id.as_bytes());
+    aad
 }
 
 pub fn cross_sign_device(
@@ -483,6 +677,12 @@ pub fn verify_published_identity(input: &[u8]) -> CryptoResult<()> {
 
 /// Verifies the complete claimed device bundle, including both signed prekeys.
 pub fn verify_claimed_device_bundle(input: &[u8]) -> CryptoResult<()> {
+    inspect_verified_claimed_device_bundle(input).map(|_| ())
+}
+
+pub(crate) fn inspect_verified_claimed_device_bundle(
+    input: &[u8],
+) -> CryptoResult<VerifiedClaimedDeviceBundle> {
     let mut reader = Reader::new(input);
     if reader.take(8)? != VERIFY_BUNDLE_MAGIC {
         return Err(CryptoError::MalformedInput);
@@ -540,23 +740,31 @@ pub fn verify_claimed_device_bundle(input: &[u8]) -> CryptoResult<()> {
             signature,
         )?;
     }
+    let bundle = DeviceBundle {
+        user_id,
+        device_id,
+        ik_public,
+        spk_id,
+        spk_public,
+        pq_signed_prekey: pq
+            .as_ref()
+            .map(|(id, public, _)| PublicPrekey { id: *id, public }),
+        registration_id,
+        bundle_version,
+    };
     verify_cross_signature(
         &RustCryptoProvider::default(),
-        &DeviceBundle {
-            user_id,
-            device_id,
-            ik_public,
-            spk_id,
-            spk_public,
-            pq_signed_prekey: pq
-                .as_ref()
-                .map(|(id, public, _)| PublicPrekey { id: *id, public }),
-            registration_id,
-            bundle_version,
-        },
+        &bundle,
         &self_signing_public,
         &cross_signature,
-    )
+    )?;
+    Ok(VerifiedClaimedDeviceBundle {
+        user_id: *user_id.as_bytes(),
+        device_id: *device_id.as_bytes(),
+        canonical_bundle: encode_cross_signature(&bundle)?,
+        signing_public: ik_public.device_signing_public(),
+        cross_signature: *cross_signature.as_bytes(),
+    })
 }
 
 /// Verifies a peer log record with only the peer's authenticated public subkey.
@@ -1279,15 +1487,18 @@ impl From<std::num::TryFromIntError> for CryptoError {
 mod tests {
     use super::{
         BACKUP_BUCKET_BYTES, BACKUP_HEADER_BYTES, BACKUP_ITERATIONS, BACKUP_MEMORY_KIB,
-        BACKUP_PARALLELISM, DEVICE_LOG_BUCKET_BYTES, DEVICE_LOG_INSPECTION_BYTES,
-        INITIAL_CLASSICAL_ONE_TIME_PREKEYS, INITIAL_PQ_ONE_TIME_PREKEYS, SAFETY_FINGERPRINT_BYTES,
-        SAFETY_MAGIC, USER_ATTESTATION_DOMAIN, VERIFY_ATTESTATION_MAGIC, VERIFY_BUNDLE_MAGIC,
+        BACKUP_PARALLELISM, DEVICE_LABEL_BUCKET_BYTES, DEVICE_LOG_BUCKET_BYTES,
+        DEVICE_LOG_INSPECTION_BYTES, INITIAL_CLASSICAL_ONE_TIME_PREKEYS,
+        INITIAL_PQ_ONE_TIME_PREKEYS, SAFETY_FINGERPRINT_BYTES, SAFETY_MAGIC,
+        USER_ATTESTATION_DOMAIN, VERIFY_ATTESTATION_MAGIC, VERIFY_BUNDLE_MAGIC,
         VERIFY_IDENTITY_MAGIC, VERIFY_LOG_MAGIC, attest_peer_master,
         create_device_log_record_with_provider, cross_sign_device, inspect_device_log_record,
-        inspect_peer_device_log_record, parse_device_package, parse_identity_package,
-        prepare_device_with_provider, prepare_first_identity_with_provider,
-        restore_identity_with_provider, safety_fingerprint, sanitize_identity_package,
-        verify_claimed_device_bundle, verify_published_identity, verify_user_attestation,
+        inspect_peer_device_log_record, open_device_label, parse_device_package,
+        parse_identity_package, prepare_device_with_provider, prepare_first_identity,
+        prepare_first_identity_with_provider, restore_identity_with_provider,
+        rotate_recovery_secret_with_provider, safety_fingerprint, sanitize_identity_package,
+        seal_device_label, verify_claimed_device_bundle, verify_published_identity,
+        verify_user_attestation,
     };
     use crate::{
         device_signatures::{
@@ -1416,6 +1627,84 @@ mod tests {
         assert_eq!(after.master_public, before.master_public);
         assert_eq!(after.master_signature, before.master_signature);
         assert!(sanitized.len() < prepared.len());
+    }
+
+    #[test]
+    fn rotating_the_recovery_secret_keeps_the_identity_and_retires_the_old_secret() {
+        // The whole point of replacement: the account keeps the master key its
+        // peers attested and its devices are cross-signed by, and only the
+        // wrapping changes. A rotation that produced a new identity would
+        // silently un-verify every contact.
+        let provider = deterministic_provider(24_000);
+        let prepared = prepare_first_identity_with_provider(&provider, &USER_ID).unwrap();
+        let before = parse_identity_package(&prepared).unwrap();
+
+        let rotated = rotate_recovery_secret_with_provider(&provider, &prepared).unwrap();
+        let after = parse_identity_package(&rotated).unwrap();
+
+        assert_eq!(after.master_public, before.master_public);
+        assert_eq!(after.self_signing_public, before.self_signing_public);
+        assert_eq!(after.master_signature, before.master_signature);
+        assert_eq!(after.backup.len(), BACKUP_BUCKET_BYTES);
+        assert_ne!(after.recovery_secret, before.recovery_secret);
+        assert_ne!(after.backup, before.backup);
+
+        // The new secret opens the new backup, and recovers the same keys.
+        let restored = restore_identity_with_provider(
+            &RustCryptoProvider::default(),
+            &USER_ID,
+            after.recovery_secret,
+            after.backup,
+        )
+        .unwrap();
+        let restored = parse_identity_package(&restored).unwrap();
+        assert_eq!(restored.master_public, before.master_public);
+        assert_eq!(restored.self_signing_public, before.self_signing_public);
+
+        // And the retired one does not, which is what "invalidates the old
+        // secret" means once the server has taken the higher version.
+        let stale = restore_identity_with_provider(
+            &RustCryptoProvider::default(),
+            &USER_ID,
+            before.recovery_secret,
+            after.backup,
+        );
+        assert_eq!(stale.unwrap_err(), CryptoError::AuthenticationFailed);
+    }
+
+    #[test]
+    fn rotation_refuses_a_package_with_no_identity_in_it() {
+        let provider = deterministic_provider(24_000);
+        let prepared = prepare_first_identity_with_provider(&provider, &USER_ID).unwrap();
+        let mut malformed = prepared.clone();
+        malformed[0] ^= 0xff;
+        assert_eq!(
+            rotate_recovery_secret_with_provider(&provider, &malformed).unwrap_err(),
+            CryptoError::MalformedInput
+        );
+        assert_eq!(
+            rotate_recovery_secret_with_provider(&provider, &[]).unwrap_err(),
+            CryptoError::MalformedInput
+        );
+
+        // A package whose user id no longer matches the signature it carries is
+        // refused before any new secret exists, so a substituted identity can
+        // never be handed a fresh backup to be recovered from.
+        let mut substituted = prepared.clone();
+        substituted[9] ^= 0xff;
+        assert_eq!(
+            rotate_recovery_secret_with_provider(&provider, &substituted).unwrap_err(),
+            CryptoError::AuthenticationFailed
+        );
+
+        // A sanitized package still carries the private identity, so it is the
+        // ordinary input: a signed-in device holds exactly that and nothing
+        // else once enrollment has finished.
+        let sanitized = sanitize_identity_package(&prepared).unwrap();
+        let rotated = rotate_recovery_secret_with_provider(&provider, &sanitized).unwrap();
+        let after = parse_identity_package(&rotated).unwrap();
+        assert!(!after.recovery_secret.is_empty());
+        assert_eq!(after.backup.len(), BACKUP_BUCKET_BYTES);
     }
 
     #[test]
@@ -1603,5 +1892,25 @@ mod tests {
             inspect_peer_device_log_record(&log_request).unwrap_err(),
             CryptoError::AuthenticationFailed
         );
+    }
+
+    #[test]
+    fn device_labels_are_account_private_device_bound_and_tamper_evident() {
+        let identity = prepare_first_identity(&USER_ID).unwrap();
+        let label = "Laptop – تهران".as_bytes();
+        let sealed = seal_device_label(&identity, &USER_ID, &DEVICE_ID, label).unwrap();
+        assert_eq!(sealed.len(), DEVICE_LABEL_BUCKET_BYTES);
+        assert_eq!(
+            open_device_label(&identity, &USER_ID, &DEVICE_ID, &sealed).unwrap(),
+            label
+        );
+
+        let mut wrong_device = DEVICE_ID;
+        wrong_device[15] ^= 1;
+        assert!(open_device_label(&identity, &USER_ID, &wrong_device, &sealed).is_err());
+
+        let mut tampered = sealed;
+        tampered[50] ^= 1;
+        assert!(open_device_label(&identity, &USER_ID, &DEVICE_ID, &tampered).is_err());
     }
 }

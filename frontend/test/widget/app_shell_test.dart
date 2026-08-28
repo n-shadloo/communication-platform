@@ -4,6 +4,7 @@ import 'package:communication_platform/app/design_system/app_tokens.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 
 void main() {
   testWidgets('selects narrow, medium, and wide structures by measured width', (
@@ -26,13 +27,13 @@ void main() {
     await _pumpApp(
       tester,
       size: const Size(360, 800),
-      initialLocation: '/chats/sample-thread',
+      initialLocation: '/voice-rooms/sample-room',
     );
-    expect(find.text('Route: /chats/sample-thread'), findsOneWidget);
+    expect(find.text('Route: /voice-rooms/sample-room'), findsOneWidget);
 
     await _resize(tester, const Size(1440, 900));
     expect(find.byKey(const ValueKey('shell-wide')), findsOneWidget);
-    expect(find.text('Route: /chats/sample-thread'), findsOneWidget);
+    expect(find.text('Route: /voice-rooms/sample-room'), findsOneWidget);
   });
 
   testWidgets('keyboard shortcuts navigate the stable destination set', (
@@ -45,14 +46,14 @@ void main() {
     await tester.sendKeyUpEvent(LogicalKeyboardKey.altLeft);
     await tester.pumpAndSettle();
 
-    expect(find.text('Voice Rooms structure'), findsOneWidget);
+    expect(find.text('Voice rooms'), findsOneWidget);
     expect(find.text('Route: /voice-rooms'), findsOneWidget);
 
     await tester.sendKeyDownEvent(LogicalKeyboardKey.altLeft);
     await tester.sendKeyEvent(LogicalKeyboardKey.digit3);
     await tester.sendKeyUpEvent(LogicalKeyboardKey.altLeft);
     await tester.pumpAndSettle();
-    expect(find.text('Settings structure'), findsOneWidget);
+    expect(find.text('Linked Devices'), findsOneWidget);
   });
 
   testWidgets('guard hook can reject a protected destination', (tester) async {
@@ -63,8 +64,32 @@ void main() {
     await tester.sendKeyUpEvent(LogicalKeyboardKey.altLeft);
     await tester.pumpAndSettle();
 
-    expect(find.text('Chats structure'), findsOneWidget);
-    expect(find.text('Settings structure'), findsNothing);
+    expect(find.text('No chats yet'), findsOneWidget);
+    expect(find.text('Linked Devices'), findsNothing);
+  });
+
+  testWidgets('withdraws compose on a page pushed above the destination', (
+    tester,
+  ) async {
+    await _pumpApp(tester, size: const Size(360, 800));
+    expect(find.byTooltip('Start a conversation'), findsOneWidget);
+
+    // A sub-route of the branch, reached by navigating rather than by booting
+    // into it, so this also proves the shell re-reads the location on a push.
+    GoRouter.of(
+      tester.element(find.byKey(const ValueKey('shell-narrow'))),
+    ).go('/voice-rooms/sample-room');
+    await tester.pumpAndSettle();
+
+    expect(find.text('Route: /voice-rooms/sample-room'), findsOneWidget);
+    expect(find.byTooltip('Create a voice room'), findsNothing);
+    expect(find.byTooltip('Start a conversation'), findsNothing);
+
+    GoRouter.of(
+      tester.element(find.byKey(const ValueKey('shell-narrow'))),
+    ).go('/voice-rooms');
+    await tester.pumpAndSettle();
+    expect(find.byTooltip('Create a voice room'), findsOneWidget);
   });
 
   testWidgets('large text on an Android-sized viewport does not overflow', (
@@ -74,14 +99,14 @@ void main() {
     addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
     await _pumpApp(tester, size: const Size(360, 800));
 
-    expect(find.text('Chats'), findsOneWidget);
+    expect(find.text('Chats'), findsWidgets);
     expect(find.text('Voice Rooms'), findsOneWidget);
     expect(find.text('Settings'), findsOneWidget);
     expect(tester.takeException(), isNull);
 
-    await tester.ensureVisible(find.text('Open placeholder detail'));
+    await tester.ensureVisible(find.text('Start a chat'));
     await tester.pumpAndSettle();
-    expect(find.text('Open placeholder detail').hitTestable(), findsOneWidget);
+    expect(find.text('Start a chat').hitTestable(), findsOneWidget);
   });
 
   testWidgets('dark and authored high-contrast themes expose semantic tokens', (
@@ -93,7 +118,7 @@ void main() {
       themeMode: ThemeMode.dark,
     );
     var context = tester.element(
-      find.byKey(const ValueKey('current-route-label')),
+      find.byKey(const ValueKey('chats-list-screen')),
     );
     expect(context.tokens.colors.canvas, const Color(0xFF0E1014));
     expect(context.tokens.colors.accent, const Color(0xFF8298FF));
@@ -109,7 +134,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    context = tester.element(find.byKey(const ValueKey('current-route-label')));
+    context = tester.element(find.byKey(const ValueKey('chats-list-screen')));
     expect(context.tokens.colors.canvas, Colors.white);
     expect(context.tokens.colors.border, Colors.black);
   });
@@ -123,10 +148,12 @@ void main() {
     addTearDown(tester.platformDispatcher.clearAccessibilityFeaturesTestValue);
     await _pumpApp(tester, size: const Size(360, 800));
 
-    await tester.tap(find.text('Open placeholder detail'));
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.altLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.digit2);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.altLeft);
     await tester.pump(const Duration(milliseconds: 200));
 
-    expect(find.text('Conversation detail'), findsOneWidget);
+    expect(find.text('Voice rooms'), findsOneWidget);
     expect(
       find.byKey(const ValueKey('app-route-spatial-transition')),
       findsNothing,

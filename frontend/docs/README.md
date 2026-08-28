@@ -24,7 +24,11 @@ The documents use three requirement words:
 
 - [Threat model](threat-model.md)
 - [Cryptographic protocol](cryptographic-protocol.md)
+- [Pairwise transport version 1](pairwise-transport-v1.md)
+- [Pairwise independent-review packet](pairwise-review-readiness.md)
 - [Post-quantum MLS profile](mls-profile.md)
+- [Closed-beta PQ MLS independent-review packet](mls-beta-review-readiness.md)
+- [Retaining an independent cryptographic reviewer](independent-review-engagement.md)
 - [Application-message protocol](message-protocol.md)
 - [Authentication and devices](authentication-and-devices.md)
 - [Attachments](attachments.md)
@@ -43,7 +47,10 @@ The documents use three requirement words:
 - [Ordered Codex implementation prompts](implementation-prompts.md)
 - [Backend/Flutter implementation checklist](implementation-checklist.md)
 - [Testing strategy](testing-strategy.md)
+- [Sustained delivery: field validation and its gate](sustained-delivery-validation.md)
 - [Deployment and release](deployment-and-release.md)
+- [Beta release signing and key continuity](release-signing.md)
+- [Third-party notices](third-party-notices.md)
 
 ## Authority and change control
 

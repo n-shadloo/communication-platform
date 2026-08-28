@@ -138,6 +138,8 @@ abstract interface class EnrollmentCryptoNativeApi {
 
   NativeBufferResult sanitizeIdentity(Uint8List package);
 
+  NativeBufferResult rotateRecoverySecret(Uint8List package);
+
   NativeBufferResult crossSignDevice(
     Uint8List devicePackage,
     Uint8List identityPackage,
@@ -185,6 +187,10 @@ final class DynamicEnrollmentCryptoNativeApi
       _sanitizeIdentity = library.lookupFunction<_PrepareNative, _PrepareDart>(
         'cp_crypto_v1_sanitize_identity',
       ),
+      _rotateRecoverySecret = library
+          .lookupFunction<_PrepareNative, _PrepareDart>(
+            'cp_crypto_v1_rotate_recovery_secret',
+          ),
       _crossSignDevice = library
           .lookupFunction<_CrossSignNative, _CrossSignDart>(
             'cp_crypto_v1_cross_sign_device',
@@ -206,6 +212,7 @@ final class DynamicEnrollmentCryptoNativeApi
   final _PrepareDart _prepareFirstIdentity;
   final _RestoreDart _restoreIdentity;
   final _PrepareDart _sanitizeIdentity;
+  final _PrepareDart _rotateRecoverySecret;
   final _CrossSignDart _crossSignDevice;
   final _LogDart _createDeviceLogRecord;
   final _InspectDart _inspectDeviceLogRecord;
@@ -228,6 +235,10 @@ final class DynamicEnrollmentCryptoNativeApi
   @override
   NativeBufferResult sanitizeIdentity(Uint8List package) =>
       _invokePrepare(_sanitizeIdentity, package);
+
+  @override
+  NativeBufferResult rotateRecoverySecret(Uint8List package) =>
+      _invokePrepare(_rotateRecoverySecret, package);
 
   @override
   NativeBufferResult crossSignDevice(

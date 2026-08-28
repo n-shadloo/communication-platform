@@ -2,8 +2,10 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:communication_platform/core/protocol/enrollment_crypto_model.dart';
+import 'package:communication_platform/core/protocol/identity_protocol_model.dart';
 import 'package:communication_platform/core/result/result.dart';
 import 'package:communication_platform/features/authentication/infrastructure/secure_session_token_adapter.dart';
+import 'package:communication_platform/features/contacts/infrastructure/drift_contact_repository.dart';
 import 'package:communication_platform/features/devices/domain/device_enrollment_model.dart';
 import 'package:communication_platform/features/devices/infrastructure/drift_enrollment_journal_store.dart';
 import 'package:communication_platform/features/local_storage/application/ports/local_storage_ports.dart';
@@ -138,6 +140,34 @@ void main() {
         (identity as Success<IdentityKeyPackage?>).value?.recoverySecret,
         isNull,
       );
+    },
+  );
+
+  test(
+    'the device bundle enrolment writes is one the reader accepts',
+    () async {
+      final store = _store(runtime);
+      final complete = _journal(
+        EnrollmentPhase.complete,
+        deviceId: deviceId,
+        identity: IdentityKeyPackage.fromNative(_identityBytes()),
+      );
+      await store.persistPrepared(complete);
+      expect(await store.update(complete), isA<Success<void>>());
+
+      // `devices.public_bundle` is written here and read only by
+      // DriftContactRepository, which every send reaches when it resolves the
+      // local account's own devices. Enrolment wrote the wire field names, so
+      // this read threw and no message could leave the device - a break neither
+      // component's own tests could see, because each one used its own fake.
+      final devices = await DriftContactRepository(
+        runtime.openedDatabase!,
+      ).readDevices(userId);
+
+      final stored = (devices as Success<List<PeerPublicDevice>>).value;
+      expect(stored, hasLength(1));
+      expect(stored.single.deviceId, deviceId);
+      expect(stored.single.identityPublic, hasLength(64));
     },
   );
 }

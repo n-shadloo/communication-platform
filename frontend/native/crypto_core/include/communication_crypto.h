@@ -3,12 +3,20 @@
 
 #include <stdint.h>
 
+/* The pairwise operation mux carries padded envelopes and authenticated
+ * device state, so it has a larger frozen bound than the other v1 entrypoints. */
+#define CP_CRYPTO_V1_PAIRWISE_MAX_IO_BYTES UINT32_C(2097152)
+#define CP_CRYPTO_V1_PAIRWISE_OP_INSPECT_PUBLIC_HEADER UINT32_C(17)
+#define CP_CRYPTO_V1_ENVELOPE_KIND_REGULAR UINT8_C(0)
+#define CP_CRYPTO_V1_ENVELOPE_KIND_INITIAL UINT8_C(1)
+
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 #define CP_CRYPTO_V1_ABI_VERSION UINT32_C(1)
 #define CP_CRYPTO_V1_CAPABILITIES_SIZE UINT32_C(32)
+#define CP_CRYPTO_V1_CAP_BETA_PQ_MLS (UINT64_C(1) << 15)
 
 typedef enum cp_crypto_status_v1 {
   CP_CRYPTO_OK = 0,
@@ -72,6 +80,12 @@ int32_t cp_crypto_v1_sanitize_identity(
     uint8_t* output,
     uintptr_t output_len,
     uintptr_t* written);
+int32_t cp_crypto_v1_rotate_recovery_secret(
+    const uint8_t* identity_package,
+    uintptr_t identity_package_len,
+    uint8_t* output,
+    uintptr_t output_len,
+    uintptr_t* written);
 int32_t cp_crypto_v1_cross_sign_device(
     const uint8_t* device_package,
     uintptr_t device_package_len,
@@ -109,6 +123,35 @@ int32_t cp_crypto_v1_inspect_device_log_record(
     uintptr_t output_len,
     uintptr_t* written);
 int32_t cp_crypto_v1_identity_operation(
+    uint32_t operation,
+    const uint8_t* input,
+    uintptr_t input_len,
+    uint8_t* output,
+    uintptr_t output_len,
+    uintptr_t* written);
+int32_t cp_crypto_v1_pairwise_operation(
+    uint32_t operation,
+    const uint8_t* input,
+    uintptr_t input_len,
+    uint8_t* output,
+    uintptr_t output_len,
+    uintptr_t* written);
+int32_t cp_crypto_v1_application_operation(
+    uint32_t operation,
+    const uint8_t* input,
+    uintptr_t input_len,
+    uint8_t* output,
+    uintptr_t output_len,
+    uintptr_t* written);
+int32_t cp_crypto_v1_attachment_operation(
+    uint32_t operation,
+    const uint8_t* input,
+    uintptr_t input_len,
+    uint8_t* output,
+    uintptr_t output_len,
+    uintptr_t* written);
+/* Exported only by the isolated beta-pq-mls native profile. */
+int32_t cp_crypto_v1_beta_mls_operation(
     uint32_t operation,
     const uint8_t* input,
     uintptr_t input_len,

@@ -1,14 +1,19 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 
+import 'package:communication_platform/app/config/deployment_disclosure.dart';
+import 'package:communication_platform/app/dependencies/core_providers.dart';
+import 'package:communication_platform/app/dependencies/deployment_disclosure_providers.dart';
 import 'package:communication_platform/app/design_system/app_components.dart';
 import 'package:communication_platform/app/design_system/app_tokens.dart';
 import 'package:communication_platform/features/authentication/presentation/authentication_controller.dart';
 import 'package:communication_platform/features/devices/domain/device_enrollment_model.dart';
 import 'package:communication_platform/features/devices/presentation/device_enrollment_controller.dart';
+import 'package:communication_platform/features/devices/presentation/security_notice_sections.dart';
+import 'package:communication_platform/features/devices/presentation/sensitive_screen_control.dart';
 import 'package:communication_platform/l10n/generated/app_localizations.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -363,7 +368,7 @@ final class _DeviceEnrollmentPageState
     bool busy,
   ) => _EnrollmentCard(
     key: const ValueKey('mandatory-security-notice'),
-    title: l10n.enrollmentSecurityTitle,
+    title: l10n.securityNoticeTitle,
     children: [
       if (journal.flow == EnrollmentFlow.laterDevice) ...[
         Text(
@@ -377,24 +382,12 @@ final class _DeviceEnrollmentPageState
         ),
         const SizedBox(height: AppSpacing.x6),
       ],
-      Text(
-        l10n.enrollmentProtectsHeading,
-        style: context.tokens.typography.section,
-      ),
-      const SizedBox(height: AppSpacing.x2),
-      Text(l10n.enrollmentProtectsBody, style: context.tokens.typography.body),
-      const SizedBox(height: AppSpacing.x6),
-      Text(
-        l10n.enrollmentDoesNotProtectHeading,
-        style: context.tokens.typography.section.copyWith(
-          color: context.tokens.colors.danger,
-        ),
-      ),
-      const SizedBox(height: AppSpacing.x2),
-      Text(
-        l10n.enrollmentDoesNotProtectBody,
-        style: context.tokens.typography.body,
-      ),
+      // The deployment disclosure sits inside this gate rather than in a second
+      // consent screen of its own. Two blocking screens in a row halve the
+      // attention paid to each, and this one is already mandatory, already
+      // durable in the enrollment journal, and already the last thing between
+      // the user and their first message (ADR-045).
+      const SecurityNoticeSections(),
       const SizedBox(height: AppSpacing.x6),
       AppButton(
         key: const ValueKey('accept-security-notice'),
@@ -460,8 +453,34 @@ final class _DeviceEnrollmentPageState
     if (!mounted || !accepted) {
       return;
     }
+    // What was accepted, not merely that something was. Recorded before the
+    // session is opened, so a fresh install never meets the re-presentation
+    // gate for a statement it has just answered. A failed write costs one
+    // extra showing on the next launch and nothing else, which is why it does
+    // not block the step that has already succeeded (ADR-052).
+    await _recordDisclosureAcceptance();
+    if (!mounted) {
+      return;
+    }
     ref.read(authenticationControllerProvider.notifier).secureSetupCompleted();
     context.go('/chats');
+  }
+
+  Future<void> _recordDisclosureAcceptance() async {
+    final disclosure = ref.read(appEnvironmentProvider).deploymentDisclosure;
+    if (disclosure == null) {
+      return;
+    }
+    try {
+      final acknowledgement = await ref.read(
+        disclosureAcknowledgementProvider.future,
+      );
+      await acknowledgement.accept(revision: disclosure.revision);
+    } on Object {
+      // Protected storage is unavailable. Enrollment itself already proved it
+      // was not, so this is the rare case; the gate re-presents the statement
+      // next launch rather than losing the acceptance silently.
+    }
   }
 
   String _message(
@@ -547,39 +566,4 @@ final class _EnrollmentNotice extends StatelessWidget {
       ),
     ),
   );
-}
-
-final class SensitiveScreenControl {
-  const SensitiveScreenControl();
-
-  static const MethodChannel _channel = MethodChannel(
-    'communication_platform/protected_storage',
-  );
-
-  Future<void> setEnabled(bool enabled) async {
-    try {
-      await _channel.invokeMethod<void>('setSensitiveScreen', {
-        'enabled': enabled,
-      });
-    } on MissingPluginException {
-      // Widget tests and unsupported future platforms remain fail-closed at
-      // the crypto boundary; they simply lack the Android screenshot control.
-    } on PlatformException {
-      // No error detail is surfaced across the privacy boundary.
-    }
-  }
-
-  Future<bool> copyText(String text) async {
-    try {
-      await _channel.invokeMethod<void>('copySensitiveText', {
-        'text': text,
-        'clearAfterSeconds': 60,
-      });
-      return true;
-    } on MissingPluginException {
-      return false;
-    } on PlatformException {
-      return false;
-    }
-  }
 }
