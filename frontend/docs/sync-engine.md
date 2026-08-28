@@ -47,10 +47,11 @@ Socket events may arrive during drain. Inbox uniqueness and event IDs make order
 
 ## Cycle order
 
-One cycle is: owed send preparations, then the outbox, then the inbox, then
-acknowledgements, then the authoritative drain loop (which runs the inbox and
-acknowledgements again per page), then preparations and the outbox a second time, then
-stale-device refresh, then the successful-sync and `online` markers.
+One cycle is: owed send preparations, then the outbox, then the inbox, then post-inbox
+work — which includes device-log gossip — then acknowledgements, then the authoritative
+drain loop (which runs the inbox, post-inbox work and acknowledgements again per page), then
+preparations and the outbox a second time, then stale-device refresh, then the
+successful-sync and `online` markers.
 
 Preparations go immediately before each outbox pass because a message the user has already
 sent is not in the outbox yet. Its event is committed and on their screen, and what it is
@@ -67,6 +68,29 @@ second pass when the first already found the transport unwilling. [ADR-060](deci
 records why: with the inbound half first and every stage returning its first failure, one
 envelope a device could not open stopped a message the user had already sent from ever
 leaving the process.
+
+**Device-log gossip is owed to a peer, not to a message, and it runs behind the message.** A
+send preparation that succeeds records the peer as owing an advertisement — one in-memory set
+insertion, nothing awaited — and returns; the debt is paid in post-inbox work. That position
+is chosen twice over. It is after the first outbox pass, which is the rule above: the cycle
+sends the user's message before it does anything on anybody else's behalf, and gossip used to
+sit in front of that as a whole second fan-out with its own device lookups and ratchet steps.
+It is also after the inbox has committed, which is what can advance a device-log head, so
+gossip advertises the heads this cycle just learned. The rows it queues are sealed by the
+second preparation pass and leave on the second outbox pass, in the same cycle.
+
+A gossip round that fails is not the send's failure and cannot retire or re-arm a preparation
+whose ciphertext is already durable — structurally, because the preparation returns `void` to
+the ledger and has no result to observe. The next send to that peer owes it again. Two sends
+to one peer inside a cycle produce one round, and a second cycle within a minute produces
+none: a device-log head moves when a device is enrolled, revoked or rotates a prekey, so
+re-advertising sooner tells the peer nothing.
+
+Gossip is a *scheduled unit of work the cycle accounts for* rather than a detached future,
+because a delivery cycle can be a headless catch-up that disposes its container and closes its
+database the moment `synchronize()` returns ([ADR-049](decisions.md),
+[ADR-050](decisions.md)). Everything gossip does begins and ends inside the cycle. See
+[ADR-065](decisions.md).
 
 A cycle is asked for by an event — a socket hint, a growing durable outbox, a deferred
 platform wake-up — or by a *time*: the supervisor arms a wake-up on the projection's
@@ -283,8 +307,12 @@ with the backend/proxy configuration and a REST health probe only when necessary
 - Every own device-set/identity change appends a self-signing-key-signed hash-chain record.
   Verified peer log heads are piggybacked in ordinary encrypted events for equivocation
   detection.
-- `stale_devices` responses immediately invalidate matching outbox targets and trigger one
-  ETag refresh. Newly discovered eligible replacement devices receive independently
+- Peer identity, device and device-log answers are remembered in memory for 30 seconds so that
+  one cycle asks about each person once instead of two to four times; the cache sits below
+  every authentication gate, never holds a prekey claim, and is emptied by every staleness
+  signal. See [authentication-and-devices.md](authentication-and-devices.md).
+- `stale_devices` responses immediately invalidate matching outbox targets, drop that peer from
+  the resolution cache, and trigger one ETag refresh. Newly discovered eligible replacement devices receive independently
   encrypted target rows with the same logical event ID; already accepted targets do not.
 
 ## Device-to-device history transfer

@@ -89,6 +89,42 @@ devices are withheld; master-key change or log fork blocks sensitive operations.
 Unknown/foreign/revoked IDs are treated identically in UI to avoid exposing server
 existence distinctions.
 
+### Short-lived peer-resolution cache
+
+Within one process, the answers `/identity`, `/devices` and `/devicelog` gave about a peer may
+stand in for a repeat of the same request for **30 seconds**. The cache decorates the remote
+port, *below* every check described above: a served answer re-enters the same authentication
+the network's would have, so the master-key comparison, the unsigned-device rejection, the
+device transition rule, the hash-chain and sequence verification, the current-live-set
+requirement on the head record, the trust states and the global fork gate all run again on
+every resolution. A hit shortens the path to a verdict; it never reaches one a live fetch would
+not have reached, and it can never widen a live device set beyond what the server itself
+returned inside the window.
+
+It is in memory only. Nothing is persisted, so a restart starts cold — deliberately: a cache
+that outlives the process can outlive a revocation it never saw. Only successful answers are
+remembered. `/devicelog` pages are shared between concurrent identical requests but never
+stored, because a stored page outlives the device answer that said which head to expect and a
+mismatched head is read as a fork.
+
+**A prekey claim is never cached, coalesced, memoized or replayed.** It consumes one-time
+prekeys, so two callers asking for the same device produce two claims or none.
+
+Everything invalidates it immediately:
+
+- a `stale_devices` response, through `stale_device_refresh_requests`;
+- a user opening or confirming a contact's safety number;
+- any trust-state transition, fork detection or device-log head advance;
+- 30 seconds.
+
+`refreshPeer` and `confirmOutOfBand` are never served a remembered answer. Both exist to ask
+whether this device's idea of a peer is still right — one for a person reading a safety number,
+one for the delivery cycle acting on a `stale_devices` response — so each drops the peer and
+keeps it dropped for the whole resolution, including against a fan-out running concurrently.
+The fan-out's own entry points, `resolveLiveDevices` and `refreshPeerForDevices`, are the ones
+the cache exists for: they ask about the same peer two to four times inside one delivery cycle.
+See [ADR-065](decisions.md).
+
 ## Prekey and key-package policy
 
 Concrete low/target watermarks are configuration constants below the classical cap of

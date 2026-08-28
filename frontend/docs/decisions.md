@@ -75,6 +75,363 @@ is not silently edited out of history.
 | ADR-062 | Accepted | The conversation timeline reads a bounded, cursor-anchored window instead of its whole history, its three per-message queries become three set-based ones, and the schema gains its first six indexes (2026-08-27) | Opening a conversation cost what had been said in it. `watchMessages` had no `LIMIT` and ran a reactions, a receipts and an attachments query for **every** message on **every** emission: measured at **3601 statements** for one emission of a 1200-message conversation, against **6** now, equal at eight messages and at twelve hundred. `watchConversations` had the same shape one level up and is now two statements rather than one per conversation. The window is a keyset range anchored at the oldest loaded message rather than a count from the newest, so a message arriving cannot push the line the reader is on out of the other end, and `OFFSET` is rejected because it re-scans what it skips. Separately, the schema declared 43 tables and **zero** indexes, so every lookup by a non-leading key column was a full scan under SQLCipher: six indexes (schema 16 -> 17, additive, no table dropped or re-keyed) chosen from `EXPLAIN QUERY PLAN` and asserted against the planner, including a partial index for pins that only works because both callers spell the predicate unbound, and a foreign-key child index on `attachments` that takes one rebuild of a 1200-message conversation from 96 ms to 27 ms. `LoadOlderMessagesIntent` and the three hardcoded pagination fields become real, and a jump to a message outside the window loads it instead of doing nothing. |
 | ADR-063 | Accepted | Applying an application event re-folds only the messages that event is a fact about, and the full rebuild becomes the recovery path it always was (2026-08-27) | The last and largest term ADR-061 and ADR-062 left behind: every authenticated event re-projected its whole conversation from the whole event log, so the cost of *receiving* anything was set by how long the conversation was — worst for an inbound receipt, which is one event per batch of messages. Measured end to end, one such rebuild of a 1200-message conversation is **6556 statements and 283 ms**; applying one event now costs **14-16 statements and about 1.1 ms**, equal at 48 messages and at 1200, and a receipt covering thirty-two messages costs thirty-two folds rather than twelve hundred. A new derived-state table, `application_event_targets` (schema 17 -> 18, additive, back-filled), gives the projector the direction the log lacks: which facts a message has. The fold is spelled `CROSS JOIN` because the ordinary form is the same statement count and a linear number of rows, visible only in `EXPLAIN QUERY PLAN`. Conversation aggregates get one definition both paths call, plus a covering partial index for the unread count. The rebuild is kept, made publicly reachable, and deliberately left folding each message against the whole fact set, because it is the oracle a differential equivalence test compares against and it must not come to share the incremental path's idea of which facts belong to which message. |
 | ADR-064 | Accepted | A rebuild re-derives the messages that changed and redraws the rows that changed, the reading anchor comes from the rows that are mounted, and a keystroke costs a timer instead of a database write and a page rebuild (2026-08-28) | The last three terms ADR-061, ADR-062 and ADR-063 left behind, all of them on the main isolate. Measured on the A56 in a 219-message conversation with the whole thing drawn: typing goes from **5.25 ms median / 8.13 p90 / 9.89 worst** of build time per frame to **2.33 / 3.76 / 6.57**, and produces 38 frames for thirty characters where it produced 55, because the page is no longer one of the things that rebuild; a message arriving goes from **1.77 / 5.02 / 7.49** to **0.82 / 3.23 / 5.97**. On the host, where a long conversation could be driven, the frame that draws an arrival went from 36.7 ms median at 1200 messages (19.7 at 48) to 10.9 (13.7 at 48), and a keystroke from 32.7 (16.8 at 48) to 4.0 (5.1 at 48) — before, both roughly doubled with conversation length; after, neither grows. `ChatMessageProjection` returns the identical view model for every message whose row cannot have changed, keyed on the whole `ConversationMessage` plus the positional inputs grouping and reply quotes actually depend on, so one arrival derives **2** elements and one reaction **1**, equal at a 48-message window and a 240-message one, against the whole window on every emission before; the timeline retains the built row behind it, so `Element.updateChild` skips it outright, and every row is keyed with a `findChildIndexCallback` so an arrival relocates elements instead of re-parenting a `GlobalKey` per row. `_messageKeys` becomes a registry of *mounted* rows — bounded by construction, and always the only set an anchor could come from — and the anchor is captured in `didUpdateWidget`, in `didChangeDependencies` and at scroll end, rather than additionally on every build and every scroll tick. The draft is debounced 500 ms and flushed on blur, route pop, leaving `resumed`, dispose and send, and the cascade that made a keystroke rebuild the page is cut in the provider layer — the draft becomes a one-shot read, typing narrows to a boolean through `select`, and the forward targets become a callback — because the draft must keep living in the `conversations` row. Also: `DateTime.now()` leaves `build` for a clock refreshed exactly when the earliest mute on screen expires, a jump no longer has its own scroll cancelled by the reading anchor it was leaving, and a jump to a target already inside the drawn range asks for the frame nothing else was going to schedule. Schema stays at 18; no repository, projector, outbox, sync-engine or backend file is touched. |
+| ADR-065 | Accepted | A delivery cycle asks the network once per person instead of two to four times, through a thirty-second process-local cache that sits below every authentication gate and never touches a prekey claim; and the device-log gossip a send owes becomes a debt the cycle records and pays after the outbox instead of a second fan-out awaited in front of the first one's ciphertext; closes the RCA ADR-060 opened (2026-08-28) | `ClientAuthenticationService` was entirely uncached, so one `prepareOwedSend` fetched a peer's identity — an unconditional full `200`, because `/identity` offers no ETag — twice, three times when a session had to be started, and again for the gossip owed to the same peer moments later, against a round trip ADR-060 measured at **107-137 ms**. Measured on the composed send path with a synthetic 122 ms round trip: a first contact and its gossip fall from **14 round trips / 1828 ms to 6 / 788**, a send and its gossip from **8 / 1051 to 4 / 528**, two sends to one peer from **8 / 1037 to 4 / 522**, and the time from `prepare` starting to a postable ciphertext from **8 / 1028 to 4 / 512** — the last of those is F7 alone, because half of it was a fan-out owed to somebody else. The cache decorates `PeerIdentityRemotePort` rather than memoizing `AuthenticatedPeer`, so a hit is the *same* verification over the same bytes: the master-key comparison, the unsigned-device rejection, the transition check, the hash chain, `requireCurrentLiveSet`, the trust states and the global fork gate all still run, and a suite proves each rejection is reproduced on a hit with zero further requests. `claimPrekeyBundles` reaches no map, no in-flight entry and no bypass check, because it consumes one-time prekeys and is `ReplaySafety.never`. The device log is coalesced but never stored: a stored page outlives the head that said what to expect, and a mismatched head is read as a fork, which would withhold every send to every peer. `refreshPeer` and `confirmOutOfBand` are forced live by the service itself, which is what makes user verification and the `stale_devices` path bypass it with no call site changed. Gossip's failure isolation stops being a swallowed `try`/`catch` and becomes a `void` return with no future to await; a bare `unawaited` was rejected because a headless catch-up (ADR-049/ADR-050) disposes its container and closes its database the moment `synchronize()` returns. Schema stays at 18; no migration, table, column or index, no endpoint, header or status-code change, no cryptographic construction touched, and no `backend/` file. |
+
+## ADR-065 in full — the cycle asks once, and gossip goes behind the message (2026-08-28)
+
+**Status:** Accepted. Client-side cost decision, entirely in the contacts, devices and
+synchronization composition. **The local schema stays at 18**: no migration, no table, no
+column, no index. Changes no endpoint, path, header, query parameter, request or response
+shape, no accepted status code, no cryptographic construction, no ciphersuite identifier, no
+protocol, no wire format, no transport trust anchor and no backend file. **Opens no production
+gate.** This ADR closes the RCA ADR-060 opened.
+
+### The question
+
+> Nothing a user waits on is slow any more. What is left is redundant network work *inside*
+> the delivery cycle: the same questions asked of the same server about the same people, two
+> to four times per message, and a second fan-out standing in front of the first one's
+> ciphertext. What does one message actually cost the network, and what is the smallest set of
+> changes that makes it cost what it needs to?
+
+Two answers, coupled. They are the last two findings of the original RCA, F6 and F7 — and
+ADR-064's closing list mislabels F7 as "the dio client"; ADR-061 has it right, and it is what
+device-log gossip does and when it is owed.
+
+**F6 — nothing about a peer is remembered for even a moment.**
+`ClientAuthenticationService` is entirely uncached. One `prepareOwedSend` resolves the peer's
+live devices and then this account's, and a send that has to establish a session resolves the
+peer a *third* time through `claimVerifiedDevices`. Each resolution is an unconditional
+`GET .../identity` — the endpoint offers no ETag, so it is always a full `200` — a
+`GET .../devices`, and device-log pages when the head moved. Then the gossip owed to that same
+peer runs moments later and resolves both accounts again from scratch. ADR-060 measured a real
+round trip from the A56 at 107 to 137 ms against a network and backend it had already cleared.
+
+**F7 — gossip is in front of the message.** ADR-061 moved gossip off the path the user waits
+on, and stopped there. `PairwiseSendPreparationAdapter.prepare` still `await`ed
+`afterSuccessfulQueue`, so a whole second fan-out — its own two device lookups, its own ratchet
+steps, its own commit transaction — ran between a sealed envelope and its `POST`. ADR-060's
+governing rule is that a delivery cycle sends the user's message before it reads anybody
+else's. Gossip is owed to a peer, not to this message, and it was in front of it.
+
+They are coupled: detaching gossip takes it off the critical path, and caching stops it
+re-fetching what the send just fetched. Neither is worth much alone.
+
+### D1. The cache is a response cache, and it sits *below* every gate
+
+This is the whole safety argument, and it is the reason the design is a decorator on
+`PeerIdentityRemotePort` rather than a memo on `AuthenticatedPeer`.
+
+`PeerIdentityRoundTripCache` implements the same port `DioContactRepository` implements and
+wraps it. `ClientAuthenticationService` is composed against the wrapper and cannot tell the
+difference: it receives an identity, a device refresh and a device-log page, exactly as it
+would from the network, and then does what it always did. The master-key comparison, the
+unsigned-device rejection, `_isValidDeviceTransition`, the hash-chain and
+sequence-monotonicity checks, `requireCurrentLiveSet` on the head record, the same-head
+pending-window rule, the `masterKeyChanged` and `deviceLogFork` trust states and the global
+fork gate all run again, on every call, on every path.
+
+So the rule the phase demanded — *a cache may only ever shorten the path to the same answer,
+and may never satisfy a caller the uncached path would have refused* — holds by construction
+rather than by review. A cache hit is not a skipped verification; it is the same verification,
+over the same bytes, reaching the same verdict without the round trip. It cannot widen a
+device set either: the widest set it can serve is one the server itself returned inside the
+window.
+
+The alternative — remembering the `AuthenticatedPeer` a resolution produced and returning it
+on a hit — was rejected for the obvious reason. It puts the cache *above* the gates, and every
+gate then has to be re-derived by hand at the cache boundary, correctly, forever. The
+`peer_resolution_cache_test.dart` group *every gate the live path applies is reached on a hit*
+exists to hold this: it plants the offending answer in the cache and proves that an unsigned
+device, an impossible device transition, a rewound log head, a changed master key, a rejected
+identity signature and the global fork gate each produce their own rejection, and their own
+persisted trust state, with **zero** further requests.
+
+### D2. Thirty seconds, keyed on the user, and everything that empties it
+
+**The key.** Identity is keyed on `userId` alone. Devices are keyed on `userId` and remember
+the ETag that was *sent* to obtain the answer: a `200` is a complete answer and is served back
+to any caller, while a `304` is a statement about the ETag that produced it and is served only
+back to a caller holding that same ETag. The device log is coalesced but never stored (D5).
+
+**The scope.** In memory, in the process, and nowhere else. The schema does not move and a
+restart starts cold, which is correct rather than a limitation: a cache that outlives the
+process is a cache that can outlive a revocation it never saw. It is one instance for the
+composed application, so the send fan-out, the prekey claim and gossip all ask through it.
+
+**The TTL is thirty seconds, and the number is chosen against what it exposes.** Thirty
+seconds is the span of one delivery cycle, which is the only thing this cache is for. Every
+redundant resolution named above is inside one: a preparation's peer lookup, its own-account
+lookup and the claim's re-resolution are consecutive, and the gossip the same cycle owes that
+peer is separated from them by one outbox flush and one inbox pass. Ten seconds covers the
+first three and loses the fourth on any device with a mailbox; a minute would start joining
+*different* cycles, which nothing asked for and nothing invalidates.
+
+What it costs is bounded and stated. The only thing a TTL protects against is a change that
+produced **no local signal at all** — a peer revoking or adding a device while this device
+receives no `stale_devices` response, no envelope from an unknown device, no trust transition
+and no user action. Every other change invalidates immediately. So the exposure is: a device
+revoked or added with no signal is invisible for at most thirty seconds longer than it already
+was. That is small beside the window that already exists between sealing a ciphertext and
+delivering it, which the outbox's own backoff measures in minutes, and it is far below the
+fifteen-minute floor at which the platform can wake a backgrounded process at all (ADR-049),
+so no entry can survive from one background catch-up to the next.
+
+**What empties it**, all of it immediate and none of it waiting for the clock:
+
+| Signal | How it reaches the cache |
+|---|---|
+| A `stale_devices` response | `stale_device_refresh_requests` → `ContactStaleDeviceRefreshAdapter` → `refreshPeer`, which is a forced-live entry point (D4) |
+| A user verifying a contact | The verification screen's `refreshPeer` and `confirmOutOfBand`, both forced-live (D4) |
+| Any trust-state transition, fork detection or head advance | Written by `ClientAuthenticationService` and by nothing else in the tree, so the answer that produced it is the answer that is held, and the next resolution reaches the same verdict from it |
+| A global device-log fork | `hasAnyDeviceLogFork()` is a local read in front of the resolution; no remembered answer is reachable past it |
+| Thirty seconds | Everything else |
+
+**Nothing failed is ever remembered.** A failure is precisely the answer that deserves another
+attempt, and remembering one would let a dropped connection keep writing `identityUnavailable`
+against a contact for the length of the window. Negative caching was considered and rejected
+for that reason alone.
+
+### D3. The prekey claim is excluded, and excluded structurally
+
+`claimPrekeyBundles` consumes one-time prekeys on the server and is marked
+`ReplaySafety.never`. Serving one twice is a cryptographic fault, not a saved round trip.
+
+It is therefore not "excluded by a condition". It reaches no map, no in-flight entry and no
+bypass check: the override is three lines that delegate, and there is nothing in the class it
+could be served from. Two concurrent callers asking to claim for the same device produce two
+claims or none — never one shared answer — which is the one place single-flight coalescing
+would have been actively wrong.
+
+The cached path also *self-corrects* against a device set that is stale in the dangerous
+direction. A claim for a device the server has since revoked comes back short, and
+`claimed.length != requestedDeviceIds.length` is already `_invalidDevice`.
+
+### D4. Two entry points may never be served, and the service says which
+
+`PeerResolutionCachePort` has three methods — `invalidate`, `invalidateAll`, and
+`live<T>(userId, resolve)` — and `ClientAuthenticationService` takes one, defaulting to
+`NoPeerResolutionCache`, which remembers nothing.
+
+`refreshPeer` and `confirmOutOfBand` run under `live`. Both exist to answer the question *is
+this device's idea of that peer still right* — one asked by a person looking at a safety
+number, the other by the delivery cycle acting on a `stale_devices` response — and a cache is
+the one thing that cannot answer it. `resolveLiveDevices` and `refreshPeerForDevices` do not,
+because they are the fan-out asking the same question of the same peer two to four times
+inside one cycle.
+
+Putting that decision in the service rather than in its callers is what makes it hold. It is
+knowledge the service owns — nothing else in the tree knows which of its entry points is a
+user's question and which is a fan-out's — and it means no call site changed: the verification
+screen and `ContactStaleDeviceRefreshAdapter` are byte-identical and are forced live anyway.
+
+`live` drops the user *and keeps them dropped for the whole of `resolve`*, counted rather than
+flagged so nested and concurrent resolutions cannot end each other's bypass. Invalidating only
+on entry would have left a concurrent fan-out free to hand the refresh the very answer it
+exists to replace.
+
+### D5. The device log is coalesced but never stored
+
+`fetchDeviceLog` shares an open request with a concurrent identical one and forgets it the
+moment it completes. The asymmetry is deliberate and it is a safety property, not an
+optimisation that was skipped.
+
+A *stored* page outlives the device answer that said which head to expect. A page whose
+`headSequence` no longer matches the advertised head is read by `_refresh` as a **fork** — it
+persists `deviceLogFork`, which trips the global gate, which withholds every send to every
+peer. A cache that can manufacture a false equivocation alarm is worse than no cache. Sharing
+an *open* request carries none of that risk: both callers receive the answer to one request
+made at one instant, which is exactly what they would each have received.
+
+It also costs almost nothing to give up. The first resolution of a cycle advances the stored
+head, so every later one in that cycle finds `advertisedHead` equal to it and asks for no page
+at all — which is why the log column is empty in the measurements below.
+
+### D6. Gossip becomes a debt the cycle records and pays after the outbox
+
+`PairwiseSendPreparationAdapter.afterSuccessfulQueue`, a `Future<void> Function(String)` that
+was awaited, becomes `onPreparedForPeer`, a `void Function(String)` that is called. It records
+one string in `OwedDeviceLogGossip`, an in-memory set of the peers this process still owes an
+advertisement to, and returns. `prepare` is finished the moment the send's own ciphertext is
+durable.
+
+The debt is paid by `DeviceLogGossipPostInboxWork`, a `PostInboxCommitWorkPort` composed last
+in the existing `_CompositePostInboxWork`. That position is load-bearing twice over:
+
+- It is **after the first outbox pass**, which is ADR-060's rule: the cycle sends the user's
+  message before it does anything on anybody else's behalf. The gossip rows it queues are
+  sealed by the second preparation pass and leave on the second outbox pass, in the same
+  cycle — so gossip is later, not slower.
+- It is **after the inbox has committed**, which makes the advertisement *better*. The inbound
+  half of a cycle is exactly what can advance a device-log head, so gossip run here advertises
+  the heads this cycle just learned rather than the ones it started with.
+
+**Failure is structural now, not swallowed.** The old guarantee — a gossip failure is not the
+send's failure — was a `try`/`catch` and a comment inside `prepare`. It is now a property of
+the signature: `onPreparedForPeer` returns `void`, there is no future to await and no result to
+inspect, and there is no path from a gossip round back to a preparation whose ciphertext is
+already durable. `OwedDeviceLogGossip.settle` cannot fail either; a peer whose round failed is
+not re-owed there, because the next send to them re-creates the debt, which is exactly what the
+old code did — and nothing records a success that did not happen, so that next send is not
+suppressed.
+
+**Coalescing has two mechanisms** because there are two shapes of "quick succession". Inside
+one cycle, the owed set does it: two sends to the same peer produce one entry and one round.
+Across cycles, a one-minute window does it: a device-log head moves when a device is enrolled,
+revoked or rotates a prekey — events measured in days — so advertising the same heads to the
+same person twice inside a minute tells them nothing while costing a full fan-out.
+
+### D7. Why a detached future was not acceptable
+
+`unawaited(gossip(peer))` would have been three characters and wrong.
+
+A delivery cycle is not always owned by a process that is going to be there afterwards.
+ADR-049 and ADR-050 put exactly one delivery owner in the process, and one of the owners is a
+headless catch-up the platform woke for a bounded moment: `runDeferredDeliveryCatchUp` calls
+`engine.synchronize()` and then, in its `finally`, disposes the provider container and closes
+the database. A future still in flight at that point is a future running against a closed
+database, or one racing whatever the next cycle opens — and the platform is entitled to freeze
+the process again the moment the tick is acknowledged. Everything above is reached from inside
+`synchronize()` and finishes inside it, which `owed_gossip_lifetime_test.dart` asserts directly:
+when the cycle returns, nothing is owed and nothing is running.
+
+### What it cost, measured
+
+**From a fake transport, not from a device.** The figures below are the real composed send path
+— `PairwiseFanoutCoordinator` over `ClientAuthenticationService` over the cache — against a
+`PeerIdentityRemotePort` that delays every request by **122 ms**, the midpoint of the 107–137 ms
+real round trip ADR-060 measured from the A56 against the deployed backend. No device
+measurement of this change has been taken. The round-trip counts are exact and are asserted in
+the committed suite; the milliseconds are what that harness took on the host and should be read
+as *round trips × a measured constant*, not as a device figure.
+
+| | round trips before | ms before | round trips after | ms after |
+|---|---|---|---|---|
+| A send in an established conversation | 4 | 521 | 4 | 497 |
+| A send that must establish a session | 7 | 874 | **5** | **619** |
+| A send and the gossip it owes | 8 | 1051 | **4** | **528** |
+| A first contact and the gossip it owes | 14 | 1828 | **6** | **788** |
+| Two sends to one peer in a cycle | 8 | 1037 | **4** | **522** |
+| **`prepare` starting → the ciphertext is postable** | **8** | **1028** | **4** | **512** |
+
+The last row is F7 by itself and is the one that matters most: the time from a preparation
+starting to a sealed envelope being ready to `POST` halves, because half of it was a second
+fan-out for somebody else. In the *after* column that work has not disappeared — it happens
+later in the same cycle, after the message is on the wire, and costs nothing extra because the
+resolutions it needs are already answered.
+
+The first row is the honest null result: a single send in an established conversation resolves
+two distinct users once each, and always did. There was no redundancy there to remove. The win
+is entirely in the three shapes that ask about the *same* person more than once — a claim, a
+gossip round, a second send — which is what the RCA said it was.
+
+`peer_resolution_cache_test.dart` pins both columns as *equalities*, in the discipline ADR-061
+through ADR-064 established, so a resolution finding its way back onto the path fails there
+loudly:
+
+| Requests about the peer | before | after |
+|---|---|---|
+| A send that establishes a session — identity / devices / claim | 2 / 2 / 1 | **1 / 1 / 1** |
+| A send and its gossip — identity / devices | 2 / 2 | **1 / 1** |
+| Two sends to one peer — identity / devices | 2 / 2 | **1 / 1** |
+| A first contact and its gossip — identity / devices / claim | 4 / 4 / 2 | **1 / 1 / 2** |
+
+The claim column is deliberately unchanged everywhere. It is the one request that must not
+move.
+
+### Correctness
+
+Forty new tests across three files, and the security ones are the point.
+
+- **`peer_resolution_cache_test.dart`** drives the real `PairwiseFanoutCoordinator` over the
+  real `ClientAuthenticationService` over the real cache, and asserts on the device ids
+  `prepareOutbound` was actually called with — the devices encrypted to, not whether a fetch
+  happened. It covers: a device revoked, a device added, a master key changed, a fork detected
+  and a `stale_devices` refresh raised, each proving the pre-change answer never reaches a
+  ciphertext; every gate reproduced on a hit with zero requests; the claim called exactly once
+  per establishment, never served from the cache and never coalesced; the request counts above
+  in both columns; single-flight; a failure never remembered; a `304` served only back to its
+  own ETag; and a forced-live resolution staying live for its whole length against a concurrent
+  fan-out.
+- **`owed_gossip_lifetime_test.dart`** drives the real `DurableSyncEngine` over a real Drift
+  store and asserts the ordering directly: the preparation returns with nothing gossiped, the
+  batch it sealed is already on the wire when gossip runs, and when `synchronize()` returns
+  nothing is owed and nothing is running. It also proves two sends in one cycle gossip once, a
+  second cycle moments later gossips no further, a cycle past the window gossips again, a
+  failing or throwing gossip round is not the cycle failing and does not put the retired
+  preparation back, a failed round is caught up by the next send, and a preparation that failed
+  owes nothing.
+- **`pairwise_send_preparation_adapter_test.dart`** keeps its three existing properties and
+  gains the ordering one: `prepare` returns, then gossip runs.
+
+Everything named as a regression surface is green and unweakened:
+`test/features/contacts/**`, `pairwise_fanout_coordinator_test.dart`,
+`local_echo_visibility_test.dart`, `local_echo_crash_safety_test.dart`,
+`durable_sync_engine_test.dart`, `durable_sync_engine_isolation_test.dart`,
+`sustained_delivery_test.dart`, `queue_gap_recovery_matrix_test.dart`,
+`platform_deferred_delivery_scheduler_test.dart`, `test/features/devices/**` and
+`test/architecture/*`. `client_authentication_service_test.dart` is unchanged — the service's
+security contract did not move, and the default `NoPeerResolutionCache` is why that test
+composes exactly what it composed before.
+
+### What this does not do
+
+- **No schema change.** Still 18. No migration, no table, no column, no index. Nothing
+  persistent moved, which is why `local-data-model.md` is untouched.
+- **No wire change.** No path, header, query parameter, request or response shape, or accepted
+  status code. In particular `/identity` gained no `If-None-Match`: the server does not offer
+  an ETag there, so reducing identity round trips is a caching problem and was solved as one.
+- **No cryptographic change.** No construction, no ciphersuite, no isolate, no
+  `PairwiseCryptoOperation`, no `backend/` file.
+- **No change to what gossip says.** It advertises this device's verified log heads to a peer
+  it is talking to, exactly as before. Only when it runs has changed.
+
+### What is explicitly left undone
+
+- **The claim path still re-verifies from cached bytes rather than reusing the resolution the
+  send already completed.** It costs a full local verification — four local reads and an
+  identity signature check, sub-millisecond against a 122 ms round trip — and splitting
+  `_refresh` into resolve-then-claim would reorder the storage writes that currently happen
+  after a failed claim. Not worth the risk for local work that does not show up in the budget.
+- **The cache is per-process and per-composition.** A second `ProviderContainer` in the same
+  process gets a second cache. Nothing composes one today, and ADR-050 forbids a second
+  delivery owner, so this is stated rather than fixed.
+- **Own-account resolution is treated exactly like a peer's.** It is resolved once per cycle
+  and cached the same way, though the local identity is already on the device; a narrower path
+  for `localIdentity.userId == userId` would save one round trip per cycle and would mean the
+  own-account device set stopped being verified the same way everybody else's is.
+- **Gossip's own fan-out is not batched across peers.** Two peers owed an advertisement in one
+  cycle produce two fan-outs and two commits. They are already coalesced per peer, and batching
+  across peers would change what a gossip envelope is.
+- **No device measurement.** The numbers above are from the suite with a synthetic 122 ms
+  round trip. A signed-beta A56 run against the deployed backend would say what the counts are
+  worth in the field, and has not been taken.
+- **The one-minute gossip window is not adaptive.** A device that enrols and revokes twice
+  inside a minute advertises the later state a minute late, or on its next send, whichever is
+  sooner.
+
+### This closes the RCA
+
+ADR-060 opened it on a measurement: a direct message took fifteen to twenty seconds to reach
+`POST /api/v1/envelopes`, the peer never received it at all, and two idle devices re-downloaded
+1.1 MB a minute against a network and backend that had already been cleared. Five phases:
+
+- **ADR-060** made a cycle finish. One unopenable envelope stopped ending the run, the outbox
+  went first, and an envelope this device can never open got a terminal state.
+- **ADR-061** made a send a local write. The message is committed and drawn before any network
+  call, and the fan-out that seals it became a durable row the cycle owes.
+- **ADR-062** made reading a conversation cost the window instead of the history.
+- **ADR-063** made receiving an event cost the event instead of the conversation.
+- **ADR-064** made a frame cost what changed on the screen instead of what is on it.
+- **ADR-065**, here, makes a delivery cycle ask the network once per person, and puts the work
+  this device owes other people behind the message its user just sent.
+
+End to end, against the original symptom: the bubble appears at the speed of a local write
+rather than after two round trips and a claim; the cycle that carries it to the wire reaches
+the wire; the ciphertext is postable in half the time it was; a first contact and its gossip
+cost six round trips where they cost fourteen; typing costs 2.33 ms of build time where it cost
+5.25; and applying one event costs fourteen to sixteen statements where it cost the whole
+conversation. Nothing from the RCA's list remains unaddressed.
 
 ## ADR-064 in full — the chat screen costs what changed on it (2026-08-28)
 
