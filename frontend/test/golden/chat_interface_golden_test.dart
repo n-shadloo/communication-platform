@@ -46,6 +46,19 @@ void main() {
       matchesGoldenFile('goldens/chat_wide_dark.png'),
     );
   });
+
+  testWidgets('mixed direction chat in an RTL locale', (tester) async {
+    await _pump(
+      tester,
+      size: const Size(800, 900),
+      locale: const Locale('fa'),
+      model: _mixedDirectionModel(),
+    );
+    await expectLater(
+      find.byKey(const ValueKey('chat-interface-golden')),
+      matchesGoldenFile('goldens/chat_medium_rtl_mixed.png'),
+    );
+  });
 }
 
 Future<void> _pump(
@@ -54,6 +67,7 @@ Future<void> _pump(
   Locale locale = const Locale('en'),
   ThemeMode themeMode = ThemeMode.light,
   bool highContrast = false,
+  ChatTimelineViewModel? model,
 }) async {
   tester.view.devicePixelRatio = 1;
   tester.view.physicalSize = size;
@@ -70,7 +84,7 @@ Future<void> _pump(
         supportedLocales: AppLocalizations.supportedLocales,
         builder: (context, child) =>
             AppDesignSystem(child: child ?? const SizedBox.shrink()),
-        home: ChatConversationView(model: _model(), onIntent: (_) {}),
+        home: ChatConversationView(model: model ?? _model(), onIntent: (_) {}),
       ),
     ),
   );
@@ -125,6 +139,47 @@ ChatTimelineViewModel _model() => ChatTimelineViewModel(
       text: 'This send needs attention.',
       delivery: ChatDeliveryViewState.failed,
     ),
+  ],
+);
+
+/// The three cases the first-strong resolver and the composer counter changed,
+/// in one RTL frame.
+///
+/// Message 2 is the regression this golden exists for: it opens with Persian
+/// digits, which are bidi class EN rather than strong RTL, so P2 skips them and
+/// the paragraph resolves on the Latin that follows. Before
+/// `resolveFirstStrongDirection` it drew right-aligned in Persian order.
+ChatTimelineViewModel _mixedDirectionModel() => ChatTimelineViewModel(
+  state: ChatTimelineLoadState.data,
+  conversationId: 'golden-mixed-direction',
+  title: 'Niloofar',
+  savedMessages: false,
+  securityGate: ChatSecurityGate.ready,
+  offline: false,
+  hasMoreBefore: false,
+  loadingBefore: false,
+  olderLoadFailed: false,
+  typing: false,
+  pinnedMessages: const [],
+  messages: [
+    // Persian carrying an embedded Latin URL and a sentence-final stop. Flutter
+    // resolves the embedded run per paragraph; the stop belongs at the left.
+    _message(
+      1,
+      text: 'گزارش را در https://example.com/build?id=42 ببینید.',
+      outgoing: false,
+      delivery: ChatDeliveryViewState.received,
+    ),
+    // Opens with Persian digits, then Latin.
+    _message(
+      2,
+      text: '۱۲۳ builds passed today.',
+      outgoing: false,
+      delivery: ChatDeliveryViewState.received,
+    ),
+    // Outgoing Latin inside the RTL locale: the bubble follows the sender, the
+    // glyphs follow the content, and the two are decided separately.
+    _message(3, text: 'Merged and deployed.'),
   ],
 );
 

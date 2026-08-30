@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:communication_platform/app/design_system/app_components.dart';
 import 'package:communication_platform/app/design_system/app_emoji_picker.dart';
 import 'package:communication_platform/app/design_system/app_icons.dart';
+import 'package:communication_platform/app/design_system/app_text_direction.dart';
 import 'package:communication_platform/app/design_system/app_tokens.dart';
 import 'package:communication_platform/core/protocol/attachment_crypto_model.dart';
 import 'package:communication_platform/features/messaging/presentation/chat_view_models.dart';
@@ -980,7 +981,7 @@ class ChatMessageBuilder extends StatelessWidget {
         switch (message.kind) {
           ChatTimelineContentKind.text => Text(
             message.deleted ? strings.chatDeletedMessage : message.text ?? '',
-            textDirection: _contentDirection(message.text),
+            textDirection: resolveFirstStrongDirection(message.text),
             style: context.tokens.typography.body.copyWith(
               color: message.deleted ? colors.textMuted : colors.textPrimary,
               fontStyle: message.deleted ? FontStyle.italic : FontStyle.normal,
@@ -1653,6 +1654,17 @@ class ChatComposerBuilderState extends State<ChatComposerBuilder>
                                 }) => currentLength > 15000
                                 ? Text(
                                     '$currentLength / $maxLength',
+                                    // A spliced numeric expression, and the
+                                    // only place in this file where two
+                                    // independent runs share one paragraph.
+                                    // Under an RTL ambient direction the two
+                                    // numbers are EN, the separator is
+                                    // neutral, and UAX #9 N1 resolves it to
+                                    // the base direction, which reverses the
+                                    // pair: `20 / 500` renders as
+                                    // `500 / 20`. The expression reads left to
+                                    // right in either locale, so it says so.
+                                    textDirection: TextDirection.ltr,
                                     style: context.tokens.typography.label,
                                   )
                                 : null,
@@ -2362,17 +2374,6 @@ BorderRadius _bubbleRadius(ChatMessageViewModel message) {
           bottomLeft: grouped,
           bottomRight: regular,
         );
-}
-
-TextDirection? _contentDirection(String? text) {
-  if (text == null || text.isEmpty) return null;
-  final firstStrong = RegExp(
-    r'[\u0590-\u08ff]|[A-Za-z]',
-  ).firstMatch(text)?.group(0);
-  if (firstStrong == null) return null;
-  return RegExp(r'[\u0590-\u08ff]').hasMatch(firstStrong)
-      ? TextDirection.rtl
-      : TextDirection.ltr;
 }
 
 String _attachmentStateLabel(
