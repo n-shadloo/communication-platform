@@ -146,7 +146,11 @@ void main() {
         'lib/app/dependencies/group_providers.dart',
         'lib/app/dependencies/sync_providers.dart',
         'lib/features/groups/presentation/group_pages.dart',
-        'lib/features/contacts/presentation/contact_pages.dart',
+        'lib/features/contacts/presentation/contact_components.dart',
+        'lib/features/contacts/presentation/contacts_new_page.dart',
+        'lib/features/contacts/presentation/contact_profile_page.dart',
+        'lib/features/contacts/presentation/edit_profile_page.dart',
+        'lib/features/contacts/presentation/safety_number_page.dart',
       ]) {
         expect(
           File(consumer).readAsStringSync(),
@@ -170,7 +174,11 @@ void main() {
         'lib/app/dependencies/group_providers.dart',
         'lib/app/dependencies/sync_providers.dart',
         'lib/features/groups/presentation/group_pages.dart',
-        'lib/features/contacts/presentation/contact_pages.dart',
+        'lib/features/contacts/presentation/contact_components.dart',
+        'lib/features/contacts/presentation/contacts_new_page.dart',
+        'lib/features/contacts/presentation/contact_profile_page.dart',
+        'lib/features/contacts/presentation/edit_profile_page.dart',
+        'lib/features/contacts/presentation/safety_number_page.dart',
       ]) {
         final source = File(consumer).readAsStringSync();
         expect(

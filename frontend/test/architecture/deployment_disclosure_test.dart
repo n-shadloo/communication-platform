@@ -575,7 +575,7 @@ void main() {
     final rendered = <String>[
       'lib/features/app_shell/presentation/structural_placeholder_page.dart',
       'lib/features/attachments/presentation/attachment_sheet.dart',
-      'lib/features/contacts/presentation/contact_pages.dart',
+      'lib/features/contacts/presentation/edit_profile_page.dart',
       'lib/features/groups/presentation/group_pages.dart',
       'lib/features/devices/presentation/security_notice_sections.dart',
     ];
