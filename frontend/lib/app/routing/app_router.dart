@@ -25,7 +25,8 @@ import 'package:communication_platform/features/groups/presentation/create_group
 import 'package:communication_platform/features/groups/presentation/edit_group_page.dart';
 import 'package:communication_platform/features/groups/presentation/group_chat_page.dart';
 import 'package:communication_platform/features/groups/presentation/group_info_page.dart';
-import 'package:communication_platform/features/messaging/presentation/chat_pages.dart';
+import 'package:communication_platform/features/messaging/presentation/chats_list_page.dart';
+import 'package:communication_platform/features/messaging/presentation/direct_chat_page.dart';
 import 'package:communication_platform/features/settings/presentation/about_page.dart';
 import 'package:communication_platform/features/settings/presentation/appearance_page.dart';
 import 'package:communication_platform/features/settings/presentation/recovery_rotation_page.dart';

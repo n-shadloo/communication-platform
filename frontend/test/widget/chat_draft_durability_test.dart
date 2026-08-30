@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:communication_platform/app/design_system/app_components.dart';
 import 'package:communication_platform/app/design_system/app_icons.dart';
 import 'package:communication_platform/app/design_system/app_theme.dart';
-import 'package:communication_platform/features/messaging/presentation/chat_pages.dart';
+import 'package:communication_platform/features/messaging/presentation/chat_conversation_view.dart';
 import 'package:communication_platform/features/messaging/presentation/chat_timeline.dart';
 import 'package:communication_platform/features/messaging/presentation/chat_view_models.dart';
 import 'package:communication_platform/l10n/generated/app_localizations.dart';
