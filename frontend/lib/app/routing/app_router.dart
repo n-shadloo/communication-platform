@@ -13,7 +13,10 @@ import 'package:communication_platform/features/authentication/presentation/sess
 import 'package:communication_platform/features/bootstrap/application/bootstrap_flow.dart';
 import 'package:communication_platform/features/bootstrap/domain/bootstrap_model.dart';
 import 'package:communication_platform/features/bootstrap/presentation/bootstrap_page.dart';
-import 'package:communication_platform/features/contacts/presentation/contact_pages.dart';
+import 'package:communication_platform/features/contacts/presentation/contact_profile_page.dart';
+import 'package:communication_platform/features/contacts/presentation/contacts_new_page.dart';
+import 'package:communication_platform/features/contacts/presentation/edit_profile_page.dart';
+import 'package:communication_platform/features/contacts/presentation/safety_number_page.dart';
 import 'package:communication_platform/features/devices/presentation/device_enrollment_page.dart';
 import 'package:communication_platform/features/devices/presentation/linked_devices_page.dart';
 import 'package:communication_platform/features/diagnostics/presentation/diagnostics_page.dart';
