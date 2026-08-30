@@ -250,7 +250,7 @@ void main() {
     // search reads that conversation's whole local history. If either
     // filter is still here, the disclosure may not deny it.
     final chats = File(
-      'lib/features/messaging/presentation/chat_pages.dart',
+      'lib/features/messaging/presentation/chats_list_page.dart',
     ).readAsStringSync();
     expect(chats, contains('item.title.toLowerCase().contains(query)'));
     // The in-conversation filter moved into one shared surface after
@@ -263,7 +263,7 @@ void main() {
     ).readAsStringSync();
     expect(search, contains('text.toLowerCase().contains(needle)'));
     for (final path in const [
-      'lib/features/messaging/presentation/chat_pages.dart',
+      'lib/features/messaging/presentation/chat_conversation_view.dart',
       'lib/features/groups/presentation/group_chat_page.dart',
     ]) {
       expect(
@@ -296,7 +296,7 @@ void main() {
     // It matches title and last-message preview, so it may not borrow the
     // in-conversation notice, which promises this device's history (ADR-052).
     final chats = File(
-      'lib/features/messaging/presentation/chat_pages.dart',
+      'lib/features/messaging/presentation/chats_list_page.dart',
     ).readAsStringSync();
     expect(chats, contains('chatsListSearchScopeNotice'));
     final english = _catalogue('lib/l10n/app_en.arb');
