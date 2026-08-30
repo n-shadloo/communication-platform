@@ -10,7 +10,7 @@ import 'package:communication_platform/features/groups/presentation/group_callba
 import 'package:communication_platform/features/groups/presentation/group_chat_page.dart';
 import 'package:communication_platform/features/groups/presentation/group_info_page.dart';
 import 'package:communication_platform/features/groups/presentation/group_production_gate_page.dart';
-import 'package:communication_platform/features/messaging/presentation/chat_timeline.dart';
+import 'package:communication_platform/features/messaging/presentation/chat_composer_builder.dart';
 import 'package:communication_platform/l10n/generated/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';

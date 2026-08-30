@@ -11,7 +11,6 @@ import 'package:communication_platform/features/contacts/domain/contact_model.da
 import 'package:communication_platform/features/messaging/domain/conversation_model.dart';
 import 'package:communication_platform/features/messaging/presentation/chat_components.dart';
 import 'package:communication_platform/features/messaging/presentation/chat_conversation_view.dart';
-import 'package:communication_platform/features/messaging/presentation/chat_timeline.dart';
 import 'package:communication_platform/features/messaging/presentation/chat_view_model_mapper.dart';
 import 'package:communication_platform/features/messaging/presentation/chat_view_models.dart';
 import 'package:communication_platform/features/messaging/presentation/visible_conversation.dart';
