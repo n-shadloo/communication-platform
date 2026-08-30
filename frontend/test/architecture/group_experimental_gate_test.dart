@@ -145,7 +145,15 @@ void main() {
       for (final consumer in const [
         'lib/app/dependencies/group_providers.dart',
         'lib/app/dependencies/sync_providers.dart',
-        'lib/features/groups/presentation/group_pages.dart',
+        'lib/features/groups/presentation/add_group_members_page.dart',
+        'lib/features/groups/presentation/create_group_page.dart',
+        'lib/features/groups/presentation/edit_group_page.dart',
+        'lib/features/groups/presentation/group_callbacks.dart',
+        'lib/features/groups/presentation/group_chat_page.dart',
+        'lib/features/groups/presentation/group_components.dart',
+        'lib/features/groups/presentation/group_info_page.dart',
+        'lib/features/groups/presentation/group_member_picker.dart',
+        'lib/features/groups/presentation/group_production_gate_page.dart',
         'lib/features/contacts/presentation/contact_components.dart',
         'lib/features/contacts/presentation/contacts_new_page.dart',
         'lib/features/contacts/presentation/contact_profile_page.dart',
@@ -173,7 +181,15 @@ void main() {
         'lib/app/config/group_production_gate.dart',
         'lib/app/dependencies/group_providers.dart',
         'lib/app/dependencies/sync_providers.dart',
-        'lib/features/groups/presentation/group_pages.dart',
+        'lib/features/groups/presentation/add_group_members_page.dart',
+        'lib/features/groups/presentation/create_group_page.dart',
+        'lib/features/groups/presentation/edit_group_page.dart',
+        'lib/features/groups/presentation/group_callbacks.dart',
+        'lib/features/groups/presentation/group_chat_page.dart',
+        'lib/features/groups/presentation/group_components.dart',
+        'lib/features/groups/presentation/group_info_page.dart',
+        'lib/features/groups/presentation/group_member_picker.dart',
+        'lib/features/groups/presentation/group_production_gate_page.dart',
         'lib/features/contacts/presentation/contact_components.dart',
         'lib/features/contacts/presentation/contacts_new_page.dart',
         'lib/features/contacts/presentation/contact_profile_page.dart',
@@ -388,24 +404,51 @@ void main() {
     });
 
     test('no screen can be reached around the gate', () {
-      final screens = File(
-        'lib/features/groups/presentation/group_pages.dart',
-      ).readAsStringSync();
+      // One gate, pinned to the screen it belongs to. This used to count five
+      // occurrences of `gate` in one concatenated source string and reason
+      // about their byte offsets relative to each other, which only held while
+      // every group screen shared a file. Per file is the stronger form: the
+      // total is still five, but a page that grows a second gate or loses its
+      // own is now named, instead of disappearing into a sum that still
+      // reaches five.
       const gate =
           'if (!ref.watch(groupFeatureAvailabilityProvider).isAvailable) {';
-      expect(gate.allMatches(screens), hasLength(5));
-      for (final injection in const [
-        'if (injectedContacts != null && onCreate != null) {',
-        'if (injectedState != null && injectedMessages != null && '
+      const screens = <String, String?>{
+        'create_group_page':
+            'if (injectedContacts != null && onCreate != null) {',
+        'group_chat_page':
+            'if (injectedState != null && injectedMessages != null && '
             'onSend != null) {',
-        'if (injectedState != null && onMutate != null) {',
-      ]) {
-        final injectionAt = screens.indexOf(injection);
+        'group_info_page': 'if (injectedState != null && onMutate != null) {',
+        'edit_group_page': null,
+        'add_group_members_page': null,
+      };
+      for (final screen in screens.entries) {
+        final path = 'lib/features/groups/presentation/${screen.key}.dart';
+        final source = File(path).readAsStringSync();
+        expect(
+          gate.allMatches(source),
+          hasLength(1),
+          reason: '$path must gate exactly once',
+        );
+        final injection = screen.value;
+        if (injection == null) {
+          // This screen takes no test injection, and the assertion is that it
+          // cannot grow one that the gate above does not cover. An `injected`
+          // constructor argument is the shape the other three take.
+          expect(
+            source,
+            isNot(contains('injected')),
+            reason: '$path grew an injection seam the gate does not precede',
+          );
+          continue;
+        }
+        final injectionAt = source.indexOf(injection);
         expect(injectionAt, greaterThan(-1), reason: 'missing: $injection');
-        final gateBefore = screens.lastIndexOf(gate, injectionAt);
+        final gateBefore = source.lastIndexOf(gate, injectionAt);
         expect(gateBefore, greaterThan(-1));
         expect(
-          screens.substring(gateBefore, injectionAt),
+          source.substring(gateBefore, injectionAt),
           isNot(contains('Widget build(')),
           reason: 'the gate preceding $injection belongs to another widget',
         );

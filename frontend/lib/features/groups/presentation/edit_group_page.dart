@@ -1,0 +1,252 @@
+import 'package:communication_platform/app/dependencies/group_providers.dart';
+import 'package:communication_platform/app/dependencies/messaging_providers.dart';
+import 'package:communication_platform/app/design_system/app_components.dart';
+import 'package:communication_platform/app/design_system/app_tokens.dart';
+import 'package:communication_platform/core/result/result.dart';
+import 'package:communication_platform/features/authentication/presentation/authentication_controller.dart';
+import 'package:communication_platform/features/groups/domain/group_model.dart';
+import 'package:communication_platform/features/groups/presentation/group_callbacks.dart';
+import 'package:communication_platform/features/groups/presentation/group_components.dart';
+import 'package:communication_platform/features/groups/presentation/group_production_gate_page.dart';
+import 'package:communication_platform/l10n/generated/app_localizations.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+
+class EditGroupPage extends ConsumerWidget {
+  const EditGroupPage({required this.groupId, super.key});
+
+  final String groupId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    if (!ref.watch(groupFeatureAvailabilityProvider).isAvailable) {
+      return const GroupProductionGatePage();
+    }
+    final auth = ref.watch(authenticationControllerProvider);
+    final userId = auth.userId;
+    if (userId == null) return const GroupProductionGatePage();
+    final group = ref.watch(groupProvider(groupId));
+    final device = ref.watch(currentMessagingDeviceIdProvider);
+    final useCases = ref.watch(groupUseCasesProvider);
+    return group.when(
+      loading: () => groupLoadingPage(context),
+      error: (_, _) => groupErrorPage(context),
+      data: (state) {
+        if (state == null) return groupErrorPage(context);
+        return device.when(
+          loading: () => groupLoadingPage(context),
+          error: (_, _) => groupErrorPage(context),
+          data: (deviceId) => useCases.when(
+            loading: () => groupLoadingPage(context),
+            error: (_, _) => groupErrorPage(context),
+            data: (resolved) => GroupEditView(
+              state: state,
+              currentUserId: userId,
+              onMutate: (operation) => resolved.mutate(
+                groupId: groupId,
+                actorUserId: userId,
+                actorDeviceId: deviceId,
+                operation: operation,
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class GroupEditView extends StatefulWidget {
+  const GroupEditView({
+    required this.state,
+    required this.currentUserId,
+    required this.onMutate,
+    super.key,
+  });
+
+  final GroupState state;
+  final String currentUserId;
+  final MutateGroupCallback onMutate;
+
+  @override
+  State<GroupEditView> createState() => _GroupEditViewState();
+}
+
+class _GroupEditViewState extends State<GroupEditView> {
+  late final TextEditingController _name;
+  late final TextEditingController _description;
+  late GroupInvitationPolicy _invitationPolicy;
+  late bool _shareHistory;
+  var _busy = false;
+  var _failed = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _name = TextEditingController(text: widget.state.metadata.name);
+    _description = TextEditingController(
+      text: widget.state.metadata.description,
+    );
+    _invitationPolicy = widget.state.invitationPolicy;
+    _shareHistory =
+        widget.state.historySharingPolicy ==
+        GroupHistorySharingPolicy.reshareAvailable;
+  }
+
+  @override
+  void dispose() {
+    _name.dispose();
+    _description.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final strings = AppLocalizations.of(context);
+    final canEdit = GroupAuthorization.allows(
+      widget.state,
+      widget.currentUserId,
+      GroupPermission.editMetadata,
+    );
+    final isOwner = GroupAuthorization.allows(
+      widget.state,
+      widget.currentUserId,
+      GroupPermission.editHistorySharingPolicy,
+    );
+    return Scaffold(
+      key: const ValueKey('group-edit-screen'),
+      appBar: AppBar(title: Text(strings.groupEditTitle)),
+      body: GroupResponsiveBody(
+        child: ListView(
+          padding: const EdgeInsets.all(AppSpacing.x4),
+          children: [
+            const GroupMaturityBanner(),
+            const SizedBox(height: AppSpacing.x4),
+            if (!canEdit)
+              GroupInlineError(message: strings.groupPermissionChanged),
+            AppField(
+              label: strings.groupNameLabel,
+              controller: _name,
+              enabled: canEdit && !_busy,
+              maxLength: GroupMetadata.maximumNameScalars,
+            ),
+            const SizedBox(height: AppSpacing.x4),
+            AppField(
+              label: strings.groupDescriptionLabel,
+              controller: _description,
+              enabled: canEdit && !_busy,
+              maxLength: GroupMetadata.maximumDescriptionScalars,
+            ),
+            const SizedBox(height: AppSpacing.x6),
+            Text(
+              strings.groupInvitePolicyLabel,
+              style: context.tokens.typography.compact,
+            ),
+            DropdownButtonFormField<GroupInvitationPolicy>(
+              key: const ValueKey('group-invite-policy'),
+              initialValue: _invitationPolicy,
+              items: [
+                for (final policy in GroupInvitationPolicy.values)
+                  DropdownMenuItem(
+                    value: policy,
+                    child: Text(_invitationLabel(strings, policy)),
+                  ),
+              ],
+              onChanged: isOwner && !_busy
+                  ? (value) => setState(() => _invitationPolicy = value!)
+                  : null,
+            ),
+            const SizedBox(height: AppSpacing.x4),
+            AppCheckboxRow(
+              value: _shareHistory,
+              label: strings.groupHistorySharingLabel,
+              onChanged: isOwner && !_busy
+                  ? (value) => setState(() => _shareHistory = value)
+                  : null,
+            ),
+            Text(
+              strings.groupHistorySharingNote,
+              style: context.tokens.typography.compact.copyWith(
+                color: context.tokens.colors.textMuted,
+              ),
+            ),
+            if (_failed) ...[
+              const SizedBox(height: AppSpacing.x4),
+              GroupInlineError(message: strings.groupActionFailed),
+            ],
+            const SizedBox(height: AppSpacing.x6),
+            if (_busy)
+              const LinearProgressIndicator()
+            else
+              Wrap(
+                spacing: AppSpacing.x2,
+                runSpacing: AppSpacing.x2,
+                alignment: WrapAlignment.end,
+                children: [
+                  AppButton(
+                    label: strings.groupCancelAction,
+                    kind: AppButtonKind.ghost,
+                    onPressed: () => context.pop(),
+                  ),
+                  AppButton(
+                    key: const ValueKey('group-save'),
+                    label: strings.groupSaveAction,
+                    onPressed: canEdit ? _save : null,
+                  ),
+                ],
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _save() async {
+    setState(() {
+      _busy = true;
+      _failed = false;
+    });
+    final metadata = GroupMetadata(
+      name: _name.text,
+      description: _description.text,
+      photoCapability: widget.state.metadata.photoCapability,
+    ).normalized();
+    Result<GroupState> result = await widget.onMutate(
+      UpdateGroupMetadataOperation(metadata),
+    );
+    if (result is Success<GroupState> &&
+        GroupAuthorization.allows(
+          widget.state,
+          widget.currentUserId,
+          GroupPermission.editHistorySharingPolicy,
+        )) {
+      result = await widget.onMutate(
+        UpdateGroupPoliciesOperation(
+          invitationPolicy: _invitationPolicy,
+          historySharingPolicy: _shareHistory
+              ? GroupHistorySharingPolicy.reshareAvailable
+              : GroupHistorySharingPolicy.newMessagesOnly,
+        ),
+      );
+    }
+    if (!mounted) return;
+    if (result is Success<GroupState>) {
+      context.pop();
+    } else {
+      setState(() {
+        _busy = false;
+        _failed = true;
+      });
+    }
+  }
+}
+
+String _invitationLabel(
+  AppLocalizations strings,
+  GroupInvitationPolicy policy,
+) => switch (policy) {
+  GroupInvitationPolicy.ownerOnly => strings.groupInviteOwnerOnly,
+  GroupInvitationPolicy.ownerAndAdmins => strings.groupInviteAdmins,
+  GroupInvitationPolicy.allMembers => strings.groupInviteEveryone,
+};

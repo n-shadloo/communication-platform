@@ -155,9 +155,26 @@ void main() {
     final syncProviders = File(
       'lib/app/dependencies/sync_providers.dart',
     ).readAsStringSync();
-    final screens = File(
-      'lib/features/groups/presentation/group_pages.dart',
-    ).readAsStringSync();
+    // The screens are nine files rather than one, and the two assertions below
+    // have opposite polarity, so a single read of a single file would either
+    // weaken the negative one to a ninth of its coverage or make the positive
+    // one depend on which file was picked. The positive check runs over the
+    // five gated pages, each of which must ask `isAvailable` for itself; the
+    // negative one runs over all nine, because no group screen may name a
+    // tier.
+    const gated = [
+      'lib/features/groups/presentation/add_group_members_page.dart',
+      'lib/features/groups/presentation/create_group_page.dart',
+      'lib/features/groups/presentation/edit_group_page.dart',
+      'lib/features/groups/presentation/group_chat_page.dart',
+      'lib/features/groups/presentation/group_info_page.dart',
+    ];
+    const ungated = [
+      'lib/features/groups/presentation/group_callbacks.dart',
+      'lib/features/groups/presentation/group_components.dart',
+      'lib/features/groups/presentation/group_member_picker.dart',
+      'lib/features/groups/presentation/group_production_gate_page.dart',
+    ];
 
     for (final source in [groupProviders, syncProviders]) {
       expect(source, contains('GroupProductionGate.privateExperimentalPermit'));
@@ -170,15 +187,22 @@ void main() {
       );
     }
 
-    expect(
-      screens.contains('groupFeatureAvailabilityProvider).isAvailable'),
-      isTrue,
-    );
-    expect(
-      screens,
-      isNot(contains('GroupFeatureAvailability.developmentPreview)')),
-      reason: 'A screen gating on one tier by name reopens the ADR-044 defect.',
-    );
+    for (final path in gated) {
+      final screen = File(path).readAsStringSync();
+      expect(
+        screen.contains('groupFeatureAvailabilityProvider).isAvailable'),
+        isTrue,
+        reason: '$path is a route destination and must ask for the permit',
+      );
+    }
+    for (final path in [...gated, ...ungated]) {
+      expect(
+        File(path).readAsStringSync(),
+        isNot(contains('GroupFeatureAvailability.developmentPreview)')),
+        reason:
+            'A screen gating on one tier by name reopens the ADR-044 defect.',
+      );
+    }
   });
 
   test('production provider cannot install the development MLS fake', () {
