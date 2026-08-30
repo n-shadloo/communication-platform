@@ -11,7 +11,7 @@ is not silently edited out of history.
 | ADR-004 | Accepted | Dio for REST and a dedicated WebSocket gateway | Centralizes authentication, redaction, refresh, retries, and protocol limits. |
 | ADR-005 | Accepted | `go_router` with route guards | Supports deep links and adaptive navigation without navigation in domain code. |
 | ADR-006 | Accepted | Forui behind app-owned components | Gains consistent primitives without coupling product design directly to a package. |
-| ADR-007 | Accepted | Flyer Chat behind a timeline adapter | Reuses virtualization while allowing exclusive builders or full replacement. |
+| ADR-007 | Superseded by ADR-066 (2026-08-30) | Flyer Chat behind a timeline adapter | Reuses virtualization while allowing exclusive builders or full replacement. The replacement is what happened: piece 15 built an app-owned reversed sliver instead of keeping messages in a Flyer controller, and ADR-054 removed `flutter_chat_ui` 2.11.1 and `flutter_chat_core` 2.9.0 from the resolved set as declared-and-unimported — noting in the same breath that this row had never been superseded. It stayed `Accepted`, naming a package the application does not depend on, for the whole of that interval. ADR-066 records what shipped, on the reason that actually decided it. |
 | ADR-008 | Accepted | Canonical CBOR for encrypted application payloads | Compact, deterministic, binary-safe, and versionable. |
 | ADR-009 | Superseded by ADR-025 | X3DH + Double Ratchet for device-pair channels | The binding backend client contract now requires hybrid PQXDH session establishment. |
 | ADR-010 | Accepted | RFC 9420 MLS for group membership/key state | Provides standardized asynchronous group FS/PCS and matches backend key packages. |
@@ -28,7 +28,7 @@ is not silently edited out of history.
 | ADR-021 | Accepted | Missing profile keys render username plus a deterministic local avatar | Avoids presenting unauthenticated profile identity during contact bootstrap. |
 | ADR-022 | Superseded by ADR-028 and ADR-030 | Recovery restores history separately from current secure membership | The server no longer stores history; history transfer and identity recovery are separate. |
 | ADR-023 | Accepted | Voice-room leave is client membership/key removal, not backend room deletion | Matches the capability-only backend and gives users an honest consequence statement. |
-| ADR-024 | Accepted | A restrained neutral/indigo app-owned visual system is the production baseline | Gives Forui and Flyer builders one reproducible identity while allowing later brand assets to replace only brand tokens. |
+| ADR-024 | Accepted | A restrained neutral/indigo app-owned visual system is the production baseline | Gives Forui and Flyer builders one reproducible identity while allowing later brand assets to replace only brand tokens. Correction of fact recorded 2026-08-30, decision unchanged: "Flyer builders" names a package ADR-054 removed and ADR-066 supersedes. There is one builder set for this identity to serve now — the app-owned timeline surface — and the tokens it consumes are the same ones this row already named. |
 | ADR-025 | Accepted | Hybrid X25519 + ML-KEM-768 PQXDH establishes every DM session | Protects recorded sessions against harvest-now-decrypt-later and forbids silent downgrade. |
 | ADR-026 | Release gate | Use the IETF `MLS_128_MLKEM768X25519_AES256GCM_SHA384_Ed25519` candidate; do not assign a production ID locally | It aligns hybrid ML-KEM-768/X25519 and Ed25519 with the existing protocol. For the Android-only version-1 release, a stable published specification and registry assignment for every primitive in the mapping, an IANA-assigned MLS ciphersuite value, maintained OpenMLS/provider support, Android interoperability, and review remain mandatory; Web interoperability is a post-v1 Web release gate under ADR-033. Presentation clarified 2026-08-16, decision unchanged: the primitive mapping and the MLS suite value are tracked as two separate gates because different registries own them under different policies and on independent schedules, and the primitive identifiers are already assigned outside the MLS registry while `TBD2` is not assigned at all. This project still assigns no production identifier locally. |
 | ADR-027 | Accepted | Account cross-signing and a client-signed device log authenticate devices | A hostile server cannot make an unsigned device or identity substitution trusted by clients. |
@@ -76,6 +76,175 @@ is not silently edited out of history.
 | ADR-063 | Accepted | Applying an application event re-folds only the messages that event is a fact about, and the full rebuild becomes the recovery path it always was (2026-08-27) | The last and largest term ADR-061 and ADR-062 left behind: every authenticated event re-projected its whole conversation from the whole event log, so the cost of *receiving* anything was set by how long the conversation was — worst for an inbound receipt, which is one event per batch of messages. Measured end to end, one such rebuild of a 1200-message conversation is **6556 statements and 283 ms**; applying one event now costs **14-16 statements and about 1.1 ms**, equal at 48 messages and at 1200, and a receipt covering thirty-two messages costs thirty-two folds rather than twelve hundred. A new derived-state table, `application_event_targets` (schema 17 -> 18, additive, back-filled), gives the projector the direction the log lacks: which facts a message has. The fold is spelled `CROSS JOIN` because the ordinary form is the same statement count and a linear number of rows, visible only in `EXPLAIN QUERY PLAN`. Conversation aggregates get one definition both paths call, plus a covering partial index for the unread count. The rebuild is kept, made publicly reachable, and deliberately left folding each message against the whole fact set, because it is the oracle a differential equivalence test compares against and it must not come to share the incremental path's idea of which facts belong to which message. |
 | ADR-064 | Accepted | A rebuild re-derives the messages that changed and redraws the rows that changed, the reading anchor comes from the rows that are mounted, and a keystroke costs a timer instead of a database write and a page rebuild (2026-08-28) | The last three terms ADR-061, ADR-062 and ADR-063 left behind, all of them on the main isolate. Measured on the A56 in a 219-message conversation with the whole thing drawn: typing goes from **5.25 ms median / 8.13 p90 / 9.89 worst** of build time per frame to **2.33 / 3.76 / 6.57**, and produces 38 frames for thirty characters where it produced 55, because the page is no longer one of the things that rebuild; a message arriving goes from **1.77 / 5.02 / 7.49** to **0.82 / 3.23 / 5.97**. On the host, where a long conversation could be driven, the frame that draws an arrival went from 36.7 ms median at 1200 messages (19.7 at 48) to 10.9 (13.7 at 48), and a keystroke from 32.7 (16.8 at 48) to 4.0 (5.1 at 48) — before, both roughly doubled with conversation length; after, neither grows. `ChatMessageProjection` returns the identical view model for every message whose row cannot have changed, keyed on the whole `ConversationMessage` plus the positional inputs grouping and reply quotes actually depend on, so one arrival derives **2** elements and one reaction **1**, equal at a 48-message window and a 240-message one, against the whole window on every emission before; the timeline retains the built row behind it, so `Element.updateChild` skips it outright, and every row is keyed with a `findChildIndexCallback` so an arrival relocates elements instead of re-parenting a `GlobalKey` per row. `_messageKeys` becomes a registry of *mounted* rows — bounded by construction, and always the only set an anchor could come from — and the anchor is captured in `didUpdateWidget`, in `didChangeDependencies` and at scroll end, rather than additionally on every build and every scroll tick. The draft is debounced 500 ms and flushed on blur, route pop, leaving `resumed`, dispose and send, and the cascade that made a keystroke rebuild the page is cut in the provider layer — the draft becomes a one-shot read, typing narrows to a boolean through `select`, and the forward targets become a callback — because the draft must keep living in the `conversations` row. Also: `DateTime.now()` leaves `build` for a clock refreshed exactly when the earliest mute on screen expires, a jump no longer has its own scroll cancelled by the reading anchor it was leaving, and a jump to a target already inside the drawn range asks for the frame nothing else was going to schedule. Schema stays at 18; no repository, projector, outbox, sync-engine or backend file is touched. |
 | ADR-065 | Accepted | A delivery cycle asks the network once per person instead of two to four times, through a thirty-second process-local cache that sits below every authentication gate and never touches a prekey claim; and the device-log gossip a send owes becomes a debt the cycle records and pays after the outbox instead of a second fan-out awaited in front of the first one's ciphertext; closes the RCA ADR-060 opened (2026-08-28) | `ClientAuthenticationService` was entirely uncached, so one `prepareOwedSend` fetched a peer's identity — an unconditional full `200`, because `/identity` offers no ETag — twice, three times when a session had to be started, and again for the gossip owed to the same peer moments later, against a round trip ADR-060 measured at **107-137 ms**. Measured on the composed send path with a synthetic 122 ms round trip: a first contact and its gossip fall from **14 round trips / 1828 ms to 6 / 788**, a send and its gossip from **8 / 1051 to 4 / 528**, two sends to one peer from **8 / 1037 to 4 / 522**, and the time from `prepare` starting to a postable ciphertext from **8 / 1028 to 4 / 512** — the last of those is F7 alone, because half of it was a fan-out owed to somebody else. The cache decorates `PeerIdentityRemotePort` rather than memoizing `AuthenticatedPeer`, so a hit is the *same* verification over the same bytes: the master-key comparison, the unsigned-device rejection, the transition check, the hash chain, `requireCurrentLiveSet`, the trust states and the global fork gate all still run, and a suite proves each rejection is reproduced on a hit with zero further requests. `claimPrekeyBundles` reaches no map, no in-flight entry and no bypass check, because it consumes one-time prekeys and is `ReplaySafety.never`. The device log is coalesced but never stored: a stored page outlives the head that said what to expect, and a mismatched head is read as a fork, which would withhold every send to every peer. `refreshPeer` and `confirmOutOfBand` are forced live by the service itself, which is what makes user verification and the `stale_devices` path bypass it with no call site changed. Gossip's failure isolation stops being a swallowed `try`/`catch` and becomes a `void` return with no future to await; a bare `unawaited` was rejected because a headless catch-up (ADR-049/ADR-050) disposes its container and closes its database the moment `synchronize()` returns. Schema stays at 18; no migration, table, column or index, no endpoint, header or status-code change, no cryptographic construction touched, and no `backend/` file. |
+| ADR-066 | Accepted | Supersedes ADR-007: the conversation timeline is an app-owned reversed sliver because Flyer requires mutable controller-owned message state and ADR-002 puts that state in drift, not because a package was slow; custom ownership is bounded to the timeline surface and Material keeps every surface the user types into or selects within; and the first thing owning it costs is a first-strong direction resolver that is correct where neither the previous regex nor `intl`'s `Bidi` is (2026-08-30) | ADR-007 named a package `pubspec.yaml` has not carried since ADR-054, and it did so for the whole interval between piece 15 replacing the adapter's contents and this row. The reason on the checklist is the durable one and was never promoted into the register: Flyer 2.11.1 keeps messages in a mutable controller it owns, and ADR-002 makes drift the single source of truth, so the two want the same state in two places — an architectural conflict, decided before any frame was measured. **The performance record is corrected rather than inherited**: ADR-062, ADR-063 and ADR-064 fixed F8's whole-window mapper re-derivation, F9's unpruned `GlobalKey` walk and F10's per-keystroke draft write, and all three were application-layer costs that no package choice caused and no package choice would have fixed. Custom rendering did not buy that performance; measuring the mapper, the key registry and the provider cascade did. **The boundary is stated so "custom" cannot drift into "from scratch"**: app-owned covers the timeline surface — the reversed sliver, the keys and `findChildIndexCallback`, pagination, author grouping and bubble geometry — while Material remains the foundation for text fields, sheets, menus, dialogs, selection and focus traversal, because IME composition, RTL caret placement, selection handles and TalkBack semantics are not being re-implemented here. ADR-006's rule for Forui and the assertion in `design_system_boundary_test.dart` are unchanged and still the thing that keeps the package out of `lib/features`. **What owning the bubble actually costs is measured on its first bill.** `_contentDirection` was not first-strong: its class was the block range `֐-ࣿ`, which contains Arabic-Indic (U+0660-U+0669, class AN) and Persian (U+06F0-U+06F9, class EN) digits, so `۱۲۳ hello` resolved RTL where UAX #9 P2 skips both and answers LTR, and it contained neither Arabic Presentation Forms block, so a `ﻲ` pasted from a legacy Windows source resolved to nothing at all. `intl` 0.20.2 was read in the pub cache rather than recalled and **rejected as a replacement on evidence**: its `Bidi.startsWithRtl` is structurally first-strong but its `_RTL_CHARS` is `֑-߿`, which repeats the digit defect exactly, while its `_LTR_CHARS` claims `ࠀ-῿` wholesale and hands Samaritan, Mandaic, Syriac Supplement and Arabic Extended-A to LTR; `Bidi.detectRtlDirectionality` is not first-strong at all but a whitespace-token count against a 0.40 threshold, with a `^http://` special case a `https://` URL does not meet. The two implementations are wrong on **different** inputs and neither is a superset, so `resolveFirstStrongDirection` replaces both, on R/AL/L ranges from `DerivedBidiClass` with the weak, neutral, mark and format classes falling through, plus P2's isolate-run skipping; 29 tests hold it, including the executable comparison against both predecessors. **The isolation half of the finding was tested and half of it did not exist**: an embedded Latin URL with trailing punctuation inside Persian needs no FSI/PDI, because Flutter runs UAX #9 per paragraph and there is no second direction spliced into that string, and that non-defect is recorded so it is not re-fixed; the real one is the composer's character counter, where `20 / 500` is two EN runs around a neutral and N1 resolves the separator to an RTL base, reversing the pair to `500 / 20`. It is pinned to LTR, which is how the expression reads in either locale. A fourth golden, `chat_medium_rtl_mixed.png`, holds all three mixed-direction cases in one RTL frame; the existing three were not regenerated. Schema stays at 18; no migration, table, column or index, no repository, projector, outbox or delivery behaviour, no endpoint, header or status code, no cryptographic construction, no protocol, no wire format and no `backend/` file. **Opens no production gate.** |
+
+## ADR-066 in full — the timeline is app-owned, and the first thing owning it costs is the bidi (2026-08-30)
+
+**Status:** Accepted. **Supersedes ADR-007.** Records a correction of fact against ADR-024.
+Client-side decision, entirely in the presentation layer and the decision register. **The local
+schema stays at 18**: no migration, no table, no column, no index. Changes no repository, no
+projector, no outbox, no delivery cycle, no endpoint, path, header, query parameter, request or
+response shape, no accepted status code, no cryptographic construction, no ciphersuite
+identifier, no protocol, no wire format and no backend file. **Opens no production gate.**
+
+### The question
+
+> The register says the conversation timeline is Flyer Chat behind an adapter. The application
+> has not depended on Flyer since ADR-054, and the checklist that replaced it recorded a reason
+> the register never carried. What actually decided that replacement, what did the three
+> performance ADRs that followed actually fix, and what does owning a chat bubble outright
+> oblige this application to get right that a package would otherwise have owned?
+
+### D1. What replaced Flyer, and the reason that actually decided it
+
+ADR-007 was written as reuse: take Flyer's virtualization, keep an adapter seam, and replace it
+later if the seam is not enough. Piece 15 replaced it almost immediately, and the reason is on
+the piece checklist rather than in this file: **Flyer 2.11.1 requires mutable, controller-owned
+message state.** ADR-002 makes drift the single source of truth precisely so REST, socket and
+optimistic state cannot diverge inside a widget. A controller that owns a mutable message list
+is a second source of truth for the same rows, and reconciling it against a drift stream is the
+divergence ADR-002 exists to prevent, reintroduced one layer higher.
+
+That is an architectural conflict, and it was decided before a frame was measured. It is the
+reason this ADR carries, because it is the one that stays true independent of how fast anything
+turned out to be.
+
+The seam ADR-007 asked for survived: `ChatTimelineAdapter` still takes immutable application
+view models and emits typed intents, and the comment at its declaration still calls itself a
+replaceable timeline boundary. What changed is what is behind the seam — a reversed
+`CustomScrollView` whose stable indices make upward pagination an append at the far edge, so
+loading older messages cannot move the row the reader is looking at.
+
+### D2. The performance record, corrected
+
+The performance argument for a custom timeline is the one most likely to be repeated, and it is
+not supported by this project's own measurements.
+
+ADR-062, ADR-063 and ADR-064 fixed, in order: an unbounded per-message read on every emission;
+a whole-conversation re-projection per applied event; and then F8, F9 and F10 — the mapper
+re-deriving the entire loaded window twice per rebuild, `_messageKeys` growing without bound and
+being walked with `findRenderObject()` once per frame, and every keystroke writing the
+`conversations` row and rebuilding the page through the provider that watched it.
+
+**Every one of those is an application-layer cost.** None was caused by a rendering package and
+none would have been fixed by choosing a different one. F8 is a mapper, F9 is a key registry,
+F10 is a provider cascade. Owning the render surface bought none of it; reading
+`EXPLAIN QUERY PLAN`, counting derived elements and timing frames on the A56 bought all of it.
+
+Anyone reaching for this ADR as precedent for replacing a package on performance grounds should
+read that paragraph first and measure instead.
+
+### D3. The boundary custom ownership actually has
+
+"Custom timeline" and "custom UI from scratch" are different decisions and only the first one is
+in force.
+
+**App-owned:** the reversed sliver and its scroll physics, the per-message keys and
+`findChildIndexCallback`, pagination and the reading anchor, author grouping and date and unread
+separators, bubble geometry and its directional padding, the reaction row, the delivery
+indicator.
+
+**Material, and staying Material:** every surface the user types into or selects within — text
+fields, bottom sheets, menus, dialogs, the selection controls, focus traversal. IME composition,
+RTL caret placement, selection handles, long-press selection and TalkBack semantics are hard,
+already correct there, and re-implementing them would trade a bounded rendering problem for an
+unbounded accessibility one.
+
+**Forui, unchanged:** ADR-006 stands. Three files under `lib/app/design_system/` name the
+package, and `design_system_boundary_test.dart` fails if a fourth appears or if anything under
+`lib/features` imports it. Forui is pre-1.0 and `app_theme.dart` depends on it for the visual
+identity, which is exactly why the blast radius is three files and asserted rather than assumed.
+
+### D4. First-strong direction, and why neither existing implementation was kept
+
+ADR-016 requires RTL and mixed-direction behaviour to be structural. The bubble already gets the
+hard half right — alignment follows the **sender** through `AlignmentDirectional`, text
+direction follows the **content** — and those two being independent is the property a package
+that couples them cannot be made to honour. The content half was wrong.
+
+`_contentDirection` matched the block range `֐-ࣿ` for RTL and `[A-Za-z]` for LTR. Two
+failures, both reproduced as tests before being fixed:
+
+- **Digits are not strong.** U+0660-U+0669 are class AN and U+06F0-U+06F9 are class EN, and both
+  sit inside that block range, so `۱۲۳ hello` resolved RTL. UAX #9 P2 finds the first character
+  of class L, AL or R and skips everything else; the answer is LTR. *(The RCA framing called the
+  Persian digits AN; `DerivedBidiClass` has them as EN. Neither is strong, so the conclusion is
+  the same.)*
+- **Neither Arabic Presentation Forms block was covered.** U+FB50-U+FDFF and U+FE70-U+FEFF are
+  AL and are what text pasted from legacy Windows sources contains. Both resolved to `null`.
+
+`intl` 0.20.2 is already a pinned direct dependency, so it was read in the pub cache rather than
+recalled, and it was rejected on what the source says:
+
+| input | old regex | `Bidi.startsWithRtl` | correct |
+|---|---|---|---|
+| `۱۲۳ hello` — U+06Fx, class EN | rtl | rtl | **ltr** |
+| `١٢٣ hello` — U+066x, class AN | rtl | rtl | **ltr** |
+| `ﻲ` Presentation Forms-B, AL | *null* | rtl | **rtl** |
+| `ﭐ` Presentation Forms-A, AL | *null* | rtl | **rtl** |
+| `ࠀ` Samaritan, R | rtl | *ltr* | **rtl** |
+| `ࢠ` Arabic Extended-A, AL | rtl | *ltr* | **rtl** |
+
+`Bidi.startsWithRtl` is structurally first-strong — `^[^LTR]*[RTL]` — but its `_RTL_CHARS` is
+`֑-߿`, which contains both digit blocks, so it repeats the defect exactly; and its
+`_LTR_CHARS` claims `ࠀ-῿` wholesale, which hands Samaritan, Mandaic, Syriac Supplement and
+Arabic Extended-A to the wrong direction. `Bidi.detectRtlDirectionality` is not first-strong at
+all: it splits on whitespace, counts tokens against a `_RTL_DETECTION_THRESHOLD` of 0.40, and
+special-cases `^http://` — which a `https://` URL does not match. The package's own source says
+its patterns "are not completely correct according to the Unicode standard. They are simplified
+for performance and small code size."
+
+The two are wrong on **different** inputs and neither contains the other, so neither was kept.
+`lib/app/design_system/app_text_direction.dart` implements P2 and P3 over
+`DerivedBidiClass` R/AL and L ranges, with the weak, neutral, mark and format classes falling
+through by omission and the RTL table checked first, so a combining mark inside an RTL block is
+not claimed by the broader LTR ranges. P2's isolate-run skipping is implemented. The one
+deliberate departure from P3 is that a string with no strong character returns `null` rather
+than LTR, so a bare number stays in the reading direction of the conversation around it — which
+is also what the code it replaces did. `intl`'s `TextDirection` never enters widget code; the
+package is imported only in the test that proves it was the wrong tool.
+
+### D5. What isolation was actually needed, and what was not
+
+The finding said no bidi isolation exists anywhere in `lib/` and named an embedded URL with
+trailing punctuation as the symptom. Half of that is not a defect, and the half that is sits
+somewhere else.
+
+**Not reproducible, and recorded so it is not re-fixed.** `سلام https://example.com/a?b=1.`
+laid out with an RTL base puts the Persian at the right, the URL to its left with its own run
+intact, and the sentence-final stop at the far left — which is where an RTL paragraph belongs
+to put it. Flutter runs UAX #9 per paragraph, and `message.text` reaches `Text` as one string
+with one direction. There is no second direction spliced into it, so there is nothing for an
+FSI/PDI pair to isolate. A test asserts the box positions rather than the absence of a bug.
+
+**Real, and fixed at the smallest boundary.** The composer's character counter is the one place
+in the file where two independent runs share a paragraph: `'$currentLength / $maxLength'` is two
+EN runs around a neutral separator, and under an RTL ambient direction N1 resolves that
+separator to the base direction and reverses the pair — `20 / 500` renders as `500 / 20`,
+asserted by box position before the fix. The counter is pinned to `TextDirection.ltr`, because
+the expression reads left to right in both locales. The reaction chip `'{emoji} {count}'` was
+measured too and is not a defect: the emoji sits right of the count under RTL, which is the
+mirroring that surface wants.
+
+### D6. The golden that would have caught this
+
+`goldens/chat_medium_rtl_mixed.png` holds three cases in one `fa` frame: Persian carrying an
+embedded Latin URL and a sentence-final stop, a bubble opening with Persian digits and
+continuing in Latin, and an outgoing Latin bubble whose alignment follows the sender while its
+glyphs follow the content. The existing three goldens were regenerated by name filter, which is
+to say not at all — only the new file is written.
+
+### Follow-ups
+
+- **F1.** `message.replyQuote` is rendered by a `Text` with no `textDirection` at all, so a
+  quoted Persian message inside an English UI, or the reverse, takes the ambient locale
+  direction rather than its own content's. It is the same defect class as D4 at a second call
+  site and was left alone here to keep this change to what it says it is.
+- **F2.** `resolveFirstStrongDirection` covers the BMP RTL scripts, both Presentation Forms
+  blocks and the supplementary RTL planes, and for LTR covers Latin, Greek, Cyrillic, Armenian,
+  the Indic and South-East Asian blocks, CJK, Kana and Hangul. A script outside that set returns
+  `null` and inherits the ambient direction. That is a bounded claim, tested as such, and the
+  boundary is stated in the file rather than discovered later.
 
 ## ADR-065 in full — the cycle asks once, and gossip goes behind the message (2026-08-28)
 
