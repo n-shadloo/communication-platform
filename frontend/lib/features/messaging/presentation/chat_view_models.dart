@@ -216,6 +216,8 @@ final class ChatListViewModel {
   final ChatDeliveryIndicator delivery;
 }
 
+typedef ChatIntentCallback = void Function(ChatIntent intent);
+
 sealed class ChatIntent {
   const ChatIntent();
 }
