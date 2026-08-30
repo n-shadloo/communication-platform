@@ -328,13 +328,6 @@ class AppLocalizationsFa extends AppLocalizations {
   String get authRestoringSession => 'در حال بازیابی نشست امن…';
 
   @override
-  String get authSecureSetupBoundaryTitle => 'راه‌اندازی امن دستگاه لازم است';
-
-  @override
-  String get authSecureSetupBoundaryMessage =>
-      'شما با دسترسی محدود ثبت‌نام وارد شده‌اید. ثبت دستگاه در مرحله بعدی کامل می‌شود.';
-
-  @override
   String get authSecurityNoticeMessage =>
       'رمز عبور، حساب شما را احراز می‌کند. یک راز بازیابی جداگانه از مواد هویت رمزنگاری محافظت می‌کند. هیچ‌یک تاریخچه پیام‌ها را از سرور بازیابی نمی‌کند.';
 

@@ -668,18 +668,6 @@ abstract class AppLocalizations {
   /// **'Restoring your secure session…'**
   String get authRestoringSession;
 
-  /// No description provided for @authSecureSetupBoundaryTitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Secure device setup required'**
-  String get authSecureSetupBoundaryTitle;
-
-  /// No description provided for @authSecureSetupBoundaryMessage.
-  ///
-  /// In en, this message translates to:
-  /// **'You are signed in with registration-only access. Device registration is completed in the next setup step.'**
-  String get authSecureSetupBoundaryMessage;
-
   /// No description provided for @authSecurityNoticeMessage.
   ///
   /// In en, this message translates to:
