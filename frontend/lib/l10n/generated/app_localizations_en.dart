@@ -331,13 +331,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get authRestoringSession => 'Restoring your secure session…';
 
   @override
-  String get authSecureSetupBoundaryTitle => 'Secure device setup required';
-
-  @override
-  String get authSecureSetupBoundaryMessage =>
-      'You are signed in with registration-only access. Device registration is completed in the next setup step.';
-
-  @override
   String get authSecurityNoticeMessage =>
       'Your login password authenticates your account. A separate recovery secret protects cryptographic identity material. Neither secret restores message history from the server.';
 
