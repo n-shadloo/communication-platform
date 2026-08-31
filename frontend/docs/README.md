@@ -52,6 +52,17 @@ The documents use three requirement words:
 - [Beta release signing and key continuity](release-signing.md)
 - [Third-party notices](third-party-notices.md)
 
+## Derived exports
+
+Not part of the engineering contract. Generated from the documents above for
+consumption by external tools, and regenerated rather than edited when their sources
+change.
+
+- [External design-tool brief](design-handoff/DESIGN.md) — design system, from
+  `visual-design-system.md` and `app_tokens.dart`
+- [Voice-room screen and state inventory](design-handoff/voice-room-states.md) — from
+  `ui-specification.md` §10/§13, `voice-and-realtime.md`, and `voicerooms/API.md`
+
 ## Authority and change control
 
 The backend `API.md` files are authoritative for available endpoints, HTTP/WebSocket
