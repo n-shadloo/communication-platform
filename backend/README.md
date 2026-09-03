@@ -72,8 +72,9 @@ online to transfer it. There is no server history API.
   non-persistent).
 - Daphne serving ASGI behind nginx; nginx terminates TLS and serves attachment bytes.
 - No CDN, no push service, no telemetry, no external CA or API. Dependencies are
-  pinned and hashed in `requirements/` and vendored as wheels in `vendor/` for
-  offline installs.
+  pinned and hashed in `requirements/`; the operator builds the untracked `vendor/`
+  wheel cache with `ops/vendor.sh` while online, and `ops/offline_install.sh`
+  installs from it with no network.
 
 ## Repository layout
 
@@ -89,7 +90,7 @@ online to transfer it. There is no server history API.
 | `core` | Size buckets, opaque blob field, env helpers, log scrubbing, health endpoint, deploy checks |
 | `config` | Settings (`base`/`dev`/`prod`), ASGI entry point, root URLconf |
 | `ops` | Deployment units, nginx/coturn/LiveKit/redis config, offline-install and audit tooling |
-| `requirements`, `vendor` | Pinned, hashed dependencies and the offline wheel cache |
+| `requirements` | Pinned, hashed dependencies. `vendor/` holds the offline wheel cache that `ops/vendor.sh` builds; it is not tracked in git |
 
 ## Local development
 
