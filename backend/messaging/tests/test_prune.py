@@ -219,31 +219,6 @@ def test_prune_prints_counts_but_never_an_identifier(
 
 
 @pytest.mark.django_db
-def test_stale_keypackages_rotate_out_but_the_last_resort_survives(active_user, settings):
-    """KEYPACKAGE_TTL_DAYS ages out the consumable pool; the last-resort package
-    is exempt — deleting it would make an idle device unaddable to groups, the
-    exact failure it exists to prevent."""
-    from datetime import timedelta as td
-
-    from devices.models import KeyPackage
-
-    settings.KEYPACKAGE_TTL_DAYS = 30
-    device = make_device(active_user, 74)
-    stale = KeyPackage.objects.create(device=device, blob=b"S" * 4096)
-    fresh = KeyPackage.objects.create(device=device, blob=b"F" * 4096)
-    last = KeyPackage.objects.create(device=device, blob=b"L" * 4096, is_last_resort=True)
-    old = timezone.now().date() - td(days=31)
-    KeyPackage.objects.filter(id__in=[stale.id, last.id]).update(created_date=old)
-
-    output = run_prune()
-
-    remaining = set(KeyPackage.objects.values_list("id", flat=True))
-    assert remaining == {fresh.id, last.id}
-    assert "keypackages pruned: 1" in output
-    assert str(stale.id) not in output
-
-
-@pytest.mark.django_db
 def test_pruning_a_device_out_of_existence_takes_its_queue(active_user, settings):
     """Cascade check: deleting a device must not strand its queue rows."""
     doomed = make_device(active_user, 77)

@@ -10,7 +10,7 @@ from django.utils import timezone
 from rest_framework_simplejwt.token_blacklist.models import OutstandingToken
 
 from attachments.models import Attachment
-from devices.models import Device, KeyPackage
+from devices.models import Device
 from messaging.models import QueuedEnvelope
 
 
@@ -24,13 +24,11 @@ class Command(BaseCommand):
         envelopes = self._prune_envelopes()
         tokens = self._flush_expired_refresh_tokens()
         attachments, files = self._prune_attachments()
-        keypackages = self._prune_keypackages()
 
         # Counts only: an id or a blob written here would land in the timer's journal.
         self.stdout.write(f"envelopes pruned: {envelopes}")
         self.stdout.write(f"refresh tokens flushed: {tokens}")
         self.stdout.write(f"attachments pruned: {attachments} (files removed: {files})")
-        self.stdout.write(f"keypackages pruned: {keypackages}")
 
     @staticmethod
     def _flush_expired_refresh_tokens():
@@ -60,17 +58,6 @@ class Command(BaseCommand):
                     queue_pruned_through__lt=row["m"],
                 ).update(queue_pruned_through=row["m"])
             deleted, _ = expired.delete()
-        return deleted
-
-    @staticmethod
-    def _prune_keypackages():
-        # Rotation: stale consumable KeyPackages age out. The last-resort package
-        # is exempt — deleting it would make an idle device unaddable to groups,
-        # which is the exact failure it exists to prevent.
-        cutoff = timezone.now().date() - timedelta(days=settings.KEYPACKAGE_TTL_DAYS)
-        deleted, _ = KeyPackage.objects.filter(
-            is_last_resort=False, created_date__lt=cutoff
-        ).delete()
         return deleted
 
     @staticmethod
