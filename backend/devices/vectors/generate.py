@@ -6,9 +6,9 @@ Run from the backend root with the dev venv:
 
 This is a **development-time tool and a reference implementation of the client
 contract's signature encodings**. Nothing in the server imports it, and the server
-never computes or verifies any encoding it produces — see ARCHITECTURE.md §A16 and
-CLAUDE.md. It lives here so the vectors the Android and Web clients test against are
-reproducible and auditable rather than pasted in by hand.
+never computes or verifies any encoding it produces — see SECURITY.md and
+CLIENT_CONTRACT.md §B. It lives here so the vectors the Android and Web clients test
+against are reproducible and auditable rather than pasted in by hand.
 
 Every key is derived from a fixed seed, so a re-run must produce a byte-identical
 file. `cryptography` is already a pinned production dependency (requirements/prod.txt),

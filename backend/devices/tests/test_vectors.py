@@ -2,7 +2,7 @@
 
 **This is not server-side signature verification.** The server neither computes nor
 checks any encoding here, and no view imports this module or `devices/vectors/` (see
-CLAUDE.md). What these tests do is lock the *specification artifact*: if the vectors
+SECURITY.md). What these tests do is lock the *specification artifact*: if the vectors
 and the documented encoding rule ever disagree, Android and Web would each "follow the
 documentation" and produce incompatible signatures — the exact failure the vectors
 exist to prevent. Re-deriving the bytes here also means the vectors cannot be edited by
@@ -24,7 +24,7 @@ VECTORS = {vector["name"]: vector for vector in DOCUMENT["vectors"]}
 
 def encode(domain, *fields):
     """Independent re-implementation of the documented rule, written from the prose
-    in ARCHITECTURE.md rather than imported from the generator — a copy of the
+    in CLIENT_CONTRACT.md §B rather than imported from the generator — a copy of the
     generator would agree with itself no matter what the rule says."""
     out = bytearray(domain.encode("ascii"))
     for field in fields:

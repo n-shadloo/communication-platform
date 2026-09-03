@@ -11,10 +11,6 @@ venv/
 !.env.example
 ops/tls/out/
 
-# Agent-facing docs — kept local, not in version control
-ARCHITECTURE.md
-CLAUDE.md
-
 # Runtime artifacts
 media_root/
 static_root/

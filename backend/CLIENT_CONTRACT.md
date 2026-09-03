@@ -3,9 +3,9 @@
 This backend is a blind relay: it stores and serves key material and ciphertext as
 opaque bytes and **verifies none of it**. Every security property below therefore lives
 in the client. This document is the binding list of those client-side halves, written
-for the Flutter developer. The server-side halves are specified in `ARCHITECTURE.md` and
+for the Flutter developer. The server-side halves are specified in `SECURITY.md` and
 the per-app `API.md` files; the residual-risk statement (what none of this protects) is
-`ARCHITECTURE.md` §A16.
+`SECURITY.md` § "Residual risk".
 
 A server-side sanity check (length, bucket, monotonic version) is never a security
 control. If the client ever skips a verification because "the server already checks

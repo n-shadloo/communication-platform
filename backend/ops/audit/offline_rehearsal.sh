@@ -8,7 +8,7 @@
 # builds and every test still holds.
 #
 # Prereqs: vendor/wheels populated (run ops/vendor.sh while still online), .env filled
-# in, and the native PostgreSQL 16 + Redis 7 from CLAUDE.md "Running things" listening
+# in, and the native PostgreSQL 16 + Redis 7 from README.md "Local development" listening
 # on localhost.
 set -euo pipefail
 
