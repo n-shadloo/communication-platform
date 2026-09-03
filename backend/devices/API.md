@@ -2,8 +2,8 @@
 
 The device registry and public-key distribution: publishing the account's
 cross-signing identity, registering a device with its signed key bundle, listing and
-labelling devices, replenishing classical and ML-KEM one-time prekeys and MLS key
-packages, maintaining the client-signed device-list log, reading peers' device lists,
+labelling devices, replenishing classical and ML-KEM one-time prekeys, maintaining
+the client-signed device-list log, reading peers' device lists,
 and claiming key material to start sessions. All paths are under `/api/v1`; requests
 and responses are JSON with base64-encoded binary values;
 `Authorization: Bearer <access token>` is required everywhere (`full` scope except
@@ -219,8 +219,8 @@ computes or checks any of it.
 
 `POST` registers a cryptographic device: identity key, signed prekey with signature,
 registration id, optional ML-KEM-768 signed prekey and one-time prekeys, optional
-encrypted label, and optional initial classical one-time prekeys and key packages, all
-in one transaction. It is the only endpoint that accepts a register-scope token, and it
+encrypted label, and optional initial classical one-time prekeys, all in one
+transaction. It is the only endpoint that accepts a register-scope token, and it
 responds with a full-scope token pair for the new device. Live devices are capped per
 account (default 10); revoked devices do not count.
 
@@ -286,8 +286,7 @@ expect more frequent invalidation than under the device-set-only tag.
   "pq_spk": { "spk_id": 1, "pub": "cVBxU3BrS2V5…", "sig": "c1BxU2ln…" },
   "pq_otpks": [ { "key_id": 1, "pub": "cVBxT3Rwaw…" } ],
   "label_blob": "cGFkZGVkLWxhYmVs…",
-  "otpks": [ { "key_id": 1, "pub": "b2t0cGtl…" } ],
-  "keypackages": [ "a2V5cGFja2FnZQ…" ]
+  "otpks": [ { "key_id": 1, "pub": "b2t0cGtl…" } ]
 }
 ```
 
@@ -298,7 +297,6 @@ Ed25519-then-X25519 pair the client contract defines; the server's range check i
 deliberately looser than that and commits to nothing about the bytes, so a wrong-sized
 `ik_pub` is caught only by peers.
 `otpks` ≤ 200 and `pq_otpks` ≤ 100 items with unique `key_id`s per list;
-`keypackages` ≤ 100, each exactly one key-package bucket (4096 or 16384 bytes);
 `label_blob` optional, one label bucket (256 or 1024 bytes). Integer ids must fit a
 32-bit column. Every signature is stored and relayed, never verified server-side;
 verification is the peer client's job.
@@ -346,7 +344,7 @@ Empty body, when `If-None-Match` matches the current `ETag`.
 { "otpks": { "0": { "pub": ["invalid base64"] } } }
 ```
 
-### Off-bucket label or key package — `400 Bad Request` (POST)
+### Off-bucket label — `400 Bad Request` (POST)
 
 ```json
 { "code": "bad_bucket", "detail": "Invalid payload." }
@@ -391,9 +389,9 @@ Scope `accounts`, default 120/min.
 
 `PUT` replaces the device's encrypted label. `DELETE` revokes the device: its token
 generation is bumped (killing every outstanding access and refresh token), its
-one-time prekeys (classical and ML-KEM), key packages (last-resort included), and
-queued envelopes are deleted in one transaction, any live WebSocket is closed with
-code 4003, and it disappears from device lists. Revocation is permanent; a "re-added"
+one-time prekeys (classical and ML-KEM) and queued envelopes are deleted in one
+transaction, any live WebSocket is closed with code 4003, and it disappears from
+device lists. Revocation is permanent; a "re-added"
 device is a new registration. Any device of the account may revoke any other (or
 itself). The client appends a device-list log record for the removal
 (CLIENT_CONTRACT.md §J).
@@ -613,145 +611,6 @@ None.
 
 Scope `accounts`, default 120/min.
 
-## Upload key packages
-
-**Method:** `PUT`
-**Path:** `/api/v1/me/devices/{device_id}/keypackages`
-
-Uploads MLS key packages for the calling device (self-only, like prekeys). Each blob
-must be exactly one key-package bucket (4096 or 16384 bytes — sized for PQ
-ciphersuites; pad accordingly). The consumable store is capped at 100 per device; a
-batch that would cross the cap is refused whole, so the client is told rather than
-silently truncated.
-
-With `"is_last_resort": true` the request must carry exactly one blob, which
-**replaces** the device's single last-resort package (at most one exists; re-uploading
-after a reinstall is idempotent). The last-resort package is what claims fall back to
-when the consumable pool is exhausted — it is served without being deleted, at a
-forward-secrecy cost on the initial group join (see the claim endpoint), which is why
-a healthy client keeps the consumable pool stocked and treats the last-resort package
-as insurance, not inventory. It lives outside the 100-cap and outside
-`keypackage_count`.
-
-**Headers**
-
-| Header | Required | Value |
-|---|---|---|
-| `Authorization` | yes | `Bearer <access token>`, full scope, bound to `{device_id}` |
-| `Content-Type` | yes | `application/json` |
-
-**Path parameters**
-
-| Name | Type | Required | Description |
-|---|---|---|---|
-| `device_id` | UUID | yes | Must equal the token's own device id |
-
-**Query parameters**
-
-| Name | Type | Required | Default | Description |
-|---|---|---|---|---|
-| — | | | | none |
-
-**Request body**
-
-```json
-{ "keypackages": [ "a2V5cGFja2FnZQ…", "c2Vjb25kLXBhY2s…" ], "is_last_resort": false }
-```
-
-≤ 100 per request; both fields optional (an empty upload returns the count);
-`is_last_resort: true` requires exactly one blob.
-
-**Responses**
-
-### Uploaded — `200 OK`
-
-```json
-{ "keypackage_count": 42 }
-```
-
-The count covers the consumable pool only — the last-resort package is never counted,
-because it never leaves and would otherwise mask exhaustion.
-
-### Invalid request — `400 Bad Request`
-
-```json
-{ "keypackages": ["Ensure this field has no more than 100 elements."] }
-```
-
-An off-bucket blob is `400 {"code": "bad_bucket", "detail": "Invalid payload."}`.
-
-### Not this device — `403 Forbidden`
-
-```json
-{ "code": "forbidden", "detail": "This token does not belong to that device." }
-```
-
-### Store cap reached — `409 Conflict`
-
-```json
-{ "code": "keypackage_limit", "detail": "Too many stored key packages for this device." }
-```
-
-### Rate limited — `429 Too Many Requests`
-
-```json
-{ "detail": "Request was throttled." }
-```
-
-Scope `accounts`, default 120/min.
-
-## Key-package count
-
-**Method:** `GET`
-**Path:** `/api/v1/me/devices/{device_id}/keypackages/count`
-
-Reports how many consumable key packages the calling device still has stored (the
-last-resort package is excluded). Self-only.
-
-**Headers**
-
-| Header | Required | Value |
-|---|---|---|
-| `Authorization` | yes | `Bearer <access token>`, full scope, bound to `{device_id}` |
-
-**Path parameters**
-
-| Name | Type | Required | Description |
-|---|---|---|---|
-| `device_id` | UUID | yes | Must equal the token's own device id |
-
-**Query parameters**
-
-| Name | Type | Required | Default | Description |
-|---|---|---|---|---|
-| — | | | | none |
-
-**Request body**
-
-None.
-
-**Responses**
-
-### Counted — `200 OK`
-
-```json
-{ "keypackage_count": 42 }
-```
-
-### Not this device — `403 Forbidden`
-
-```json
-{ "code": "forbidden", "detail": "This token does not belong to that device." }
-```
-
-### Rate limited — `429 Too Many Requests`
-
-```json
-{ "detail": "Request was throttled." }
-```
-
-Scope `accounts`, default 120/min.
-
 ## List a user's devices
 
 **Method:** `GET`
@@ -856,6 +715,9 @@ proceed with a clearly-flagged classical-only session is the client's job
 
 Call it when starting a session with a peer. An explicit `"device_ids": []` claims
 nothing — the empty list is honoured, not treated as "all" — so batch carefully.
+Group sessions start here too: a group is a set of pairwise sessions, one per member
+device, so starting one claims from each member's `user_id` in turn
+(CLIENT_CONTRACT.md §F). There is no group-specific key material.
 
 **Headers**
 
@@ -920,80 +782,6 @@ yields `{"bundles": []}` with `200`.
 
 ```json
 { "device_ids": { "0": ["Must be a valid UUID."] } }
-```
-
-### Register-scope token — `403 Forbidden`
-
-```json
-{ "code": "scope_forbidden", "detail": "This token cannot access this endpoint." }
-```
-
-### Rate limited — `429 Too Many Requests`
-
-```json
-{ "detail": "Request was throttled." }
-```
-
-Scope `claim`, default 120/min.
-
-## Claim key packages
-
-**Method:** `POST`
-**Path:** `/api/v1/users/{user_id}/keypackages/claim`
-
-Returns one MLS key package per targeted live device. A consumable (non-last-resort)
-package is preferred: oldest first, deleted on claim, each handed out exactly once.
-When a device's consumable pool is exhausted, its **last-resort** package is served
-instead — **without being deleted**, so the device stays addable to groups. A reused
-last-resort package weakens forward secrecy for the initial group join (every join
-that used it shares one KEM secret, so a later compromise of that key exposes each
-such join's Welcome); it is a fallback, not an equivalent. Devices with neither are
-simply absent from the response; an exhausted store is not an error. Used when adding
-a user's devices to a group.
-
-**Headers**
-
-| Header | Required | Value |
-|---|---|---|
-| `Authorization` | yes | `Bearer <access token>`, full scope |
-| `Content-Type` | yes | `application/json` |
-
-**Path parameters**
-
-| Name | Type | Required | Description |
-|---|---|---|---|
-| `user_id` | UUID | yes | Owner of the devices whose key packages are claimed |
-
-**Query parameters**
-
-| Name | Type | Required | Default | Description |
-|---|---|---|---|---|
-| — | | | | none |
-
-**Request body**
-
-```json
-{ "device_ids": ["2a77d4b9-e611-4c0f-9f1c-6a2e3b7d4e0f"] }
-```
-
-Optional, same semantics as the prekey claim.
-
-**Responses**
-
-### Claimed — `200 OK`
-
-```json
-{
-  "keypackages": [
-    { "device_id": "2a77d4b9-e611-4c0f-9f1c-6a2e3b7d4e0f", "blob": "a2V5cGFja2FnZQ…" }
-  ]
-}
-```
-
-### Invalid request — `400 Bad Request`
-
-```json
-{ "device_ids": ["Ensure this field has no more than 100 elements."] }
 ```
 
 ### Register-scope token — `403 Forbidden`

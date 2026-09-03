@@ -35,7 +35,9 @@ public keys, and it enforces nothing security-relevant. Cross-signing material a
 device-list records pass through as blobs it never parses or verifies; every check that
 matters happens client-side, against keys the server has never held. No
 content-encryption key ever reaches the server, though it does hold infrastructure
-secrets — the TLS private key, the JWT signing key, and the LiveKit API secret.
+secrets — the TLS private key, the JWT signing key, and the LiveKit API secret. Group
+chats are pairwise: a message is encrypted once per member device, and the server
+keeps no roster, group object, or group key.
 
 The honest limit: an adversary holding live root on the box can watch which authenticated
 connection deposits into and collects from each device's queue, which is enough to
@@ -104,7 +106,7 @@ with `--no-index` and `--require-hashes`.
 | [docs/architecture/DESIGN-RECORD.md](docs/architecture/DESIGN-RECORD.md) | The system of record for the architecture: the positions table, the assumption ledger, the deferral list, and the decision log |
 | [docs/architecture/GROUND-TRUTH.md](docs/architecture/GROUND-TRUTH.md) | The measured facts of the deployment: topology, configuration deviations, scale facts, and the domain rules the code must hold |
 | [docs/architecture/decisions/](docs/architecture/decisions/) | One ADR for each architecture decision |
-| [frontend/docs/README.md](frontend/docs/README.md) | Index of the client engineering contract: threat model, cryptographic protocol, MLS profile, UI specification, sync engine, and platform notes |
+| [frontend/docs/README.md](frontend/docs/README.md) | Index of the client engineering contract: threat model, cryptographic protocol, UI specification, sync engine, and platform notes |
 
 ## Current status
 
