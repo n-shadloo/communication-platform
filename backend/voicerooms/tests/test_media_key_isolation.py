@@ -51,7 +51,6 @@ def test_the_pattern_itself_has_teeth_and_spares_infrastructure_names():
         "LIVEKIT_API_SECRET",
         "JWT_SIGNING_KEY",
         "ik_pub",
-        "keypackage",
         "key_id",
         "name_blob",
     ):

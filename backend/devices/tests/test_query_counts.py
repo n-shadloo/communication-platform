@@ -13,7 +13,7 @@ outstanding-token row of its own.
 
 import pytest
 
-from .conftest import DEVICES_URL, make_device, pubkey, stock_keypackages, stock_prekeys
+from .conftest import DEVICES_URL, make_device, pubkey, stock_prekeys
 
 pytestmark = pytest.mark.django_db
 
@@ -142,28 +142,6 @@ def test_an_exhausted_pool_costs_one_query_less(
     assert "otpk" not in response.json()["bundles"][0]
 
 
-@pytest.mark.parametrize("store_size", [1, 50, 100])
-def test_a_keypackage_claim_does_not_scale_with_the_store(
-    api,
-    active_user,
-    device,
-    auth_headers,
-    peer,
-    peer_device,
-    django_assert_num_queries,
-    store_size,
-):
-    stock_keypackages(peer_device, store_size)
-    headers = auth_headers(active_user, device)
-
-    with django_assert_num_queries(AUTH_QUERIES + 1 + CLAIM_QUERIES_PER_DEVICE):
-        response = api.post(
-            f"/api/v1/users/{peer.id}/keypackages/claim", {}, format="json", **headers
-        )
-
-    assert len(response.json()["keypackages"]) == 1
-
-
 @pytest.mark.parametrize("log_length", [0, 5, 60])
 def test_the_device_list_stays_constant_query_as_the_log_grows(
     api, active_user, device, auth_headers, django_assert_num_queries, log_length
@@ -227,16 +205,15 @@ def test_replenishment_is_constant_query(
 def test_registration_is_constant_query_whatever_the_payload(
     api, active_user, device, auth_headers, django_assert_num_queries
 ):
-    """200 prekeys and 100 key packages go in as two bulk inserts, not 300."""
+    """200 prekeys go in as one bulk insert, not 200."""
     from .conftest import publish_identity, register_payload
 
     publish_identity(active_user)
     headers = auth_headers(active_user, device)
-    payload = register_payload(otpks=200, keypackages=100)
+    payload = register_payload(otpks=200)
     # savepoint, user lock, cap count, identity-exists check, device insert,
-    # otpk bulk, keypackage bulk, release, then the refresh-token row the issued
-    # pair writes
-    with django_assert_num_queries(AUTH_QUERIES + 9):
+    # otpk bulk, release, then the refresh-token row the issued pair writes
+    with django_assert_num_queries(AUTH_QUERIES + 8):
         response = api.post(DEVICES_URL, payload, format="json", **headers)
 
     assert response.status_code == 201

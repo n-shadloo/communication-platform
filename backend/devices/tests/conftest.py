@@ -3,10 +3,9 @@ import base64
 import pytest
 
 from accounts.models import User
-from core.buckets import KEYPACKAGE_BUCKETS, LABEL_BUCKETS
+from core.buckets import LABEL_BUCKETS
 from devices.models import (
     Device,
-    KeyPackage,
     OneTimePrekey,
     PqOneTimePrekey,
     UserIdentity,
@@ -28,17 +27,12 @@ def label_blob(filler=b"L"):
     return base64.b64encode((filler * size)[:size]).decode()
 
 
-def keypackage_blob(filler=b"K"):
-    size = min(KEYPACKAGE_BUCKETS)
-    return base64.b64encode((filler * size)[:size]).decode()
-
-
 def cross_sig_b64(seed=b"x"):
     """Base64 of a 64-byte Ed25519 signature stand-in (opaque to the server)."""
     return base64.b64encode((seed * 64)[:64]).decode()
 
 
-def register_payload(otpks=1, keypackages=0, **overrides):
+def register_payload(otpks=1, **overrides):
     payload = {
         "ik_pub": pubkey(b"i"),
         "spk_id": 1,
@@ -50,9 +44,6 @@ def register_payload(otpks=1, keypackages=0, **overrides):
         # the follow-up PUT .../prekeys call.
         "otpks": [
             {"key_id": i, "pub": pubkey(bytes([65 + (i % 26)]))} for i in range(otpks)
-        ],
-        "keypackages": [
-            keypackage_blob(bytes([65 + (i % 26)])) for i in range(keypackages)
         ],
     }
     payload.update(overrides)
@@ -103,15 +94,6 @@ def stock_pq_prekeys(device, count, start=0):
         [
             PqOneTimePrekey(device=device, key_id=start + i, pub=b"q" * PQ_PUBKEY_LEN)
             for i in range(count)
-        ]
-    )
-
-
-def stock_keypackages(device, count):
-    KeyPackage.objects.bulk_create(
-        [
-            KeyPackage(device=device, blob=b"k" * min(KEYPACKAGE_BUCKETS))
-            for _ in range(count)
         ]
     )
 

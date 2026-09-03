@@ -16,12 +16,10 @@ from accounts.tokens import issue_full, issue_register_scope
 from .conftest import (
     DEVICES_URL,
     PASSWORD,
-    keypackage_blob,
     label_blob,
     make_device,
     pubkey,
     register_payload,
-    stock_keypackages,
     stock_prekeys,
 )
 
@@ -40,13 +38,12 @@ class DeviceLogSilenceTests(TestCase):
         )
         self.peer_device = make_device(self.peer, 2)
         stock_prekeys(self.peer_device, 2)
-        stock_keypackages(self.peer_device, 2)
         access, _refresh = issue_full(self.alice, self.device)
         self.headers = {"HTTP_AUTHORIZATION": f"Bearer {access}"}
         self.client = APIClient()
 
     def test_the_whole_device_lifecycle_emits_no_identifier_or_key(self):
-        payload = register_payload(otpks=2, keypackages=1, label_blob=label_blob())
+        payload = register_payload(otpks=2, label_blob=label_blob())
 
         with self.assertLogs(level="DEBUG") as captured:
             # assertLogs fails outright if nothing is logged, and a clean request logs
@@ -65,21 +62,9 @@ class DeviceLogSilenceTests(TestCase):
                 format="json",
                 **self.headers,
             )
-            self.client.post(
-                f"/api/v1/users/{self.peer.id}/keypackages/claim",
-                {},
-                format="json",
-                **self.headers,
-            )
             self.client.put(
                 f"{DEVICES_URL}/{self.device.id}/prekeys",
                 {"otpks": [{"key_id": 42, "pub": pubkey(b"r")}]},
-                format="json",
-                **self.headers,
-            )
-            self.client.put(
-                f"{DEVICES_URL}/{self.device.id}/keypackages",
-                {"keypackages": [keypackage_blob(b"Z")]},
                 format="json",
                 **self.headers,
             )
@@ -95,7 +80,6 @@ class DeviceLogSilenceTests(TestCase):
             "peer user id": str(self.peer.id),
             "uploaded identity key": payload["ik_pub"],
             "uploaded label blob": payload["label_blob"],
-            "uploaded key package": payload["keypackages"][0],
             "claimed identity key": bundle["ik_pub"],
             "claimed one-time prekey": bundle["otpk"]["pub"],
             "issued access token": registered.json()["access"],

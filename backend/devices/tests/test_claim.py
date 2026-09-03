@@ -6,19 +6,15 @@ import base64
 import pytest
 from django.utils import timezone
 
-from devices.models import KeyPackage, OneTimePrekey
+from devices.models import OneTimePrekey
 
-from .conftest import make_device, stock_keypackages, stock_prekeys
+from .conftest import make_device, stock_prekeys
 
 pytestmark = pytest.mark.django_db
 
 
 def claim_url(user_id):
     return f"/api/v1/users/{user_id}/keys/claim"
-
-
-def kp_claim_url(user_id):
-    return f"/api/v1/users/{user_id}/keypackages/claim"
 
 
 def test_a_bundle_carries_the_public_x3dh_material(
@@ -174,22 +170,6 @@ def test_a_deactivated_users_devices_are_not_claimable(
     )
 
     assert response.json()["bundles"] == []
-
-
-def test_key_packages_are_handed_out_once_each(
-    api, active_user, device, auth_headers, peer, peer_device
-):
-    stock_keypackages(peer_device, 2)
-    headers = auth_headers(active_user, device)
-
-    first = api.post(kp_claim_url(peer.id), {}, format="json", **headers)
-    second = api.post(kp_claim_url(peer.id), {}, format="json", **headers)
-    third = api.post(kp_claim_url(peer.id), {}, format="json", **headers)
-
-    assert len(first.json()["keypackages"]) == 1
-    assert len(second.json()["keypackages"]) == 1
-    assert third.json()["keypackages"] == []  # exhausted, not an error
-    assert KeyPackage.objects.filter(device=peer_device).count() == 0
 
 
 def test_claiming_a_users_own_devices_is_normal(api, active_user, device, auth_headers):

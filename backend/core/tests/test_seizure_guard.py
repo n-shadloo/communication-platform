@@ -236,7 +236,6 @@ class SeizureGuardTests(SimpleTestCase):
                 "devices.Device",
                 "devices.OneTimePrekey",
                 "devices.PqOneTimePrekey",
-                "devices.KeyPackage",
                 "devices.DeviceLogRecord",
                 "devices.UserIdentity",
                 "vault.KeyBackup",
@@ -256,7 +255,6 @@ class SeizureGuardTests(SimpleTestCase):
             {
                 "accounts.ProfileBlob.blob",
                 "devices.Device.label_blob",
-                "devices.KeyPackage.blob",
                 "devices.DeviceLogRecord.blob",
                 "vault.KeyBackup.blob",
                 "messaging.QueuedEnvelope.blob",

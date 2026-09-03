@@ -24,16 +24,6 @@ urlpatterns = [
         name="my-prekeys-count",
     ),
     path(
-        "me/devices/<uuid:device_id>/keypackages",
-        views.MyKeyPackagesView.as_view(),
-        name="my-keypackages",
-    ),
-    path(
-        "me/devices/<uuid:device_id>/keypackages/count",
-        views.MyKeyPackagesCountView.as_view(),
-        name="my-keypackages-count",
-    ),
-    path(
         "users/<uuid:user_id>/identity",
         views.PeerIdentityView.as_view(),
         name="peer-identity",
@@ -52,10 +42,5 @@ urlpatterns = [
         "users/<uuid:user_id>/keys/claim",
         views.ClaimKeysView.as_view(),
         name="claim-keys",
-    ),
-    path(
-        "users/<uuid:user_id>/keypackages/claim",
-        views.ClaimKeyPackagesView.as_view(),
-        name="claim-keypackages",
     ),
 ]

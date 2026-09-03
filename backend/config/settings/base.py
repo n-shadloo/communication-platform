@@ -164,10 +164,6 @@ ATTACH_TTL_DAYS = env_int("ATTACH_TTL_DAYS", default=30)
 # commit, leaving that device permanently desynced until peers re-add it — see
 # queue_pruned_through.
 ENVELOPE_TTL_DAYS = env_int("ENVELOPE_TTL_DAYS", default=7)
-# Stale MLS KeyPackages are rotated out so a claimed package is never too old for
-# the joiner's ciphersuite/credential expectations; the last-resort package is
-# exempt (it is the exhausted-pool fallback and replaced only by upload).
-KEYPACKAGE_TTL_DAYS = env_int("KEYPACKAGE_TTL_DAYS", default=30)
 MAX_DEVICES_PER_USER = env_int("MAX_DEVICES_PER_USER", default=10)
 
 # Realtime gateway bounds.

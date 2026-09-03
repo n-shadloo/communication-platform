@@ -75,7 +75,6 @@ def _scripted_rest_traffic():
         ATTACHMENT_BUCKETS,
         DEVICELOG_BUCKETS,
         ENVELOPE_BUCKETS,
-        KEYPACKAGE_BUCKETS,
         NAME_BUCKETS,
     )
 
@@ -119,7 +118,6 @@ def _scripted_rest_traffic():
             "spk_sig": _b64_filled(32, 0x67),
             "registration_id": 4242,
             "otpks": [{"key_id": 1, "pub": _b64_filled(32, 0x6F)}],
-            "keypackages": [_b64_filled(min(KEYPACKAGE_BUCKETS), 0x6B)],
         },
         format="json",
         HTTP_AUTHORIZATION=f"Bearer {s['register-scope access token']}",

@@ -17,7 +17,6 @@ from accounts.tokens import issue_full
 from .models import (
     Device,
     DeviceLogRecord,
-    KeyPackage,
     OneTimePrekey,
     PqOneTimePrekey,
     UserIdentity,
@@ -26,7 +25,6 @@ from .serializers import (
     ClaimSerializer,
     DeviceLogAppendSerializer,
     IdentitySerializer,
-    KeyPackageUploadSerializer,
     LabelUpdateSerializer,
     PrekeyReplenishSerializer,
     RegisterDeviceSerializer,
@@ -34,7 +32,6 @@ from .serializers import (
 
 # Without a stored cap, replenishment is an unbounded write primitive for any
 # authenticated device.
-MAX_STORED_KEYPACKAGES = 100
 MAX_STORED_OTPKS = 200
 # 100 × 1184 B per device keeps the worst-case PQ pool ≈ 24 MB across the whole
 # deployment (20 users × 10 devices); the cap is a storage budget, do not raise it.
@@ -256,10 +253,6 @@ class MyDevicesView(APIView):
                         for otpk in data["pq_otpks"]
                     ]
                 )
-            if data["kp_raws"]:
-                KeyPackage.objects.bulk_create(
-                    [KeyPackage(device=device, blob=raw) for raw in data["kp_raws"]]
-                )
 
         access, refresh = issue_full(request.user, device)
         return Response(
@@ -339,7 +332,6 @@ class MyDeviceDetailView(APIView):
             device.save(update_fields=["revoked_date", "token_generation"])
             OneTimePrekey.objects.filter(device=device).delete()
             PqOneTimePrekey.objects.filter(device=device).delete()
-            KeyPackage.objects.filter(device=device).delete()
             device.queue.all().delete()  # its mailbox
 
         self._close_sockets(device_id)
@@ -479,65 +471,6 @@ class MyPrekeysCountView(_OwnDeviceView):
         )
 
 
-class MyKeyPackagesView(_OwnDeviceView):
-    def put(self, request, device_id):
-        denied = self._reject_other_device(request, device_id)
-        if denied is not None:
-            return denied
-        serializer = KeyPackageUploadSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        raws = serializer.validated_data["kp_raws"]
-
-        with transaction.atomic():
-            Device.objects.select_for_update().filter(pk=device_id).only("id").first()
-            if serializer.validated_data["is_last_resort"]:
-                # Replace-on-upload keeps the cap at one last-resort package per
-                # device, and keeps re-uploading after a reinstall idempotent.
-                # It lives outside the consumable cap: it is never deleted by a
-                # claim, so counting it against the pool would permanently
-                # shrink the pool by one.
-                KeyPackage.objects.filter(
-                    device_id=device_id, is_last_resort=True
-                ).delete()
-                KeyPackage.objects.create(
-                    device_id=device_id, blob=raws[0], is_last_resort=True
-                )
-            else:
-                stored = KeyPackage.objects.filter(
-                    device_id=device_id, is_last_resort=False
-                ).count()
-                if stored + len(raws) > MAX_STORED_KEYPACKAGES:
-                    return error(
-                        "keypackage_limit",
-                        "Too many stored key packages for this device.",
-                        409,
-                    )
-                if raws:
-                    KeyPackage.objects.bulk_create(
-                        [KeyPackage(device_id=device_id, blob=raw) for raw in raws]
-                    )
-            # The count is the consumable pool — the client replenishes on this
-            # number, and the everlasting last-resort row would mask exhaustion.
-            count = KeyPackage.objects.filter(
-                device_id=device_id, is_last_resort=False
-            ).count()
-        return Response({"keypackage_count": count})
-
-
-class MyKeyPackagesCountView(_OwnDeviceView):
-    def get(self, request, device_id):
-        denied = self._reject_other_device(request, device_id)
-        if denied is not None:
-            return denied
-        return Response(
-            {
-                "keypackage_count": KeyPackage.objects.filter(
-                    device_id=device_id, is_last_resort=False
-                ).count()
-            }
-        )
-
-
 class MyDeviceLogView(APIView):
     """Append client-signed device-list log records.
 
@@ -665,8 +598,10 @@ class PeerDevicesView(APIView):
         return resp
 
 
-class _ClaimView(APIView):
-    """Shared target resolution for the two claim endpoints."""
+class ClaimKeysView(APIView):
+    """Return an X3DH bundle per requested live device, consuming one one-time prekey
+    each (deleted transactionally, skip_locked so a claim can never hand the same OTPK
+    twice)."""
 
     permission_classes = [IsAuthenticated, IsFullScope]
     throttle_scope = "claim"
@@ -683,12 +618,6 @@ class _ClaimView(APIView):
         if "device_ids" in serializer.validated_data:
             qs = qs.filter(id__in=serializer.validated_data["device_ids"])
         return qs.only(*fields).order_by("id")
-
-
-class ClaimKeysView(_ClaimView):
-    """Return an X3DH bundle per requested live device, consuming one one-time prekey
-    each (deleted transactionally, skip_locked so a claim can never hand the same OTPK
-    twice)."""
 
     def post(self, request, user_id):
         targets = self._targets(
@@ -769,44 +698,3 @@ class ClaimKeysView(_ClaimView):
                 bundle["otpk"] = otpk
             bundles.append(bundle)
         return Response({"bundles": bundles})
-
-
-class ClaimKeyPackagesView(_ClaimView):
-    def post(self, request, user_id):
-        targets = self._targets(request, user_id, ("id",))
-        out = []
-        for device in targets:
-            with transaction.atomic():
-                row = (
-                    KeyPackage.objects.select_for_update(skip_locked=True)
-                    .filter(device_id=device.id, is_last_resort=False)
-                    .order_by("created_date", "id")
-                    .first()
-                )
-                if row is not None:
-                    out.append(
-                        {
-                            "device_id": str(device.id),
-                            "blob": base64.b64encode(bytes(row.blob)).decode(),
-                        }
-                    )
-                    row.delete()
-                    continue
-                # Pool exhausted: serve the last-resort package WITHOUT deleting
-                # it, so the device can still be added to groups. Every join that
-                # reuses it shares one KEM secret, so compromising that one key
-                # later exposes each such join's Welcome — a real forward-secrecy
-                # cost, and the reason this is the fallback and not the default.
-                last = (
-                    KeyPackage.objects.filter(device_id=device.id, is_last_resort=True)
-                    .order_by("id")
-                    .first()
-                )
-                if last is not None:
-                    out.append(
-                        {
-                            "device_id": str(device.id),
-                            "blob": base64.b64encode(bytes(last.blob)).decode(),
-                        }
-                    )
-        return Response({"keypackages": out})

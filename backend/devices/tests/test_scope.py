@@ -43,15 +43,8 @@ def endpoints(device_id, user_id):
             {"otpks": [{"key_id": 1, "pub": pubkey()}]},
         ),
         "prekey count": ("get", f"{DEVICES_URL}/{device_id}/prekeys/count", None),
-        "upload keypackages": (
-            "put",
-            f"{DEVICES_URL}/{device_id}/keypackages",
-            {"keypackages": []},
-        ),
-        "keypackage count": ("get", f"{DEVICES_URL}/{device_id}/keypackages/count", None),
         "peer device list": ("get", f"/api/v1/users/{user_id}/devices", None),
         "claim prekey bundles": ("post", f"/api/v1/users/{user_id}/keys/claim", {}),
-        "claim key packages": ("post", f"/api/v1/users/{user_id}/keypackages/claim", {}),
     }
 
 

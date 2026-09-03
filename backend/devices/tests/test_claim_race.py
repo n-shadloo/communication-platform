@@ -14,9 +14,9 @@ from rest_framework.test import APIClient
 
 from accounts.models import User
 from accounts.tokens import issue_full
-from devices.models import KeyPackage, OneTimePrekey
+from devices.models import OneTimePrekey
 
-from .conftest import PASSWORD, make_device, stock_keypackages, stock_prekeys
+from .conftest import PASSWORD, make_device, stock_prekeys
 
 CONCURRENT_CLAIMS = 12
 
@@ -72,11 +72,6 @@ class ClaimRaceTests(TransactionTestCase):
         bundle = body["bundles"][0]
         return bundle["otpk"]["key_id"] if "otpk" in bundle else None
 
-    @staticmethod
-    def _keypackage_of(body):
-        packages = body["keypackages"]
-        return packages[0]["blob"] if packages else None
-
     def test_one_prekey_is_handed_to_at_most_one_concurrent_claimant(self):
         stock_prekeys(self.owner_device, 1, start=99)
 
@@ -101,18 +96,6 @@ class ClaimRaceTests(TransactionTestCase):
         self.assertEqual(
             OneTimePrekey.objects.filter(device=self.owner_device).count(), 0
         )
-
-    def test_one_key_package_is_handed_to_at_most_one_concurrent_claimant(self):
-        stock_keypackages(self.owner_device, 1)
-
-        received = self._storm(
-            f"/api/v1/users/{self.owner.id}/keypackages/claim", self._keypackage_of
-        )
-
-        self.assertEqual(
-            len(received), 1, f"the single key package went to {len(received)} claimants"
-        )
-        self.assertEqual(KeyPackage.objects.filter(device=self.owner_device).count(), 0)
 
     def test_the_race_is_real_without_skip_locked(self):
         """Guards the guard. Read-then-delete over the same row, under the same load,

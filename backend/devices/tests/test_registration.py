@@ -2,12 +2,11 @@ import pytest
 from django.urls import reverse
 
 from accounts.tokens import issue_register_scope
-from devices.models import Device, KeyPackage, OneTimePrekey
+from devices.models import Device, OneTimePrekey
 
 from .conftest import (
     DEVICES_URL,
     cross_sig_b64,
-    keypackage_blob,
     label_blob,
     make_device,
     pubkey,
@@ -26,7 +25,7 @@ def test_a_register_scope_token_registers_a_device_and_gets_full_tokens(api, act
     """The register-scope token from login exists only to reach this endpoint."""
     response = api.post(
         DEVICES_URL,
-        register_payload(otpks=3, keypackages=2),
+        register_payload(otpks=3),
         format="json",
         **bearer(issue_register_scope(active_user)),
     )
@@ -38,7 +37,6 @@ def test_a_register_scope_token_registers_a_device_and_gets_full_tokens(api, act
     device = Device.objects.get(id=body["device_id"])
     assert device.user_id == active_user.id
     assert OneTimePrekey.objects.filter(device=device).count() == 3
-    assert KeyPackage.objects.filter(device=device).count() == 2
     # The issued token is genuinely full scope: it reaches an endpoint the register
     # token could not.
     assert api.get(reverse("user-directory"), **bearer(body["access"])).status_code == 200
@@ -183,22 +181,6 @@ def test_a_label_blob_outside_its_bucket_is_rejected_without_echoing_it(
     assert off_bucket not in response.content.decode()
 
 
-def test_a_keypackage_outside_its_bucket_is_rejected(
-    api, active_user, device, auth_headers
-):
-    import base64
-
-    payload = register_payload()
-    payload["keypackages"] = [base64.b64encode(b"x" * 999).decode()]
-
-    response = api.post(
-        DEVICES_URL, payload, format="json", **auth_headers(active_user, device)
-    )
-
-    assert response.status_code == 400
-    assert response.json()["code"] == "bad_bucket"
-
-
 def test_unknown_fields_are_rejected(api, active_user, device, auth_headers):
     response = api.post(
         DEVICES_URL,
@@ -216,19 +198,6 @@ def test_more_than_two_hundred_otpks_are_rejected(api, active_user, device, auth
         register_payload(otpks=201),
         format="json",
         **auth_headers(active_user, device),
-    )
-
-    assert response.status_code == 400
-
-
-def test_more_than_a_hundred_keypackages_are_rejected(
-    api, active_user, device, auth_headers
-):
-    payload = register_payload()
-    payload["keypackages"] = [keypackage_blob() for _ in range(101)]
-
-    response = api.post(
-        DEVICES_URL, payload, format="json", **auth_headers(active_user, device)
     )
 
     assert response.status_code == 400

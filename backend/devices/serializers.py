@@ -4,7 +4,7 @@ import binascii
 from rest_framework import serializers
 
 from accounts.serializers import StrictSerializer
-from core.buckets import DEVICELOG_BUCKETS, KEYPACKAGE_BUCKETS, LABEL_BUCKETS
+from core.buckets import DEVICELOG_BUCKETS, LABEL_BUCKETS
 from core.fields import decode_blob_or_400
 
 PUBKEY_MIN, PUBKEY_MAX = (
@@ -29,7 +29,6 @@ MAX_SIG_CHARS = 4 * ((ED25519_SIG_LEN + 2) // 3) + 8
 MAX_PQ_PUBKEY_CHARS = 4 * ((PQ_PUBKEY_LEN + 2) // 3) + 8
 MAX_DEVICELOG_CHARS = 4 * ((max(DEVICELOG_BUCKETS) + 2) // 3) + 8
 MAX_LABEL_CHARS = 4 * ((max(LABEL_BUCKETS) + 2) // 3) + 8
-MAX_KEYPACKAGE_CHARS = 4 * ((max(KEYPACKAGE_BUCKETS) + 2) // 3) + 8
 
 # PositiveIntegerField is a 32-bit signed column with a >= 0 check. Without an upper
 # bound a larger int reaches the column and raises psycopg's DataError, a 500 on
@@ -54,7 +53,6 @@ PREMATURE_BUNDLE_DETAIL = (
 
 MAX_OTPKS = 200
 MAX_PQ_OTPKS = 100
-MAX_KEYPACKAGES = 100
 # Accounts hold at most MAX_DEVICES_PER_USER devices, so a longer id list can only
 # be noise; the bound keeps an oversized `IN (...)` out of the planner.
 MAX_CLAIM_DEVICE_IDS = 100
@@ -197,13 +195,6 @@ class RegisterDeviceSerializer(StrictSerializer):
     otpks = serializers.ListField(
         child=OtpkSerializer(), max_length=MAX_OTPKS, allow_empty=True
     )
-    keypackages = serializers.ListField(
-        child=serializers.CharField(
-            max_length=MAX_KEYPACKAGE_CHARS, trim_whitespace=False
-        ),
-        max_length=MAX_KEYPACKAGES,
-        allow_empty=True,
-    )
 
     def to_internal_value(self, data):
         """Reject the cross-signature fields with an answer, not just a refusal.
@@ -229,10 +220,6 @@ class RegisterDeviceSerializer(StrictSerializer):
             data["label_raw"] = decode_blob_or_400(data["label_blob"], LABEL_BUCKETS)
         else:
             data["label_raw"] = None
-        data["kp_raws"] = [
-            decode_blob_or_400(encoded, KEYPACKAGE_BUCKETS)
-            for encoded in data["keypackages"]
-        ]
         _reject_duplicate_key_ids(data["otpks"])
         _reject_duplicate_key_ids(data["pq_otpks"], field="pq_otpks")
         return data
@@ -282,32 +269,6 @@ class PrekeyReplenishSerializer(StrictSerializer):
             data["cross_sig_raw"] = _b64_ed25519_sig(data["cross_sig"], "cross_sig")
         _reject_duplicate_key_ids(data["otpks"])
         _reject_duplicate_key_ids(data["pq_otpks"], field="pq_otpks")
-        return data
-
-
-class KeyPackageUploadSerializer(StrictSerializer):
-    keypackages = serializers.ListField(
-        child=serializers.CharField(
-            max_length=MAX_KEYPACKAGE_CHARS, trim_whitespace=False
-        ),
-        max_length=MAX_KEYPACKAGES,
-        allow_empty=True,
-        required=False,
-        default=list,
-    )
-    is_last_resort = serializers.BooleanField(required=False, default=False)
-
-    def validate(self, data):
-        data["kp_raws"] = [
-            decode_blob_or_400(encoded, KEYPACKAGE_BUCKETS)
-            for encoded in data["keypackages"]
-        ]
-        # One per device, replace-on-upload: a batch of last-resort packages has
-        # no meaning, so reject it rather than silently keeping only one.
-        if data["is_last_resort"] and len(data["kp_raws"]) != 1:
-            raise serializers.ValidationError(
-                {"is_last_resort": "exactly one last-resort keypackage"}
-            )
         return data
 
 

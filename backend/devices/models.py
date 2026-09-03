@@ -2,7 +2,7 @@ import uuid
 
 from django.db import models
 
-from core.buckets import DEVICELOG_BUCKETS, KEYPACKAGE_BUCKETS, LABEL_BUCKETS
+from core.buckets import DEVICELOG_BUCKETS, LABEL_BUCKETS
 from core.fields import OpaqueBlobField
 
 
@@ -125,25 +125,6 @@ class PqOneTimePrekey(models.Model):
                 fields=["device", "key_id"], name="uniq_pq_onetimeprekey_device_key_id"
             ),
         ]
-
-
-class KeyPackage(models.Model):
-    """Opaque MLS KeyPackage, deleted when claimed — except the last-resort one.
-
-    A device with an exhausted (or fully expired) KeyPackage store could never be
-    added to a group, so each device may hold one last-resort package that claims
-    return without deleting. Reuse costs forward secrecy on the initial group
-    join, which is why it is the exhausted-pool fallback and never the preferred
-    path.
-    """
-
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    device = models.ForeignKey(
-        Device, on_delete=models.CASCADE, related_name="key_packages"
-    )
-    blob = OpaqueBlobField(bucket_set=KEYPACKAGE_BUCKETS)
-    is_last_resort = models.BooleanField(default=False)
-    created_date = models.DateField(auto_now_add=True)
 
 
 class DeviceLogRecord(models.Model):
