@@ -1,0 +1,100 @@
+# Design record
+
+This file is the system of record for the architecture of the server. Read it
+before any design work. Never re-derive a decision it already holds, and never
+contradict one without a reversal entry — a new ADR, plus a `Superseded by` line
+on the old one.
+
+Measured facts of the deployment live in [`GROUND-TRUTH.md`](GROUND-TRUTH.md) and
+never here. One ADR for each decision lives in [`decisions/`](decisions/).
+
+**Scope.** The server, at `backend/`. The Flutter client at `frontend/` is out of
+scope for this record; the binding client half of every security property is
+`backend/CLIENT_CONTRACT.md`.
+
+**Current scale band.** Band 0, pre-launch. Fewer than 50 accounts, at most 10
+devices for each account, at most 50 members in a group, on one VPS with 1 vCPU
+and 1 GB RAM. Every position below is designed for band 0 and one band of
+headroom, and no further. The signal that moves the band is sustained real
+traffic, not a date.
+
+**The rebuild, in phases.** Phase 1 removes MLS and makes groups pairwise. Phase
+2 replaces the HTTP and real-time stack. Phase 3 rebuilds the admin. Phase 4
+raises the test gate. Phase 5 finishes the documents.
+
+## 1. Positions
+
+Every row carries all five fields: the forcing function, the bands, the flip
+trigger, the cost, and the evidence with its currency. A row with a missing field
+is incomplete, not merely terse.
+
+| Surface | Position | Forcing function | Bands | Flip trigger | Cost | Evidence (currency) |
+|---|---|---|---|---|---|---|
+| Group messaging ([0001](decisions/0001-pairwise-double-ratchet-group-fan-out.md)) | Pairwise Double Ratchet fan-out. The sender encrypts a group message once for every live device of every member. No group object, roster, epoch, group key or key package exists on the server | An MLS server holds group state, and group state is the social graph the threat model refuses to store | 0 to 1 | A group needs more than ~50 members, or the per-message fan-out cost dominates send latency | O(devices) ciphertext for each message: at most 500 envelope rows for a 50-member group with 10 devices each | Signal's original private group messaging kept group state on the clients and left the server with none (current). The pairwise cost model is the reason Signal later added sender keys at larger group sizes (current) |
+| HTTP API ([0002](decisions/0002-fastapi-as-the-only-http-api-surface.md)) | FastAPI is the only HTTP surface. DRF leaves. Django keeps the ORM, the migrations, the admin and the settings | The developer's forcing function is a faster response path beside a long-lived WebSocket connection in one process | 0 to 2 | The team's cost of two frameworks in one process exceeds the response-path gain, or Django's own async story closes the gap | The whole view, serializer, permission and throttle layer is rewritten. Two request models live in one repository | Django has served ASGI since 3.0 and documents mounting an ASGI application; FastAPI documents sub-application mounting (current). A named production user of this exact Django-ORM-behind-FastAPI split is not established here — reasoned, not sourced |
+| Process model ([0003](decisions/0003-one-asgi-process.md)) | FastAPI is the root ASGI application; the Django ASGI application is mounted at `ADMIN_PATH`. `django.setup()` runs before any model import. uvicorn with uvloop and httptools, supervised by systemd. `WEB_CONCURRENCY` defaults to 1 | 1 vCPU and 1 GB RAM will not hold two process trees, and a second port would need a second nginx route and a second unit | 0 to 1 | Admin traffic and API traffic contend for the same worker, or the admin needs its own restart cadence | One process is one blast radius: an admin request that blocks a worker blocks the API | uvicorn is the reference ASGI server and documents the uvloop and httptools extras; systemd supervising uvicorn directly is the documented deployment (current) |
+| Real-time transport ([0004](decisions/0004-websocket-gateway-on-redis-pubsub.md)) | `/ws` is a Starlette WebSocket route in the FastAPI application. Cross-process fan-out is Redis publish and subscribe through `redis.asyncio`, one subscription connection for each worker. Channels leaves | Channels' Redis layer is a second framework and a second Redis client for a fan-out this system already needs Redis for | 0 to 2 | Fan-out needs delivery guarantees that publish and subscribe does not give, such as replay after a subscriber restart | The gateway owns its own group registry, heartbeats and drain. Redis publish and subscribe drops a message for a subscriber that is not connected | Redis publish and subscribe is what `channels_redis` itself uses for group send (current). `redis.asyncio` is the maintained async client in redis-py (current) |
+| Data path ([0005](decisions/0005-django-orm-on-a-thread-sensitive-data-path.md)) | The Django ORM is the only data access layer. Every unit of work is one synchronous function that opens its own transaction and never awaits, run through `sync_to_async(thread_sensitive=True)` inside a per-request `ThreadSensitiveContext`. `close_old_connections()` brackets each unit. `CONN_MAX_AGE` is 0, with Django's psycopg pool | A second data access layer beside the ORM would need its own migrations, its own model of the schema, and its own audit against the seizure guard | 0 to 2 | The ORM thread pool saturates before the database does, and profiling names the thread hop as the constraint | Every database call costs a thread hop. The worker count, not the event loop, is the concurrency lever | This is the execution model Django's own async views use for ORM access, and `ThreadSensitiveContext` is asgiref's documented API for scoping it (current). Django's psycopg connection pool is documented from Django 5.1 (current) |
+| Authentication ([0006](decisions/0006-device-bound-tokens-on-pyjwt.md)) | PyJWT issues and verifies HS256 tokens. An access token is bound to one device through `tgen`; a refresh carries `rgen` and rotates in one transaction; a replayed refresh revokes every token of the device. No token table exists. simplejwt and its blacklist app leave | A token table is a per-device login record at rest, and the threat model refuses to keep one | 0 to 2 | Revocation must reach a token that has not yet expired and whose device is not the subject, or a second relying party appears and HS256's shared secret stops being appropriate | Revocation is only as fine-grained as the two generation counters. A stolen access token stays valid until it expires or the generation moves | Refresh-token rotation with reuse detection that revokes the whole family is the OAuth 2.0 security best current practice (current). PyJWT is the reference Python implementation (current) |
+| Contract conventions ([0007](decisions/0007-contract-conventions.md)) | One error envelope `{"code", "detail"}` on every error including 404, 405, 413, 429 and 500. Validation failures are `400 invalid_request` with a field-located detail that never echoes input. `422` is never used. The version lives in the URL path and stays `v1`. Pagination is keyset only. No idempotency store exists | A stored response for a send would link a sender to its recipients at rest, which is exactly what the schema refuses to hold | 0 to 2 | A released client exists that cannot be updated in step with the server; the version then needs a deprecation cycle | A retried send can duplicate an envelope. Each mutating route documents its retry semantics instead of relying on a store | Keyset pagination is the standard cursor form for a growing collection (current). The refusal of an idempotency store is a consequence of the threat model — reasoned, not sourced |
+| Schema document ([0008](decisions/0008-fastapi-generates-the-openapi-document.md)) | FastAPI generates the OpenAPI document. `python manage.py openapi` writes `backend/openapi.json`, `--check` fails on drift, and CI runs the check. The interactive documentation routes are closed outside `DEBUG`. The per-app `API.md` files stay the human reference | A schema that no gate checks drifts from the code within one release | 0 to 4 | The document becomes large enough that a diff on it stops being reviewable | One committed artifact to regenerate on every contract change | Schema generation checked in CI is the standard defence against contract drift (current) |
+| Migrations ([0009](decisions/0009-regenerate-the-initial-migrations.md)) | After the schema stabilises, every app gets one regenerated `0001_initial` and every earlier migration file leaves. The deployment recreates the database | No user depends on stored data, and 14 migration files describe a schema history that never ran in production | 0 only | Any production data exists that a person would miss | The migration history before the rewrite is unrecoverable from the tree. Every environment must be recreated, not migrated | Django documents squashing and the regeneration of an initial migration (current). The precondition — no production data — is measured in `GROUND-TRUTH.md` (current) |
+| Rate limiting ([0010](decisions/0010-redis-rate-limiting-that-fails-closed.md)) | Redis holds the counters. The scope names, the `THROTTLE_*` variables, their defaults and their `N/period` syntax are unchanged. An authenticated request counts per user id, an anonymous one per client address. `429` carries `throttled` and `Retry-After`. When Redis is unreachable a throttled route answers `503 unavailable` | A counter in process memory is per worker, and a counter on disk violates the volatile-data rule | 0 to 2 | A second application host appears and the client address stops identifying a caller | Redis becomes a hard dependency of every throttled route. Its loss is an outage, by choice | Failing closed is the standard posture for a control whose purpose is to refuse traffic (current). Redis is already a hard dependency of the gateway (current) |
+| Admin ([0011](decisions/0011-django-unfold-admin-panel.md)) | A django-unfold panel. Registered: `User`, `Device`, `Room`, `Attachment` and the admin `LogEntry` as a read-only audit log. Every key, blob, prekey, log-record, backup and queue model is hidden. Every administrative action writes a `LogEntry`. Lockout state lives only in Redis. Assets are served from the project | An operator needs a support surface, and the default admin would expose ciphertext, key bytes and the social graph | 0 to 1 | The staff workflow outgrows list-and-edit, or a second operator role needs permissions the admin cannot express | A dependency with its own template and asset surface. Every newly registered model must be re-audited for exposure | django-unfold is a maintained, widely used admin theme (current). The audit-log requirement is the operator half of the threat model — reasoned, not sourced |
+| Dependency policy ([0012](decisions/0012-pinned-hashed-and-untracked-wheel-cache.md)) | Every dependency is pinned and hashed. `backend/vendor/` is not tracked; the operator produces the wheel set on the VPS with `ops/vendor.sh` while online. CI proves that every dependency installs from wheels with `--no-index` and `--only-binary=:all:` | The system must install with no network, and a 26 MB binary cache in git is a cost paid by every clone forever | 0 to 4 | The VPS loses the ability to fetch wheels at all, and the cache must travel with the repository | The operator must run one command while online before the first offline install, and again after any version change | pip documents `--require-hashes`, `--no-index` and `--find-links` as the hash-verified offline install path (current) |
+| Testing ([0013](decisions/0013-pytest-and-ruff-as-the-test-and-lint-stack.md)) | pytest with pytest-django and pytest-asyncio, random order through pytest-randomly, `httpx` driving the API and `hypothesis` driving property-based tests. ruff is the only linter and formatter. No type checker. Phase 4 sets a 95 percent branch-coverage gate in CI | A fixed collection order hides an order dependency until the day it fails alone | 0 to 4 | The suite runtime stops fitting a pre-push gate, or a class of defect appears that only a type checker catches | A random order makes a failure harder to reproduce without its seed. A coverage gate can be satisfied by tests that assert nothing | ruff is a widely adopted linter and formatter (current). `httpx` and `hypothesis` are not yet installed; they arrive with the surface that needs them (current) |
+| Process hardening ([0014](decisions/0014-process-hardening-at-the-edge.md)) | uvicorn runs with `--proxy-headers`, `--forwarded-allow-ips 127.0.0.1` and `--no-access-log`. A pure-ASGI middleware sets a deadline on every HTTP request. Every route has an explicit body cap equal to the largest payload its contract admits. The trusted host list is `ALLOWED_HOSTS`. No CORS policy exists | One process on 1 GB of RAM has no headroom for an unbounded body or a request that never ends | 0 to 2 | A browser client is served from an origin other than the API origin, at which point a CORS policy becomes necessary | A deadline can cut a legitimate slow request. Each body cap is one more contract detail to keep true | Trusting forwarded headers only from the proxy address is uvicorn's documented posture (current). The single-origin argument against CORS is standard (current) |
+| Documents ([0015](decisions/0015-the-document-map.md)) | `backend/SECURITY.md` and `backend/CLIENT_CONTRACT.md` stay at their paths and are rewritten in place. New root documents: `API_CHANGES.md`, `ACCEPTED_RISKS.md`, `docs/architecture/` and `docs/admin/`. `backend/ops/RUNBOOK.md` becomes the operator runbook. A root document routes to a `backend/` document and never repeats it | `frontend/docs/` links to the three `backend/` document sets by path; moving one breaks the client's references | 0 to 4 | The client stops depending on the `backend/` paths | Two document roots to keep consistent, and one routing rule to enforce at review | Docs-as-code keeps the record in version control under review, next to the code (current) |
+| Voice media keys ([0016](decisions/0016-client-held-voice-media-keys.md)) | Each participant generates a per-sender media key and distributes it to every participant device over the pairwise session, carried in volatile `signal` frames. A `room_presence` leave rotates the key. The server, LiveKit and coturn never hold a media key | An SFU that can decrypt is a wiretap at the point the threat model assumes is hostile | 0 to 1 | A room needs a participant count at which per-sender key distribution over pairwise sessions stops being affordable | Key distribution is O(participants) for each sender, and it repeats on every leave | Per-participant keys distributed out of band, with rotation on membership change, is the end-to-end encryption model an SFU supports (current) |
+
+## 2. Assumption ledger
+
+Never delete or soften a row here to make the design look decided.
+
+| ID | Statement | Placeholder value | Revisit trigger |
+|---|---|---|---|
+| A1 | The whole population fits one process on one small VPS | Fewer than 50 accounts, at most 10 devices for each, at most 500 concurrent sockets | Sustained concurrent sockets above 200, or the first `503` that is not a Redis outage |
+| A2 | Pairwise fan-out is affordable at the stated group ceiling | At most 500 envelope rows for one message to a 50-member group | p95 send latency above 1 s, or the first request for a group larger than 50 |
+| A3 | One uvicorn worker, PostgreSQL, Redis and LiveKit coexist in 1 GB of RAM | `WEB_CONCURRENCY=1` | Resident set above 700 MB, or the first OOM kill on the VPS |
+| A4 | The ORM thread hop is not the constraint at this band | Default `sync_to_async` executor sizing | A profile that names thread-pool waiting as the top cost |
+| A5 | Attachment bytes fit the VPS disk under the retention windows | `ATTACH_TTL_DAYS` and the per-user quota as configured | Disk usage above 70 percent, or the first quota rejection a user reports |
+| A6 | The retention windows are longer than a realistic offline period during a shutdown | `ENVELOPE_TTL_DAYS` as configured | A user reports a message that expired before delivery |
+| A7 | `check --deploy` in CI can run against a stub environment that is representative | A generated 50-character secret and a stub host list | The first deployment defect that a green `check --deploy` did not catch |
+
+## 3. Deferrals
+
+Never mark a row resolved without the trigger it names.
+
+| Item | Trigger that ends the deferral |
+|---|---|
+| A second factor on the admin login | A second operator exists. Recorded in `ACCEPTED_RISKS.md` when that file lands |
+| The 95 percent branch-coverage gate in CI | Phase 4 |
+| `httpx` and `hypothesis` in `requirements/dev.txt` | The first test that drives the FastAPI surface, in phase 2 |
+| `API_CHANGES.md` and `ACCEPTED_RISKS.md` | The next run of phase 1 creates `API_CHANGES.md`; `ACCEPTED_RISKS.md` lands with the admin in phase 3 |
+| `backend/ops/RUNBOOK.md` | Phase 5 |
+| `docs/admin/` | Phase 3 |
+| Regenerating every `0001_initial` and deleting the earlier migrations | The schema stops changing, at the end of phase 2 |
+| coturn still reads its certificate from a public-CA path (`/etc/letsencrypt/live/...`) while nginx now terminates with the private CA pair | The first end-to-end voice rehearsal on the VPS |
+| A `verified` date check in CI over `GROUND-TRUTH.md` | The first entry passes the 90-day window |
+| Any second application host, read replica, worker fleet or cache tier | Band 1 is reached and measured, not assumed |
+
+## 4. Decision log
+
+| ADR | Title | Status | Phase | Supersedes / Superseded by |
+|---|---|---|---|---|
+| [0001](decisions/0001-pairwise-double-ratchet-group-fan-out.md) | Groups use pairwise Double Ratchet fan-out | Accepted | 1 | — |
+| [0002](decisions/0002-fastapi-as-the-only-http-api-surface.md) | FastAPI is the only HTTP API surface | Accepted | 2 | — |
+| [0003](decisions/0003-one-asgi-process.md) | One ASGI process | Accepted | 2 | — |
+| [0004](decisions/0004-websocket-gateway-on-redis-pubsub.md) | The WebSocket gateway fans out over Redis publish and subscribe | Accepted | 2 | — |
+| [0005](decisions/0005-django-orm-on-a-thread-sensitive-data-path.md) | The Django ORM is the only data access layer | Accepted | 2 | — |
+| [0006](decisions/0006-device-bound-tokens-on-pyjwt.md) | Device-bound tokens on PyJWT, with no token table | Accepted | 2 | — |
+| [0007](decisions/0007-contract-conventions.md) | Contract conventions | Accepted | 2 | — |
+| [0008](decisions/0008-fastapi-generates-the-openapi-document.md) | FastAPI generates the OpenAPI document | Accepted | 2 | — |
+| [0009](decisions/0009-regenerate-the-initial-migrations.md) | Regenerate the initial migrations | Accepted | 2 | — |
+| [0010](decisions/0010-redis-rate-limiting-that-fails-closed.md) | Redis rate limiting that fails closed | Accepted | 2 | — |
+| [0011](decisions/0011-django-unfold-admin-panel.md) | A django-unfold admin panel that shows no secret | Accepted | 3 | — |
+| [0012](decisions/0012-pinned-hashed-and-untracked-wheel-cache.md) | Pinned, hashed dependencies and an untracked wheel cache | Accepted | 1 | — |
+| [0013](decisions/0013-pytest-and-ruff-as-the-test-and-lint-stack.md) | pytest and ruff as the test and lint stack | Accepted | 1 and 4 | — |
+| [0014](decisions/0014-process-hardening-at-the-edge.md) | Process hardening at the edge | Accepted | 2 | — |
+| [0015](decisions/0015-the-document-map.md) | The document map | Accepted | 1 to 5 | — |
+| [0016](decisions/0016-client-held-voice-media-keys.md) | Client-held voice media keys | Accepted | 1 | — |
