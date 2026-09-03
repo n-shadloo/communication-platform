@@ -8,9 +8,8 @@ from core.fields import OpaqueBlobField
 
 class Room(models.Model):
     """A persistent room is only an id (capability) plus an encrypted name.
-    Membership, invites, roles, and media crypto state are client-side room-MLS
-    state carried over mailbox envelopes; live participants exist only in
-    non-persistent Redis."""
+    Membership, invites, roles, and media keys are client-side state carried over
+    pairwise sessions; live participants exist only in non-persistent Redis."""
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     name_blob = OpaqueBlobField(bucket_set=NAME_BUCKETS)
