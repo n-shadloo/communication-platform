@@ -1,0 +1,42 @@
+# Ruff is the only linter and formatter for this project. No type checker is added.
+#
+# The rule set is deliberately small: every violation it reports has a mechanical
+# fix, so a lint failure never turns into a design argument. `vendor/` and `.venv/`
+# are ignored through `.gitignore`, which ruff honours by default.
+
+[tool.ruff]
+line-length = 90
+target-version = "py312"
+
+[tool.ruff.lint]
+# E, W  pycodestyle    — layout errors and warnings
+# F     pyflakes       — unused imports, undefined names, dead bindings
+# I     isort          — import order
+select = ["E", "W", "F", "I"]
+
+[tool.ruff.lint.isort]
+known-first-party = [
+    "accounts",
+    "attachments",
+    "config",
+    "core",
+    "devices",
+    "messaging",
+    "ops",
+    "realtime",
+    "vault",
+    "voicerooms",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Channels needs the ASGI application built — and so the app registry populated —
+# before `realtime.consumers` is imported. The import order is load-bearing.
+"config/asgi.py" = ["E402"]
+# The settings modules layer over `base` with a star import, which is how Django
+# settings compose; the names a layer overrides come from that star.
+"config/settings/dev.py" = ["F403", "F405"]
+"config/settings/prod.py" = ["F403", "F405"]
+# `makemigrations` writes these files, and the long lines in them are Django's own
+# field help texts. Nobody chooses that width, and a rewrap here is lost the next
+# time the migration is regenerated.
+"*/migrations/*.py" = ["E501"]
