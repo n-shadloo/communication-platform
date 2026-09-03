@@ -1,5 +1,6 @@
 """Backpressure and protocol bounds: every violation is a clean 4008 close, never a
 consumer crash."""
+
 import pytest
 
 from .conftest import bearer, connect_ok, expect_close, mint_access
@@ -53,6 +54,7 @@ async def test_non_object_json_closes_4008_instead_of_crashing(active_user, devi
 
 async def test_unknown_frame_types_are_ignored(active_user, device):
     from .conftest import probe
+
     comm = await connect_ok(bearer(await mint_access(active_user, device)))
 
     await comm.send_json_to({"type": "mystery"})

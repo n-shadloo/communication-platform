@@ -3,6 +3,7 @@
 The vault endpoint holds the recovery-protected key backup, so it may not admit a
 register-scope token.
 """
+
 import pytest
 
 from accounts.tokens import issue_register_scope
@@ -31,14 +32,21 @@ def endpoints():
 @pytest.mark.parametrize("name", list(endpoints()))
 def test_a_register_scope_token_reaches_no_vault_endpoint(api, register_headers, name):
     method, url, body = endpoints()[name]
-    resp = getattr(api, method)(url, body, format="json", **register_headers) \
-        if body is not None else getattr(api, method)(url, **register_headers)
+    resp = (
+        getattr(api, method)(url, body, format="json", **register_headers)
+        if body is not None
+        else getattr(api, method)(url, **register_headers)
+    )
     assert resp.status_code == 403, f"{name} admitted a register-scope token"
     assert resp.json()["code"] == "scope_forbidden"
 
 
 def test_full_scope_is_accepted(api, active_user, device, auth_headers):
     """Guards the guard: the 403s above must be about scope, not a broken token."""
-    resp = api.put(KEYBACKUP_URL, {"blob": backup_blob(), "version": 1},
-                   format="json", **auth_headers(active_user, device))
+    resp = api.put(
+        KEYBACKUP_URL,
+        {"blob": backup_blob(), "version": 1},
+        format="json",
+        **auth_headers(active_user, device),
+    )
     assert resp.status_code == 200

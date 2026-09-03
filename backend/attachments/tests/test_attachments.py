@@ -1,4 +1,5 @@
 """The attachment store: the capability id is the only gate."""
+
 import pytest
 from django.core.files.uploadedfile import SimpleUploadedFile
 
@@ -11,13 +12,18 @@ SMALLEST = min(ATTACHMENT_BUCKETS)
 
 def upload(api, headers, payload=None, size=SMALLEST):
     body = payload if payload is not None else b"\x01" * size
-    return api.post(UPLOAD_URL, {"blob": SimpleUploadedFile("blob", body)},
-                    format="multipart", **headers)
+    return api.post(
+        UPLOAD_URL,
+        {"blob": SimpleUploadedFile("blob", body)},
+        format="multipart",
+        **headers,
+    )
 
 
 @pytest.mark.django_db
-def test_an_upload_returns_a_43_char_capability_id(api, active_user, device, auth_headers,
-                                                   attachments_root):
+def test_an_upload_returns_a_43_char_capability_id(
+    api, active_user, device, auth_headers, attachments_root
+):
     resp = upload(api, auth_headers(active_user, device))
 
     assert resp.status_code == 201
@@ -32,7 +38,9 @@ def test_an_upload_returns_a_43_char_capability_id(api, active_user, device, aut
 
 
 @pytest.mark.django_db
-def test_capability_ids_are_unguessable_and_distinct(api, active_user, device, auth_headers):
+def test_capability_ids_are_unguessable_and_distinct(
+    api, active_user, device, auth_headers
+):
     first = upload(api, auth_headers(active_user, device)).json()["attachment_id"]
     second = upload(api, auth_headers(active_user, device)).json()["attachment_id"]
 
@@ -44,7 +52,9 @@ def test_capability_ids_are_unguessable_and_distinct(api, active_user, device, a
 
 @pytest.mark.django_db
 def test_an_off_bucket_upload_is_rejected(api, active_user, device, auth_headers):
-    resp = upload(api, auth_headers(active_user, device), payload=b"\x01" * (SMALLEST - 1))
+    resp = upload(
+        api, auth_headers(active_user, device), payload=b"\x01" * (SMALLEST - 1)
+    )
 
     assert resp.status_code == 400
     assert resp.json()["code"] == "bad_bucket"
@@ -53,15 +63,18 @@ def test_an_off_bucket_upload_is_rejected(api, active_user, device, auth_headers
 
 @pytest.mark.django_db
 def test_a_missing_file_is_a_400(api, active_user, device, auth_headers):
-    resp = api.post(UPLOAD_URL, {}, format="multipart", **auth_headers(active_user, device))
+    resp = api.post(
+        UPLOAD_URL, {}, format="multipart", **auth_headers(active_user, device)
+    )
 
     assert resp.status_code == 400
     assert resp.json()["code"] == "bad_request"
 
 
 @pytest.mark.django_db
-def test_the_quota_is_enforced_per_user(api, active_user, device, auth_headers, settings,
-                                        bob, bob_device):
+def test_the_quota_is_enforced_per_user(
+    api, active_user, device, auth_headers, settings, bob, bob_device
+):
     settings.ATTACH_USER_QUOTA_BYTES = SMALLEST
 
     first = upload(api, auth_headers(active_user, device))
@@ -94,8 +107,9 @@ def test_a_download_hands_the_bytes_to_nginx(api, active_user, device, auth_head
 
 
 @pytest.mark.django_db
-def test_any_authenticated_user_may_fetch_by_capability(api, active_user, device,
-                                                        auth_headers, bob, bob_device):
+def test_any_authenticated_user_may_fetch_by_capability(
+    api, active_user, device, auth_headers, bob, bob_device
+):
     """The unguessable id is the access control; a per-recipient ACL would rebuild
     the conversation graph."""
     cap = upload(api, auth_headers(active_user, device)).json()["attachment_id"]
@@ -123,8 +137,9 @@ def test_anonymous_access_is_rejected(api, active_user, device, auth_headers):
 
 
 @pytest.mark.django_db
-def test_a_register_scope_token_cannot_upload_or_download(api, active_user, device,
-                                                          auth_headers):
+def test_a_register_scope_token_cannot_upload_or_download(
+    api, active_user, device, auth_headers
+):
     cap = upload(api, auth_headers(active_user, device)).json()["attachment_id"]
     register = auth_headers(active_user, scope="register")
 

@@ -50,9 +50,7 @@ def test_bumping_token_generation_rejects_outstanding_access_tokens(
     assert response.json()["code"] == "token_revoked"
 
 
-def test_deleting_the_device_rejects_its_token(
-    api, active_user, device, protected_url
-):
+def test_deleting_the_device_rejects_its_token(api, active_user, device, protected_url):
     access, _ = issue_full(active_user, device)
     device.delete()
 
@@ -74,13 +72,16 @@ def test_deactivating_the_account_rejects_its_tokens(
     assert response.status_code in {401, 403}
 
 
-@pytest.mark.parametrize("method, url_name, args", [
-    ("get", "user-directory", []),
-    ("get", "user-profile", ["11111111-1111-1111-1111-111111111111"]),
-    ("get", "my-profile", []),
-    ("put", "my-profile", []),
-    ("post", "logout", []),
-])
+@pytest.mark.parametrize(
+    "method, url_name, args",
+    [
+        ("get", "user-directory", []),
+        ("get", "user-profile", ["11111111-1111-1111-1111-111111111111"]),
+        ("get", "my-profile", []),
+        ("put", "my-profile", []),
+        ("post", "logout", []),
+    ],
+)
 def test_register_scope_token_reaches_no_endpoint_in_this_phase(
     api, active_user, method, url_name, args
 ):
@@ -108,7 +109,8 @@ def test_a_view_relying_on_project_defaults_is_closed_to_register_scope(active_u
             return Response({"reached": True})
 
     request = APIRequestFactory().get(
-        "/", HTTP_AUTHORIZATION=f"Bearer {issue_register_scope(active_user)}")
+        "/", HTTP_AUTHORIZATION=f"Bearer {issue_register_scope(active_user)}"
+    )
 
     response = DefaultsOnlyView.as_view()(request)
 

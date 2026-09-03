@@ -4,6 +4,7 @@ Each helper's underlying sync function (`.func`) is measured directly: the async
 boundary is exercised by the live consumer tests, and `database_sync_to_async`'s
 close_old_connections would sever the test transaction's connection under
 CONN_MAX_AGE=0."""
+
 import pytest
 from django.db import connection
 from django.test.utils import CaptureQueriesContext
@@ -11,7 +12,6 @@ from django.test.utils import CaptureQueriesContext
 from accounts.tokens import issue_full
 from core.buckets import ENVELOPE_BUCKETS
 from messaging.models import QueuedEnvelope
-
 from realtime.auth import authenticate_access, delete_envelopes, touch_active
 
 pytestmark = pytest.mark.django_db
@@ -47,13 +47,19 @@ def test_ack_delete_is_one_statement(active_user, device):
     """One DELETE regardless of ack size (fast-delete path; the BEGIN/COMMIT pair is
     Django's own atomic wrapper, not extra round-trip work)."""
     rows = QueuedEnvelope.objects.bulk_create(
-        [QueuedEnvelope(recipient_device=device, seq=i + 1,
-                        blob=b"e" * min(ENVELOPE_BUCKETS)) for i in range(200)])
+        [
+            QueuedEnvelope(
+                recipient_device=device, seq=i + 1, blob=b"e" * min(ENVELOPE_BUCKETS)
+            )
+            for i in range(200)
+        ]
+    )
 
     queries = _count(delete_envelopes, device.id, [r.id for r in rows])
 
     deletes = [q for q in queries if q.startswith("DELETE")]
     assert len(deletes) == 1
-    assert all(q.startswith(TXN_BOOKKEEPING) for q in queries
-               if not q.startswith("DELETE"))
+    assert all(
+        q.startswith(TXN_BOOKKEEPING) for q in queries if not q.startswith("DELETE")
+    )
     assert QueuedEnvelope.objects.filter(recipient_device=device).count() == 0

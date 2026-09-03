@@ -19,7 +19,8 @@ def in_memory_layer(settings):
     signal that survives a test could only have done so through the database, which
     is exactly what the zero-rows assertions check."""
     settings.CHANNEL_LAYERS = {
-        "default": {"BACKEND": "channels.layers.InMemoryChannelLayer"}}
+        "default": {"BACKEND": "channels.layers.InMemoryChannelLayer"}
+    }
 
 
 @pytest.fixture
@@ -29,8 +30,14 @@ def peer(db):
 
 @pytest.fixture
 def peer_device(peer):
-    return Device.objects.create(user=peer, ik_pub=b"ik", spk_id=1, spk_pub=b"spk",
-                                 spk_sig=b"sig", registration_id=2002)
+    return Device.objects.create(
+        user=peer,
+        ik_pub=b"ik",
+        spk_id=1,
+        spk_pub=b"spk",
+        spk_sig=b"sig",
+        registration_id=2002,
+    )
 
 
 @database_sync_to_async
@@ -70,8 +77,9 @@ async def probe(comm, own_device_id):
     """Round-trip a self-signal. Frames are processed in order, so when the probe
     comes back every previously sent frame has been fully handled: a deterministic
     barrier."""
-    await comm.send_json_to({"type": "signal", "to_device": str(own_device_id),
-                             "blob": "probe"})
+    await comm.send_json_to(
+        {"type": "signal", "to_device": str(own_device_id), "blob": "probe"}
+    )
     frame = await comm.receive_json_from(timeout=2)
     assert frame == {"type": "signal", "blob": "probe"}
 
@@ -79,4 +87,5 @@ async def probe(comm, own_device_id):
 @database_sync_to_async
 def table_counts():
     from django.apps import apps
+
     return {m._meta.label: m.objects.count() for m in apps.get_models()}

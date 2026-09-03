@@ -33,16 +33,21 @@ class RoomDetailView(APIView):
     throttle_scope = "accounts"
 
     def get(self, request, room_id):
-        room = Room.objects.filter(id=room_id).only(
-            "id", "name_blob", "updated_date").first()
+        room = (
+            Room.objects.filter(id=room_id)
+            .only("id", "name_blob", "updated_date")
+            .first()
+        )
         if room is None:
             return Response({"code": "not_found"}, status=404)
-        return Response({
-            "room_id": str(room.id),
-            "name_blob": base64.b64encode(bytes(room.name_blob)).decode(),
-            "updated_date": room.updated_date.isoformat(),
-            "live_count": room_live_count(room.id),
-        })
+        return Response(
+            {
+                "room_id": str(room.id),
+                "name_blob": base64.b64encode(bytes(room.name_blob)).decode(),
+                "updated_date": room.updated_date.isoformat(),
+                "live_count": room_live_count(room.id),
+            }
+        )
 
     def put(self, request, room_id):
         serializer = RoomNameSerializer(data=request.data)
@@ -52,8 +57,8 @@ class RoomDetailView(APIView):
         # updated_date explicitly; GET exposes it so peers notice renames. Still a
         # single UPDATE.
         updated = Room.objects.filter(id=room_id).update(
-            name_blob=serializer.validated_data["raw"],
-            updated_date=timezone.now().date())
+            name_blob=serializer.validated_data["raw"], updated_date=timezone.now().date()
+        )
         return Response(status=200 if updated else 404)
 
 
@@ -70,8 +75,11 @@ class RoomTokenView(APIView):
             return Response({"code": "device_scope_required"}, status=403)
         if not Room.objects.filter(id=room_id).exists():
             return Response({"code": "not_found"}, status=404)
-        if not (settings.LIVEKIT_URL and settings.LIVEKIT_API_KEY
-                and settings.LIVEKIT_API_SECRET):
+        if not (
+            settings.LIVEKIT_URL
+            and settings.LIVEKIT_API_KEY
+            and settings.LIVEKIT_API_SECRET
+        ):
             return Response({"code": "voice_unconfigured"}, status=503)
         token, ttl = mint_join_token(room_id, device.id)
         return Response({"url": settings.LIVEKIT_URL, "token": token, "expires_in": ttl})

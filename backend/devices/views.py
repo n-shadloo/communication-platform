@@ -14,12 +14,23 @@ from accounts.models import User
 from accounts.permissions import IsFullScope
 from accounts.tokens import issue_full
 
-from .models import (Device, DeviceLogRecord, KeyPackage, OneTimePrekey,
-                     PqOneTimePrekey, UserIdentity)
-from .serializers import (ClaimSerializer, DeviceLogAppendSerializer,
-                          IdentitySerializer, KeyPackageUploadSerializer,
-                          LabelUpdateSerializer, PrekeyReplenishSerializer,
-                          RegisterDeviceSerializer)
+from .models import (
+    Device,
+    DeviceLogRecord,
+    KeyPackage,
+    OneTimePrekey,
+    PqOneTimePrekey,
+    UserIdentity,
+)
+from .serializers import (
+    ClaimSerializer,
+    DeviceLogAppendSerializer,
+    IdentitySerializer,
+    KeyPackageUploadSerializer,
+    LabelUpdateSerializer,
+    PrekeyReplenishSerializer,
+    RegisterDeviceSerializer,
+)
 
 # Without a stored cap, replenishment is an unbounded write primitive for any
 # authenticated device.
@@ -29,8 +40,7 @@ MAX_STORED_OTPKS = 200
 # deployment (20 users × 10 devices); the cap is a storage budget, do not raise it.
 MAX_STORED_PQ_OTPKS = 100
 
-FORBIDDEN = {"code": "forbidden",
-             "detail": "This token does not belong to that device."}
+FORBIDDEN = {"code": "forbidden", "detail": "This token does not belong to that device."}
 
 
 def error(code, detail, status_code):
@@ -56,12 +66,19 @@ def _device_list_etag(user_id):
     log append must change the tag, or a polling peer would sit on a 304 and
     never see the new head it is supposed to gossip.
     """
-    rows = list(Device.objects.filter(user_id=user_id, user__is_active=True,
-                                      revoked_date__isnull=True)
-                .values_list("id", flat=True).order_by("id"))
-    head = (DeviceLogRecord.objects
-            .filter(user_id=user_id, user__is_active=True)
-            .order_by("-seq").values_list("seq", "blob").first())
+    rows = list(
+        Device.objects.filter(
+            user_id=user_id, user__is_active=True, revoked_date__isnull=True
+        )
+        .values_list("id", flat=True)
+        .order_by("id")
+    )
+    head = (
+        DeviceLogRecord.objects.filter(user_id=user_id, user__is_active=True)
+        .order_by("-seq")
+        .values_list("seq", "blob")
+        .first()
+    )
     head_hash = hashlib.sha256(bytes(head[1])).hexdigest() if head else None
     digest = hashlib.sha256(repr((rows, head_hash)).encode()).hexdigest()
     return f'"{digest[:32]}"', (head[0] if head else None)
@@ -90,17 +107,23 @@ class MyIdentityView(APIView):
             # control: a modified server would simply not apply it, and clients
             # must detect identity changes on their own.
             User.objects.select_for_update().filter(pk=request.user.id).only("id").first()
-            current = UserIdentity.objects.filter(
-                user_id=request.user.id).values_list("version", flat=True).first()
+            current = (
+                UserIdentity.objects.filter(user_id=request.user.id)
+                .values_list("version", flat=True)
+                .first()
+            )
             if current is not None and data["version"] <= current:
                 return Response({"code": "stale_version"}, status=409)
             UserIdentity.objects.update_or_create(
                 user_id=request.user.id,
-                defaults={"master_pub": data["master_raw"],
-                          "self_signing_pub": data["self_signing_raw"],
-                          "user_signing_pub": data["user_signing_raw"],
-                          "master_sig": data["master_sig_raw"],
-                          "version": data["version"]})
+                defaults={
+                    "master_pub": data["master_raw"],
+                    "self_signing_pub": data["self_signing_raw"],
+                    "user_signing_pub": data["user_signing_raw"],
+                    "master_sig": data["master_sig_raw"],
+                    "version": data["version"],
+                },
+            )
         return Response(status=200)
 
 
@@ -116,21 +139,32 @@ class PeerIdentityView(APIView):
     def get(self, request, user_id):
         # user__is_active matches PeerDevicesView: a deactivated account publishes
         # nothing.
-        identity = UserIdentity.objects.filter(
-            user_id=user_id, user__is_active=True).only(
-            "master_pub", "self_signing_pub", "user_signing_pub", "master_sig",
-            "version").first()
+        identity = (
+            UserIdentity.objects.filter(user_id=user_id, user__is_active=True)
+            .only(
+                "master_pub",
+                "self_signing_pub",
+                "user_signing_pub",
+                "master_sig",
+                "version",
+            )
+            .first()
+        )
         if identity is None:
             return Response({"code": "not_found"}, status=404)
-        return Response({
-            "master_pub": base64.b64encode(bytes(identity.master_pub)).decode(),
-            "self_signing_pub": base64.b64encode(
-                bytes(identity.self_signing_pub)).decode(),
-            "user_signing_pub": base64.b64encode(
-                bytes(identity.user_signing_pub)).decode(),
-            "master_sig": base64.b64encode(bytes(identity.master_sig)).decode(),
-            "version": identity.version,
-        })
+        return Response(
+            {
+                "master_pub": base64.b64encode(bytes(identity.master_pub)).decode(),
+                "self_signing_pub": base64.b64encode(
+                    bytes(identity.self_signing_pub)
+                ).decode(),
+                "user_signing_pub": base64.b64encode(
+                    bytes(identity.user_signing_pub)
+                ).decode(),
+                "master_sig": base64.b64encode(bytes(identity.master_sig)).decode(),
+                "version": identity.version,
+            }
+        )
 
 
 class MyDevicesView(APIView):
@@ -161,7 +195,8 @@ class MyDevicesView(APIView):
             # concurrent INSERT.
             User.objects.select_for_update().filter(pk=request.user.id).only("id").first()
             count = Device.objects.filter(
-                user_id=request.user.id, revoked_date__isnull=True).count()
+                user_id=request.user.id, revoked_date__isnull=True
+            ).count()
             if count >= settings.MAX_DEVICES_PER_USER:
                 return error("device_limit", "This account has too many devices.", 409)
             # A published identity is a precondition of registration — but only
@@ -173,16 +208,23 @@ class MyDevicesView(APIView):
             # client, NOT a security control: a
             # modified server would simply not apply it, and peers must treat a
             # device with no verifiable identity chain as unverified regardless.
-            if count and not UserIdentity.objects.filter(
-                    user_id=request.user.id).exists():
-                return error("identity_required",
-                             "Publish a cross-signing identity before adding "
-                             "another device.", 400)
+            if (
+                count
+                and not UserIdentity.objects.filter(user_id=request.user.id).exists()
+            ):
+                return error(
+                    "identity_required",
+                    "Publish a cross-signing identity before adding another device.",
+                    400,
+                )
             pq_spk = data.get("pq_spk")
             device = Device.objects.create(
                 user_id=request.user.id,
-                ik_pub=data["ik_raw"], spk_id=data["spk_id"], spk_pub=data["spk_raw"],
-                spk_sig=data["spk_sig_raw"], registration_id=data["registration_id"],
+                ik_pub=data["ik_raw"],
+                spk_id=data["spk_id"],
+                spk_pub=data["spk_raw"],
+                spk_sig=data["spk_sig_raw"],
+                registration_id=data["registration_id"],
                 # cross_sig/bundle_version are not settable here and the serializer
                 # refuses them: the client cannot sign a bundle whose device_id this
                 # INSERT is about to mint, and a later device cannot reach its
@@ -194,24 +236,41 @@ class MyDevicesView(APIView):
                 pq_spk_pub=pq_spk["pub_raw"] if pq_spk else None,
                 pq_spk_sig=pq_spk["sig_raw"] if pq_spk else None,
                 pq_spk_updated_date=timezone.now().date() if pq_spk else None,
-                label_blob=data["label_raw"])  # spk_updated_date is auto_now_add
+                label_blob=data["label_raw"],
+            )  # spk_updated_date is auto_now_add
             if data["otpks"]:
-                OneTimePrekey.objects.bulk_create([
-                    OneTimePrekey(device=device, key_id=otpk["key_id"], pub=otpk["raw"])
-                    for otpk in data["otpks"]])
+                OneTimePrekey.objects.bulk_create(
+                    [
+                        OneTimePrekey(
+                            device=device, key_id=otpk["key_id"], pub=otpk["raw"]
+                        )
+                        for otpk in data["otpks"]
+                    ]
+                )
             if data["pq_otpks"]:
-                PqOneTimePrekey.objects.bulk_create([
-                    PqOneTimePrekey(device=device, key_id=otpk["key_id"],
-                                    pub=otpk["raw"])
-                    for otpk in data["pq_otpks"]])
+                PqOneTimePrekey.objects.bulk_create(
+                    [
+                        PqOneTimePrekey(
+                            device=device, key_id=otpk["key_id"], pub=otpk["raw"]
+                        )
+                        for otpk in data["pq_otpks"]
+                    ]
+                )
             if data["kp_raws"]:
-                KeyPackage.objects.bulk_create([
-                    KeyPackage(device=device, blob=raw) for raw in data["kp_raws"]])
+                KeyPackage.objects.bulk_create(
+                    [KeyPackage(device=device, blob=raw) for raw in data["kp_raws"]]
+                )
 
         access, refresh = issue_full(request.user, device)
-        return Response({"device_id": str(device.id), "access": access,
-                         "refresh": refresh, "scope": "full"},
-                        status=status.HTTP_201_CREATED)
+        return Response(
+            {
+                "device_id": str(device.id),
+                "access": access,
+                "refresh": refresh,
+                "scope": "full",
+            },
+            status=status.HTTP_201_CREATED,
+        )
 
     def get(self, request):
         this_id = getattr(getattr(request, "auth_device", None), "id", None)
@@ -219,19 +278,32 @@ class MyDevicesView(APIView):
         if request.headers.get("If-None-Match") == etag:
             return Response(status=status.HTTP_304_NOT_MODIFIED)
 
-        devices = Device.objects.filter(
-            user_id=request.user.id, revoked_date__isnull=True).only(
-            # created_date is day-coarse, so it alone leaves same-day devices in an
-            # arbitrary order that can shuffle between polls; id breaks the tie.
-            "id", "label_blob", "created_date", "last_active_date").order_by(
-            "created_date", "id")
-        data = [{
-            "device_id": str(device.id),
-            "label_blob": base64.b64encode(bytes(device.label_blob)).decode() if device.label_blob else None,
-            "created_date": device.created_date.isoformat(),
-            "last_active_date": device.last_active_date.isoformat() if device.last_active_date else None,
-            "this_device": (device.id == this_id),
-        } for device in devices]
+        devices = (
+            Device.objects.filter(user_id=request.user.id, revoked_date__isnull=True)
+            .only(
+                # created_date is day-coarse, so it alone leaves same-day devices in an
+                # arbitrary order that can shuffle between polls; id breaks the tie.
+                "id",
+                "label_blob",
+                "created_date",
+                "last_active_date",
+            )
+            .order_by("created_date", "id")
+        )
+        data = [
+            {
+                "device_id": str(device.id),
+                "label_blob": base64.b64encode(bytes(device.label_blob)).decode()
+                if device.label_blob
+                else None,
+                "created_date": device.created_date.isoformat(),
+                "last_active_date": device.last_active_date.isoformat()
+                if device.last_active_date
+                else None,
+                "this_device": (device.id == this_id),
+            }
+            for device in devices
+        ]
 
         resp = Response({"devices": data, "log_head_seq": log_head_seq})
         resp["ETag"] = etag
@@ -255,8 +327,11 @@ class MyDeviceDetailView(APIView):
 
     def delete(self, request, device_id):
         with transaction.atomic():
-            device = Device.objects.select_for_update().filter(
-                id=device_id, user_id=request.user.id, revoked_date__isnull=True).first()
+            device = (
+                Device.objects.select_for_update()
+                .filter(id=device_id, user_id=request.user.id, revoked_date__isnull=True)
+                .first()
+            )
             if device is None:
                 return error("not_found", "No such device.", 404)
             device.revoked_date = timezone.now().date()
@@ -277,10 +352,12 @@ class MyDeviceDetailView(APIView):
         try:
             from asgiref.sync import async_to_sync
             from channels.layers import get_channel_layer
+
             layer = get_channel_layer()
             if layer:
                 async_to_sync(layer.group_send)(
-                    f"dev.{device_id}", {"type": "connection.close"})
+                    f"dev.{device_id}", {"type": "connection.close"}
+                )
         except Exception:
             pass
 
@@ -323,14 +400,19 @@ class MyPrekeysView(_OwnDeviceView):
             # same reason.
             stored = OneTimePrekey.objects.filter(device_id=device_id).count()
             if stored + len(data["otpks"]) > MAX_STORED_OTPKS:
-                return error("prekey_limit",
-                             "Too many stored one-time prekeys for this device.", 409)
+                return error(
+                    "prekey_limit",
+                    "Too many stored one-time prekeys for this device.",
+                    409,
+                )
             if data["pq_otpks"]:
                 pq_stored = PqOneTimePrekey.objects.filter(device_id=device_id).count()
                 if pq_stored + len(data["pq_otpks"]) > MAX_STORED_PQ_OTPKS:
                     return error(
                         "prekey_limit",
-                        "Too many stored PQ one-time prekeys for this device.", 409)
+                        "Too many stored PQ one-time prekeys for this device.",
+                        409,
+                    )
             # One UPDATE for the signed-bundle fields. Rotating the spk stales the
             # stored cross_sig, so a rotating client is expected to send a fresh
             # cross_sig and bundle_version in the same call; the server stores what
@@ -338,13 +420,18 @@ class MyPrekeysView(_OwnDeviceView):
             bundle_updates = {}
             if spk:
                 bundle_updates.update(
-                    spk_id=spk["spk_id"], spk_pub=spk["pub_raw"],
-                    spk_sig=spk["sig_raw"], spk_updated_date=timezone.now().date())
+                    spk_id=spk["spk_id"],
+                    spk_pub=spk["pub_raw"],
+                    spk_sig=spk["sig_raw"],
+                    spk_updated_date=timezone.now().date(),
+                )
             if pq_spk:
                 bundle_updates.update(
-                    pq_spk_id=pq_spk["spk_id"], pq_spk_pub=pq_spk["pub_raw"],
+                    pq_spk_id=pq_spk["spk_id"],
+                    pq_spk_pub=pq_spk["pub_raw"],
                     pq_spk_sig=pq_spk["sig_raw"],
-                    pq_spk_updated_date=timezone.now().date())
+                    pq_spk_updated_date=timezone.now().date(),
+                )
             if "cross_sig_raw" in data:
                 bundle_updates["cross_sig"] = data["cross_sig_raw"]
             if "bundle_version" in data:
@@ -354,15 +441,25 @@ class MyPrekeysView(_OwnDeviceView):
             if data["otpks"]:
                 # ignore_conflicts: re-uploading a key_id the device already stored is
                 # an idempotent retry, not an error.
-                OneTimePrekey.objects.bulk_create([
-                    OneTimePrekey(device_id=device_id, key_id=otpk["key_id"],
-                                  pub=otpk["raw"])
-                    for otpk in data["otpks"]], ignore_conflicts=True)
+                OneTimePrekey.objects.bulk_create(
+                    [
+                        OneTimePrekey(
+                            device_id=device_id, key_id=otpk["key_id"], pub=otpk["raw"]
+                        )
+                        for otpk in data["otpks"]
+                    ],
+                    ignore_conflicts=True,
+                )
             if data["pq_otpks"]:
-                PqOneTimePrekey.objects.bulk_create([
-                    PqOneTimePrekey(device_id=device_id, key_id=otpk["key_id"],
-                                    pub=otpk["raw"])
-                    for otpk in data["pq_otpks"]], ignore_conflicts=True)
+                PqOneTimePrekey.objects.bulk_create(
+                    [
+                        PqOneTimePrekey(
+                            device_id=device_id, key_id=otpk["key_id"], pub=otpk["raw"]
+                        )
+                        for otpk in data["pq_otpks"]
+                    ],
+                    ignore_conflicts=True,
+                )
             count = OneTimePrekey.objects.filter(device_id=device_id).count()
         return Response({"otpk_count": count})
 
@@ -372,12 +469,14 @@ class MyPrekeysCountView(_OwnDeviceView):
         denied = self._reject_other_device(request, device_id)
         if denied is not None:
             return denied
-        return Response({
-            "otpk_count": OneTimePrekey.objects.filter(
-                device_id=device_id).count(),
-            "pq_otpk_count": PqOneTimePrekey.objects.filter(
-                device_id=device_id).count(),
-        })
+        return Response(
+            {
+                "otpk_count": OneTimePrekey.objects.filter(device_id=device_id).count(),
+                "pq_otpk_count": PqOneTimePrekey.objects.filter(
+                    device_id=device_id
+                ).count(),
+            }
+        )
 
 
 class MyKeyPackagesView(_OwnDeviceView):
@@ -397,23 +496,31 @@ class MyKeyPackagesView(_OwnDeviceView):
                 # It lives outside the consumable cap: it is never deleted by a
                 # claim, so counting it against the pool would permanently
                 # shrink the pool by one.
-                KeyPackage.objects.filter(device_id=device_id,
-                                          is_last_resort=True).delete()
-                KeyPackage.objects.create(device_id=device_id, blob=raws[0],
-                                          is_last_resort=True)
+                KeyPackage.objects.filter(
+                    device_id=device_id, is_last_resort=True
+                ).delete()
+                KeyPackage.objects.create(
+                    device_id=device_id, blob=raws[0], is_last_resort=True
+                )
             else:
                 stored = KeyPackage.objects.filter(
-                    device_id=device_id, is_last_resort=False).count()
+                    device_id=device_id, is_last_resort=False
+                ).count()
                 if stored + len(raws) > MAX_STORED_KEYPACKAGES:
-                    return error("keypackage_limit",
-                                 "Too many stored key packages for this device.", 409)
+                    return error(
+                        "keypackage_limit",
+                        "Too many stored key packages for this device.",
+                        409,
+                    )
                 if raws:
                     KeyPackage.objects.bulk_create(
-                        [KeyPackage(device_id=device_id, blob=raw) for raw in raws])
+                        [KeyPackage(device_id=device_id, blob=raw) for raw in raws]
+                    )
             # The count is the consumable pool — the client replenishes on this
             # number, and the everlasting last-resort row would mask exhaustion.
-            count = KeyPackage.objects.filter(device_id=device_id,
-                                              is_last_resort=False).count()
+            count = KeyPackage.objects.filter(
+                device_id=device_id, is_last_resort=False
+            ).count()
         return Response({"keypackage_count": count})
 
 
@@ -422,8 +529,13 @@ class MyKeyPackagesCountView(_OwnDeviceView):
         denied = self._reject_other_device(request, device_id)
         if denied is not None:
             return denied
-        return Response({"keypackage_count": KeyPackage.objects.filter(
-            device_id=device_id, is_last_resort=False).count()})
+        return Response(
+            {
+                "keypackage_count": KeyPackage.objects.filter(
+                    device_id=device_id, is_last_resort=False
+                ).count()
+            }
+        )
 
 
 class MyDeviceLogView(APIView):
@@ -448,16 +560,21 @@ class MyDeviceLogView(APIView):
         with transaction.atomic():
             # Serialise appends for this user by locking the user row.
             User.objects.select_for_update().filter(id=request.user.id).only("id").first()
-            current = DeviceLogRecord.objects.filter(
-                user_id=request.user.id).aggregate(m=Max("seq"))["m"]
+            current = DeviceLogRecord.objects.filter(user_id=request.user.id).aggregate(
+                m=Max("seq")
+            )["m"]
             start = (current if current is not None else -1) + 1
-            rows = [DeviceLogRecord(user_id=request.user.id, seq=start + i,
-                                    blob=record["raw"])
-                    for i, record in enumerate(records)]
+            rows = [
+                DeviceLogRecord(
+                    user_id=request.user.id, seq=start + i, blob=record["raw"]
+                )
+                for i, record in enumerate(records)
+            ]
             DeviceLogRecord.objects.bulk_create(rows)
 
-        return Response({"first_seq": start, "last_seq": start + len(records) - 1},
-                        status=201)
+        return Response(
+            {"first_seq": start, "last_seq": start + len(records) - 1}, status=201
+        )
 
 
 class PeerDeviceLogView(APIView):
@@ -475,24 +592,32 @@ class PeerDeviceLogView(APIView):
         # both 500s if parsed naively. A bad cursor falls back to reading from the
         # start; a bad or oversized limit clamps into [1, MAX_LIMIT].
         after = self._int(request.query_params.get("after"), -1)
-        limit = max(1, min(self._int(request.query_params.get("limit"),
-                                     self.MAX_LIMIT), self.MAX_LIMIT))
+        limit = max(
+            1,
+            min(
+                self._int(request.query_params.get("limit"), self.MAX_LIMIT),
+                self.MAX_LIMIT,
+            ),
+        )
 
-        base = DeviceLogRecord.objects.filter(user_id=user_id,
-                                              user__is_active=True)
-        rows = list(base.filter(seq__gt=after).order_by("seq").only(
-            "seq", "blob")[:limit + 1])
+        base = DeviceLogRecord.objects.filter(user_id=user_id, user__is_active=True)
+        rows = list(
+            base.filter(seq__gt=after).order_by("seq").only("seq", "blob")[: limit + 1]
+        )
         has_more = len(rows) > limit
         rows = rows[:limit]
         head_seq = base.aggregate(m=Max("seq"))["m"]
 
-        return Response({
-            "records": [{"seq": row.seq,
-                         "blob": base64.b64encode(bytes(row.blob)).decode()}
-                        for row in rows],
-            "has_more": has_more,
-            "head_seq": head_seq,
-        })
+        return Response(
+            {
+                "records": [
+                    {"seq": row.seq, "blob": base64.b64encode(bytes(row.blob)).decode()}
+                    for row in rows
+                ],
+                "has_more": has_more,
+                "head_seq": head_seq,
+            }
+        )
 
     @staticmethod
     def _int(value, default):
@@ -513,22 +638,29 @@ class PeerDevicesView(APIView):
         if request.headers.get("If-None-Match") == etag:
             return Response(status=status.HTTP_304_NOT_MODIFIED)
 
-        devices = Device.objects.filter(
-            user_id=user_id, revoked_date__isnull=True, user__is_active=True).only(
-            "id", "ik_pub", "registration_id", "cross_sig",
-            "bundle_version").order_by("id")
+        devices = (
+            Device.objects.filter(
+                user_id=user_id, revoked_date__isnull=True, user__is_active=True
+            )
+            .only("id", "ik_pub", "registration_id", "cross_sig", "bundle_version")
+            .order_by("id")
+        )
         # cross_sig is surfaced verbatim, null included: a device that was never
         # cross-signed must be visible as such so peers can refuse it. Substituting
         # or defaulting anything here would forge exactly the attestation the
         # design keeps out of the server's hands.
-        data = [{"device_id": str(device.id),
-                 "ik_pub": base64.b64encode(bytes(device.ik_pub)).decode(),
-                 "registration_id": device.registration_id,
-                 "cross_sig": _b64_or_none(device.cross_sig),
-                 "bundle_version": device.bundle_version} for device in devices]
+        data = [
+            {
+                "device_id": str(device.id),
+                "ik_pub": base64.b64encode(bytes(device.ik_pub)).decode(),
+                "registration_id": device.registration_id,
+                "cross_sig": _b64_or_none(device.cross_sig),
+                "bundle_version": device.bundle_version,
+            }
+            for device in devices
+        ]
 
-        resp = Response({"devices": data, "etag": etag,
-                         "log_head_seq": log_head_seq})
+        resp = Response({"devices": data, "etag": etag, "log_head_seq": log_head_seq})
         resp["ETag"] = etag
         return resp
 
@@ -543,8 +675,9 @@ class _ClaimView(APIView):
     def _targets(request, user_id, fields):
         serializer = ClaimSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        qs = Device.objects.filter(user_id=user_id, revoked_date__isnull=True,
-                                   user__is_active=True)
+        qs = Device.objects.filter(
+            user_id=user_id, revoked_date__isnull=True, user__is_active=True
+        )
         # Presence, not truthiness: an explicit `device_ids: []` asks for no devices.
         # Treating it as "all" would silently burn a one-time prekey on every device.
         if "device_ids" in serializer.validated_data:
@@ -558,31 +691,56 @@ class ClaimKeysView(_ClaimView):
     twice)."""
 
     def post(self, request, user_id):
-        targets = self._targets(request, user_id, (
-            "id", "registration_id", "ik_pub", "spk_id", "spk_pub", "spk_sig",
-            "cross_sig", "bundle_version", "pq_spk_id", "pq_spk_pub", "pq_spk_sig"))
+        targets = self._targets(
+            request,
+            user_id,
+            (
+                "id",
+                "registration_id",
+                "ik_pub",
+                "spk_id",
+                "spk_pub",
+                "spk_sig",
+                "cross_sig",
+                "bundle_version",
+                "pq_spk_id",
+                "pq_spk_pub",
+                "pq_spk_sig",
+            ),
+        )
         bundles = []
         for device in targets:
             otpk = None
             pq_otpk = None
             with transaction.atomic():
-                row = (OneTimePrekey.objects.select_for_update(skip_locked=True)
-                       .filter(device_id=device.id).order_by("key_id").first())
+                row = (
+                    OneTimePrekey.objects.select_for_update(skip_locked=True)
+                    .filter(device_id=device.id)
+                    .order_by("key_id")
+                    .first()
+                )
                 if row is not None:
-                    otpk = {"key_id": row.key_id,
-                            "pub": base64.b64encode(bytes(row.pub)).decode()}
+                    otpk = {
+                        "key_id": row.key_id,
+                        "pub": base64.b64encode(bytes(row.pub)).decode(),
+                    }
                     row.delete()
                 # A PQ one-time prekey is only consumed alongside the signed PQ
                 # prekey: without pq_spk the bundle is classical-only anyway, and
                 # burning a stored PQ key for it would waste the key without ever
                 # serving PQ material.
                 if device.pq_spk_pub:
-                    pq_row = (PqOneTimePrekey.objects
-                              .select_for_update(skip_locked=True)
-                              .filter(device_id=device.id).order_by("key_id").first())
+                    pq_row = (
+                        PqOneTimePrekey.objects.select_for_update(skip_locked=True)
+                        .filter(device_id=device.id)
+                        .order_by("key_id")
+                        .first()
+                    )
                     if pq_row is not None:
-                        pq_otpk = {"key_id": pq_row.key_id,
-                                   "pub": base64.b64encode(bytes(pq_row.pub)).decode()}
+                        pq_otpk = {
+                            "key_id": pq_row.key_id,
+                            "pub": base64.b64encode(bytes(pq_row.pub)).decode(),
+                        }
                         pq_row.delete()
             bundle = {
                 "device_id": str(device.id),
@@ -603,10 +761,8 @@ class ClaimKeysView(_ClaimView):
             # decision needs.
             if device.pq_spk_pub:
                 bundle["pq_spk_id"] = device.pq_spk_id
-                bundle["pq_spk_pub"] = base64.b64encode(
-                    bytes(device.pq_spk_pub)).decode()
-                bundle["pq_spk_sig"] = base64.b64encode(
-                    bytes(device.pq_spk_sig)).decode()
+                bundle["pq_spk_pub"] = base64.b64encode(bytes(device.pq_spk_pub)).decode()
+                bundle["pq_spk_sig"] = base64.b64encode(bytes(device.pq_spk_sig)).decode()
                 if pq_otpk:
                     bundle["pq_otpk"] = pq_otpk
             if otpk:
@@ -621,12 +777,19 @@ class ClaimKeyPackagesView(_ClaimView):
         out = []
         for device in targets:
             with transaction.atomic():
-                row = (KeyPackage.objects.select_for_update(skip_locked=True)
-                       .filter(device_id=device.id, is_last_resort=False)
-                       .order_by("created_date", "id").first())
+                row = (
+                    KeyPackage.objects.select_for_update(skip_locked=True)
+                    .filter(device_id=device.id, is_last_resort=False)
+                    .order_by("created_date", "id")
+                    .first()
+                )
                 if row is not None:
-                    out.append({"device_id": str(device.id),
-                                "blob": base64.b64encode(bytes(row.blob)).decode()})
+                    out.append(
+                        {
+                            "device_id": str(device.id),
+                            "blob": base64.b64encode(bytes(row.blob)).decode(),
+                        }
+                    )
                     row.delete()
                     continue
                 # Pool exhausted: serve the last-resort package WITHOUT deleting
@@ -634,9 +797,16 @@ class ClaimKeyPackagesView(_ClaimView):
                 # reuses it shares one KEM secret, so compromising that one key
                 # later exposes each such join's Welcome — a real forward-secrecy
                 # cost, and the reason this is the fallback and not the default.
-                last = KeyPackage.objects.filter(
-                    device_id=device.id, is_last_resort=True).order_by("id").first()
+                last = (
+                    KeyPackage.objects.filter(device_id=device.id, is_last_resort=True)
+                    .order_by("id")
+                    .first()
+                )
                 if last is not None:
-                    out.append({"device_id": str(device.id),
-                                "blob": base64.b64encode(bytes(last.blob)).decode()})
+                    out.append(
+                        {
+                            "device_id": str(device.id),
+                            "blob": base64.b64encode(bytes(last.blob)).decode(),
+                        }
+                    )
         return Response({"keypackages": out})

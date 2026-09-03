@@ -21,13 +21,13 @@ class Migration(migrations.Migration):
     matters here: nothing is ever backfilled or synthesized."""
 
     dependencies = [
-        ('devices', '0007_device_queue_pruned_through'),
+        ("devices", "0007_device_queue_pruned_through"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='keypackage',
-            name='is_last_resort',
+            model_name="keypackage",
+            name="is_last_resort",
             field=models.BooleanField(default=False),
         ),
     ]

@@ -4,6 +4,7 @@
 here. That is the point: this asserts the code never emits an id or blob in the
 first place.
 """
+
 import logging
 
 from django.test import TestCase
@@ -16,10 +17,10 @@ from .conftest import PASSWORD, backup_blob, make_device
 
 
 class VaultLogSilenceTests(TestCase):
-
     def setUp(self):
-        self.owner = User.objects.create_user(username="alice", password=PASSWORD,
-                                               is_active=True)
+        self.owner = User.objects.create_user(
+            username="alice", password=PASSWORD, is_active=True
+        )
         self.device = make_device(self.owner, 1)
         access, _refresh = issue_full(self.owner, self.device)
         self.headers = {"HTTP_AUTHORIZATION": f"Bearer {access}"}
@@ -33,9 +34,12 @@ class VaultLogSilenceTests(TestCase):
             # so the canary keeps the block honest.
             logging.getLogger("test.canary").debug("canary")
 
-            put = self.client.put("/api/v1/me/keybackup",
-                                  {"blob": backup_payload, "version": 1},
-                                  format="json", **self.headers)
+            put = self.client.put(
+                "/api/v1/me/keybackup",
+                {"blob": backup_payload, "version": 1},
+                format="json",
+                **self.headers,
+            )
             get = self.client.get("/api/v1/me/keybackup", **self.headers)
 
         self.assertEqual(put.status_code, 200)

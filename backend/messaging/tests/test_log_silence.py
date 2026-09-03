@@ -4,6 +4,7 @@
 applied to what it captures. That is deliberate: these tests assert the code never
 emits an identifier in the first place; `core/tests/test_scrub.py` covers the filter.
 """
+
 import base64
 import logging
 import tempfile
@@ -20,10 +21,10 @@ from core.buckets import ATTACHMENT_BUCKETS
 from .conftest import PASSWORD, SMALLEST_BUCKET, envelope_blob, make_device
 
 
-@override_settings(CHANNEL_LAYERS={
-    "default": {"BACKEND": "channels.layers.InMemoryChannelLayer"}})
+@override_settings(
+    CHANNEL_LAYERS={"default": {"BACKEND": "channels.layers.InMemoryChannelLayer"}}
+)
 class LogSilenceTests(TestCase):
-
     def setUp(self):
         # Uploads must land in a temp dir, never the repo's media_root.
         tmp = tempfile.TemporaryDirectory()
@@ -32,11 +33,13 @@ class LogSilenceTests(TestCase):
         attachments_root.enable()
         self.addCleanup(attachments_root.disable)
 
-        self.alice = User.objects.create_user(username="alice", password=PASSWORD,
-                                              is_active=True)
+        self.alice = User.objects.create_user(
+            username="alice", password=PASSWORD, is_active=True
+        )
         self.device = make_device(self.alice, 1)
-        self.bob = User.objects.create_user(username="bob", password=PASSWORD,
-                                            is_active=True)
+        self.bob = User.objects.create_user(
+            username="bob", password=PASSWORD, is_active=True
+        )
         self.target = make_device(self.bob, 2)
         access, _refresh = issue_full(self.alice, self.device)
         self.headers = {"HTTP_AUTHORIZATION": f"Bearer {access}"}
@@ -54,15 +57,22 @@ class LogSilenceTests(TestCase):
             send = self.client.post(
                 "/api/v1/envelopes",
                 {"messages": [{"device_id": str(self.target.id), "blob": blob}]},
-                format="json", **self.headers)
+                format="json",
+                **self.headers,
+            )
             drain = self.client.get("/api/v1/me/envelopes", **self.headers)
-            self.client.post("/api/v1/me/envelopes/ack",
-                             {"ids": [e["id"] for e in drain.json()["envelopes"]]},
-                             format="json", **self.headers)
+            self.client.post(
+                "/api/v1/me/envelopes/ack",
+                {"ids": [e["id"] for e in drain.json()["envelopes"]]},
+                format="json",
+                **self.headers,
+            )
             upload = self.client.post(
                 "/api/v1/attachments",
                 {"blob": SimpleUploadedFile("blob", upload_bytes)},
-                format="multipart", **self.headers)
+                format="multipart",
+                **self.headers,
+            )
 
         self.assertEqual(send.status_code, 202)
         self.assertEqual(upload.status_code, 201)
@@ -88,7 +98,9 @@ class LogSilenceTests(TestCase):
             resp = self.client.post(
                 "/api/v1/envelopes",
                 {"messages": [{"device_id": str(self.target.id), "blob": off_bucket}]},
-                format="json", **self.headers)
+                format="json",
+                **self.headers,
+            )
 
         self.assertEqual(resp.status_code, 400)
         for line in captured.output:

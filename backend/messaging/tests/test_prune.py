@@ -21,11 +21,13 @@ def run_prune():
 
 
 def queue_row(device, seq, age_days=0):
-    row = QueuedEnvelope.objects.create(recipient_device=device, seq=seq,
-                                        blob=b"a" * SMALLEST_BUCKET)
+    row = QueuedEnvelope.objects.create(
+        recipient_device=device, seq=seq, blob=b"a" * SMALLEST_BUCKET
+    )
     if age_days:
         QueuedEnvelope.objects.filter(id=row.id).update(
-            queued_hour=timezone.now() - timedelta(days=age_days))
+            queued_hour=timezone.now() - timedelta(days=age_days)
+        )
     return row
 
 
@@ -36,7 +38,8 @@ def stored_attachment(user, root, age_days=0):
     path.write_bytes(b"\x01" * min(ATTACHMENT_BUCKETS))
     if age_days:
         Attachment.objects.filter(id=attachment.id).update(
-            created_date=timezone.now().date() - timedelta(days=age_days))
+            created_date=timezone.now().date() - timedelta(days=age_days)
+        )
     return attachment, path
 
 
@@ -60,8 +63,9 @@ def test_expired_queue_rows_go_and_fresh_ones_stay(device, settings):
 
 
 @pytest.mark.django_db
-def test_expired_attachments_lose_both_row_and_bytes(active_user, attachments_root,
-                                                     settings):
+def test_expired_attachments_lose_both_row_and_bytes(
+    active_user, attachments_root, settings
+):
     settings.ATTACH_TTL_DAYS = 30
     fresh, fresh_path = stored_attachment(active_user, attachments_root)
     expired, expired_path = stored_attachment(active_user, attachments_root, age_days=31)
@@ -75,8 +79,9 @@ def test_expired_attachments_lose_both_row_and_bytes(active_user, attachments_ro
 
 
 @pytest.mark.django_db
-def test_a_missing_file_does_not_stop_the_row_being_cleared(active_user, attachments_root,
-                                                            settings):
+def test_a_missing_file_does_not_stop_the_row_being_cleared(
+    active_user, attachments_root, settings
+):
     settings.ATTACH_TTL_DAYS = 30
     expired, path = stored_attachment(active_user, attachments_root, age_days=31)
     path.unlink()  # a previous run died between unlink and delete
@@ -88,8 +93,9 @@ def test_a_missing_file_does_not_stop_the_row_being_cleared(active_user, attachm
 
 
 @pytest.mark.django_db
-def test_one_unremovable_file_does_not_stall_the_whole_sweep(active_user, attachments_root,
-                                                             settings, monkeypatch):
+def test_one_unremovable_file_does_not_stall_the_whole_sweep(
+    active_user, attachments_root, settings, monkeypatch
+):
     """Rows are cleared in one pass after the loop, so an escaping OSError would stop
     retention altogether."""
     settings.ATTACH_TTL_DAYS = 30
@@ -114,8 +120,9 @@ def test_one_unremovable_file_does_not_stall_the_whole_sweep(active_user, attach
 
 
 @pytest.mark.django_db
-def test_pruning_sets_the_watermark_to_the_max_pruned_seq_per_device(active_user,
-                                                                     settings):
+def test_pruning_sets_the_watermark_to_the_max_pruned_seq_per_device(
+    active_user, settings
+):
     """A pruned envelope may have been an MLS commit the device can never re-obtain,
     so the prune must leave a per-device high-water mark for the drain to surface."""
     settings.ENVELOPE_TTL_DAYS = 7
@@ -123,7 +130,7 @@ def test_pruning_sets_the_watermark_to_the_max_pruned_seq_per_device(active_user
     current = make_device(active_user, 72)
     queue_row(lagging, 3, age_days=8)
     queue_row(lagging, 4, age_days=8)
-    queue_row(lagging, 5)               # fresh: survives, stays above the watermark
+    queue_row(lagging, 5)  # fresh: survives, stays above the watermark
     queue_row(current, 9, age_days=8)
 
     run_prune()
@@ -161,11 +168,17 @@ def test_expired_refresh_tokens_are_flushed_and_live_ones_stay(active_user):
     """Token-issue times approximate login times, so they must age out of the DB with
     the refresh TTL."""
     expired = OutstandingToken.objects.create(
-        user=active_user, jti="expired-jti", token="t1",
-        expires_at=timezone.now() - timedelta(days=1))
+        user=active_user,
+        jti="expired-jti",
+        token="t1",
+        expires_at=timezone.now() - timedelta(days=1),
+    )
     OutstandingToken.objects.create(
-        user=active_user, jti="live-jti", token="t2",
-        expires_at=timezone.now() + timedelta(days=1))
+        user=active_user,
+        jti="live-jti",
+        token="t2",
+        expires_at=timezone.now() + timedelta(days=1),
+    )
 
     output = run_prune()
 
@@ -190,8 +203,9 @@ def test_prune_is_safe_to_run_repeatedly(device, active_user, attachments_root, 
 
 
 @pytest.mark.django_db
-def test_prune_prints_counts_but_never_an_identifier(device, active_user, attachments_root,
-                                                     settings):
+def test_prune_prints_counts_but_never_an_identifier(
+    device, active_user, attachments_root, settings
+):
     """The timer's stdout lands in the journal, so an id here would be a graph leak."""
     settings.ENVELOPE_TTL_DAYS = 30
     settings.ATTACH_TTL_DAYS = 30
@@ -205,19 +219,19 @@ def test_prune_prints_counts_but_never_an_identifier(device, active_user, attach
 
 
 @pytest.mark.django_db
-def test_stale_keypackages_rotate_out_but_the_last_resort_survives(active_user,
-                                                                   settings):
+def test_stale_keypackages_rotate_out_but_the_last_resort_survives(active_user, settings):
     """KEYPACKAGE_TTL_DAYS ages out the consumable pool; the last-resort package
     is exempt — deleting it would make an idle device unaddable to groups, the
     exact failure it exists to prevent."""
     from datetime import timedelta as td
+
     from devices.models import KeyPackage
+
     settings.KEYPACKAGE_TTL_DAYS = 30
     device = make_device(active_user, 74)
     stale = KeyPackage.objects.create(device=device, blob=b"S" * 4096)
     fresh = KeyPackage.objects.create(device=device, blob=b"F" * 4096)
-    last = KeyPackage.objects.create(device=device, blob=b"L" * 4096,
-                                     is_last_resort=True)
+    last = KeyPackage.objects.create(device=device, blob=b"L" * 4096, is_last_resort=True)
     old = timezone.now().date() - td(days=31)
     KeyPackage.objects.filter(id__in=[stale.id, last.id]).update(created_date=old)
 

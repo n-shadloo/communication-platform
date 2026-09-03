@@ -5,15 +5,19 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('devices', '0002_device_queue_seq'),
+        ("devices", "0002_device_queue_seq"),
     ]
 
     operations = [
         migrations.AlterField(
-            model_name='onetimeprekey',
-            name='device',
-            field=models.ForeignKey(db_index=False, on_delete=django.db.models.deletion.CASCADE, related_name='onetime_prekeys', to='devices.device'),
+            model_name="onetimeprekey",
+            name="device",
+            field=models.ForeignKey(
+                db_index=False,
+                on_delete=django.db.models.deletion.CASCADE,
+                related_name="onetime_prekeys",
+                to="devices.device",
+            ),
         ),
     ]

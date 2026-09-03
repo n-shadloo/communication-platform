@@ -5,6 +5,7 @@ racing other transactions, which a wrapping test transaction would hide. (The
 same-owner append race that used to live here moved with the append pattern to
 devices/tests/test_device_log.py when server-side history was removed.)
 """
+
 import base64
 import threading
 
@@ -31,8 +32,9 @@ class KeyBackupVersionRaceTests(TransactionTestCase):
     writes read version=None and the lower one can clobber the higher."""
 
     def setUp(self):
-        self.owner = User.objects.create_user(username="alice", password=PASSWORD,
-                                              is_active=True)
+        self.owner = User.objects.create_user(
+            username="alice", password=PASSWORD, is_active=True
+        )
         access_low, _ = issue_full(self.owner, make_device(self.owner, 1))
         access_high, _ = issue_full(self.owner, make_device(self.owner, 2))
         self.low = {"HTTP_AUTHORIZATION": f"Bearer {access_low}"}
@@ -43,15 +45,20 @@ class KeyBackupVersionRaceTests(TransactionTestCase):
         high_blob = backup_blob(b"H")
         expected_high = base64.b64decode(high_blob)
         for _ in range(RACE_ROUNDS):
-            KeyBackup.objects.filter(user_id=self.owner.id).delete()  # force a first write
+            KeyBackup.objects.filter(
+                user_id=self.owner.id
+            ).delete()  # force a first write
             barrier = threading.Barrier(2)
 
             def put(headers, version, blob):
                 try:
                     barrier.wait(timeout=10)
-                    APIClient().put("/api/v1/me/keybackup",
-                                    {"blob": blob, "version": version},
-                                    format="json", **headers)
+                    APIClient().put(
+                        "/api/v1/me/keybackup",
+                        {"blob": blob, "version": version},
+                        format="json",
+                        **headers,
+                    )
                 finally:
                     connections.close_all()
 

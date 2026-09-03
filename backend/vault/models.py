@@ -11,8 +11,12 @@ class KeyBackup(models.Model):
     here and not on the server at all — it moves between devices client-to-client
     on enrollment."""
 
-    user = models.OneToOneField("accounts.User", on_delete=models.CASCADE,
-                                primary_key=True, related_name="keybackup")
+    user = models.OneToOneField(
+        "accounts.User",
+        on_delete=models.CASCADE,
+        primary_key=True,
+        related_name="keybackup",
+    )
     blob = OpaqueBlobField(bucket_set=BACKUP_BUCKETS)
     version = models.PositiveIntegerField(default=0)
     updated_date = models.DateField(auto_now=True)

@@ -5,13 +5,24 @@ from core.fields import OpaqueBlobField
 
 # Column names that would mean the server had grown a plaintext store, key material,
 # or a conversation graph. None of these may ever exist on any model.
-FORBIDDEN_FIELD_NAMES = frozenset({
-    "plaintext", "content", "message_text", "body",
-    "private_key", "secret_key", "session_key",
-    "sender", "sender_id", "recipient_id",
-    "members", "membership", "roster",
-    "password_plain",
-})
+FORBIDDEN_FIELD_NAMES = frozenset(
+    {
+        "plaintext",
+        "content",
+        "message_text",
+        "body",
+        "private_key",
+        "secret_key",
+        "session_key",
+        "sender",
+        "sender_id",
+        "recipient_id",
+        "members",
+        "membership",
+        "roster",
+        "password_plain",
+    }
+)
 
 # `password` holds an Argon2id hash: auth material, not a content key. It is
 # legitimate on the user model and nowhere else.
@@ -20,9 +31,11 @@ PASSWORD_ALLOWED_ON = frozenset({"accounts.User"})
 # The framework tables are audited once and accepted. Django's `session_key` is an
 # opaque session identifier used only by the admin (the API is token-only) and is
 # not key material. Nothing else gets an exemption.
-AUDITED_FRAMEWORK_COLUMNS = frozenset({
-    "sessions.Session.session_key",
-})
+AUDITED_FRAMEWORK_COLUMNS = frozenset(
+    {
+        "sessions.Session.session_key",
+    }
+)
 
 # Public halves of client keypairs are explicitly fine to store and are not bucketed
 # ciphertext, so they stay plain BinaryFields.
@@ -69,7 +82,8 @@ class FieldManifestTests(SimpleTestCase):
                     offenders.append(f"{label}.{name}")
 
         self.assertEqual(
-            offenders, [],
+            offenders,
+            [],
             "Forbidden columns found; this server stores no plaintext, no key "
             f"material, and no conversation graph: {offenders}",
         )
@@ -79,13 +93,15 @@ class FieldManifestTests(SimpleTestCase):
         for label, field in blob_fields():
             if not isinstance(field, OpaqueBlobField):
                 problems.append(
-                    f"{label}.{field.name} is {type(field).__name__}, expected OpaqueBlobField"
+                    f"{label}.{field.name} is {type(field).__name__}, "
+                    "expected OpaqueBlobField"
                 )
             elif not field.bucket_set:
                 problems.append(f"{label}.{field.name} has an empty bucket_set")
 
         self.assertEqual(
-            problems, [],
+            problems,
+            [],
             f"Every stored blob must be exact-bucket-validated: {problems}",
         )
 

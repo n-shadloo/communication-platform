@@ -17,8 +17,10 @@ from .serializers import SendSerializer
 MAX_DRAIN_LIMIT = 100
 MAX_ACK_IDS = 200
 
-DEVICE_SCOPE_REQUIRED = {"code": "device_scope_required",
-                         "detail": "This endpoint requires a device-scoped token."}
+DEVICE_SCOPE_REQUIRED = {
+    "code": "device_scope_required",
+    "detail": "This endpoint requires a device-scoped token.",
+}
 BAD_REQUEST = {"code": "bad_request", "detail": "Malformed request."}
 
 
@@ -35,9 +37,11 @@ class SendEnvelopesView(APIView):
         messages = serializer.validated_data["messages"]
 
         target_ids = [message["device_id"] for message in messages]
-        live = set(Device.objects.filter(
-            id__in=target_ids, revoked_date__isnull=True,
-            user__is_active=True).values_list("id", flat=True))
+        live = set(
+            Device.objects.filter(
+                id__in=target_ids, revoked_date__isnull=True, user__is_active=True
+            ).values_list("id", flat=True)
+        )
 
         accepted = 0
         stale = []
@@ -52,20 +56,27 @@ class SendEnvelopesView(APIView):
                 # blocks and re-reads the incremented value. This is what keeps
                 # (device, seq) unique without a global sequence.
                 Device.objects.filter(id=device_id).update(queue_seq=F("queue_seq") + 1)
-                seq = Device.objects.filter(id=device_id).values_list(
-                    "queue_seq", flat=True).first()
+                seq = (
+                    Device.objects.filter(id=device_id)
+                    .values_list("queue_seq", flat=True)
+                    .first()
+                )
                 envelope = QueuedEnvelope.objects.create(
-                    recipient_device_id=device_id, seq=seq, blob=message["raw"])
+                    recipient_device_id=device_id, seq=seq, blob=message["raw"]
+                )
             created.append((device_id, envelope))
             accepted += 1
 
         self._push(created)
-        return Response({"accepted": accepted, "stale_devices": stale},
-                        status=status.HTTP_202_ACCEPTED)
+        return Response(
+            {"accepted": accepted, "stale_devices": stale},
+            status=status.HTTP_202_ACCEPTED,
+        )
 
     @staticmethod
     def _push(created):
         from messaging.services import _push
+
         _push(created)
 
 
@@ -79,20 +90,30 @@ class MyEnvelopesView(APIView):
             return Response(DEVICE_SCOPE_REQUIRED, status=403)
 
         limit = self._limit(request)
-        rows = list(QueuedEnvelope.objects.filter(recipient_device_id=device.id)
-                    .order_by("seq").only("id", "seq", "blob")[:limit + 1])
+        rows = list(
+            QueuedEnvelope.objects.filter(recipient_device_id=device.id)
+            .order_by("seq")
+            .only("id", "seq", "blob")[: limit + 1]
+        )
         has_more = len(rows) > limit
         rows = rows[:limit]
 
-        return Response({
-            "envelopes": [{"id": str(row.id), "seq": row.seq,
-                           "blob": base64.b64encode(bytes(row.blob)).decode()}
-                          for row in rows],
-            "has_more": has_more,
-            # A client whose last acked seq is below this lost envelopes to the
-            # TTL prune — possibly MLS commits — and must trigger a group re-add.
-            "pruned_through": device.queue_pruned_through,
-        })
+        return Response(
+            {
+                "envelopes": [
+                    {
+                        "id": str(row.id),
+                        "seq": row.seq,
+                        "blob": base64.b64encode(bytes(row.blob)).decode(),
+                    }
+                    for row in rows
+                ],
+                "has_more": has_more,
+                # A client whose last acked seq is below this lost envelopes to the
+                # TTL prune — possibly MLS commits — and must trigger a group re-add.
+                "pruned_through": device.queue_pruned_through,
+            }
+        )
 
     @staticmethod
     def _limit(request):
@@ -128,5 +149,6 @@ class AckEnvelopesView(APIView):
             return Response(BAD_REQUEST, status=400)
 
         deleted, _ = QueuedEnvelope.objects.filter(
-            recipient_device_id=device.id, id__in=parsed).delete()
+            recipient_device_id=device.id, id__in=parsed
+        ).delete()
         return Response({"deleted": deleted})

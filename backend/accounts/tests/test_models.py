@@ -12,18 +12,23 @@ def test_accounts_are_inactive_until_the_owner_activates_them():
 
 
 def test_superuser_is_active_because_it_is_the_operator_account():
-    operator = User.objects.create_superuser(username="owner", password="a-long-enough-pw")
+    operator = User.objects.create_superuser(
+        username="owner", password="a-long-enough-pw"
+    )
 
     assert operator.is_active is True
     assert operator.is_staff is True
     assert operator.is_superuser is True
 
 
-@pytest.mark.parametrize("supplied,stored", [
-    ("Bob", "bob"),
-    ("MIXEDcase_9", "mixedcase_9"),
-    ("ALLCAPS", "allcaps"),
-])
+@pytest.mark.parametrize(
+    "supplied,stored",
+    [
+        ("Bob", "bob"),
+        ("MIXEDcase_9", "mixedcase_9"),
+        ("ALLCAPS", "allcaps"),
+    ],
+)
 def test_username_is_normalised_to_lowercase(supplied, stored):
     user = User.objects.create_user(username=supplied, password="a-long-enough-pw")
     user.refresh_from_db()

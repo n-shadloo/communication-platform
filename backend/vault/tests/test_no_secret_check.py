@@ -7,6 +7,7 @@ the vault app takes a secret or returns a pass/fail for one:
   3. the app's code (comments and docstrings stripped, so prose that merely says "no
      secret" doesn't trip it) mentions no secret/verify/decrypt identifier.
 """
+
 import re
 import tokenize
 from pathlib import Path
@@ -20,7 +21,8 @@ from vault.serializers import KeyBackupSerializer
 VAULT_DIR = Path(vault.__file__).resolve().parent
 
 FORBIDDEN = re.compile(
-    r"secret|passphrase|password|recover|unlock|decrypt|verify", re.IGNORECASE)
+    r"secret|passphrase|password|recover|unlock|decrypt|verify", re.IGNORECASE
+)
 
 EXPECTED_ROUTES = {"me/keybackup"}
 
@@ -48,7 +50,9 @@ def test_serializers_expose_no_secret_field():
     assert set(KeyBackupSerializer().get_fields()) == {"blob", "version"}
 
 
-@pytest.mark.parametrize("filename", ["views.py", "serializers.py", "models.py", "urls.py"])
+@pytest.mark.parametrize(
+    "filename", ["views.py", "serializers.py", "models.py", "urls.py"]
+)
 def test_no_secret_handling_identifier_in_code(filename):
     hits = FORBIDDEN.findall(code_only(VAULT_DIR / filename))
     assert hits == [], f"{filename} has secret-handling identifiers: {hits}"

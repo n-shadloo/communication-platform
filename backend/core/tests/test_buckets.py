@@ -2,12 +2,15 @@ import base64
 
 from django.test import SimpleTestCase
 
-from core.buckets import (DEVICELOG_BUCKETS, ENVELOPE_BUCKETS, KEYPACKAGE_BUCKETS,
-                          NAME_BUCKETS)
+from core.buckets import (
+    DEVICELOG_BUCKETS,
+    ENVELOPE_BUCKETS,
+    KEYPACKAGE_BUCKETS,
+    NAME_BUCKETS,
+)
 from core.fields import BadBucket, decode_blob_or_400
 
-BUCKET_SETS = (ENVELOPE_BUCKETS, NAME_BUCKETS, KEYPACKAGE_BUCKETS,
-               DEVICELOG_BUCKETS)
+BUCKET_SETS = (ENVELOPE_BUCKETS, NAME_BUCKETS, KEYPACKAGE_BUCKETS, DEVICELOG_BUCKETS)
 
 
 def b64(nbytes):

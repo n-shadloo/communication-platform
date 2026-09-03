@@ -14,9 +14,15 @@ from devices.models import Device
 
 from .models import ProfileBlob, User
 from .permissions import IsFullScope
-from .serializers import (DirectoryUserSerializer, LoginSerializer,
-                          ProfileReadSerializer, ProfileWriteSerializer,
-                          RefreshTokenSerializer, RegisterSerializer, UsernameTaken)
+from .serializers import (
+    DirectoryUserSerializer,
+    LoginSerializer,
+    ProfileReadSerializer,
+    ProfileWriteSerializer,
+    RefreshTokenSerializer,
+    RegisterSerializer,
+    UsernameTaken,
+)
 from .tokens import issue_full, issue_register_scope
 
 # A revoked device, a wrong generation, and a deactivated account are all reported
@@ -69,8 +75,11 @@ class LoginView(APIView):
         password = serializer.validated_data["password"]
         device_id = serializer.validated_data.get("device_id")
 
-        user = User.objects.filter(username=username).only(
-            "id", "password", "is_active").first()
+        user = (
+            User.objects.filter(username=username)
+            .only("id", "password", "is_active")
+            .first()
+        )
         if user is None:
             check_password(password, _DUMMY_HASH)  # equalize timing
             return self.invalid_credentials()
@@ -83,19 +92,36 @@ class LoginView(APIView):
             return error("account_inactive", "This account is awaiting activation.", 403)
 
         if device_id:
-            device = Device.objects.filter(
-                id=device_id, user_id=user.id, revoked_date__isnull=True,
-            ).only("id", "token_generation").first()
+            device = (
+                Device.objects.filter(
+                    id=device_id,
+                    user_id=user.id,
+                    revoked_date__isnull=True,
+                )
+                .only("id", "token_generation")
+                .first()
+            )
             if device is not None:
                 access, refresh = issue_full(user, device)
-                return Response({"access": access, "refresh": refresh,
-                                 "user_id": str(user.id),
-                                 "device_id": str(device.id), "scope": "full"})
+                return Response(
+                    {
+                        "access": access,
+                        "refresh": refresh,
+                        "user_id": str(user.id),
+                        "device_id": str(device.id),
+                        "scope": "full",
+                    }
+                )
 
         # No or unknown device: a short register-scope token whose only power is
         # POST /me/devices.
-        return Response({"access": issue_register_scope(user),
-                         "user_id": str(user.id), "scope": "register"})
+        return Response(
+            {
+                "access": issue_register_scope(user),
+                "user_id": str(user.id),
+                "scope": "register",
+            }
+        )
 
     @staticmethod
     def invalid_credentials():
@@ -112,7 +138,9 @@ class RefreshView(APIView):
         if not serializer.is_valid():
             return error("invalid_token", "Refresh token is missing or malformed.", 401)
         try:
-            token = RefreshToken(serializer.validated_data["refresh"])  # signature/expiry/blacklist
+            token = RefreshToken(
+                serializer.validated_data["refresh"]
+            )  # signature/expiry/blacklist
         except TokenError:
             return error("invalid_token", "Refresh token is missing or malformed.", 401)
 
@@ -125,15 +153,18 @@ class RefreshView(APIView):
         except (TypeError, ValueError):
             return Response(TOKEN_REVOKED, status=401)
 
-        device = (Device.objects
-                  .filter(id=device_id, revoked_date__isnull=True)
-                  .select_related("user")
-                  .only("id", "user_id", "token_generation", "user__is_active")
-                  .first())
-        if (device is None
-                or str(device.user_id) != str(token.get("user_id"))
-                or token.get("tgen") != device.token_generation
-                or not device.user.is_active):
+        device = (
+            Device.objects.filter(id=device_id, revoked_date__isnull=True)
+            .select_related("user")
+            .only("id", "user_id", "token_generation", "user__is_active")
+            .first()
+        )
+        if (
+            device is None
+            or str(device.user_id) != str(token.get("user_id"))
+            or token.get("tgen") != device.token_generation
+            or not device.user.is_active
+        ):
             return Response(TOKEN_REVOKED, status=401)
 
         token.blacklist()  # rotation: retire the presented refresh
@@ -167,7 +198,11 @@ class UserDirectoryView(ListAPIView):
     pagination_class = None
 
     def get_queryset(self):
-        return User.objects.filter(is_active=True).only("id", "username").order_by("username")
+        return (
+            User.objects.filter(is_active=True)
+            .only("id", "username")
+            .order_by("username")
+        )
 
     def list(self, request, *args, **kwargs):
         # The response contract wraps the list in {"users": [...]}; ListAPIView would
@@ -181,8 +216,11 @@ class ProfileDetailView(APIView):
     throttle_scope = "accounts"
 
     def get(self, request, user_id):
-        profile = ProfileBlob.objects.filter(
-            user_id=user_id, user__is_active=True).only("blob", "version").first()
+        profile = (
+            ProfileBlob.objects.filter(user_id=user_id, user__is_active=True)
+            .only("blob", "version")
+            .first()
+        )
         if profile is None:
             return error("not_found", "No profile for that user.", 404)
         return Response(ProfileReadSerializer(profile).data)
@@ -193,8 +231,11 @@ class MyProfileView(APIView):
     throttle_scope = "accounts"
 
     def get(self, request):
-        profile = ProfileBlob.objects.filter(
-            user_id=request.user.id).only("blob", "version").first()
+        profile = (
+            ProfileBlob.objects.filter(user_id=request.user.id)
+            .only("blob", "version")
+            .first()
+        )
         if profile is None:
             return error("not_found", "No profile yet.", 404)
         return Response(ProfileReadSerializer(profile).data)
@@ -211,11 +252,16 @@ class MyProfileView(APIView):
                 # .only("version"): the locked read exists to compare versions, so the
                 # stored blob is not dragged back with it. Branching here rather than
                 # calling update_or_create avoids a second identical SELECT.
-                profile = (ProfileBlob.objects.select_for_update()
-                           .filter(user_id=request.user.id).only("version").first())
+                profile = (
+                    ProfileBlob.objects.select_for_update()
+                    .filter(user_id=request.user.id)
+                    .only("version")
+                    .first()
+                )
                 if profile is None:
-                    ProfileBlob.objects.create(user_id=request.user.id, blob=raw,
-                                               version=new_version)
+                    ProfileBlob.objects.create(
+                        user_id=request.user.id, blob=raw, version=new_version
+                    )
                 elif new_version <= profile.version:
                     return error("stale_version", "Version must increase.", 409)
                 else:

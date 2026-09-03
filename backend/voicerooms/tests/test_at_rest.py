@@ -4,6 +4,7 @@ No membership, no participant history, no room text; there is no table to hold a
 it. `transaction=True` matters for the dump tests: pg_dump runs in a separate process
 over a separate connection and sees only committed rows.
 """
+
 import pytest
 from django.db import connection
 
@@ -49,8 +50,12 @@ def test_there_is_no_membership_participant_or_room_text_table_anywhere():
         tables = set(connection.introspection.table_names(cursor))
 
     assert TABLE in tables, "the room table itself is missing"
-    offenders = [t for t in tables if t != TABLE and
-                 ("room" in t or "member" in t or "participant" in t or "roster" in t)]
+    offenders = [
+        t
+        for t in tables
+        if t != TABLE
+        and ("room" in t or "member" in t or "participant" in t or "roster" in t)
+    ]
     assert offenders == [], f"a room-adjacent table exists at rest: {offenders}"
 
 

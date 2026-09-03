@@ -4,6 +4,7 @@
 applied to what it captures. That is deliberate: these tests assert the code never
 emits an identifier in the first place; `core/tests/test_scrub.py` covers the filter.
 """
+
 import logging
 
 from django.test import TestCase
@@ -12,21 +13,31 @@ from rest_framework.test import APIClient
 from accounts.models import User
 from accounts.tokens import issue_full, issue_register_scope
 
-from .conftest import (DEVICES_URL, PASSWORD, keypackage_blob, label_blob,
-                       make_device, pubkey, register_payload, stock_keypackages,
-                       stock_prekeys)
+from .conftest import (
+    DEVICES_URL,
+    PASSWORD,
+    keypackage_blob,
+    label_blob,
+    make_device,
+    pubkey,
+    register_payload,
+    stock_keypackages,
+    stock_prekeys,
+)
 
 
 class DeviceLogSilenceTests(TestCase):
-
     def setUp(self):
-        self.alice = User.objects.create_user(username="alice", password=PASSWORD,
-                                              is_active=True)
+        self.alice = User.objects.create_user(
+            username="alice", password=PASSWORD, is_active=True
+        )
         from .conftest import publish_identity
+
         publish_identity(self.alice)  # registration past the first device needs one
         self.device = make_device(self.alice, 1)
-        self.peer = User.objects.create_user(username="peer", password=PASSWORD,
-                                             is_active=True)
+        self.peer = User.objects.create_user(
+            username="peer", password=PASSWORD, is_active=True
+        )
         self.peer_device = make_device(self.peer, 2)
         stock_prekeys(self.peer_device, 2)
         stock_keypackages(self.peer_device, 2)
@@ -42,21 +53,36 @@ class DeviceLogSilenceTests(TestCase):
             # nothing at all — which is the point. The canary keeps it honest.
             logging.getLogger("test.canary").debug("canary")
 
-            registered = self.client.post(DEVICES_URL, payload, format="json",
-                                          **self.headers)
+            registered = self.client.post(
+                DEVICES_URL, payload, format="json", **self.headers
+            )
             new_id = registered.json()["device_id"]
             self.client.get(DEVICES_URL, **self.headers)
             self.client.get(f"/api/v1/users/{self.peer.id}/devices", **self.headers)
-            claim = self.client.post(f"/api/v1/users/{self.peer.id}/keys/claim", {},
-                                     format="json", **self.headers)
-            self.client.post(f"/api/v1/users/{self.peer.id}/keypackages/claim", {},
-                             format="json", **self.headers)
-            self.client.put(f"{DEVICES_URL}/{self.device.id}/prekeys",
-                            {"otpks": [{"key_id": 42, "pub": pubkey(b"r")}]},
-                            format="json", **self.headers)
-            self.client.put(f"{DEVICES_URL}/{self.device.id}/keypackages",
-                            {"keypackages": [keypackage_blob(b"Z")]},
-                            format="json", **self.headers)
+            claim = self.client.post(
+                f"/api/v1/users/{self.peer.id}/keys/claim",
+                {},
+                format="json",
+                **self.headers,
+            )
+            self.client.post(
+                f"/api/v1/users/{self.peer.id}/keypackages/claim",
+                {},
+                format="json",
+                **self.headers,
+            )
+            self.client.put(
+                f"{DEVICES_URL}/{self.device.id}/prekeys",
+                {"otpks": [{"key_id": 42, "pub": pubkey(b"r")}]},
+                format="json",
+                **self.headers,
+            )
+            self.client.put(
+                f"{DEVICES_URL}/{self.device.id}/keypackages",
+                {"keypackages": [keypackage_blob(b"Z")]},
+                format="json",
+                **self.headers,
+            )
             self.client.delete(f"{DEVICES_URL}/{new_id}", **self.headers)
 
         self.assertEqual(registered.status_code, 201)
@@ -82,18 +108,24 @@ class DeviceLogSilenceTests(TestCase):
     def test_rejected_input_is_not_echoed_into_the_logs(self):
         """The bad-bucket and forbidden paths must not log what they refused."""
         import base64
+
         off_bucket = base64.b64encode(b"q" * 77).decode()
 
         with self.assertLogs(level="DEBUG") as captured:
             logging.getLogger("test.canary").debug("canary")
             rejected = self.client.post(
-                DEVICES_URL, register_payload(label_blob=off_bucket), format="json",
-                **self.headers)
+                DEVICES_URL,
+                register_payload(label_blob=off_bucket),
+                format="json",
+                **self.headers,
+            )
             forbidden = self.client.get(
-                f"{DEVICES_URL}/{self.peer_device.id}/prekeys/count", **self.headers)
+                f"{DEVICES_URL}/{self.peer_device.id}/prekeys/count", **self.headers
+            )
             scoped_out = self.client.get(
                 DEVICES_URL,
-                HTTP_AUTHORIZATION=f"Bearer {issue_register_scope(self.alice)}")
+                HTTP_AUTHORIZATION=f"Bearer {issue_register_scope(self.alice)}",
+            )
 
         self.assertEqual(rejected.status_code, 400)
         self.assertEqual(forbidden.status_code, 403)

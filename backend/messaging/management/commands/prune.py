@@ -69,7 +69,8 @@ class Command(BaseCommand):
         # which is the exact failure it exists to prevent.
         cutoff = timezone.now().date() - timedelta(days=settings.KEYPACKAGE_TTL_DAYS)
         deleted, _ = KeyPackage.objects.filter(
-            is_last_resort=False, created_date__lt=cutoff).delete()
+            is_last_resort=False, created_date__lt=cutoff
+        ).delete()
         return deleted
 
     @staticmethod
@@ -80,8 +81,9 @@ class Command(BaseCommand):
         # Unlink before deleting the row: a crash in between leaves a row whose bytes
         # are already gone, which the next pass clears. Dropping the row first would
         # strand the file, since cleanup only ever walks rows.
-        for attachment in Attachment.objects.filter(
-                created_date__lt=cutoff).only("id").iterator():
+        for attachment in (
+            Attachment.objects.filter(created_date__lt=cutoff).only("id").iterator()
+        ):
             try:
                 os.remove(attachment.disk_path())
                 removed_files += 1

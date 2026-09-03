@@ -6,6 +6,7 @@ the filter mutates records in place, so the console handler launders the message
 before caplog's later-attached handler stores it, and a leak would grade its own
 homework. So, like assertLogs, all root handlers are swapped out for the capture
 window."""
+
 import logging
 import uuid
 from contextlib import contextmanager
@@ -41,7 +42,8 @@ def raw_root_capture():
 
 
 async def test_every_socket_scenario_emits_no_identifier_or_payload(
-        active_user, device, peer, peer_device):
+    active_user, device, peer, peer_device
+):
     access_a = await mint_access(active_user, device)
     access_b = await mint_access(peer, peer_device)
     signal_blob = "volatile-ciphertext-blob"
@@ -58,29 +60,42 @@ async def test_every_socket_scenario_emits_no_identifier_or_payload(
 
         # Durable push and ack, including a malformed ack.
         from channels.layers import get_channel_layer
+
         await get_channel_layer().group_send(
-            f"dev.{device.id}", {"type": "envelope.push", "id": str(uuid.uuid4()),
-                                 "seq": 1, "blob": push_blob})
+            f"dev.{device.id}",
+            {
+                "type": "envelope.push",
+                "id": str(uuid.uuid4()),
+                "seq": 1,
+                "blob": push_blob,
+            },
+        )
         frame = await comm_a.receive_json_from(timeout=2)
         await comm_a.send_json_to({"type": "ack", "ids": [frame["id"]]})
         await comm_a.send_json_to({"type": "ack", "ids": [str(device.id) + "-corrupt"]})
 
         # Volatile signals: delivered, braced spelling, offline target, malformed.
-        await comm_a.send_json_to({"type": "signal", "to_device": str(peer_device.id),
-                                   "blob": signal_blob})
-        assert await comm_b.receive_json_from(timeout=2) == {"type": "signal",
-                                                             "blob": signal_blob}
-        await comm_a.send_json_to({"type": "signal", "to_device": offline_target,
-                                   "blob": signal_blob})
-        await comm_a.send_json_to({"type": "signal", "to_device": "not-a-uuid",
-                                   "blob": signal_blob})
+        await comm_a.send_json_to(
+            {"type": "signal", "to_device": str(peer_device.id), "blob": signal_blob}
+        )
+        assert await comm_b.receive_json_from(timeout=2) == {
+            "type": "signal",
+            "blob": signal_blob,
+        }
+        await comm_a.send_json_to(
+            {"type": "signal", "to_device": offline_target, "blob": signal_blob}
+        )
+        await comm_a.send_json_to(
+            {"type": "signal", "to_device": "not-a-uuid", "blob": signal_blob}
+        )
 
         # Presence subscribe + the offline emit on disconnect.
-        await comm_a.send_json_to({"type": "subscribe_presence",
-                                   "device_ids": [str(peer_device.id)]})
-        await comm_b.receive_json_from(timeout=2)   # A online
+        await comm_a.send_json_to(
+            {"type": "subscribe_presence", "device_ids": [str(peer_device.id)]}
+        )
+        await comm_b.receive_json_from(timeout=2)  # A online
         await comm_a.disconnect()
-        await comm_b.receive_json_from(timeout=2)   # A offline
+        await comm_b.receive_json_from(timeout=2)  # A offline
         await comm_b.disconnect()
 
         # Rejected handshakes: bad token, unlisted origin, and a
