@@ -23,7 +23,8 @@ import logging
 import secrets as random_secrets
 from contextlib import contextmanager
 
-CANARY = "log-silence-audit-canary"
+CANARY_OPEN = "log-silence-audit-canary-open"
+CANARY_CLOSE = "log-silence-audit-canary-close"
 
 
 class _RawCapture(logging.Handler):
@@ -256,12 +257,24 @@ async def run_audit(probe=None):
     leak."""
     from channels.db import database_sync_to_async
 
+    # Import the ASGI application before the capture opens. That import runs
+    # django.setup(), which re-applies LOGGING through dictConfig and replaces the
+    # handlers this audit swapped in. Inside the capture window it would kill the
+    # capture halfway through, and every assertion after that point would grade an
+    # empty list instead of the real log stream.
+    import config.asgi  # noqa: F401
+
     with capture_all_logging() as lines:
-        logging.getLogger("ops.audit.canary").debug(CANARY)
+        logging.getLogger("ops.audit.canary").debug(CANARY_OPEN)
         secrets = await database_sync_to_async(_scripted_rest_traffic)()
         await _scripted_socket_traffic(secrets)
         if probe is not None:
             probe(secrets)
-    if not any(CANARY in line for line in lines):
+        logging.getLogger("ops.audit.canary").debug(CANARY_CLOSE)
+    if not any(CANARY_OPEN in line for line in lines):
         raise RuntimeError("log capture was not live; this audit proved nothing")
+    if not any(CANARY_CLOSE in line for line in lines):
+        raise RuntimeError(
+            "log capture stopped before the run ended; this audit proved nothing"
+        )
     return scan(lines, secrets), secrets, lines
