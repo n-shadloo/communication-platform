@@ -97,8 +97,9 @@ def test_ack_deletes_only_the_named_rows(api, active_user, device, auth_headers)
 @pytest.mark.django_db
 def test_the_drain_surfaces_the_pruned_watermark(api, active_user, device, auth_headers):
     """`pruned_through` is the queue-gap signal: a client whose last acked seq is
-    below it lost envelopes to the TTL prune (possibly MLS commits) and must
-    trigger a group re-add. Zero means nothing was ever pruned."""
+    below it lost envelopes to the TTL prune (possibly ratchet messages or control
+    events) and must repair the affected pairwise sessions. Zero means nothing was
+    ever pruned."""
     headers = auth_headers(active_user, device)
     assert api.get(DRAIN_URL, **headers).json()["pruned_through"] == 0
 

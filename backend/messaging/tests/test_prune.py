@@ -123,8 +123,9 @@ def test_one_unremovable_file_does_not_stall_the_whole_sweep(
 def test_pruning_sets_the_watermark_to_the_max_pruned_seq_per_device(
     active_user, settings
 ):
-    """A pruned envelope may have been an MLS commit the device can never re-obtain,
-    so the prune must leave a per-device high-water mark for the drain to surface."""
+    """A pruned envelope may have carried a ratchet message or a control event the
+    device can never re-obtain, so the prune must leave a per-device high-water mark
+    for the drain to surface."""
     settings.ENVELOPE_TTL_DAYS = 7
     lagging = make_device(active_user, 71)
     current = make_device(active_user, 72)

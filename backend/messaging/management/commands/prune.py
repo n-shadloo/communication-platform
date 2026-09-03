@@ -45,8 +45,9 @@ class Command(BaseCommand):
         expired = QueuedEnvelope.objects.filter(queued_hour__lt=cutoff)
         with transaction.atomic():
             # Watermark before delete, in one transaction. A pruned envelope may have
-            # been an MLS commit the device can never re-obtain, so the device must be
-            # able to see that it missed something: queue_pruned_through is that
+            # carried a ratchet message or a group control event the device can never
+            # re-obtain, so the device must be able to see that it missed something:
+            # queue_pruned_through is that
             # signal (surfaced by GET /me/envelopes as `pruned_through`). Advancing
             # the watermark without the delete committing would tell a device it lost
             # envelopes it can still fetch, so both happen or neither does.

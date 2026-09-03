@@ -66,10 +66,10 @@ class Device(models.Model):
     queue_seq = models.BigIntegerField(default=0)
     # Highest seq the TTL prune has ever deleted from this device's mailbox. A
     # returning device whose last acked seq is below this lost envelopes it can
-    # never re-fetch — possibly MLS commits, which leaves it permanently desynced
-    # from those groups (client-to-client history transfer moves content, not
-    # ratchet state). Surfaced as `pruned_through` so the client knows to ask
-    # peers for a group re-add rather than failing silently.
+    # never re-fetch — possibly ratchet messages or group control events. Surfaced
+    # as `pruned_through` so the client knows to repair each affected pairwise
+    # session and ask a member for the current group state, rather than failing
+    # silently (CLIENT_CONTRACT.md §H).
     queue_pruned_through = models.BigIntegerField(default=0)
     # ML-KEM-768 signed prekey for hybrid PQXDH. All nullable: a device that never
     # uploaded PQ material serves classical-only bundles with the PQ fields omitted,

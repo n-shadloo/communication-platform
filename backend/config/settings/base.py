@@ -159,10 +159,10 @@ ATTACHMENTS_ROOT = Path(env("ATTACHMENTS_ROOT", default=str(BASE_DIR / "media_ro
 ATTACH_USER_QUOTA_BYTES = env_int("ATTACH_USER_QUOTA_BYTES", default=2 * 1024**3)
 ATTACH_TTL_DAYS = env_int("ATTACH_TTL_DAYS", default=30)
 # 7 days bounds what a live seizure captures to at most a week of *undelivered*
-# ciphertext (delivery deletes on ack). It is also a group-membership parameter:
-# an envelope pruned before an offline device collects it may have been an MLS
-# commit, leaving that device permanently desynced until peers re-add it — see
-# queue_pruned_through.
+# ciphertext (delivery deletes on ack). It is also the window an offline device
+# has to collect its mail: an envelope pruned first may have carried a ratchet
+# message or a group control event, and the device must then repair the affected
+# pairwise sessions — see queue_pruned_through.
 ENVELOPE_TTL_DAYS = env_int("ENVELOPE_TTL_DAYS", default=7)
 MAX_DEVICES_PER_USER = env_int("MAX_DEVICES_PER_USER", default=10)
 

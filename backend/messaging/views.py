@@ -110,7 +110,8 @@ class MyEnvelopesView(APIView):
                 ],
                 "has_more": has_more,
                 # A client whose last acked seq is below this lost envelopes to the
-                # TTL prune — possibly MLS commits — and must trigger a group re-add.
+                # TTL prune — possibly ratchet messages or control events — and must
+                # repair the affected pairwise sessions (CLIENT_CONTRACT.md §H).
                 "pruned_through": device.queue_pruned_through,
             }
         )
