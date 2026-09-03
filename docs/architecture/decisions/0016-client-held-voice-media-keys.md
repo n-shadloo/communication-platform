@@ -3,6 +3,7 @@
 - Status: Accepted
 - Phase: 1
 - Date: 2026-09-03
+- Landed: 2026-09-03, in the second run of phase 1
 
 ## Context
 

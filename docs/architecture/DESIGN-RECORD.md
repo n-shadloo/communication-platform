@@ -70,7 +70,7 @@ Never mark a row resolved without the trigger it names.
 | A second factor on the admin login | A second operator exists. Recorded in `ACCEPTED_RISKS.md` when that file lands |
 | The 95 percent branch-coverage gate in CI | Phase 4 |
 | `httpx` and `hypothesis` in `requirements/dev.txt` | The first test that drives the FastAPI surface, in phase 2 |
-| `API_CHANGES.md` and `ACCEPTED_RISKS.md` | The next run of phase 1 creates `API_CHANGES.md`; `ACCEPTED_RISKS.md` lands with the admin in phase 3 |
+| `ACCEPTED_RISKS.md` | Lands with the admin in phase 3. `API_CHANGES.md` landed on 2026-09-03, in the second run of phase 1, and is no longer deferred |
 | `backend/ops/RUNBOOK.md` | Phase 5 |
 | `docs/admin/` | Phase 3 |
 | Regenerating every `0001_initial` and deleting the earlier migrations | The schema stops changing, at the end of phase 2 |
@@ -80,21 +80,21 @@ Never mark a row resolved without the trigger it names.
 
 ## 4. Decision log
 
-| ADR | Title | Status | Phase | Supersedes / Superseded by |
-|---|---|---|---|---|
-| [0001](decisions/0001-pairwise-double-ratchet-group-fan-out.md) | Groups use pairwise Double Ratchet fan-out | Accepted | 1 | — |
-| [0002](decisions/0002-fastapi-as-the-only-http-api-surface.md) | FastAPI is the only HTTP API surface | Accepted | 2 | — |
-| [0003](decisions/0003-one-asgi-process.md) | One ASGI process | Accepted | 2 | — |
-| [0004](decisions/0004-websocket-gateway-on-redis-pubsub.md) | The WebSocket gateway fans out over Redis publish and subscribe | Accepted | 2 | — |
-| [0005](decisions/0005-django-orm-on-a-thread-sensitive-data-path.md) | The Django ORM is the only data access layer | Accepted | 2 | — |
-| [0006](decisions/0006-device-bound-tokens-on-pyjwt.md) | Device-bound tokens on PyJWT, with no token table | Accepted | 2 | — |
-| [0007](decisions/0007-contract-conventions.md) | Contract conventions | Accepted | 2 | — |
-| [0008](decisions/0008-fastapi-generates-the-openapi-document.md) | FastAPI generates the OpenAPI document | Accepted | 2 | — |
-| [0009](decisions/0009-regenerate-the-initial-migrations.md) | Regenerate the initial migrations | Accepted | 2 | — |
-| [0010](decisions/0010-redis-rate-limiting-that-fails-closed.md) | Redis rate limiting that fails closed | Accepted | 2 | — |
-| [0011](decisions/0011-django-unfold-admin-panel.md) | A django-unfold admin panel that shows no secret | Accepted | 3 | — |
-| [0012](decisions/0012-pinned-hashed-and-untracked-wheel-cache.md) | Pinned, hashed dependencies and an untracked wheel cache | Accepted | 1 | — |
-| [0013](decisions/0013-pytest-and-ruff-as-the-test-and-lint-stack.md) | pytest and ruff as the test and lint stack | Accepted | 1 and 4 | — |
-| [0014](decisions/0014-process-hardening-at-the-edge.md) | Process hardening at the edge | Accepted | 2 | — |
-| [0015](decisions/0015-the-document-map.md) | The document map | Accepted | 1 to 5 | — |
-| [0016](decisions/0016-client-held-voice-media-keys.md) | Client-held voice media keys | Accepted | 1 | — |
+| ADR | Title | Status | Phase | Landed | Supersedes / Superseded by |
+|---|---|---|---|---|---|
+| [0001](decisions/0001-pairwise-double-ratchet-group-fan-out.md) | Groups use pairwise Double Ratchet fan-out | Accepted | 1 | 2026-09-03 | — |
+| [0002](decisions/0002-fastapi-as-the-only-http-api-surface.md) | FastAPI is the only HTTP API surface | Accepted | 2 | — | — |
+| [0003](decisions/0003-one-asgi-process.md) | One ASGI process | Accepted | 2 | — | — |
+| [0004](decisions/0004-websocket-gateway-on-redis-pubsub.md) | The WebSocket gateway fans out over Redis publish and subscribe | Accepted | 2 | — | — |
+| [0005](decisions/0005-django-orm-on-a-thread-sensitive-data-path.md) | The Django ORM is the only data access layer | Accepted | 2 | — | — |
+| [0006](decisions/0006-device-bound-tokens-on-pyjwt.md) | Device-bound tokens on PyJWT, with no token table | Accepted | 2 | — | — |
+| [0007](decisions/0007-contract-conventions.md) | Contract conventions | Accepted | 2 | — | — |
+| [0008](decisions/0008-fastapi-generates-the-openapi-document.md) | FastAPI generates the OpenAPI document | Accepted | 2 | — | — |
+| [0009](decisions/0009-regenerate-the-initial-migrations.md) | Regenerate the initial migrations | Accepted | 2 | — | — |
+| [0010](decisions/0010-redis-rate-limiting-that-fails-closed.md) | Redis rate limiting that fails closed | Accepted | 2 | — | — |
+| [0011](decisions/0011-django-unfold-admin-panel.md) | A django-unfold admin panel that shows no secret | Accepted | 3 | — | — |
+| [0012](decisions/0012-pinned-hashed-and-untracked-wheel-cache.md) | Pinned, hashed dependencies and an untracked wheel cache | Accepted | 1 | — | — |
+| [0013](decisions/0013-pytest-and-ruff-as-the-test-and-lint-stack.md) | pytest and ruff as the test and lint stack | Accepted | 1 and 4 | — | — |
+| [0014](decisions/0014-process-hardening-at-the-edge.md) | Process hardening at the edge | Accepted | 2 | — | — |
+| [0015](decisions/0015-the-document-map.md) | The document map | Accepted | 1 to 5 | — | — |
+| [0016](decisions/0016-client-held-voice-media-keys.md) | Client-held voice media keys | Accepted | 1 | 2026-09-03 | — |

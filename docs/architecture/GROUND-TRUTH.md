@@ -66,12 +66,12 @@ runtime path.
 | Pinned production distributions | 34 | `grep -cE '^[a-zA-Z0-9._-]+==' requirements/prod.txt` | 2026-09-03 |
 | Pinned development distributions | 8 | `grep -cE '^[a-zA-Z0-9._-]+==' requirements/dev.txt` | 2026-09-03 |
 | Project apps | 8 — `core`, `accounts`, `devices`, `vault`, `messaging`, `attachments`, `voicerooms`, `realtime` | `INSTALLED_APPS` | 2026-09-03 |
-| Project models | 12 | `django.apps.apps.get_models()` filtered to the project apps | 2026-09-03 |
-| Migration files | 14 — accounts 1, attachments 1, devices 8, messaging 1, vault 2, voicerooms 1 | `ls -1 */migrations/0*.py \| wc -l` | 2026-09-03 |
+| Project models | 11 | `django.apps.apps.get_models()` filtered to the project apps | 2026-09-03 |
+| Migration files | 15 — accounts 1, attachments 1, devices 9, messaging 1, vault 2, voicerooms 1 | `ls -1 */migrations/0*.py \| wc -l` | 2026-09-03 |
 | Tracked Python files | 167 | `git ls-files '*.py' \| wc -l` | 2026-09-03 |
-| Test files | 61 | `git ls-files '*/test_*.py' \| wc -l` | 2026-09-03 |
-| Tests collected | 510, plus 53 subtests | `pytest -q` | 2026-09-03 |
-| URL routes declared | 38 `path()` entries across the `urls.py` files | `grep -rhn "path(" --include='urls.py' . \| wc -l` | 2026-09-03 |
+| Test files | 60 | `git ls-files '*/test_*.py' \| wc -l` | 2026-09-03 |
+| Tests collected | 483, plus 44 subtests | `pytest -q` | 2026-09-03 |
+| URL routes declared | 35 `path()` entries across the `urls.py` files | `grep -rhn "path(" --include='urls.py' . \| wc -l` | 2026-09-03 |
 | Production hardware | 1 vCPU, 1 GB RAM, single VPS | operator statement; no host metric exists yet | 2026-09-03 |
 | Accounts, devices, groups | 0 accounts in production; the band caps the design at fewer than 50 accounts, at most 10 devices for each account, and at most 50 members in a group | pre-launch; the caps are the stated scale band, not a measurement | 2026-09-03 |
 | Scale band | Band 0, pre-launch | no production traffic exists | 2026-09-03 |
