@@ -32,7 +32,7 @@ The vocabulary is fixed. A client branches on `code`, never on `detail`.
 | 403 | `device_scope_required` | The route needs a device-bound token. |
 | 403 | `forbidden` | The token belongs to another device than the path names. |
 | 404 | `not_found` | No such route or resource. |
-| 405 | `method_not_allowed` | The route exists; the method does not. `Allow` lists the methods. |
+| 405 | `method_not_allowed` | The route exists; the method does not. `Allow` lists the methods of one route object. |
 | 409 | `username_taken` | Registration name conflict, including the concurrent race. |
 | 409 | `stale_version` | A version did not increase. |
 | 409 | `device_limit` | The account holds `MAX_DEVICES_PER_USER` live devices. |
@@ -44,13 +44,16 @@ The vocabulary is fixed. A client branches on `code`, never on `detail`.
 | 503 | `unavailable` | The rate-limit store is unreachable, or the request exceeded its deadline. |
 | 503 | `voice_unconfigured` | LiveKit is not configured. |
 
-Two surfaces serve this API while the migration runs. `core`, `accounts` and `vault`
-are served by FastAPI and use the envelope everywhere, including for `404` and `405`
-on their own paths. The routes of `devices`, `messaging`, `attachments` and
-`voicerooms` are still served by Django REST Framework: they use the same
-authentication vocabulary, because both stacks verify through one module, but a path
-no route serves at all still answers Django's own `404` page (`text/html`).
-`API_CHANGES.md` records when that changes.
+One surface serves this API. Every route of every app answers through FastAPI and
+uses the envelope everywhere, including for a `404` on a path no route serves and a
+`405` on a method a route does not carry. `Allow` on a `405` names the methods of one
+route object, so on a path two methods share it names one of them and not both:
+branch on `code`, and never read `Allow` as the complete method set of a path.
+
+One code in the table is reserved rather than reachable today.
+`device_scope_required` belongs to a route that needs a device-bound token where the
+requirement itself does not supply one; every route now takes a requirement that
+does, so no route returns it. It stays in the vocabulary.
 
 ## Request limits
 

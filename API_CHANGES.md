@@ -6,6 +6,76 @@ field, the old behaviour, the new behaviour, and the client action. The current
 contract is `backend/CLIENT_CONTRACT.md` and the per-app `backend/*/API.md`
 references; this file records only what moved.
 
+## Phase 2 — attachments and voice
+
+The last run of the move to FastAPI
+([ADR-0002](docs/architecture/decisions/0002-fastapi-as-the-only-http-api-surface.md)).
+This run moves `POST /api/v1/attachments`, `GET /api/v1/attachments/{attachment_id}`,
+`POST /api/v1/rooms`, `GET` and `PUT /api/v1/rooms/{room_id}`, and
+`POST /api/v1/rooms/{room_id}/token`. Django REST Framework then leaves the project.
+Every route of every app now answers through FastAPI.
+
+No path, method, or success body changed. What changed is the error shape on these
+six routes, four refusals that are reported differently, the body cap and the
+deadline of each one, and what a path that no route serves answers.
+
+### The error envelope reaches `attachments` and `voicerooms`
+
+Every error these routes return is now `{"code": ..., "detail": ...}`, with `detail`
+a string except for `invalid_request`, where it maps a field path to the list of
+messages that failed. No error body echoes request input. The full vocabulary is the
+table in `backend/core/API.md`; branch on `code`, never on `detail`.
+
+| Item | Old behaviour | New behaviour | Client action |
+|---|---|---|---|
+| Validation failure on a room body | The bare Django REST Framework field-error object, with no `code` key: `{"name_blob": ["This field is required."]}` | `400 {"code": "invalid_request", "detail": {"name_blob": ["Field required"]}}` | Parse the envelope; read the field path as a dotted string |
+| An undeclared field in a room body | `400 {"junk": "Unexpected field."}` | `400 {"code": "invalid_request", "detail": {"junk": ["Extra inputs are not permitted"]}}` | Send only `name_blob` |
+| Validation messages | REST Framework's text, for example `"This field is required."` | Pydantic's text, for example `"Field required"` | Show `detail` values; never match on their text |
+| Rate limited | `429 {"detail": "Request was throttled."}` | `429 {"code": "throttled", "detail": "Request was throttled."}` with a `Retry-After` header in seconds | Read `Retry-After` and back off; branch on `code` |
+| Wrong method on one of these routes | `405 {"detail": "Method \"DELETE\" not allowed."}`, with `Allow` naming every method the route serves | `405 {"code": "method_not_allowed", "detail": "That method is not allowed."}`. `Allow` now names the methods of one route object, so on a path two methods share — `/api/v1/rooms/{room_id}` — it names one of them and not both | Branch on `code`. Do not read `Allow` as the complete method set of a path |
+| Unhandled failure | Django's `500` page | `500 {"code": "server_error", "detail": "Internal error."}`, with no traceback and no detail | None |
+
+One refusal is new: the counters for the `attachments` and `roomtoken` scopes now
+live in Redis rather than in the Django cache layer, so a request that arrives while
+that store is unreachable answers `503 {"code": "unavailable", ...}` instead of
+failing as an unhandled error. The rates themselves are unchanged. Treat `503` as an
+outage and `429` as backoff.
+
+### Four refusals changed code
+
+| Item | Old behaviour | New behaviour | Client action |
+|---|---|---|---|
+| A malformed upload body — no `blob` part, a body that is not multipart, or a second part beside `blob` | `400 {"code": "bad_request", "detail": "Expected a single \`blob\` file."}` for a missing part; a second part was accepted and ignored | `400 {"code": "invalid_request", "detail": {"blob": ["Expected one multipart file part named \`blob\`."]}}` for all three. The code `bad_request` is retired | Replace the `bad_request` branch with `invalid_request`, and send exactly one part |
+| A malformed `{room_id}` in a path | `404`, from the URL resolver | `400 {"code": "invalid_request", "detail": {"room_id": [...]}}` | Treat a malformed id as a client bug, not a missing resource |
+| An unknown room | `GET` and the token mint returned `404 {"code": "not_found"}`; `PUT` returned `404` with an empty body | `404 {"code": "not_found", "detail": "No such room."}` on all three | Compare `code`, not the whole body, and parse the `PUT` refusal as JSON |
+| `403 {"code": "device_scope_required"}` on the token mint | Documented, and unreachable in practice: every full-scope token names a device | Gone from the route. A register-scope token is `403 scope_forbidden`, which is what it always answered. The code stays in the vocabulary | Drop the `device_scope_required` branch |
+
+`503 {"code": "voice_unconfigured"}` also gained a `detail` of `"Voice is not
+configured."`; the code is unchanged.
+
+### The upload takes a cap of its own
+
+`POST /api/v1/attachments` was bounded at 70 MiB, which is what nginx admits, because
+the same class covered every route the Django application still served. Its cap is
+now the largest attachment bucket plus the multipart wrapper —
+`67108864 + MULTIPART_OVERHEAD_BYTES`, 64 MiB + 8 KiB by default. A body between the
+two answers `413 {"code": "payload_too_large", ...}` where it used to reach the
+bucket check and answer `400 bad_bucket`. No legal upload is affected: the largest
+one a client can send is exactly the largest bucket.
+
+The four room routes and the attachment download move from that 70 MiB class to the
+JSON class: 16 KiB, and a 15-second deadline rather than 120. The largest legal room
+body is a 1024-byte name blob, about 1.4 KB encoded, so no legal request is affected.
+
+### A path no route serves answers JSON
+
+Django served every path FastAPI did not claim, so an unknown path under `/api/v1`
+answered Django's own `404` page in `text/html`. Django now answers `ADMIN_PATH` and
+nothing else, and every other unmatched path is
+`404 {"code": "not_found", "detail": "No such route or resource."}` with the security
+headers every other response carries. A client that distinguished a typo'd path from
+a missing resource by content type must branch on `code` instead.
+
 ## Phase 2 — devices and messaging
 
 The second run of the move to FastAPI

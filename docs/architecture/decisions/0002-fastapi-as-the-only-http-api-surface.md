@@ -3,9 +3,10 @@
 - Status: Accepted
 - Phase: 2
 - Date: 2026-09-03
-- Landing: 2026-09-04, in the first and second runs of phase 2. FastAPI serves
-  `core`, `accounts`, `vault`, `devices` and `messaging`; REST Framework still serves
-  `attachments` and `voicerooms`, and their move ends this landing.
+- Landed: 2026-09-04, over the first three runs of phase 2. FastAPI serves every
+  HTTP route of every app, and Django REST Framework is gone from the project. The
+  Django ASGI application answers `ADMIN_PATH` and, in development, the static files
+  the admin renders with.
 
 ## Context
 
@@ -47,13 +48,15 @@ Django keeps the ORM, the migrations, the admin and the settings.
 
 ## Consequences
 
-- `djangorestframework` leaves `requirements/prod.txt`, and `rest_framework`
-  leaves `INSTALLED_APPS`.
-- Every `REST_FRAMEWORK` setting loses its meaning and is replaced: the
+- `djangorestframework` left `requirements/prod.txt`, and `rest_framework` left
+  `INSTALLED_APPS`. `python-multipart` took its place, because Starlette needs it to
+  parse the one multipart body this API accepts.
+- Every `REST_FRAMEWORK` setting lost its meaning and was replaced: the
   authentication class by a FastAPI dependency, the permission classes by
   dependencies, the throttle rates by [0010](0010-redis-rate-limiting-that-fails-closed.md),
-  the exception handler by [0007](0007-contract-conventions.md).
-- The per-app `API.md` files stay the human reference and must be re-checked
-  against the FastAPI routes, not against the DRF viewsets.
+  the exception handler by [0007](0007-contract-conventions.md). `THROTTLE_RATES` is
+  the one table that survived the block, because the Redis limiter reads it.
+- The per-app `API.md` files stay the human reference and are now written against
+  the FastAPI routes. `API_CHANGES.md` records every contract change of the move.
 - `fastapi-alongside-django` owns the code on the FastAPI side and the seam. This
   ADR only records that the surface exists.

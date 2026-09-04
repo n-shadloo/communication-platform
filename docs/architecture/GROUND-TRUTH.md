@@ -6,7 +6,7 @@ it or delete it, and never lengthen the window to bring one back inside it.
 
 Scope note, and the reason several sections are thin: the VPS does not serve yet.
 The system is at scale band 0, pre-launch, with no real traffic and no production
-database. Every entry here was measured on the repository at commit `ca33ce5` or
+database. Every entry here was measured on the repository at commit `aac13f6` or
 on the developer machine. A row that names the VPS states what the committed
 operator configuration sets, not what a running host reports, and says so. The
 first production measurement replaces it.
@@ -20,7 +20,7 @@ file holds no decision.
 | Component | Where it runs | What it reaches | verified |
 |---|---|---|---|
 | nginx | VPS, ports 80 and 443, TLS 1.3 only, `ssl_early_data off` | `127.0.0.1:8000` for `/api/` and `/ws`, `127.0.0.1:7880` for `/rtc` | 2026-09-03 (configured, `backend/ops/nginx/chat.nimashadloo.dev.conf`) |
-| ASGI application | VPS, one daphne process on `127.0.0.1:8000`, systemd unit `chat.service`, user `deploy`. In-process: FastAPI is the root HTTP application, the Django ASGI application answers every path no FastAPI route claims, and the Channels router answers the WebSocket scope | PostgreSQL and Redis on loopback | 2026-09-04 (configured, `backend/ops/systemd/chat.service`; composition observed in `backend/config/asgi.py`) |
+| ASGI application | VPS, one daphne process on `127.0.0.1:8000`, systemd unit `chat.service`, user `deploy`. In-process: FastAPI is the root HTTP application and serves every API route, the Django ASGI application answers `ADMIN_PATH` alone, and the Channels router answers the WebSocket scope | PostgreSQL and Redis on loopback | 2026-09-04 (configured, `backend/ops/systemd/chat.service`; composition observed in `backend/config/asgi.py`) |
 | PostgreSQL 16 | VPS, loopback | — | 2026-09-03 (configured) |
 | Redis 7 | VPS, loopback, `bind 127.0.0.1`, `protected-mode yes` | — | 2026-09-03 (configured, `backend/ops/redis/redis-chatapp.conf`) |
 | LiveKit SFU | VPS, `127.0.0.1:7880`, RTC UDP 50100–50200, TCP 7881, `turn.enabled: false`, `use_external_ip: false` | the participants' media | 2026-09-03 (configured, `backend/ops/livekit/livekit.yaml`) |
@@ -45,15 +45,12 @@ runtime path.
 | `DATABASES["default"]["OPTIONS"]["pool"]` | `{min_size: 1, max_size: 16, timeout: 10}` | no pool | [0005](decisions/0005-django-orm-on-a-thread-sensitive-data-path.md) | 2026-09-04 |
 | FastAPI `openapi_url`, `docs_url`, `redoc_url` | `None` | `/openapi.json`, `/docs`, `/redoc` | [0008](decisions/0008-fastapi-generates-the-openapi-document.md) closes them outside `DEBUG`; the surface publishes no route map until `manage.py openapi` lands | 2026-09-04 |
 | FastAPI `router.redirect_slashes` | `False` | `True` | [0007](decisions/0007-contract-conventions.md) | 2026-09-04 |
-| FastAPI `router.default` | the Django ASGI application | Starlette's own 404 | — (transition: the routes that have not moved) | 2026-09-04 |
-| `DEFAULT_AUTHENTICATION_CLASSES` | `accounts.auth.DeviceJWTAuthentication` only, a thin adapter over `api.auth` | session and basic authentication | [0006](decisions/0006-device-bound-tokens-on-pyjwt.md) | 2026-09-04 |
-| `UNAUTHENTICATED_USER` | `None` | `AnonymousUser` | — | 2026-09-03 |
-| DRF renderers and parsers | JSON renderer only; JSON and multipart parsers only | the browsable API renderer is included | — | 2026-09-03 |
-| `EXCEPTION_HANDLER` | `core.exceptions.api_exception_handler` | DRF's own handler | [0007](decisions/0007-contract-conventions.md) | 2026-09-03 |
+| FastAPI `router.default` | a dispatcher that hands `ADMIN_PATH` (and `STATIC_URL` under `DEBUG`) to the Django ASGI application and raises the router's own 404 for everything else | Starlette's own 404 | [0002](decisions/0002-fastapi-as-the-only-http-api-surface.md) | 2026-09-04 |
+| Multipart limits on the upload route | `max_files=1`, `max_fields=0`, and a spool threshold of 64 KiB, set by parsing the form in the route rather than declaring an `UploadFile` parameter | `max_files=1000`, `max_fields=1000`, and a spool threshold of 1 MiB | [0014](decisions/0014-process-hardening-at-the-edge.md) | 2026-09-04 |
 | Access log | `--access-log /dev/null` on daphne; no nginx access log for the API | an access log is written | — (invariant: no identifier reaches a log line) | 2026-09-03 |
 | Redis persistence | `save ""`, `appendonly no` | RDB snapshots on | — (invariant: volatile data never touches disk) | 2026-09-03 |
 | `ssl_early_data` | `off` | `off` in nginx, but commonly turned on with TLS 1.3 | — (0-RTT payloads are replayable) | 2026-09-03 |
-| `client_max_body_size` | 70m | 1m | — (the largest attachment bucket is 64 MiB) | 2026-09-03 |
+| `client_max_body_size` | 70m | 1m | — (the largest attachment bucket is 64 MiB; the application caps the upload route tighter still, at that bucket plus 8 KiB of multipart wrapper) | 2026-09-04 |
 | `ssl_protocols` | `TLSv1.3` | `TLSv1.2 TLSv1.3` | — | 2026-09-03 |
 | LiveKit `turn.enabled` | `false` | `false`, but the bundled TURN is the common choice | — (coturn is the relay) | 2026-09-03 |
 | coturn `no-stun` | set | STUN is served | — (relay-only; no discovery surface) | 2026-09-03 |
@@ -65,9 +62,8 @@ runtime path.
 |---|---|---|---|
 | Python | 3.12.10 | `backend/.venv/bin/python -V` | 2026-09-03 |
 | Django | 6.0.7 | `django.get_version()` | 2026-09-03 |
-| Django REST Framework | 3.17.1 | `requirements/prod.txt` | 2026-09-03 |
 | FastAPI / Starlette / Pydantic | 0.141.1 / 1.6.0 / 2.13.5 | `requirements/prod.txt` | 2026-09-04 |
-| PyJWT / psycopg-pool | 2.13.0 / 3.3.1 | `requirements/prod.txt` | 2026-09-04 |
+| PyJWT / psycopg-pool / python-multipart | 2.13.0 / 3.3.1 / 0.0.32 | `requirements/prod.txt` | 2026-09-04 |
 | httpx (test only) | 0.28.1 | `requirements/dev.txt` | 2026-09-04 |
 | Channels / daphne | 4.3.2 / 4.2.2 | `requirements/prod.txt` | 2026-09-03 |
 | Pinned production distributions | 42 | `grep -cE '^[a-zA-Z0-9._-]+==' requirements/prod.txt` | 2026-09-04 |
@@ -75,10 +71,10 @@ runtime path.
 | Project apps | 8 — `core`, `accounts`, `devices`, `vault`, `messaging`, `attachments`, `voicerooms`, `realtime` | `INSTALLED_APPS` | 2026-09-03 |
 | Project models | 11 | `django.apps.apps.get_models()` filtered to the project apps | 2026-09-03 |
 | Migration files | 16 — accounts 1, attachments 1, devices 10, messaging 1, vault 2, voicerooms 1 | `ls -1 */migrations/0*.py \| wc -l` | 2026-09-04 |
-| Tracked Python files | 179 | `git ls-files '*.py' \| wc -l` | 2026-09-04 |
-| Test files | 65 | `git ls-files '*/test_*.py' \| wc -l` | 2026-09-04 |
-| Tests collected | 687, plus 44 subtests | `pytest -q` | 2026-09-04 |
-| URL routes declared | 8 `path()` entries across the `urls.py` files — the admin, two `attachments` routes and three `voicerooms` routes, plus the two `include()` lines — and 26 FastAPI method-and-path pairs over 24 distinct paths | `grep -rhn "path(" --include='urls.py' . \| wc -l`, and `core/tests/test_route_table.py` for the FastAPI table | 2026-09-04 |
+| Tracked Python files | 178 | `git ls-files '*.py' \| wc -l` | 2026-09-04 |
+| Test files | 66 | `git ls-files '*/test_*.py' \| wc -l` | 2026-09-04 |
+| Tests collected | 716, plus 44 subtests | `pytest -q` | 2026-09-04 |
+| URL routes declared | 1 `path()` entry across the `urls.py` files — the admin — plus `staticfiles_urlpatterns()` under `DEBUG`, and 32 FastAPI method-and-path pairs over 27 distinct paths | `grep -rhn "path(" --include='urls.py' . \| wc -l`, and `core/tests/test_route_table.py` for the FastAPI table | 2026-09-04 |
 | Project apps | `api/` is a Python package and not an installed app: it holds no model and appears in no `INSTALLED_APPS` | `INSTALLED_APPS` | 2026-09-04 |
 | Production hardware | 1 vCPU, 1 GB RAM, single VPS | operator statement; no host metric exists yet | 2026-09-03 |
 | Accounts, devices, groups | 0 accounts in production; the band caps the design at fewer than 50 accounts, at most 10 devices for each account, and at most 50 members in a group | pre-launch; the caps are the stated scale band, not a measurement | 2026-09-03 |
@@ -92,12 +88,14 @@ table whose size follows traffic, and nothing has measured it.
 
 | Operation | The duration | The conditions of the run | verified |
 |---|---|---|---|
-| Full test suite | 34.4 s, 687 passed | Developer machine, `pytest -q`, native PostgreSQL 16 and Redis 7 on loopback, random order (`pytest-randomly` seed reported per run) | 2026-09-04 |
-| Full test suite, second order | 41.0 s, 687 passed | Same machine, a different `pytest-randomly` order in the same session. The spread between the two orders is the cost of the `transaction=True` tests, whose table truncation lands in a different place each run, and it widened when the `devices` and `messaging` suites moved to the FastAPI client and took that marker with them | 2026-09-04 |
+| Full test suite | 36.1 s, 716 passed | Developer machine, `pytest -q`, native PostgreSQL 16 and Redis 7 on loopback, random order (`pytest-randomly` seed reported per run) | 2026-09-04 |
+| Full test suite, second order | 42.2 s, 716 passed | Same machine, a different `pytest-randomly` order in the same session. The spread between the two orders is the cost of the `transaction=True` tests, whose table truncation lands in a different place each run | 2026-09-04 |
 | `AddField` for `Device.refresh_generation` | 5.1 ms over a 200 000-row probe table, with no rewrite | `psql`, inside a rolled-back transaction: the `relfilenode` was unchanged, and `pg_locks` showed ACCESS EXCLUSIVE on the table alone | 2026-09-04 |
 | Test-database teardown | warns on roughly one run in three: `database "test_chatapp" is being accessed by other users`, one session | Developer machine, `pytest -q` repeated. It is a teardown warning and never a failure; the suite is green either way, and CI is unaffected because each run builds a fresh database. Reproduced with `DB_POOL_MIN_SIZE=0`, so it is not the pool's idle connection but a connection a worker thread still holds when `destroy_test_db` runs | 2026-09-04 |
 | Send fan-out | 3 queries of its own, at 1, 6 and 20 recipients alike, and 3 for ten envelopes to one mailbox: one locked liveness read, one bulk counter update, one bulk insert. A batch that reaches only stale devices costs the liveness read alone. The authentication dependency adds one query to every route | `CaptureQueriesContext` over the composed application, transaction statements excluded, in `messaging/tests/test_query_counts.py` | 2026-09-04 |
 | Prekey claim | 1 target read, 1 locked select per target device, and 1 delete for the batch — 3 queries of its own for one device with a pool of 1, 20 or 200 keys, and 8 for six devices. An exhausted pool costs one less, because nothing is deleted | `CaptureQueriesContext` over the composed application, transaction statements excluded, in `devices/tests/test_query_counts.py` | 2026-09-04 |
+| Attachment upload | 3 queries of its own — the uploader's row lock, one `SUM` aggregate, one insert — at 0 and at 25 attachments already held. The download is 1. The authentication dependency adds one query to every route | `CaptureQueriesContext` over the composed application, transaction statements excluded, in `attachments/tests/test_query_counts.py` | 2026-09-04 |
+| Offline install of the regenerated set | 54 hash-verified wheels collected and installed with `--no-index` | `pip download --require-hashes --only-binary=:all: -r requirements/dev.txt`, then `pip install --no-index --find-links` into a fresh venv, on the developer machine | 2026-09-04 |
 | Hash-verified dependency install | 7 s to fetch and install the two added wheels | `pip install --require-hashes -r requirements/dev.txt` on the developer machine, online | 2026-09-03 |
 
 No restore drill, no failover drill, and no deploy has been timed. Those rows stay
@@ -130,10 +128,10 @@ one discovered from the repository rather than assumed.
 | Seam shape | Same-process mount. FastAPI is the root ASGI application; the Django ASGI application is the router's `default`, so it answers every path no FastAPI route claims. A dispatcher in `backend/config/asgi.py` routes the WebSocket scope to the Channels router and everything else to FastAPI | 2026-09-04 (observed, `backend/config/asgi.py`) |
 | Database each runtime connects to | One: the `default` PostgreSQL database. There is no second database and no second connection string | 2026-09-04 (observed, `config/settings/base.py`) |
 | DDL owner | Django. There is no second migration tool, and the FastAPI side declares no schema of its own | 2026-09-04 (observed, `*/migrations/`) |
-| Writer of each table | The Django ORM, in every case. The FastAPI routes write through the same models, inside synchronous units of work, so the field defaults, the `auto_now` values and the signals all run | 2026-09-04 (observed, `accounts/services.py`, `vault/services.py`, `devices/services.py`, `messaging/services.py`) |
+| Writer of each table | The Django ORM, in every case. The FastAPI routes write through the same models, inside synchronous units of work, so the field defaults, the `auto_now` values and the signals all run | 2026-09-04 (observed, `accounts/services.py`, `vault/services.py`, `devices/services.py`, `messaging/services.py`, `attachments/services.py`, `voicerooms/services.py`) |
 | Data access layer | The Django ORM only, through `api/orm.py`: one synchronous function for each unit of work, bracketed with `close_old_connections()` and run with `sync_to_async(thread_sensitive=True)` inside a per-request `ThreadSensitiveContext` | 2026-09-04 (observed, `api/orm.py`, `api/middleware.py`) |
-| Credential at the seam | One HS256 bearer token, issued and verified only by `api/auth.py`. The REST Framework authentication class and the WebSocket gateway both call that module, so a token one stack revokes is dead on the other | 2026-09-04 (observed, `accounts/auth.py`, `realtime/auth.py`; asserted by `accounts/tests/test_device_auth.py`) |
+| Credential at the seam | One HS256 bearer token, issued and verified only by `api/auth.py`. The FastAPI dependencies and the WebSocket gateway both call that module, so a token the HTTP surface revokes is dead on the socket | 2026-09-04 (observed, `api/auth.py`, `realtime/auth.py`; asserted by `accounts/tests/test_device_auth.py` and `realtime/tests/test_revoke_close.py`) |
 | Broker | None. There is no task queue and no Celery application; the only scheduled work is the `prune` management command under a systemd timer | 2026-09-04 (observed) |
-| Cache | One Redis instance, `REDIS_URL`. The Django cache, the Channels layer, the room presence set and the FastAPI rate limiter all use it. The limiter keys its counters under `ratelimit:` and the REST Framework throttle keeps its own keys. Only `attachments` and `voicerooms` still count on the throttle, and their scopes — `attachments` and `roomtoken` — are served by no FastAPI route, so no scope is double-counted today | 2026-09-04 (observed, `api/ratelimit.py`, `config/urls.py`) |
+| Cache | One Redis instance, `REDIS_URL`. The Django cache, the Channels layer, the room presence sets and the rate limiter all use it. `api/redis.py` holds one `redis.asyncio` client for each running event loop, and the limiter and presence share it, so one process draws one pool. The limiter keys its counters under `ratelimit:` and presence keys its sets under `roomlive:`. There is one counter stack, and no scope is counted twice | 2026-09-04 (observed, `api/redis.py`, `api/ratelimit.py`, `voicerooms/presence.py`) |
 | Process set | One. A single daphne process serves HTTP and WebSocket alike; `WEB_CONCURRENCY` does not apply until uvicorn replaces it | 2026-09-04 (configured, `backend/ops/systemd/chat.service`) |
 | Lifespan | daphne sends no ASGI lifespan message, so nothing the application needs is built at startup. The Redis client of the rate limiter is built on first use and released on a lifespan shutdown where one arrives | 2026-09-04 (observed, `api/ratelimit.py`, `api/app.py`) |

@@ -9,20 +9,22 @@ conversation graph — an envelope knows its recipient device and nothing else.
 Python 3.12, Django 6.0, FastAPI, Channels 4 on Daphne. PostgreSQL and Redis are the
 only backing services, and there is no outbound network dependency at runtime.
 
-The HTTP surface is moving from Django REST Framework to FastAPI one app at a time.
-FastAPI is the root application and serves `core`, `accounts` and `vault`; every path
-it does not claim falls through to the Django application, which still holds the
-admin and the REST Framework routes of `devices`, `messaging`, `attachments` and
-`voicerooms`. Django keeps the ORM, the migrations, the admin and the settings
-throughout.
+FastAPI is the only HTTP API surface. It is the root application and serves every
+route of every app; the Django application behind it answers `ADMIN_PATH` and, in
+development, the static files the admin renders with. Any other path is this API's
+own `404`, never a Django page. Django keeps the ORM, the migrations, the admin and
+the settings.
 
 ## Protocol and transport
 
-**REST.** All HTTP endpoints live under `/api/v1`, JSON in and JSON out (multipart is
-accepted solely for attachment upload). Binary values cross the API base64-encoded.
-Errors share one envelope: `{"code": "...", "detail": ...}`, where `detail` is a string
-except for `invalid_request`, which maps a field path to its messages. No error body
-echoes request input. On the routes FastAPI serves, a request that fails validation is
+**REST.** All HTTP endpoints live under `/api/v1`, JSON in and JSON out. The one
+exception is `POST /api/v1/attachments`, which takes a multipart body of exactly one
+file part named `blob` and nothing else; its cap is the largest attachment bucket
+plus `MULTIPART_OVERHEAD_BYTES`, and the bytes stream to disk one chunk at a time so
+the process never holds a whole attachment. Binary values otherwise cross the API
+base64-encoded. Errors share one envelope: `{"code": "...", "detail": ...}`, where
+`detail` is a string except for `invalid_request`, which maps a field path to its
+messages. No error body echoes request input. A request that fails validation is
 `400 invalid_request`, a body above the route's cap is `413 payload_too_large`, and a
 request past its deadline is `503 unavailable`.
 
@@ -89,7 +91,8 @@ online to transfer it. There is no server history API.
   non-persistent).
 - Daphne serving ASGI behind nginx; nginx terminates TLS and serves attachment bytes.
   Daphne sends no ASGI lifespan message, so nothing the application needs is built at
-  startup; the Redis client of the rate limiter is built on first use.
+  startup; the one Redis client the rate limiter and room presence share is built on
+  first use.
 - No CDN, no push service, no telemetry, no external CA or API. Dependencies are
   pinned and hashed in `requirements/`; the operator builds the untracked `vendor/`
   wheel cache with `ops/vendor.sh` while online, and `ops/offline_install.sh`
@@ -99,7 +102,7 @@ online to transfer it. There is no server history API.
 
 | Path | Owns |
 |---|---|
-| `api` | The FastAPI runtime and the seam: the composed application, token issue and verification, the error envelope, the Redis rate limiter, the ORM unit-of-work helper, the pure-ASGI request limits |
+| `api` | The FastAPI runtime and the seam: the composed application, token issue and verification, the error envelope, the shared Redis client and the rate limiter over it, the ORM unit-of-work helper, the pure-ASGI request limits |
 | `accounts` | User model, register/login/refresh/logout, user directory, encrypted profile blobs |
 | `devices` | Device registry, cross-signing identity, classical + ML-KEM prekeys, device-list log, peer bundles and claims, revocation cascade |
 | `vault` | Recovery key backup (cross-signing private key material, opaque to the server) |
@@ -155,10 +158,11 @@ Every environment variable the code reads, with its default:
 | `REFRESH_DAYS` | `14` | Refresh-token lifetime, days |
 | `REGISTER_SCOPE_ACCESS_MIN` | `10` | Register-scope token lifetime, minutes |
 | `REQUEST_DEADLINE_SECONDS` | `15` | Deadline for a request FastAPI serves; past it the answer is `503 unavailable` |
-| `UPLOAD_DEADLINE_SECONDS` | `120` | Deadline for the routes the Django application still serves, whose largest body is a 64 MiB attachment |
-| `BODY_CAP_JSON_BYTES` | `16384` | Body cap for the JSON routes FastAPI serves |
+| `UPLOAD_DEADLINE_SECONDS` | `120` | Deadline for the attachment upload and the device/envelope batch routes |
+| `BODY_CAP_JSON_BYTES` | `16384` | Body cap for a small-JSON route, and for any path no route claims |
 | `BODY_CAP_BACKUP_BYTES` | `2097152` | Body cap for `PUT /api/v1/me/keybackup` |
-| `BODY_CAP_UPLOAD_BYTES` | `73400320` | Body cap for the routes the Django application still serves; matches nginx's `client_max_body_size 70m` |
+| `BODY_CAP_BATCH_BYTES` | `73400320` | Body cap for the `devices` and `messaging` list bodies; matches nginx's `client_max_body_size 70m` |
+| `MULTIPART_OVERHEAD_BYTES` | `8192` | Added to the largest attachment bucket to give `POST /api/v1/attachments` its cap |
 | `THROTTLE_REGISTER` | `10/hour` | Rate limit: account registration |
 | `THROTTLE_LOGIN` | `20/hour` | Rate limit: login |
 | `THROTTLE_REFRESH` | `120/hour` | Rate limit: token refresh |

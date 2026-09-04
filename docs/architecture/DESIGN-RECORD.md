@@ -79,8 +79,6 @@ Never mark a row resolved without the trigger it names.
 | Regenerating every `0001_initial` and deleting the earlier migrations | The schema stops changing, at the end of phase 2 |
 | coturn still reads its certificate from a public-CA path (`/etc/letsencrypt/live/...`) while nginx now terminates with the private CA pair | The first end-to-end voice rehearsal on the VPS |
 | A `verified` date check in CI over `GROUND-TRUTH.md` | The first entry passes the 90-day window |
-| One rate-limit counter for the whole surface. Two counter stacks still run: the Redis limiter for every FastAPI route, and the REST Framework throttle for `attachments` and `voicerooms`. No scope is double-counted today — the two apps that remain hold `attachments` and `roomtoken`, which no FastAPI route serves — so the deferral is now about the second stack existing, not about a doubled allowance | The remaining apps move off REST Framework, in phase 2 |
-| The envelope on `404` and `405` for a path no route serves, which still answers Django's own page | The remaining apps move off REST Framework, in phase 2 |
 | Any second application host, read replica, worker fleet or cache tier | Band 1 is reached and measured, not assumed |
 
 ## 4. Decision log
@@ -88,7 +86,7 @@ Never mark a row resolved without the trigger it names.
 | ADR | Title | Status | Phase | Landed | Supersedes / Superseded by |
 |---|---|---|---|---|---|
 | [0001](decisions/0001-pairwise-double-ratchet-group-fan-out.md) | Groups use pairwise Double Ratchet fan-out | Accepted | 1 | 2026-09-03 | — |
-| [0002](decisions/0002-fastapi-as-the-only-http-api-surface.md) | FastAPI is the only HTTP API surface | Accepted | 2 | landing, 2026-09-04 | — |
+| [0002](decisions/0002-fastapi-as-the-only-http-api-surface.md) | FastAPI is the only HTTP API surface | Accepted | 2 | 2026-09-04 | — |
 | [0003](decisions/0003-one-asgi-process.md) | One ASGI process | Accepted | 2 | landing, 2026-09-04 | — |
 | [0004](decisions/0004-websocket-gateway-on-redis-pubsub.md) | The WebSocket gateway fans out over Redis publish and subscribe | Accepted | 2 | — | — |
 | [0005](decisions/0005-django-orm-on-a-thread-sensitive-data-path.md) | The Django ORM is the only data access layer | Accepted | 2 | landing, 2026-09-04 | — |
