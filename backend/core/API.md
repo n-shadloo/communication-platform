@@ -160,6 +160,10 @@ limit, so it still answers while the rate-limit store is down.
 
 None.
 
+**Retry semantics.** Safe to repeat: the route reads no state and writes none. It runs
+inside no unit of work and takes no database or Redis connection, so a client may poll
+it while the rest of the surface is refusing.
+
 **Responses**
 
 ### Alive — `200 OK`

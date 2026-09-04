@@ -420,6 +420,10 @@ is not paginated, because the scale band caps it at fewer than 50 accounts.
 
 None.
 
+**Retry semantics.** Safe to repeat: the route writes nothing. Two calls a moment
+apart can differ all the same, because the operator activates and deactivates accounts
+between them; the directory is a current answer, never a stable one.
+
 **Responses**
 
 ### Listed — `200 OK`
@@ -474,6 +478,10 @@ a peer announces a change.
 **Request body**
 
 None.
+
+**Retry semantics.** Safe to repeat: the route writes nothing. `version` is what tells
+two answers apart, so a client that caches a profile compares that rather than the
+blob.
 
 **Responses**
 
@@ -547,7 +555,8 @@ losing writer gets `409 stale_version`, refetches, and reapplies.
 
 **Retry semantics.** A retry of the same `PUT` either applies it or answers `409
 stale_version` because the first attempt already stored that version. Both outcomes
-leave the stored blob correct; on `409` the client refetches and re-applies.
+leave the stored blob correct; on `409` the client refetches and re-applies. `GET`
+writes nothing and is safe to repeat.
 
 **Responses**
 

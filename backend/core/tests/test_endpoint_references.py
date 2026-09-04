@@ -12,7 +12,7 @@ The shape it reads is the shape the files already use.
   backticks. A trailing parenthesised verb — `(PUT)` — restricts it to that
   method; without one it belongs to every method of the section.
 - The throttle scope is a line beginning ``Scope `name` ``.
-- The retry semantics of a mutating route is a `**Retry semantics.**` paragraph.
+- The retry semantics of a route is a `**Retry semantics.**` paragraph.
 
 Four statuses are not required per route, because a route inherits them from the
 requirement it declares, from the request deadline and from the unhandled-failure
@@ -42,7 +42,6 @@ SCOPE = re.compile(r"^Scope `([a-z]+)`", re.M)
 RETRY = re.compile(r"^\*\*Retry semantics\.\*\*", re.M)
 BACKTICKED = re.compile(r"`([^`]+)`")
 VERB = re.compile(r"\b(GET|POST|PUT|DELETE)\b")
-MUTATING = {"POST", "PUT", "DELETE"}
 
 # The refusals a route answers because of what it declares rather than what it
 # does. `core/API.md` carries each body once.
@@ -147,11 +146,18 @@ def test_every_route_names_the_throttle_scope_it_counts_against(route):
     assert set(SCOPE.findall(body)) == route_scopes()[route], route
 
 
-@pytest.mark.parametrize("route", sorted(key for key in OPERATIONS if key[0] in MUTATING))
-def test_every_mutating_route_documents_what_a_retry_does(route):
+@pytest.mark.parametrize("route", sorted(OPERATIONS))
+def test_every_route_documents_what_a_retry_does(route):
     """ADR-0007 refuses an idempotency store, because a stored response for a send
     would link a sender to its recipients at rest. The retry semantics are what
-    stands in its place, and they are contract rather than commentary."""
+    stands in its place, and they are contract rather than commentary.
+
+    Every route, not only the mutating ones the ADR names. A client writing a
+    retry policy reads one paragraph per route or it reads none, and "this route
+    is a read" is a fact about the route that only the route can state — the
+    method does not carry it, as `POST /api/v1/rooms/{room_id}/token` shows by
+    writing nothing.
+    """
     body = next(body for method, path, body in sections() if (method, path) == route)
 
     assert RETRY.search(body) is not None, route

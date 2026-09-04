@@ -153,6 +153,12 @@ visible.
 
 None.
 
+**Retry semantics.** Safe to repeat: the route writes nothing and the capability is not
+consumed by reading it. The bytes stay reachable until the operator deletes the
+attachment or `ATTACH_TTL_DAYS` expires it, after which every call answers
+`404 not_found` — so a retry that starts answering `404` has met the end of the object's
+life, not a transient failure.
+
 **Responses**
 
 ### Served — `200 OK`

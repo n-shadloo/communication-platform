@@ -148,6 +148,10 @@ self-contained so no such indirection exists.
 |---|---|---|---|
 | `user_id` | UUID | yes | Account whose identity is fetched |
 
+**Retry semantics.** Safe to repeat: the route writes nothing. `version` moves when the
+user rotates the identity, and a client that has pinned one compares that rather than
+the key bytes.
+
 **Responses**
 
 ### Found — `200 OK`
@@ -691,6 +695,10 @@ has stored. Same self-only gate as replenishment.
 
 None.
 
+**Retry semantics.** Safe to repeat: the route writes nothing. The two counts fall
+whenever a peer claims a bundle, so treat an answer as a reading taken at that instant
+and never as a reservation.
+
 **Responses**
 
 ### Counted — `200 OK`
@@ -762,6 +770,10 @@ session state / log-head comparison should be refreshed.
 **Request body**
 
 None.
+
+**Retry semantics.** Safe to repeat: the route writes nothing. A retry that carries the
+`ETag` of the first answer gets `304` while the device set is unchanged, which is the
+cheap way to poll it.
 
 **Responses**
 
@@ -1066,6 +1078,11 @@ never a `500`.
 **Request body**
 
 None.
+
+**Retry semantics.** Safe to repeat: the route writes nothing and a keyset page is
+stable, because a record is only ever appended and never edited or deleted. Re-reading
+a page after a lost response yields the same records; pass the same `after` rather than
+restarting from the head.
 
 **Responses**
 

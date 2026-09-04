@@ -193,6 +193,12 @@ falls back to 100, a negative one clamps to 1.
 
 None.
 
+**Retry semantics.** Safe to repeat, and repeating is the design: draining consumes
+nothing. A row leaves the mailbox only when `POST /api/v1/me/envelopes/ack` names it, so
+a retry after a lost response returns the same envelopes at the same `seq` values rather
+than losing them. A client that cannot tell whether its ack landed drains again and
+acks again; a second ack for a row already gone deletes nothing.
+
 **Responses**
 
 ### Drained — `200 OK`
