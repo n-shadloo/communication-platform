@@ -807,7 +807,7 @@ def test_the_lockout_refuses_when_redis_cannot_be_read(client, monkeypatch):
     User.objects.create_superuser(username="owner", password=PASSWORD)
 
     class Unreachable:
-        def get(self, *args, **kwargs):
+        def ttl(self, *args, **kwargs):
             raise redis.ConnectionError("redis is down")
 
     monkeypatch.setattr("core.lockout._redis", lambda: Unreachable())
@@ -851,13 +851,13 @@ def test_a_value_planted_in_redis_is_never_deserialized(client):
     import redis
     from django.conf import settings
 
-    from core.lockout import _key
+    from core.lockout import ADMIN, _key
 
     DETONATED.clear()
     payload = pickle.dumps(Detonator())
     store = redis.Redis.from_url(settings.REDIS_URL)
     try:
-        for key in (_key("lock", "owner"), f":1:{_key('lock', 'owner')}"):
+        for key in (_key(ADMIN, "lock", "owner"), f":1:{_key(ADMIN, 'lock', 'owner')}"):
             store.set(key, payload, ex=60)
         response = client.post(
             reverse("admin:login"), {"username": "owner", "password": PASSWORD}

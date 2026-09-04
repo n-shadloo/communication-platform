@@ -202,7 +202,10 @@ None of these is ever described as one of the others.
 - **Authentication vs encryption identity are never conflated.** The password authorizes
   the account (Argon2id-hashed, device-bound short-lived JWTs with a rotating refresh);
   a device's cryptographic identity is created client-side and only its public keys are
-  uploaded. Owner activation gates every account; revoking a device bumps its token
+  uploaded. Five failed attempts on a name within fifteen minutes lock that name for
+  fifteen minutes on both password surfaces — the API login and the admin panel —
+  before any hash is computed, and a locked name answers the same whether or not an
+  account holds it. Owner activation gates every account; revoking a device bumps its token
   generation (access dies ≤ 15 min, refresh immediately) and deletes its queue and its
   classical and PQ prekeys in one transaction.
 - **A neighbouring process on the host is not trusted.** The VPS is shared, and

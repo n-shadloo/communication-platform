@@ -95,7 +95,7 @@ should be taken if the model is touched for any other reason.
 
 **What is exposed.** Lockout state lives only in Redis, because a failed-attempt table
 would be a login record at rest and volatile data never touches disk (invariant 7).
-`core.lockout.is_locked` fails closed: when it cannot read the state it refuses the
+`core.lockout.locked_for` fails closed: when it cannot read the state it refuses the
 sign-in rather than allowing it. A Redis outage therefore locks the operator out of
 the panel until Redis is back.
 

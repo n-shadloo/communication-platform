@@ -141,6 +141,12 @@ Unknown usernames and wrong passwords return the same body, and unknown username
 still pay for a real Argon2 verification, so the two cases are not distinguishable by
 response or by timing. Activation state is only revealed after a correct password.
 
+Five failed attempts on one name within fifteen minutes lock that name for fifteen
+minutes, whether or not an account holds it, so the lock confirms nothing about
+existence. A locked name answers `429 throttled` with `Retry-After` before the
+password is hashed, and a successful sign-in clears the count. The per-address limit
+below stands beside it.
+
 **Headers**
 
 | Header | Required | Value |
@@ -228,7 +234,13 @@ The cap on this route is 16 KiB, counted as the bytes arrive rather than read fr
 
 ### Rate limited — `429 Too Many Requests`
 
-Scope `login`, default 20/hour per client address.
+```json
+{ "code": "throttled", "detail": "Too many sign-in attempts for this name. Wait and try again." }
+```
+
+Scope `login`, default 20/hour per client address, with `detail` `"Request was
+throttled."`. The body above is the other cause of the same status: the name is in
+its cool-off, and `Retry-After` carries the seconds left in it.
 
 ## Refresh tokens
 

@@ -1,10 +1,14 @@
-"""A cool-off lock on the admin login, held in Redis and nowhere else.
+"""A cool-off lock on a login name, held in Redis and nowhere else.
 
-The panel is the one surface with a password, so it is the one surface with a
-brute-force problem (ADR-0011). The lock is on the submitted account name rather
-than on the client address: the operator reaches the panel through nginx on
-loopback, so every attempt carries the same address and an address lock would be a
-lock on everybody.
+Two surfaces take a password — the admin panel (ADR-0011) and `POST
+/api/v1/auth/login` — and both have the same brute-force problem. The lock is on
+the submitted account name rather than on the client address, and each surface
+counts on its own. For the panel an address lock would be a lock on everybody,
+because the operator reaches it through nginx on loopback. For the API the
+address limiter still stands, but it bounds one address, and a guesser with many
+addresses multiplies it: the name is the thing under attack, so the name is what
+locks. A name locks whether or not an account holds it, so the lock confirms
+nothing about existence.
 
 Three properties this file exists to keep:
 
@@ -35,11 +39,15 @@ from django.dispatch import receiver
 from django.utils.translation import gettext_lazy as _
 from unfold.forms import AuthenticationForm
 
-# Five attempts and fifteen minutes. One operator who mistypes a password twice is
+# Five attempts and fifteen minutes. One person who mistypes a password twice is
 # never inconvenienced; an online guesser gets 20 attempts an hour against an
 # Argon2id hash of a password of at least ten characters.
 FAILURE_THRESHOLD = 5
 COOLOFF_SECONDS = 15 * 60
+
+# The two password surfaces, each with counters of its own.
+ADMIN = "admin"
+API = "api"
 
 # Deliberately the same sentence whether the name is locked, unknown or merely
 # wrong-passworded, so the page never confirms that an account exists.
@@ -68,49 +76,53 @@ def _redis():
     return _store
 
 
-def _key(prefix, username):
+def _key(surface, kind, username):
     digest = hashlib.sha256(username.strip().lower().encode()).hexdigest()[:32]
-    return f"adminlock:{prefix}:{digest}"
+    return f"lock:{surface}:{kind}:{digest}"
 
 
-def is_locked(username):
-    """Whether this name is in its cool-off.
+def locked_for(username, surface):
+    """The seconds left in this name's cool-off, or 0 when it has none.
 
     Fails closed. The state lives in one place, and a control whose whole purpose
     is to refuse an attempt cannot answer "allow" when it does not know — the same
     posture the rate limiter takes when Redis is unreachable (ADR-0010). The
     operator's recovery is to bring Redis back on the host they already hold.
 
-    Presence is the lock: the value is never interpreted, so whatever bytes sit
-    under the key, a lock is all they can mean.
+    Presence is the lock: the value is never read, so whatever bytes sit under the
+    key, a lock is all they can mean. A key with no expiry counts as a full
+    cool-off rather than as no lock.
     """
     try:
-        return _redis().get(_key("lock", username)) is not None
+        ttl = _redis().ttl(_key(surface, "lock", username))
     except redis.RedisError as exc:
         raise LockoutUnavailable from exc
+    if ttl == -2:
+        return 0
+    return COOLOFF_SECONDS if ttl < 0 else ttl
 
 
-def note_failure(username):
+def note_failure(username, surface):
     """Count one failed attempt, and lock the name once it crosses the threshold.
 
     Silent on a Redis failure: the attempt already failed, and the error would name
-    an account. `is_locked` is where an unreachable Redis is refused.
+    an account. `locked_for` is where an unreachable Redis is refused.
     """
     try:
         store = _redis()
-        fails = _key("fails", username)
+        fails = _key(surface, "fails", username)
         count = store.incr(fails)
         store.expire(fails, COOLOFF_SECONDS)
         if count >= FAILURE_THRESHOLD:
-            store.set(_key("lock", username), 1, ex=COOLOFF_SECONDS)
+            store.set(_key(surface, "lock", username), 1, ex=COOLOFF_SECONDS)
     except redis.RedisError:
         pass
 
 
-def clear(username):
+def clear(username, surface):
     """Forget the failures of a name that has just signed in."""
     try:
-        _redis().delete(_key("fails", username), _key("lock", username))
+        _redis().delete(_key(surface, "fails", username), _key(surface, "lock", username))
     except redis.RedisError:
         pass
 
@@ -126,7 +138,7 @@ class AdminLoginForm(AuthenticationForm):
         username = self.cleaned_data.get("username")
         if username:
             try:
-                locked = is_locked(username)
+                locked = locked_for(username, ADMIN)
             except LockoutUnavailable:
                 raise ValidationError(
                     UNAVAILABLE_MESSAGE, code="lockout_unavailable"
@@ -140,12 +152,13 @@ class AdminLoginForm(AuthenticationForm):
 
 @receiver(user_login_failed, dispatch_uid="core.lockout.on_login_failed")
 def _on_login_failed(sender, credentials, **kwargs):
-    """Django scrubs the password out of `credentials` before it sends this."""
+    """Django scrubs the password out of `credentials` before it sends this. The
+    API surface never calls `authenticate()`, so only the panel reaches here."""
     username = credentials.get("username")
     if username:
-        note_failure(username)
+        note_failure(username, ADMIN)
 
 
 @receiver(user_logged_in, dispatch_uid="core.lockout.on_login_succeeded")
 def _on_login_succeeded(sender, user, **kwargs):
-    clear(user.get_username())
+    clear(user.get_username(), ADMIN)

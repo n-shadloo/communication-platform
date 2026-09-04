@@ -471,3 +471,103 @@ class TestLogout:
         assert response.status_code == 401
         assert response.json()["code"] == "unauthenticated"
         assert response.headers["www-authenticate"] == "Bearer"
+
+
+class TestLoginLockout:
+    """The cool-off on a login name, shared with the admin panel (`core/lockout.py`).
+
+    The address limiter alone bounds a guesser to its rate per address, and an
+    attacker with many addresses multiplies it. The name is the thing being
+    attacked, so the name is what locks: five failures in fifteen minutes refuse
+    the name — real or not, so the lock confirms nothing about existence — before
+    the password is hashed.
+    """
+
+    def fail(self, http, username, times):
+        for _ in range(times):
+            response = http.post(
+                LOGIN_URL, json={"username": username, "password": "the-wrong-one"}
+            )
+            assert response.status_code == 401
+
+    def test_repeated_failures_lock_the_name_with_a_retry_after(self, http, active_user):
+        from core.lockout import COOLOFF_SECONDS, FAILURE_THRESHOLD
+
+        self.fail(http, "alice", FAILURE_THRESHOLD)
+
+        # The right password now, and it is still refused.
+        response = http.post(LOGIN_URL, json={"username": "alice", "password": PASSWORD})
+
+        assert response.status_code == 429
+        assert response.json()["code"] == "throttled"
+        assert 0 < int(response.headers["Retry-After"]) <= COOLOFF_SECONDS
+
+    def test_a_locked_name_never_reaches_the_password_hash(self, http, active_user):
+        from core.lockout import FAILURE_THRESHOLD
+
+        self.fail(http, "alice", FAILURE_THRESHOLD)
+
+        with (
+            mock.patch.object(User, "check_password", autospec=True) as known,
+            mock.patch("accounts.services.check_password") as unknown,
+        ):
+            http.post(LOGIN_URL, json={"username": "alice", "password": PASSWORD})
+
+        assert known.call_count == 0
+        assert unknown.call_count == 0
+
+    def test_the_lock_is_keyed_on_the_name_and_not_on_existence(self, http):
+        """A name that exists and one that does not lock the same way, so the
+        lock is not an oracle for the directory."""
+        from core.lockout import FAILURE_THRESHOLD
+
+        self.fail(http, "ghost", FAILURE_THRESHOLD)
+
+        response = http.post(LOGIN_URL, json={"username": "ghost", "password": PASSWORD})
+
+        assert response.status_code == 429
+        assert response.json()["code"] == "throttled"
+
+    def test_the_lock_holds_for_one_name_only(self, http, active_user, bob):
+        from core.lockout import FAILURE_THRESHOLD
+
+        self.fail(http, "alice", FAILURE_THRESHOLD)
+
+        response = http.post(LOGIN_URL, json={"username": "bob", "password": PASSWORD})
+
+        assert response.status_code == 200
+
+    def test_a_successful_login_forgets_the_earlier_failures(self, http, active_user):
+        from core.lockout import FAILURE_THRESHOLD
+
+        self.fail(http, "alice", FAILURE_THRESHOLD - 1)
+        assert (
+            http.post(
+                LOGIN_URL, json={"username": "alice", "password": PASSWORD}
+            ).status_code
+            == 200
+        )
+        self.fail(http, "alice", FAILURE_THRESHOLD - 1)
+
+        response = http.post(LOGIN_URL, json={"username": "alice", "password": PASSWORD})
+
+        assert response.status_code == 200
+
+    def test_the_lock_refuses_when_redis_cannot_be_read(
+        self, http, active_user, monkeypatch
+    ):
+        """Fails closed, like the address limiter (ADR-0010) and the admin form:
+        a control whose purpose is to refuse cannot answer "allow" when it does
+        not know."""
+        import redis
+
+        class Unreachable:
+            def ttl(self, *args, **kwargs):
+                raise redis.ConnectionError("redis is down")
+
+        monkeypatch.setattr("core.lockout._redis", lambda: Unreachable())
+
+        response = http.post(LOGIN_URL, json={"username": "alice", "password": PASSWORD})
+
+        assert response.status_code == 503
+        assert response.json()["code"] == "unavailable"

@@ -39,7 +39,7 @@ The vocabulary is fixed. A client branches on `code`, never on `detail`.
 | 409 | `prekey_limit` | A prekey pool cap is reached. |
 | 413 | `payload_too_large` | The body exceeds the route cap. |
 | 413 | `quota_exceeded` | The attachment quota is exhausted. |
-| 429 | `throttled` | Rate limit reached. `Retry-After` carries the seconds to wait. |
+| 429 | `throttled` | Rate limit reached, or a login name in its cool-off. `Retry-After` carries the seconds to wait. |
 | 500 | `server_error` | Unhandled failure. `detail` is `"Internal error."`. |
 | 503 | `unavailable` | The rate-limit store is unreachable, or the request exceeded its deadline. |
 | 503 | `voice_unconfigured` | LiveKit is not configured. |

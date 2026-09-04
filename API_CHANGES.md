@@ -259,6 +259,16 @@ Nothing else about the panel is observable to a client. It is served at `ADMIN_P
 by the Django application mounted behind FastAPI, and every other path is still this
 API's own `404`.
 
+## What the security audit bounded
+
+Each row below is a limit the security audit of phase 4 added. Every one refuses
+something a client could previously do without bound, and every one is documented in
+the route's own reference.
+
+| Item | Old behaviour | New behaviour | Client action |
+|---|---|---|---|
+| `POST /api/v1/auth/login` after five failed attempts on one name within fifteen minutes | Every attempt answered `401 invalid_credentials`; only the per-address limiter stood between a guesser with many addresses and the password | `429 {"code": "throttled", "detail": "Too many sign-in attempts for this name. Wait and try again."}` with `Retry-After` in seconds, for that name, until the cool-off ends. The lock applies to a name whether or not an account holds it, so it confirms nothing about existence, and a successful sign-in clears the count | Back off for `Retry-After` seconds and tell the user. Do not treat the refusal as a wrong password, and do not retry inside the window |
+
 ## What the client can build against now
 
 **The surface is frozen at `v1` from this merge.** It is published two ways and they

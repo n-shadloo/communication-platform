@@ -14,10 +14,12 @@ from django.db.models import F
 from accounts.models import ProfileBlob, User
 from api.auth import issue_full, issue_register_scope
 from api.errors import ApiError
+from core import lockout
 from devices.models import Device
 from realtime.bus import close_device_sockets
 
 INVALID_CREDENTIALS = "Username or password is incorrect."
+NAME_LOCKED = "Too many sign-in attempts for this name. Wait and try again."
 
 # A fixed invalid hash so an unknown-username login still spends Argon2 time.
 DUMMY_HASH = make_password("timing-equalizer-not-a-real-password")
@@ -67,16 +69,27 @@ def _rotate_refresh_generation(user_id, device_id):
 
 
 def login(username, password, device_id):
+    # The cool-off is checked before the password is hashed, so a locked name
+    # buys no Argon2 work, and it fails closed like the address limiter above it.
+    try:
+        wait = lockout.locked_for(username, lockout.API)
+    except lockout.LockoutUnavailable:
+        raise ApiError(503, "unavailable", "The service is temporarily unavailable.")
+    if wait:
+        raise ApiError(429, "throttled", NAME_LOCKED, {"Retry-After": str(wait)})
     user = (
         User.objects.filter(username=username).only("id", "password", "is_active").first()
     )
     if user is None:
         check_password(password, DUMMY_HASH)  # equalize timing
+        lockout.note_failure(username, lockout.API)
         raise ApiError(401, "invalid_credentials", INVALID_CREDENTIALS)
     # user.check_password (not the bare function) carries the setter that
     # transparently re-hashes when the configured Argon2 cost changes.
     if not user.check_password(password):
+        lockout.note_failure(username, lockout.API)
         raise ApiError(401, "invalid_credentials", INVALID_CREDENTIALS)
+    lockout.clear(username, lockout.API)
     # Only once the password is proven does activation state become observable.
     if not user.is_active:
         raise ApiError(403, "account_inactive", "This account is awaiting activation.")
