@@ -1,14 +1,22 @@
 import os
+from contextlib import contextmanager
 from datetime import timedelta
 from io import StringIO
+from unittest import mock
 
+import psycopg
 import pytest
+from django.contrib.admin.models import ADDITION, LogEntry
 from django.core.management import call_command
-from django.db import connection
+from django.core.management.base import CommandError
+from django.db import DatabaseError, connection
+from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 
 from attachments.models import Attachment
 from core.buckets import ATTACHMENT_BUCKETS
+from devices.models import Device
+from messaging.management.commands import prune
 from messaging.models import QueuedEnvelope
 
 from .conftest import SMALLEST_BUCKET, make_device
@@ -47,6 +55,23 @@ def stored_attachment(user, root, age_days=0):
 def attachments_root(settings, tmp_path):
     settings.ATTACHMENTS_ROOT = tmp_path
     return tmp_path
+
+
+@pytest.fixture
+def expired_audit_rows(active_user, settings):
+    """Five audit rows past the retention window, so a batch of two takes three
+    passes."""
+    rows = [
+        LogEntry.objects.create(
+            user=active_user, object_repr="x", action_flag=ADDITION, change_message=""
+        )
+        for _ in range(5)
+    ]
+    LogEntry.objects.filter(pk__in=[row.pk for row in rows]).update(
+        action_time=timezone.now()
+        - timedelta(days=settings.ADMIN_AUDIT_RETENTION_DAYS + 1)
+    )
+    return rows
 
 
 @pytest.mark.django_db
@@ -224,3 +249,187 @@ def test_the_retention_filter_column_carries_an_index():
         definitions = [row[0] for row in cursor.fetchall()]
 
     assert any("(queued_hour" in definition for definition in definitions), definitions
+
+
+# --- The sweep as background work -------------------------------------------------
+
+
+@contextmanager
+def another_session():
+    """A second PostgreSQL session, outside Django's connection.
+
+    An advisory lock belongs to the backend that took it, so proving the guard
+    needs a second backend. Built from the parameters Django would use, minus the
+    two objects that are Django's own machinery rather than connection settings.
+    """
+    params = {
+        key: value
+        for key, value in connection.get_connection_params().items()
+        if key not in ("cursor_factory", "context")
+    }
+    session = psycopg.connect(**params, autocommit=True)
+    try:
+        yield session
+    finally:
+        session.close()
+
+
+def deletes_of(context, table):
+    return [
+        query["sql"]
+        for query in context.captured_queries
+        if query["sql"].startswith("DELETE") and table in query["sql"]
+    ]
+
+
+@pytest.mark.django_db(transaction=True)
+def test_the_envelope_sweep_deletes_in_batches_that_bound_its_lock_time(
+    active_user, settings, monkeypatch
+):
+    """One unbounded DELETE holds a row lock on every expired envelope until it
+    commits, and the sweep runs beside live traffic rather than in a window. The
+    mailbox ceiling times the device count is what that delete could be."""
+    settings.ENVELOPE_TTL_DAYS = 7
+    monkeypatch.setattr(prune, "BATCH", 2)
+    device = make_device(active_user, 81)
+    for seq in range(1, 6):
+        queue_row(device, seq, age_days=8)
+
+    with CaptureQueriesContext(connection) as context:
+        run_prune()
+
+    assert deletes_of(context, "messaging_queuedenvelope") != []
+    assert len(deletes_of(context, "messaging_queuedenvelope")) == 3  # 2 + 2 + 1
+    assert QueuedEnvelope.objects.count() == 0
+
+
+@pytest.mark.django_db(transaction=True)
+def test_the_audit_sweep_deletes_in_batches_too(
+    expired_audit_rows, settings, monkeypatch
+):
+    settings.ADMIN_AUDIT_RETENTION_DAYS = 90
+    monkeypatch.setattr(prune, "BATCH", 2)
+
+    with CaptureQueriesContext(connection) as context:
+        run_prune()
+
+    assert len(deletes_of(context, "django_admin_log")) == 3  # 2 + 2 + 1
+    assert LogEntry.objects.count() == 0
+
+
+@pytest.mark.django_db(transaction=True)
+def test_the_watermark_of_a_batch_is_one_update_however_many_devices(
+    active_user, settings
+):
+    """The mark used to be raised one device at a time, which is a query per device
+    with expired mail inside the transaction that holds the delete."""
+    settings.ENVELOPE_TTL_DAYS = 7
+    for index in range(4):
+        queue_row(make_device(active_user, 90 + index), index + 1, age_days=8)
+
+    with CaptureQueriesContext(connection) as context:
+        run_prune()
+
+    updates = [
+        query["sql"]
+        for query in context.captured_queries
+        if query["sql"].startswith("UPDATE") and "devices_device" in query["sql"]
+    ]
+    assert len(updates) == 1
+    assert list(
+        Device.objects.order_by("registration_id").values_list(
+            "queue_pruned_through", flat=True
+        )
+    ) == [1, 2, 3, 4]
+
+
+@pytest.mark.django_db(transaction=True)
+def test_a_sweep_declines_while_another_session_holds_the_lock(active_user, settings):
+    """Two sweeps interleaved would advance one device's watermark from one batch
+    while the other deletes a different one, and the device would be told it lost
+    envelopes that are still in its mailbox. systemd declining to start a second
+    `Type=oneshot` instance is the state of the unit at one instant, not a lock,
+    and an operator running this by hand is outside the unit entirely."""
+    settings.ENVELOPE_TTL_DAYS = 7
+    device = make_device(active_user, 95)
+    queue_row(device, 1, age_days=8)
+
+    with another_session() as session:
+        session.execute(
+            "SELECT pg_advisory_lock(%s, %s)",
+            [prune.LOCK_NAMESPACE, prune.LOCK_RESOURCE],
+        )
+        output = run_prune()
+
+    assert prune.SKIPPED in output
+    assert QueuedEnvelope.objects.count() == 1
+    device.refresh_from_db()
+    assert device.queue_pruned_through == 0
+
+
+@pytest.mark.django_db(transaction=True)
+def test_the_lock_is_released_so_the_next_run_sweeps(active_user, settings):
+    """A session lock outlives every transaction of the sweep, so nothing but the
+    command's own release ends it while the process lives."""
+    settings.ENVELOPE_TTL_DAYS = 7
+    queue_row(make_device(active_user, 96), 1, age_days=8)
+
+    run_prune()
+    queue_row(make_device(active_user, 97), 1, age_days=8)
+    second = run_prune()
+
+    assert prune.SKIPPED not in second
+    assert QueuedEnvelope.objects.count() == 0
+
+
+@pytest.mark.django_db(transaction=True)
+def test_a_failed_sweep_names_the_step_and_nothing_else(active_user, settings):
+    """The statements of this command carry envelope ids, and a database error
+    carries the statement that raised it — so an escaping traceback writes a
+    device's mailbox into the timer's journal. `CommandError` is also what makes
+    the exit status 1 instead of a traceback."""
+    settings.ENVELOPE_TTL_DAYS = 7
+    device = make_device(active_user, 98)
+    row = queue_row(device, 1, age_days=8)
+    leaky = DatabaseError(f"DELETE FROM messaging_queuedenvelope WHERE id = '{row.id}'")
+
+    with mock.patch.object(Device.objects, "filter", side_effect=leaky):
+        with pytest.raises(CommandError) as raised:
+            run_prune()
+
+    assert "envelope sweep" in str(raised.value)
+    assert str(row.id) not in str(raised.value)
+    assert str(device.id) not in str(raised.value)
+
+
+@pytest.mark.django_db(transaction=True)
+def test_a_failed_sweep_exits_non_zero(active_user, settings, capsys):
+    """The real exit path, not the `call_command` one: `run_from_argv` turns a
+    `CommandError` into `sys.exit(1)`, which is what the timer's unit reads."""
+    settings.ENVELOPE_TTL_DAYS = 7
+    queue_row(make_device(active_user, 99), 1, age_days=8)
+
+    with mock.patch.object(Device.objects, "filter", side_effect=DatabaseError("x")):
+        with pytest.raises(SystemExit) as exit_status:
+            prune.Command().run_from_argv(["manage.py", "prune"])
+
+    assert exit_status.value.code == 1
+    assert "envelope sweep" in capsys.readouterr().err
+
+
+@pytest.mark.django_db(transaction=True)
+def test_a_skipped_sweep_exits_zero(active_user, settings, capsys):
+    """A run that declines the lock has done the right thing. Exiting non-zero
+    would leave the timer's unit in a failed state for it."""
+    settings.ENVELOPE_TTL_DAYS = 7
+    queue_row(make_device(active_user, 100), 1, age_days=8)
+
+    with another_session() as session:
+        session.execute(
+            "SELECT pg_advisory_lock(%s, %s)",
+            [prune.LOCK_NAMESPACE, prune.LOCK_RESOURCE],
+        )
+        prune.Command().run_from_argv(["manage.py", "prune"])
+
+    assert prune.SKIPPED in capsys.readouterr().out
+    assert QueuedEnvelope.objects.count() == 1
