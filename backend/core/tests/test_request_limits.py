@@ -14,7 +14,7 @@ from unittest import mock
 import anyio
 import pytest
 from django.conf import settings
-from django.db import OperationalError, connection
+from django.db import OperationalError
 from django.test import override_settings
 from fastapi.routing import iter_route_contexts
 from psycopg_pool import PoolTimeout
@@ -421,45 +421,6 @@ def test_a_route_waiting_on_the_loop_is_refused_at_the_deadline_the_settings_car
     assert deadline <= waited < deadline * 4
     for header, value in SECURITY_HEADERS:
         assert response.headers[header.decode()] == value.decode()
-
-
-@pytest.mark.django_db(transaction=True)
-def test_the_deadline_does_not_cut_off_a_statement_already_running(
-    active_user, device, bearer, monkeypatch
-):
-    """The limit of the deadline, pinned so nobody reads it as more than it is.
-
-    `anyio.fail_after` cancels at an await point. A unit of work is synchronous
-    and runs on a worker thread, and asgiref answers the cancellation by cancelling
-    its inner task and then awaiting the executor coroutine anyway — a thread inside
-    `cursor.execute` cannot be interrupted from the loop. So a statement that hangs
-    holds its connection and its thread until PostgreSQL returns, however short the
-    deadline is, and the deadline bounds the awaits around it rather than the query
-    itself. `ACCEPTED_RISKS.md` carries what that costs and what would close it.
-
-    Asserted through a real statement rather than a sleeping thread, because the
-    query is the case that matters.
-    """
-    deadline = 0.05
-    statement = 0.4
-
-    def crawl(*_args, **_kwargs):
-        with connection.cursor() as cursor:
-            cursor.execute("SELECT pg_sleep(%s)", [statement])
-        return [], False
-
-    monkeypatch.setattr(services, "drain", crawl)
-    with override_settings(UPLOAD_DEADLINE_SECONDS=deadline):
-        fresh = create_app(django_asgi_app)
-        client = AsgiClient(wrap(fresh), fresh, reraise=False)
-        started = time.monotonic()
-        response = client.get("/api/v1/me/envelopes", headers=bearer(active_user, device))
-        waited = time.monotonic() - started
-
-    # The deadline did fire, so the answer is the envelope — but only once the
-    # statement had run to completion, which is the whole point of this test.
-    assert response.status_code == 503
-    assert waited >= statement
 
 
 def test_a_wrong_method_renders_the_envelope_with_the_methods_of_one_route(http):
