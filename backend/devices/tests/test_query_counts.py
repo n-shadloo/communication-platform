@@ -19,12 +19,14 @@ from devices.models import DeviceLogRecord
 
 from .conftest import (
     DEVICES_URL,
+    label_blob,
     make_device,
     pubkey,
     publish_identity,
     register_payload,
     stock_prekeys,
 )
+from .test_cross_signing import identity_payload
 
 pytestmark = pytest.mark.django_db(transaction=True)
 
@@ -358,3 +360,46 @@ def test_the_peer_identity_is_one_query(
     )
 
     assert response.json()["version"] == 1
+
+
+def test_relabelling_a_device_is_one_update(http, active_user, device, bearer):
+    """The ownership predicate rides in the UPDATE's WHERE clause, so a device of
+    another account is never loaded and the route never costs a read first."""
+    response = counted(
+        http,
+        "PUT",
+        f"{DEVICES_URL}/{device.id}",
+        AUTH_QUERY + 1,
+        json={"label_blob": label_blob()},
+        headers=bearer(active_user, device),
+    )
+
+    assert response.status_code == 200
+
+
+def test_publishing_an_identity_is_constant_query(http, active_user, device, bearer):
+    """The owner lock, the version probe, and the upsert — the same three whether
+    the identity exists yet or not, because the probe reads the version without
+    dragging the key material back with it."""
+    headers = bearer(active_user, device)
+
+    # first publish: owner lock, version probe, the upsert's own SELECT and INSERT
+    counted(
+        http,
+        "PUT",
+        "/api/v1/me/identity",
+        AUTH_QUERY + 4,
+        json=identity_payload(version=1),
+        headers=headers,
+    )
+    # second: the same shape, with an UPDATE where the INSERT was
+    response = counted(
+        http,
+        "PUT",
+        "/api/v1/me/identity",
+        AUTH_QUERY + 4,
+        json=identity_payload(version=2),
+        headers=headers,
+    )
+
+    assert response.status_code == 200

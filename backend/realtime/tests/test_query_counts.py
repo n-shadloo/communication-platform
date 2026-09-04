@@ -15,7 +15,12 @@ from django.test.utils import CaptureQueriesContext
 from api.auth import issue_full
 from core.buckets import ENVELOPE_BUCKETS
 from messaging.models import QueuedEnvelope
-from realtime.auth import _authenticate_access, _delete_envelopes, _touch_active
+from realtime.auth import (
+    _authenticate_access,
+    _delete_envelopes,
+    _room_exists,
+    _touch_active,
+)
 
 pytestmark = pytest.mark.django_db
 
@@ -66,3 +71,30 @@ def test_ack_delete_is_one_statement(active_user, device):
         q.startswith(TXN_BOOKKEEPING) for q in queries if not q.startswith("DELETE")
     )
     assert QueuedEnvelope.objects.filter(recipient_device=device).count() == 0
+
+
+def test_room_existence_is_one_query_however_many_rooms(active_user, device):
+    """The room subscribe frame runs this before it joins, so it is on the frame
+    path rather than the connection path. There is no roster to read: a room is a
+    capability id and an encrypted name."""
+    from voicerooms.models import Room
+
+    Room.objects.bulk_create([Room(name_blob=b"n" * 256) for _ in range(25)])
+    room = Room.objects.create(name_blob=b"n" * 256)
+
+    queries = _count(_room_exists, str(room.id))
+
+    assert len(queries) == 1
+    assert queries[0].startswith("SELECT")
+
+
+def test_a_bind_costs_the_token_check_and_the_activity_stamp(active_user, device):
+    """The whole database cost of bringing a socket up: one joined read to verify
+    the token, one UPDATE to stamp the device active. Nothing here may grow with
+    the mailbox, the room set, or the account's device count, because it runs on
+    every reconnect of every client."""
+    access, _ = issue_full(active_user, device)
+
+    queries = _count(_authenticate_access, access) + _count(_touch_active, device.id)
+
+    assert len(queries) == 2
