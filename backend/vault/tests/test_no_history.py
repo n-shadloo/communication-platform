@@ -6,9 +6,13 @@ pin the removal — no model, no table, no route, no prune path — so history c
 quietly grow back, and prove the key backup survived the removal intact.
 """
 
+import base64
+
 import pytest
 from django.apps import apps
 from django.db import connection
+
+from vault.models import KeyBackup
 
 from .conftest import KEYBACKUP_URL, backup_blob
 
@@ -80,3 +84,65 @@ def test_the_key_backup_still_works_end_to_end(http, active_user, device, bearer
         "blob": payload,
         "version": 3,
     }
+
+
+def test_an_overwritten_backup_leaves_no_earlier_copy_anywhere_in_the_table(
+    http, active_user, device, bearer
+):
+    """Replacing the backup is a replacement, not an append. The bytes of the
+    superseded blob must not survive in any row — a kept previous version is a
+    two-entry history, and the argument that stops it at two stops it nowhere."""
+    headers = bearer(active_user, device)
+    superseded = backup_blob(b"1")
+    current = backup_blob(b"2")
+
+    http.put(KEYBACKUP_URL, json={"blob": superseded, "version": 1}, headers=headers)
+    http.put(KEYBACKUP_URL, json={"blob": current, "version": 2}, headers=headers)
+
+    stored = [bytes(row.blob) for row in KeyBackup.objects.all()]
+    assert stored == [base64.b64decode(current)]
+    assert base64.b64decode(superseded) not in stored
+
+
+def test_the_route_hands_back_only_the_current_version(http, active_user, device, bearer):
+    """Three writes, one readable answer. There is no parameter, header or body
+    that reaches an older one, because no older one is kept."""
+    headers = bearer(active_user, device)
+    earlier = [backup_blob(b"1"), backup_blob(b"2")]
+    for version, blob in enumerate(earlier, start=1):
+        http.put(KEYBACKUP_URL, json={"blob": blob, "version": version}, headers=headers)
+    newest = backup_blob(b"3")
+    http.put(KEYBACKUP_URL, json={"blob": newest, "version": 3}, headers=headers)
+
+    body = http.get(KEYBACKUP_URL, headers=headers)
+
+    assert body.json() == {"blob": newest, "version": 3}
+    assert all(blob not in body.text for blob in earlier)
+
+
+def test_the_vault_router_carries_no_parameter_and_no_extra_verb():
+    """A history API needs a way to name one of many: a path parameter, a range
+    query or a verb that appends. The router has one fixed path and the two verbs
+    that replace and read a single value."""
+    from vault.routes import router
+
+    assert {(route.path, tuple(sorted(route.methods))) for route in router.routes} == {
+        ("/me/keybackup", ("GET",)),
+        ("/me/keybackup", ("PUT",)),
+    }
+    assert all("{" not in route.path for route in router.routes)
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "/api/v1/me/keybackup/versions",
+        "/api/v1/me/keybackup/history",
+        "/api/v1/me/history/export",
+    ],
+)
+def test_no_backup_history_path_answers_anything(http, active_user, device, bearer, url):
+    response = http.get(url, headers=bearer(active_user, device))
+
+    assert response.status_code == 404
+    assert response.json()["code"] == "not_found"
