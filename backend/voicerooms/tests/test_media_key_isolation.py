@@ -1,8 +1,9 @@
 """No media-key path exists on this server.
 
-No model field, no serializer field, and no token claim anywhere carries an SFrame /
-media / room-content key, and the room join token is a pure LiveKit video grant. The
-LiveKit API secret is infrastructure and is deliberately not a match target.
+No model field, no request or response field, and no token claim anywhere carries
+an SFrame / media / room-content key, and the room join token is a pure LiveKit
+video grant. The LiveKit API secret is infrastructure and is deliberately not a
+match target.
 """
 
 import importlib
@@ -12,7 +13,7 @@ from pathlib import Path
 
 import jwt
 from django.apps import apps
-from rest_framework import serializers as drf_serializers
+from pydantic import BaseModel
 
 from voicerooms.livekit import mint_join_token
 
@@ -68,27 +69,27 @@ def test_no_model_field_anywhere_names_key_material():
     assert offenders == [], f"a media/content-key column exists: {offenders}"
 
 
-def test_no_serializer_field_anywhere_names_key_material():
+def test_no_request_or_response_field_anywhere_names_key_material():
     offenders = []
     for app in LOCAL_APPS:
         try:
-            module = importlib.import_module(f"{app}.serializers")
+            module = importlib.import_module(f"{app}.schemas")
         except ModuleNotFoundError:
             continue
         for obj in vars(module).values():
-            if isinstance(obj, type) and issubclass(obj, drf_serializers.BaseSerializer):
-                for name in getattr(obj, "_declared_fields", {}):
+            if isinstance(obj, type) and issubclass(obj, BaseModel):
+                for name in obj.model_fields:
                     if FORBIDDEN.search(name):
-                        offenders.append(f"{app}.serializers.{obj.__name__}.{name}")
-    assert offenders == [], f"a serializer accepts/returns key material: {offenders}"
+                        offenders.append(f"{app}.schemas.{obj.__name__}.{name}")
+    assert offenders == [], f"a model accepts/returns key material: {offenders}"
 
 
 def test_grep_of_the_schema_and_api_surface_finds_no_key_field():
-    """The literal grep half: models, serializers, and the migrations that shape the
+    """The literal grep half: models, schemas, and the migrations that shape the
     schema."""
     offenders = []
     for app in LOCAL_APPS:
-        for pattern in ("models.py", "serializers.py", "migrations/*.py"):
+        for pattern in ("models.py", "schemas.py", "migrations/*.py"):
             for path in sorted((BACKEND / app).glob(pattern)):
                 for lineno, line in enumerate(path.read_text().splitlines(), 1):
                     if FORBIDDEN.search(line):

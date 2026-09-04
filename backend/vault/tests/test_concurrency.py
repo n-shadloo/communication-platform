@@ -10,12 +10,13 @@ import base64
 import threading
 
 from django.core.cache import cache
-from django.db import connections
+from django.db import connection, connections
 from django.test import TransactionTestCase
-from rest_framework.test import APIClient
 
 from accounts.models import User
-from accounts.tokens import issue_full
+from api.auth import issue_full
+from config.asgi import api_application, application
+from conftest import AsgiClient
 from vault.models import KeyBackup
 
 from .conftest import PASSWORD, backup_blob, make_device
@@ -37,9 +38,9 @@ class KeyBackupVersionRaceTests(TransactionTestCase):
         )
         access_low, _ = issue_full(self.owner, make_device(self.owner, 1))
         access_high, _ = issue_full(self.owner, make_device(self.owner, 2))
-        self.low = {"HTTP_AUTHORIZATION": f"Bearer {access_low}"}
-        self.high = {"HTTP_AUTHORIZATION": f"Bearer {access_high}"}
-        cache.clear()  # a shared throttle cache would otherwise bleed across rounds
+        self.low = {"Authorization": f"Bearer {access_low}"}
+        self.high = {"Authorization": f"Bearer {access_high}"}
+        cache.clear()  # a shared limiter store would otherwise bleed across rounds
 
     def test_concurrent_first_write_never_lets_the_lower_version_win(self):
         high_blob = backup_blob(b"H")
@@ -51,13 +52,20 @@ class KeyBackupVersionRaceTests(TransactionTestCase):
             barrier = threading.Barrier(2)
 
             def put(headers, version, blob):
+                # One client per thread: each call runs on its own event loop, and
+                # the ORM work lands on the thread that made the call.
+                client = AsgiClient(application, api_application)
                 try:
+                    # Open this thread's connection before the barrier. Connection
+                    # setup costs more than the transaction the race is about, and
+                    # CONN_MAX_AGE is 0, so threads released together would otherwise
+                    # reach the owner row one at a time on a slow runner.
+                    connection.ensure_connection()
                     barrier.wait(timeout=10)
-                    APIClient().put(
+                    client.put(
                         "/api/v1/me/keybackup",
-                        {"blob": blob, "version": version},
-                        format="json",
-                        **headers,
+                        json={"blob": blob, "version": version},
+                        headers=headers,
                     )
                 finally:
                     connections.close_all()

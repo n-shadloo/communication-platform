@@ -3,7 +3,7 @@
 A wrong recovery secret fails client-side only. Assert, three ways, that nothing in
 the vault app takes a secret or returns a pass/fail for one:
   1. the only route is the documented key-backup blob endpoint;
-  2. the key-backup serializer accepts exactly {blob, version}, no secret field;
+  2. the key-backup request model accepts exactly {blob, version}, no secret field;
   3. the app's code (comments and docstrings stripped, so prose that merely says "no
      secret" doesn't trip it) mentions no secret/verify/decrypt identifier.
 """
@@ -15,8 +15,8 @@ from pathlib import Path
 import pytest
 
 import vault
-from vault import urls as vault_urls
-from vault.serializers import KeyBackupSerializer
+from vault.routes import router
+from vault.schemas import KeyBackupIn
 
 VAULT_DIR = Path(vault.__file__).resolve().parent
 
@@ -24,7 +24,7 @@ FORBIDDEN = re.compile(
     r"secret|passphrase|password|recover|unlock|decrypt|verify", re.IGNORECASE
 )
 
-EXPECTED_ROUTES = {"me/keybackup"}
+EXPECTED_ROUTES = {"/me/keybackup"}
 
 
 def code_only(path):
@@ -40,18 +40,18 @@ def code_only(path):
 
 
 def test_the_only_route_is_the_documented_one_and_it_is_not_a_secret_check():
-    routes = {str(p.pattern) for p in vault_urls.urlpatterns}
+    routes = {route.path for route in router.routes}
     assert routes == EXPECTED_ROUTES, routes
     for route in routes:
         assert not FORBIDDEN.search(route), f"route {route!r} looks like a secret check"
 
 
-def test_serializers_expose_no_secret_field():
-    assert set(KeyBackupSerializer().get_fields()) == {"blob", "version"}
+def test_request_models_expose_no_secret_field():
+    assert set(KeyBackupIn.model_fields) == {"blob", "version"}
 
 
 @pytest.mark.parametrize(
-    "filename", ["views.py", "serializers.py", "models.py", "urls.py"]
+    "filename", ["routes.py", "schemas.py", "services.py", "models.py"]
 )
 def test_no_secret_handling_identifier_in_code(filename):
     hits = FORBIDDEN.findall(code_only(VAULT_DIR / filename))

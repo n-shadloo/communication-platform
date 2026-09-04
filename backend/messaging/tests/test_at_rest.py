@@ -48,20 +48,19 @@ def three_recipient_devices(db):
 @pytest.mark.skipif(PG_DUMP is None, reason="pg_dump not on PATH")
 @pytest.mark.django_db(transaction=True)
 def test_a_seized_queue_shows_no_sender_and_no_link_between_co_recipients(
-    api, active_user, device, auth_headers, three_recipient_devices
+    http, active_user, device, bearer, three_recipient_devices
 ):
     # One logical message to 3 devices across 2 users; a real client encrypts per
     # device, so the three copies differ.
-    resp = api.post(
+    resp = http.post(
         "/api/v1/envelopes",
-        {
+        json={
             "messages": [
                 {"device_id": str(d.id), "blob": envelope_blob(bytes([65 + i]))}
                 for i, d in enumerate(three_recipient_devices)
             ]
         },
-        format="json",
-        **auth_headers(active_user, device),
+        headers=bearer(active_user, device),
     )
     assert resp.status_code == 202
 
@@ -106,32 +105,27 @@ def test_a_seized_queue_shows_no_sender_and_no_link_between_co_recipients(
 @pytest.mark.skipif(PG_DUMP is None, reason="pg_dump not on PATH")
 @pytest.mark.django_db(transaction=True)
 def test_an_acked_envelope_leaves_no_trace_in_a_raw_table_dump(
-    api, active_user, device, auth_headers, three_recipient_devices
+    http, active_user, device, bearer, three_recipient_devices
 ):
     """Retention honored: delivery-ack deletes the row, so a dump taken afterwards
     holds neither the row nor the ciphertext. What a seizure captures is bounded by
     the undelivered set, never by delivered traffic."""
     recipient = three_recipient_devices[0]
     blob = envelope_blob(b"W")
-    resp = api.post(
+    resp = http.post(
         "/api/v1/envelopes",
-        {"messages": [{"device_id": str(recipient.id), "blob": blob}]},
-        format="json",
-        **auth_headers(active_user, device),
+        json={"messages": [{"device_id": str(recipient.id), "blob": blob}]},
+        headers=bearer(active_user, device),
     )
     assert resp.status_code == 202
 
-    from accounts.tokens import issue_full
-
-    owner_access, _ = issue_full(recipient.user, recipient)
-    owner_headers = {"HTTP_AUTHORIZATION": f"Bearer {owner_access}"}
-    drained = api.get("/api/v1/me/envelopes", **owner_headers).json()["envelopes"]
+    owner_headers = bearer(recipient.user, recipient)
+    drained = http.get("/api/v1/me/envelopes", headers=owner_headers).json()["envelopes"]
     assert len(drained) == 1
-    acked = api.post(
+    acked = http.post(
         "/api/v1/me/envelopes/ack",
-        {"ids": [drained[0]["id"]]},
-        format="json",
-        **owner_headers,
+        json={"ids": [drained[0]["id"]]},
+        headers=owner_headers,
     )
     assert acked.json() == {"deleted": 1}
 

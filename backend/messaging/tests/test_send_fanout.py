@@ -4,20 +4,23 @@ import uuid
 import pytest
 from django.utils import timezone
 
+from messaging import services
 from messaging.models import QueuedEnvelope
+from messaging.schemas import OutgoingItemIn
 
 from .conftest import envelope_blob
+
+pytestmark = pytest.mark.django_db(transaction=True)
 
 SEND_URL = "/api/v1/envelopes"
 
 
-def send(api, headers, items):
-    return api.post(SEND_URL, {"messages": items}, format="json", **headers)
+def send(http, headers, items):
+    return http.post(SEND_URL, json={"messages": items}, headers=headers)
 
 
-@pytest.mark.django_db
 def test_one_message_to_three_devices_becomes_three_independent_rows(
-    api, active_user, device, auth_headers, bob_devices, carol_device
+    http, active_user, device, bearer, bob_devices, carol_device
 ):
     targets = [*bob_devices, carol_device]
     # A real client encrypts separately per recipient device, so the copies differ.
@@ -26,7 +29,7 @@ def test_one_message_to_three_devices_becomes_three_independent_rows(
         for i, d in enumerate(targets)
     ]
 
-    resp = send(api, auth_headers(active_user, device), items)
+    resp = send(http, bearer(active_user, device), items)
 
     assert resp.status_code == 202
     assert resp.json() == {"accepted": 3, "stale_devices": []}
@@ -39,9 +42,8 @@ def test_one_message_to_three_devices_becomes_three_independent_rows(
     assert [r.seq for r in rows] == [1, 1, 1]
 
 
-@pytest.mark.django_db
 def test_each_device_gets_its_own_ascending_seq(
-    api, active_user, device, auth_headers, bob_devices
+    http, active_user, device, bearer, bob_devices
 ):
     target = bob_devices[0]
     items = [
@@ -49,7 +51,7 @@ def test_each_device_gets_its_own_ascending_seq(
         for i in range(3)
     ]
 
-    resp = send(api, auth_headers(active_user, device), items)
+    resp = send(http, bearer(active_user, device), items)
 
     assert resp.json()["accepted"] == 3
     seqs = list(
@@ -62,17 +64,16 @@ def test_each_device_gets_its_own_ascending_seq(
     assert target.queue_seq == 3
 
 
-@pytest.mark.django_db
 def test_a_revoked_device_is_reported_stale_and_enqueues_nothing(
-    api, active_user, device, auth_headers, bob_devices
+    http, active_user, device, bearer, bob_devices
 ):
     dead, alive = bob_devices
     dead.revoked_date = timezone.now().date()
     dead.save(update_fields=["revoked_date"])
 
     resp = send(
-        api,
-        auth_headers(active_user, device),
+        http,
+        bearer(active_user, device),
         [
             {"device_id": str(dead.id), "blob": envelope_blob()},
             {"device_id": str(alive.id), "blob": envelope_blob(b"b")},
@@ -84,16 +85,15 @@ def test_a_revoked_device_is_reported_stale_and_enqueues_nothing(
     assert QueuedEnvelope.objects.filter(recipient_device_id=alive.id).count() == 1
 
 
-@pytest.mark.django_db
 def test_a_deactivated_users_device_is_stale(
-    api, active_user, device, auth_headers, bob, bob_devices
+    http, active_user, device, bearer, bob, bob_devices
 ):
     bob.is_active = False
     bob.save(update_fields=["is_active"])
 
     resp = send(
-        api,
-        auth_headers(active_user, device),
+        http,
+        bearer(active_user, device),
         [{"device_id": str(bob_devices[0].id), "blob": envelope_blob()}],
     )
 
@@ -101,57 +101,104 @@ def test_a_deactivated_users_device_is_stale(
     assert QueuedEnvelope.objects.count() == 0
 
 
-@pytest.mark.django_db
-def test_an_unknown_device_is_stale_not_an_error(api, active_user, device, auth_headers):
+def test_an_unknown_device_is_stale_not_an_error(http, active_user, device, bearer):
     ghost = str(uuid.uuid4())
 
     resp = send(
-        api,
-        auth_headers(active_user, device),
-        [{"device_id": ghost, "blob": envelope_blob()}],
+        http, bearer(active_user, device), [{"device_id": ghost, "blob": envelope_blob()}]
     )
 
     assert resp.json() == {"accepted": 0, "stale_devices": [ghost]}
 
 
-@pytest.mark.django_db
+def test_a_rejected_item_queues_nothing_for_the_rest_of_the_batch(
+    http, active_user, device, bearer, bob_devices
+):
+    """A batch that fails on its last item leaves no row from its first: a client
+    that retries a rejected batch must not find half of it already queued."""
+    good, other = bob_devices
+    off_bucket = base64.b64encode(b"a" * 1023).decode()
+
+    resp = send(
+        http,
+        bearer(active_user, device),
+        [
+            {"device_id": str(good.id), "blob": envelope_blob()},
+            {"device_id": str(other.id), "blob": off_bucket},
+        ],
+    )
+
+    assert resp.status_code == 400
+    assert QueuedEnvelope.objects.count() == 0
+    good.refresh_from_db()
+    assert good.queue_seq == 0  # the counter did not advance either
+
+
+def test_a_failed_insert_takes_the_counter_advance_down_with_it(bob_devices, monkeypatch):
+    """One send is one transaction, and this is the half validation cannot show.
+
+    The counter advance and the insert are two statements; outside one transaction
+    a failed insert would leave the mailbox counter ahead of its rows, and every
+    seq it skipped would read to the client as an envelope the TTL prune ate.
+    Driven at the unit of work rather than over HTTP, because Starlette re-raises
+    after it renders the 500 and the test client would see the exception instead
+    of the state left behind.
+    """
+    target = bob_devices[0]
+
+    def refuse(*args, **kwargs):
+        raise RuntimeError("the insert failed")
+
+    monkeypatch.setattr(QueuedEnvelope.objects, "bulk_create", refuse)
+
+    with pytest.raises(RuntimeError):
+        services.send(
+            [
+                OutgoingItemIn(device_id=str(target.id), blob=envelope_blob()),
+            ]
+        )
+
+    target.refresh_from_db()
+    assert target.queue_seq == 0
+    assert QueuedEnvelope.objects.count() == 0
+
+
 def test_an_off_bucket_blob_is_rejected_without_echoing_the_payload(
-    api, active_user, device, auth_headers, bob_devices
+    http, active_user, device, bearer, bob_devices
 ):
     off_bucket = base64.b64encode(b"a" * 1023).decode()
 
     resp = send(
-        api,
-        auth_headers(active_user, device),
+        http,
+        bearer(active_user, device),
         [{"device_id": str(bob_devices[0].id), "blob": off_bucket}],
     )
 
     assert resp.status_code == 400
     assert resp.json()["code"] == "bad_bucket"
-    assert off_bucket not in resp.content.decode()
+    assert off_bucket not in resp.text
     assert QueuedEnvelope.objects.count() == 0
 
 
-@pytest.mark.django_db
-def test_a_register_scope_token_cannot_send(api, active_user, auth_headers, bob_devices):
+def test_a_register_scope_token_cannot_send(
+    http, active_user, register_bearer, bob_devices
+):
     """A register-scope token's only power is POST /me/devices."""
     resp = send(
-        api,
-        auth_headers(active_user, scope="register"),
+        http,
+        register_bearer(active_user),
         [{"device_id": str(bob_devices[0].id), "blob": envelope_blob()}],
     )
 
     assert resp.status_code == 403
+    assert resp.json()["code"] == "scope_forbidden"
     assert QueuedEnvelope.objects.count() == 0
 
 
-@pytest.mark.django_db
-def test_an_unknown_field_is_rejected(
-    api, active_user, device, auth_headers, bob_devices
-):
-    resp = api.post(
+def test_an_unknown_field_is_rejected(http, active_user, device, bearer, bob_devices):
+    resp = http.post(
         SEND_URL,
-        {
+        json={
             "messages": [
                 {
                     "device_id": str(bob_devices[0].id),
@@ -160,27 +207,26 @@ def test_an_unknown_field_is_rejected(
                 }
             ]
         },
-        format="json",
-        **auth_headers(active_user, device),
+        headers=bearer(active_user, device),
     )
 
     assert resp.status_code == 400
     assert QueuedEnvelope.objects.count() == 0
 
 
-@pytest.mark.django_db
-def test_the_batch_cap_is_enforced(api, active_user, device, auth_headers, bob_devices):
+def test_the_batch_cap_is_enforced(http, active_user, device, bearer, bob_devices):
     items = [{"device_id": str(bob_devices[0].id), "blob": envelope_blob()}] * 257
 
-    resp = send(api, auth_headers(active_user, device), items)
+    resp = send(http, bearer(active_user, device), items)
 
     assert resp.status_code == 400
     assert QueuedEnvelope.objects.count() == 0
 
 
-@pytest.mark.django_db
-def test_anonymous_send_is_rejected(api, bob_devices):
-    resp = send(api, {}, [{"device_id": str(bob_devices[0].id), "blob": envelope_blob()}])
+def test_anonymous_send_is_rejected(http, bob_devices):
+    resp = send(
+        http, {}, [{"device_id": str(bob_devices[0].id), "blob": envelope_blob()}]
+    )
 
     assert resp.status_code == 401
     assert QueuedEnvelope.objects.count() == 0

@@ -6,6 +6,11 @@ objects in both directions — binary frames are a protocol violation. Nothing r
 here is persisted or logged; the durable message queue (see `messaging/API.md`) is
 the source of truth, and this socket only makes it fast.
 
+Delivery between sockets is Redis publish and subscribe, which holds a message only
+for the instant it takes to hand it to whoever is connected. A frame published for a
+device that is mid-reconnect is dropped, and the client's next REST drain is what
+recovers it — which is why the queue, not this socket, is the contract for delivery.
+
 **URL:** `wss://<host>/ws`
 
 ## Connection and authentication
@@ -14,22 +19,28 @@ Two handshake paths:
 
 - **Native clients** send `Authorization: Bearer <access token>` on the upgrade
   request. A valid full-scope, device-bound token accepts the connection; anything
-  else closes with **4001** immediately after accept.
+  else **refuses the handshake** — the server answers the upgrade request with
+  `403 Forbidden` and no WebSocket is ever established. There is no close code to
+  read, because there is no accepted socket to send one on. Treat a failed handshake
+  on this path as the 4001 case: refresh the access token and reconnect.
 - **Browsers** cannot set WebSocket headers: connect bare, then send an `auth` frame
   as the first message. The server allows ten seconds; an unauthenticated socket that
   sends any other frame, presents a bad token, or lets the deadline pass closes with
-  **4001**.
+  **4001**. This path is accepted first, so here the code does arrive.
 
 The token is validated with the same strength as REST: signature and expiry, `full`
 scope (a register-scope token opens no socket), a live device whose
-`token_generation` matches, and an active account. On success the socket joins the
-device's delivery group and the device's `last_active_date` is touched (day
+`token_generation` matches, and an active account. On success the socket subscribes
+to the device's delivery topic and the device's `last_active_date` is touched (day
 precision).
 
 If the server is configured with an Origin allowlist (`ALLOWED_WS_ORIGINS`, required
-in production), a handshake presenting an Origin header not on the list is closed
-with **4403**. A handshake with no Origin header at all is allowed — native clients
-send none, and the header is only a browser cross-site defense.
+in production), a handshake presenting an Origin header not on the list is refused.
+**4403** is the documented meaning of that refusal, and it is what the application
+sends, but the decision is taken before the accept — so, exactly as for a bad header
+token, what the client observes is a failed handshake answered `403 Forbidden`. A
+handshake with no Origin header at all is allowed: native clients send none, and the
+header is only a browser cross-site defense.
 
 ### `auth` (client → server)
 
@@ -51,11 +62,17 @@ frames are processed normally. Failure closes 4001.
 | `ack` ids | ≤ 200 | frame dropped |
 | `subscribe_presence` targets | ≤ 500 | frame dropped |
 | Room subscriptions per socket | 100 | subscribe dropped |
+| Undelivered server frames queued for one socket | 256 | close 4008 |
 
 Undecodable JSON, non-object JSON, and binary frames close 4008. Frames with an
 unknown `type` are ignored (but still count against the rate limit). Malformed but
 well-typed frames — a bad UUID, an oversized blob, a wrong-typed field — are silently
 dropped without closing the socket, matching the volatile, fire-and-forget semantics.
+
+The last row is backpressure rather than a frame the client sent. Server frames for a
+socket that is not reading them are held in a bounded queue; past the bound the socket
+is a slow consumer and is closed 4008. Read continuously, and treat a 4008 with no
+preceding protocol error as a signal to reconnect and drain over REST.
 
 ## Client → server messages
 
@@ -97,8 +114,8 @@ client explicitly listed; an empty list means nobody is told anything.
 { "type": "room_subscribe", "room_id": "7c1d2e3f-4a5b-6c7d-8e9f-0a1b2c3d4e5f" }
 ```
 
-Joins the live session of an existing room: the socket enters the room's relay
-group, every subscriber (including this one) receives a `room_presence` join, and the
+Joins the live session of an existing room: the socket subscribes to the room's
+relay topic, every subscriber (including this one) receives a `room_presence` join, and the
 device is added to the room's live-count set. Subscribing to a nonexistent room or
 past the 100-room cap is silently ignored; re-subscribing to a held room re-announces
 join and stays allowed.
@@ -178,12 +195,17 @@ Leave fires on explicit `room_leave` and on disconnect.
 
 ## Close codes
 
-| Code | Meaning |
-|---|---|
-| 4001 | Authentication failed: bad/expired/register-scope token, revoked device, inactive account, missed auth deadline, or a frame before authentication |
-| 4003 | The device was revoked or its account deactivated while connected |
-| 4008 | Protocol violation: binary frame, oversized frame, undecodable or non-object JSON, or rate cap exceeded |
-| 4403 | Origin header present but not on the server's allowlist |
+| Code | Meaning | What the client does |
+|---|---|---|
+| 4001 | Authentication failed after the accept: bad/expired/register-scope token in an `auth` frame, revoked device, inactive account, missed auth deadline, or a frame sent before authentication | Refresh the access token and reconnect |
+| 4003 | The device was revoked or its account deactivated while connected | Stop reconnecting; the token is dead and a fresh login on another device is required |
+| 4008 | Protocol violation — binary frame, oversized frame, undecodable or non-object JSON, rate cap exceeded — or a slow consumer whose server-frame queue overflowed | Fix the frame, or read faster; reconnect and drain over REST |
+| 4403 | Origin header present but not on the server's allowlist | Correct the Origin; the server refuses the handshake rather than sending this code (see below) |
+| 1012 | The server is restarting and drained its sockets | Reconnect after a backoff; this is a deploy, not a fault |
 
-After 4003 the token is dead; reconnecting requires a fresh login on another device.
-After 4001 the client should refresh its access token and reconnect.
+**4001 and 4403 before the accept.** Both refusals can be decided before the socket is
+accepted — 4403 always is, and 4001 is on the header-token path. A server has no
+accepted socket to send a close frame on at that point, so it answers the upgrade
+request with `403 Forbidden` instead and the code never reaches the client. A failed
+handshake therefore means "refused": check the Origin and the token, refresh, and
+retry. Once a socket has been accepted, every code above arrives as a close frame.

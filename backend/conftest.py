@@ -1,25 +1,96 @@
+import logging
+
+import httpx
 import pytest
+from asgiref.sync import async_to_sync
 from django.core.cache import cache
-from rest_framework.test import APIClient
+from httpx import ASGITransport
 
 from accounts.models import User
-from accounts.tokens import issue_full, issue_register_scope
+from api.auth import issue_full, issue_register_scope
+from config.asgi import api_application, application
 from devices.models import Device
 
 PASSWORD = "correct-horse-battery-staple"
+BASE_URL = "http://testserver"
+
+# httpx logs every request it makes, with its URL, at INFO. That client is this
+# harness, not the server, and a request path in a log line is exactly what the
+# log-silence suites exist to catch — so silence the harness rather than let it
+# grade the server. The server imports no HTTP client: httpx is a test-only
+# dependency and this logger does not exist in production.
+logging.getLogger("httpx").disabled = True
+
+
+class AsgiClient:
+    """A synchronous facade over `httpx.AsyncClient` on the composed application.
+
+    Synchronous on purpose. asgiref runs thread-sensitive work — which is every
+    ORM unit of work — in the thread that called `async_to_sync`, so a request
+    uses the test's own connection, sees the test's uncommitted rows, and lands
+    in the counter `django_assert_num_queries` installed. An async test would
+    push the ORM onto a second thread with a second connection and see none of
+    that.
+
+    Each call runs with the FastAPI lifespan entered. `ASGITransport` never
+    enters it, and `async_to_sync` builds a fresh event loop for each call, so
+    nothing the lifespan holds may outlive one call.
+    """
+
+    def __init__(self, transport_app, lifespan_app):
+        self._client = httpx.AsyncClient(
+            transport=ASGITransport(app=transport_app), base_url=BASE_URL
+        )
+        self._lifespan_app = lifespan_app
+
+    async def _request(self, method, url, **kwargs):
+        async with self._lifespan_app.router.lifespan_context(self._lifespan_app):
+            return await self._client.request(method, url, **kwargs)
+
+    def request(self, method, url, **kwargs):
+        return async_to_sync(self._request)(method, url, **kwargs)
+
+    def get(self, url, **kwargs):
+        return self.request("GET", url, **kwargs)
+
+    def post(self, url, **kwargs):
+        return self.request("POST", url, **kwargs)
+
+    def put(self, url, **kwargs):
+        return self.request("PUT", url, **kwargs)
+
+    def delete(self, url, **kwargs):
+        return self.request("DELETE", url, **kwargs)
 
 
 @pytest.fixture(autouse=True)
 def clear_throttle_cache():
-    """DRF throttle counters live in the shared Redis cache, so without this they leak
-    between tests and across whole runs (the login scope is 20/hour)."""
+    """Rate-limit counters live in the shared Redis instance, so without this they
+    leak between tests and across whole runs (the login scope is 20/hour). The
+    Django cache backend clears by flushing the database, which takes the
+    FastAPI limiter's own keys with it."""
     cache.clear()
     yield
 
 
 @pytest.fixture
-def api():
-    return APIClient()
+def http():
+    """Drives every route of this API through the whole composed stack: the
+    middleware, the FastAPI routes, and the Django admin behind them."""
+    return AsgiClient(application, api_application)
+
+
+@pytest.fixture
+def new_http():
+    """A client factory, for a race test that drives the surface from threads.
+
+    One `AsgiClient` holds one `httpx.AsyncClient`, and `async_to_sync` builds a
+    fresh event loop for each call in the thread that made it, so a client shared
+    across threads would carry connections bound to a loop that is already gone.
+    Each thread builds its own, and its ORM work then runs on that thread, against
+    that thread's own database connection.
+    """
+    return lambda: AsgiClient(application, api_application)
 
 
 @pytest.fixture
@@ -42,15 +113,28 @@ def device(active_user):
 
 
 @pytest.fixture
-def auth_headers():
-    """Build request headers for a user. `scope="register"` mints the short-lived
-    token whose only power is adding a device."""
+def bearer():
+    """`Authorization` for a full-scope token bound to `device`."""
 
-    def build(user, device=None, scope="full"):
-        if scope == "register":
-            access = issue_register_scope(user)
-        else:
-            access, _refresh = issue_full(user, device)
-        return {"HTTP_AUTHORIZATION": f"Bearer {access}"}
+    def build(user, device):
+        access, _refresh = issue_full(user, device)
+        return {"Authorization": f"Bearer {access}"}
 
     return build
+
+
+@pytest.fixture
+def register_bearer():
+    """`Authorization` for the short-lived token whose only power is adding a
+    device."""
+
+    def build(user):
+        return {"Authorization": f"Bearer {issue_register_scope(user)}"}
+
+    return build
+
+
+@pytest.fixture
+def bob(db):
+    """A second activated account, for the tests that need two."""
+    return User.objects.create_user(username="bob", password=PASSWORD, is_active=True)

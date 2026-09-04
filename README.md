@@ -35,9 +35,9 @@ public keys, and it enforces nothing security-relevant. Cross-signing material a
 device-list records pass through as blobs it never parses or verifies; every check that
 matters happens client-side, against keys the server has never held. No
 content-encryption key ever reaches the server, though it does hold infrastructure
-secrets — the TLS private key, the JWT signing key, and the LiveKit API secret. Group
-chats are pairwise: a message is encrypted once per member device, and the server
-keeps no roster, group object, or group key.
+secrets — the TLS private key, the JWT signing key, the Django secret key, the LiveKit
+API secret, and the TURN shared secret. Group chats are pairwise: a message is encrypted
+once per member device, and the server keeps no roster, group object, or group key.
 
 The honest limit: an adversary holding live root on the box can watch which authenticated
 connection deposits into and collects from each device's queue, which is enough to
@@ -54,8 +54,8 @@ Full threat model, key inventory, and residual risk:
 flowchart LR
   C["Flutter client<br/>Android · Web"]
   N["nginx<br/>TLS 1.3"]
-  D["Daphne<br/>ASGI"]
-  A["Django + DRF<br/>Channels"]
+  D["uvicorn<br/>ASGI"]
+  A["FastAPI + Django"]
   P[("PostgreSQL 16")]
   R[("Redis 7")]
   L["LiveKit SFU"]
@@ -75,9 +75,9 @@ flowchart LR
 | Layer | Technology |
 |---|---|
 | Client | Flutter 3.44.7, Dart 3.12.2 — Android and Web targets only |
-| Server | Python 3.12, Django 6.0, Django REST Framework, Channels 4 on Daphne |
+| Server | Python 3.12, Django 6.0, FastAPI on uvicorn |
 | Database | PostgreSQL 16, loopback only |
-| Cache and channel layer | Redis 7, loopback only |
+| Cache, fan-out bus and live state | Redis 7, loopback only |
 | Voice | Self-hosted LiveKit SFU, self-hosted coturn |
 | Edge | nginx, TLS 1.3 under a pre-distributed private CA |
 
@@ -85,7 +85,7 @@ flowchart LR
 
 | Path | Owner | Contents |
 |---|---|---|
-| [`backend/`](backend/) | [Nima Shadloo](https://github.com/n-shadloo) | Django server and system architecture: the `accounts`, `devices`, `vault`, `messaging`, `attachments`, `voicerooms`, `realtime`, `core`, and `config` apps, plus `ops/` deployment artefacts for a single VPS |
+| [`backend/`](backend/) | [Nima Shadloo](https://github.com/n-shadloo) | The server: the `accounts`, `devices`, `vault`, `messaging`, `attachments`, `voicerooms`, `realtime` and `core` apps, the `api` package that composes the FastAPI runtime over them, the `config` project, and `ops/` deployment artefacts for a single VPS |
 | [`frontend/`](frontend/) | [realSeyed](https://github.com/realSeyed) | Flutter client for Android and Web, including all client-side cryptography |
 
 `backend/vendor/wheels` is the offline wheel cache, and it is not tracked in git. The
@@ -103,6 +103,8 @@ with `--no-index` and `--require-hashes`.
 | [backend/SECURITY.md](backend/SECURITY.md) | Threat model, the precise key invariant, what a seizure yields, and residual risk |
 | [backend/CLIENT_CONTRACT.md](backend/CLIENT_CONTRACT.md) | The client-side half of every security property; authoritative for client implementations |
 | Per-app API reference | [accounts](backend/accounts/API.md) · [devices](backend/devices/API.md) · [vault](backend/vault/API.md) · [messaging](backend/messaging/API.md) · [attachments](backend/attachments/API.md) · [voicerooms](backend/voicerooms/API.md) · [realtime](backend/realtime/API.md) · [core](backend/core/API.md) |
+| [backend/openapi.json](backend/openapi.json) | The same surface as a generated OpenAPI document: every path, method, payload shape and error status. CI fails a change that does not regenerate it |
+| [API_CHANGES.md](API_CHANGES.md) | Everything a client can observe that has moved since the pre-rebuild state, and what the client does about each one |
 | [docs/architecture/DESIGN-RECORD.md](docs/architecture/DESIGN-RECORD.md) | The system of record for the architecture: the positions table, the assumption ledger, the deferral list, and the decision log |
 | [docs/architecture/GROUND-TRUTH.md](docs/architecture/GROUND-TRUTH.md) | The measured facts of the deployment: topology, configuration deviations, scale facts, and the domain rules the code must hold |
 | [docs/architecture/decisions/](docs/architecture/decisions/) | One ADR for each architecture decision |
@@ -110,16 +112,21 @@ with `--no-index` and `--require-hashes`.
 
 ## Current status
 
-Built, with tests: the nine backend apps above — account and device registration,
+Built, with tests: the eight backend apps above — account and device registration,
 device-scoped JWT authentication, cross-signing and classical + ML-KEM prekey
 distribution, the durable envelope queue, bucketed attachments, voice-room token minting,
 and the `/ws` gateway — together with the `ops/` artefacts for deploying them to one VPS.
 
+The API surface is frozen at `v1`: [backend/openapi.json](backend/openapi.json) is the
+generated contract and CI fails a change that does not regenerate it, and
+[API_CHANGES.md](API_CHANGES.md) records every observable change from here on.
+
 Not built: the frontend beyond its foundation. It currently has a design system, an
 adaptive application shell, environment provisioning with a fail-closed bootstrap, and a
 local storage layer; it has no chat, group, voice, or cryptography features. There has
-been no external security audit, and the API surface is still moving —
-[backend/CLIENT_CONTRACT.md](backend/CLIENT_CONTRACT.md) is authoritative when it changes.
+been no external security audit, and
+[backend/CLIENT_CONTRACT.md](backend/CLIENT_CONTRACT.md) is authoritative for what a
+client must do for the security properties to hold.
 
 ## License
 

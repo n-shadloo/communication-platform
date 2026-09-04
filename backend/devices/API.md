@@ -4,12 +4,26 @@ The device registry and public-key distribution: publishing the account's
 cross-signing identity, registering a device with its signed key bundle, listing and
 labelling devices, replenishing classical and ML-KEM one-time prekeys, maintaining
 the client-signed device-list log, reading peers' device lists,
-and claiming key material to start sessions. All paths are under `/api/v1`; requests
-and responses are JSON with base64-encoded binary values;
-`Authorization: Bearer <access token>` is required everywhere (`full` scope except
-where noted). Validation failures on this app return the DRF field-error object
-directly, e.g. `400 {"ik_pub": ["invalid base64"]}`, with no `code` key; the
-project-wide `401` bodies listed in `accounts/API.md` apply here too.
+and claiming key material to start sessions. Every route here is served by FastAPI.
+
+All paths are under `/api/v1`. Requests and responses are JSON; binary values are
+base64 strings. Unless an endpoint says otherwise, it requires
+`Authorization: Bearer <access token>` with `full` scope. Errors use the envelope and
+the vocabulary that [`core/API.md`](../core/API.md) fixes; three responses can appear
+on any authenticated endpoint and are not repeated per section:
+
+- `401 {"code": "unauthenticated", …}` with `WWW-Authenticate: Bearer` when the
+  `Authorization` header is absent or malformed;
+- `401 {"code": "invalid_token", …}` when the token fails signature, expiry, type or
+  claim checks;
+- `401 {"code": "token_revoked", …}` when the device is revoked or deleted, a
+  generation is stale, or the account has been deactivated.
+
+Every request body rejects a field the endpoint does not declare, and every field is
+read strictly: a value of the wrong JSON type is refused rather than converted, so
+`"1"` and `true` are not accepted where an integer is declared. A `{user_id}` or
+`{device_id}` in a path that is not a UUID is
+`400 {"code": "invalid_request", "detail": {"user_id": [...]}}`, not a `404`.
 
 **Nothing in this app is verified server-side.** Cross-signatures, prekey signatures,
 identity self-signatures, and device-log hash chains are stored and relayed as opaque
@@ -35,6 +49,10 @@ the out-of-band-verified master key).
 A fresh account publishes its identity immediately after registering its first device
 (the first registration is the only one allowed without a published identity — see
 device registration below).
+
+**Retry semantics.** A retry of the same `PUT` either applies it or answers `409
+stale_version`, because the first attempt already stored that version. Both leave the
+stored identity correct; on `409` the client re-reads before it writes again.
 
 **Headers**
 
@@ -67,13 +85,22 @@ Empty body.
 ### Invalid request — `400 Bad Request`
 
 ```json
-{ "master_sig": ["bad signature length"] }
+{ "code": "invalid_request", "detail": { "master_sig": ["bad signature length"] } }
 ```
+
+### Body too large — `413 Payload Too Large`
+
+```json
+{ "code": "payload_too_large", "detail": "Request body is too large." }
+```
+
+The cap on this route is 16 KiB, counted as the bytes arrive rather than read from
+`Content-Length`, so an understated header does not defeat it.
 
 ### Stale version — `409 Conflict`
 
 ```json
-{ "code": "stale_version" }
+{ "code": "stale_version", "detail": "Version must increase." }
 ```
 
 Sent when `version` ≤ the stored version; the stored identity is unchanged.
@@ -87,7 +114,7 @@ Sent when `version` ≤ the stored version; the stored identity is unchanged.
 ### Rate limited — `429 Too Many Requests`
 
 ```json
-{ "detail": "Request was throttled." }
+{ "code": "throttled", "detail": "Request was throttled." }
 ```
 
 Scope `accounts`, default 120/min.
@@ -135,16 +162,24 @@ self-contained so no such indirection exists.
 }
 ```
 
+### Malformed id — `400 Bad Request`
+
+```json
+{ "code": "invalid_request", "detail": { "user_id": ["Input should be a valid UUID, invalid character: found `n` at 1"] } }
+```
+
+A `user_id` that is not a UUID never reaches the lookup.
+
 ### No published identity, unknown or deactivated user — `404 Not Found`
 
 ```json
-{ "code": "not_found" }
+{ "code": "not_found", "detail": "No published identity." }
 ```
 
 ### Rate limited — `429 Too Many Requests`
 
 ```json
-{ "detail": "Request was throttled." }
+{ "code": "throttled", "detail": "Request was throttled." }
 ```
 
 Scope `accounts`, default 120/min.
@@ -254,6 +289,12 @@ head of the account's device-list log (null when empty). The response carries an
 the live device set **and** the device-log head, so a log append also invalidates it —
 expect more frequent invalidation than under the device-set-only tag.
 
+**Retry semantics.** `POST` is not idempotent: a retry after a lost response mints a
+second device with a second id and a second token pair, and the first device stays
+live and counts against `MAX_DEVICES_PER_USER`. A client that has lost the response
+lists its devices with `GET` before it registers again, and revokes the device it
+cannot use. `GET` writes nothing.
+
 **Headers**
 
 | Header | Required | Value |
@@ -341,8 +382,11 @@ Empty body, when `If-None-Match` matches the current `ETag`.
 ### Invalid request — `400 Bad Request` (POST)
 
 ```json
-{ "otpks": { "0": { "pub": ["invalid base64"] } } }
+{ "code": "invalid_request", "detail": { "otpks.0.pub": ["invalid base64"] } }
 ```
+
+`detail` maps a dotted field path to its messages; a list item carries its index in
+that path.
 
 ### Off-bucket label — `400 Bad Request` (POST)
 
@@ -353,8 +397,15 @@ Empty body, when `If-None-Match` matches the current `ETag`.
 ### Cross-signature sent at registration — `400 Bad Request` (POST)
 
 ```json
-{ "cross_sig": "Not accepted at registration: the canonical device bundle covers device_id, which this request assigns, so no signature computed before the response can be valid. Send cross_sig and bundle_version to PUT /me/devices/{device_id}/prekeys once you have the device_id." }
+{
+  "code": "invalid_request",
+  "detail": {
+    "cross_sig": ["Not accepted at registration: the canonical device bundle covers device_id, which this request assigns, so no signature computed before the response can be valid. Send cross_sig and bundle_version to PUT /me/devices/{device_id}/prekeys once you have the device_id."]
+  }
+}
 ```
+
+Both fields are named when both are sent.
 
 ### No published identity (second device onward) — `400 Bad Request` (POST)
 
@@ -362,13 +413,23 @@ Empty body, when `If-None-Match` matches the current `ETag`.
 { "code": "identity_required", "detail": "Publish a cross-signing identity before adding another device." }
 ```
 
+### Body too large — `413 Payload Too Large` (POST)
+
+```json
+{ "code": "payload_too_large", "detail": "Request body is too large." }
+```
+
+The cap on this route is 70 MiB, counted as the bytes arrive rather than read from
+`Content-Length`, so an understated header does not defeat it. The 70 MiB is what nginx
+admits; the list caps of the schema refuse a larger body long before it.
+
 ### Device cap reached — `409 Conflict` (POST)
 
 ```json
 { "code": "device_limit", "detail": "This account has too many devices." }
 ```
 
-### Register-scope token on GET — `403 Forbidden`
+### Register-scope token — `403 Forbidden` (GET)
 
 ```json
 { "code": "scope_forbidden", "detail": "This token cannot access this endpoint." }
@@ -377,7 +438,7 @@ Empty body, when `If-None-Match` matches the current `ETag`.
 ### Rate limited — `429 Too Many Requests`
 
 ```json
-{ "detail": "Request was throttled." }
+{ "code": "throttled", "detail": "Request was throttled." }
 ```
 
 Scope `accounts`, default 120/min.
@@ -395,6 +456,12 @@ device lists. Revocation is permanent; a "re-added"
 device is a new registration. Any device of the account may revoke any other (or
 itself). The client appends a device-list log record for the removal
 (CLIENT_CONTRACT.md §J).
+
+**Retry semantics.** `PUT` is idempotent: it replaces the label blob, so a repeated
+call with the same body leaves the same label. `DELETE` is safe to repeat and
+self-reporting: the first call revokes, and a second answers `404` because a revoked
+device is no longer found — which is also what an id from another account answers, so
+a `404` never confirms that a device exists.
 
 **Headers**
 
@@ -434,10 +501,27 @@ Empty body.
 ### Invalid request — `400 Bad Request` (PUT)
 
 ```json
-{ "label_blob": ["This field is required."] }
+{ "code": "invalid_request", "detail": { "label_blob": ["Field required"] } }
 ```
 
 An off-bucket label is `400 {"code": "bad_bucket", "detail": "Invalid payload."}`.
+
+### Malformed id — `400 Bad Request`
+
+```json
+{ "code": "invalid_request", "detail": { "device_id": ["Input should be a valid UUID, invalid character: found `n` at 1"] } }
+```
+
+A `device_id` that is not a UUID never reaches the lookup.
+
+### Body too large — `413 Payload Too Large` (PUT)
+
+```json
+{ "code": "payload_too_large", "detail": "Request body is too large." }
+```
+
+The cap on this route is 16 KiB, counted as the bytes arrive rather than read from
+`Content-Length`, so an understated header does not defeat it.
 
 ### Unknown, foreign, or already-revoked device — `404 Not Found`
 
@@ -456,7 +540,7 @@ Another account's device id is a `404`, not a `403`, so existence is not confirm
 ### Rate limited — `429 Too Many Requests`
 
 ```json
-{ "detail": "Request was throttled." }
+{ "code": "throttled", "detail": "Request was throttled." }
 ```
 
 Scope `accounts`, default 120/min.
@@ -489,6 +573,14 @@ applied either — no prekey rotation, no signature update.
 
 Clients watch the count endpoint (or the `otpk_count` in this response) and replenish
 when the pools run low, since every peer claim consumes one of each.
+
+**Retry semantics.** Idempotent on the keys: a `key_id` the device already stores is
+ignored rather than rejected, so re-sending a batch stores nothing twice and the
+returned `otpk_count` is the truth either way. Two cases are not idempotent. The
+signed prekey and the cross-signature are replaced by whatever the retry carries, and
+the pool cap is checked against the batch as sent, so a retry of a batch that already
+landed can answer `409 prekey_limit` while storing nothing. On `409` the client reads
+`GET .../prekeys/count` before it decides what to send.
 
 **Headers**
 
@@ -536,7 +628,7 @@ keys must decode to exactly 1184 bytes; `cross_sig` and `pq_spk.sig` to exactly 
 ### Invalid request — `400 Bad Request`
 
 ```json
-{ "otpks": "duplicate key_id" }
+{ "code": "invalid_request", "detail": { "otpks": ["duplicate key_id"] } }
 ```
 
 ### Not this device — `403 Forbidden`
@@ -544,6 +636,16 @@ keys must decode to exactly 1184 bytes; `cross_sig` and `pq_spk.sig` to exactly 
 ```json
 { "code": "forbidden", "detail": "This token does not belong to that device." }
 ```
+
+### Body too large — `413 Payload Too Large`
+
+```json
+{ "code": "payload_too_large", "detail": "Request body is too large." }
+```
+
+The cap on this route is 70 MiB, counted as the bytes arrive rather than read from
+`Content-Length`, so an understated header does not defeat it. The 70 MiB is what nginx
+admits; the list caps of the schema refuse a larger body long before it.
 
 ### Pool cap reached — `409 Conflict`
 
@@ -554,7 +656,7 @@ keys must decode to exactly 1184 bytes; `cross_sig` and `pq_spk.sig` to exactly 
 ### Rate limited — `429 Too Many Requests`
 
 ```json
-{ "detail": "Request was throttled." }
+{ "code": "throttled", "detail": "Request was throttled." }
 ```
 
 Scope `accounts`, default 120/min.
@@ -597,6 +699,14 @@ None.
 { "otpk_count": 173, "pq_otpk_count": 88 }
 ```
 
+### Malformed id — `400 Bad Request`
+
+```json
+{ "code": "invalid_request", "detail": { "device_id": ["Input should be a valid UUID, invalid character: found `n` at 1"] } }
+```
+
+A `device_id` that is not a UUID never reaches the lookup.
+
 ### Not this device — `403 Forbidden`
 
 ```json
@@ -606,7 +716,7 @@ None.
 ### Rate limited — `429 Too Many Requests`
 
 ```json
-{ "detail": "Request was throttled." }
+{ "code": "throttled", "detail": "Request was throttled." }
 ```
 
 Scope `accounts`, default 120/min.
@@ -677,6 +787,14 @@ Header: `ETag: "5b3a9c1d7e2f4a6b8c0d1e2f3a4b5c6d"`. `cross_sig` and `log_head_se
 may be `null`. An unknown or deactivated user yields `{"devices": [], "etag": …,
 "log_head_seq": null}` with `200`.
 
+### Malformed id — `400 Bad Request`
+
+```json
+{ "code": "invalid_request", "detail": { "user_id": ["Input should be a valid UUID, invalid character: found `n` at 1"] } }
+```
+
+A `user_id` that is not a UUID never reaches the lookup.
+
 ### Not modified — `304 Not Modified`
 
 Empty body.
@@ -690,7 +808,7 @@ Empty body.
 ### Rate limited — `429 Too Many Requests`
 
 ```json
-{ "detail": "Request was throttled." }
+{ "code": "throttled", "detail": "Request was throttled." }
 ```
 
 Scope `accounts`, default 120/min.
@@ -718,6 +836,12 @@ nothing — the empty list is honoured, not treated as "all" — so batch carefu
 Group sessions start here too: a group is a set of pairwise sessions, one per member
 device, so starting one claims from each member's `user_id` in turn
 (CLIENT_CONTRACT.md §F). There is no group-specific key material.
+
+**Retry semantics.** Not idempotent, and expensively so: every call consumes one
+one-time prekey from each target device, so a retry after a lost response burns a
+second key per device and the first is gone for good. Nothing recovers it — a
+one-time prekey is handed out once by construction. A client that loses the response
+treats the claim as spent and starts the session from the bundle the retry returned.
 
 **Headers**
 
@@ -781,8 +905,18 @@ yields `{"bundles": []}` with `200`.
 ### Invalid request — `400 Bad Request`
 
 ```json
-{ "device_ids": { "0": ["Must be a valid UUID."] } }
+{ "code": "invalid_request", "detail": { "device_ids.0": ["Input should be a valid UUID, invalid character: found `n` at 1"] } }
 ```
+
+### Body too large — `413 Payload Too Large`
+
+```json
+{{ "code": "payload_too_large", "detail": "Request body is too large." }}
+```
+
+The cap on this route is 70 MiB, counted as the bytes arrive rather than read from
+`Content-Length`, so an understated header does not defeat it. The 70 MiB is what
+nginx admits; the list caps of the schema refuse a larger body long before it.
 
 ### Register-scope token — `403 Forbidden`
 
@@ -793,7 +927,7 @@ yields `{"bundles": []}` with `200`.
 ### Rate limited — `429 Too Many Requests`
 
 ```json
-{ "detail": "Request was throttled." }
+{ "code": "throttled", "detail": "Request was throttled." }
 ```
 
 Scope `claim`, default 120/min.
@@ -818,6 +952,13 @@ actually compare (clients gossip heads inside ordinary E2EE messages).
 
 Appending changes the account's device-list `ETag`, so polling peers re-fetch and see
 the new head.
+
+**Retry semantics.** Not idempotent: the server assigns `seq` and never inspects a
+record, so a retry after a lost response appends the same blobs again under fresh
+sequence numbers. The log is a hash chain the client builds, so the duplicate records
+link to the same predecessor and every reader sees a fork. Before retrying, read the
+log back with `GET /users/{user_id}/devicelog` and compare `head_seq` against what the
+append should have produced.
 
 **Headers**
 
@@ -845,6 +986,16 @@ the new head.
 Sequence numbers are server-assigned, per-user, contiguous within a batch, starting
 at 0.
 
+### Body too large — `413 Payload Too Large`
+
+```json
+{{ "code": "payload_too_large", "detail": "Request body is too large." }}
+```
+
+The cap on this route is 70 MiB, counted as the bytes arrive rather than read from
+`Content-Length`, so an understated header does not defeat it. The 70 MiB is what
+nginx admits; the list caps of the schema refuse a larger body long before it.
+
 ### Off-bucket record — `400 Bad Request`
 
 ```json
@@ -860,7 +1011,7 @@ at 0.
 ### Rate limited — `429 Too Many Requests`
 
 ```json
-{ "detail": "Request was throttled." }
+{ "code": "throttled", "detail": "Request was throttled." }
 ```
 
 Scope `accounts`, default 120/min.
@@ -917,6 +1068,14 @@ None.
 `head_seq` is `null` and `records` empty for an empty log, an unknown user, or a
 deactivated user.
 
+### Malformed id — `400 Bad Request`
+
+```json
+{ "code": "invalid_request", "detail": { "user_id": ["Input should be a valid UUID, invalid character: found `n` at 1"] } }
+```
+
+A `user_id` that is not a UUID never reaches the lookup.
+
 ### Register-scope token — `403 Forbidden`
 
 ```json
@@ -926,7 +1085,7 @@ deactivated user.
 ### Rate limited — `429 Too Many Requests`
 
 ```json
-{ "detail": "Request was throttled." }
+{ "code": "throttled", "detail": "Request was throttled." }
 ```
 
 Scope `accounts`, default 120/min.

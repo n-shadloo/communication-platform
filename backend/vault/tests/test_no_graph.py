@@ -16,7 +16,10 @@ from vault.models import KeyBackup
 
 from .conftest import KEYBACKUP_URL, backup_blob
 
-pytestmark = pytest.mark.django_db
+# transaction=True because the ORM bracket of `api.orm.run_unit` closes the
+# connection around every unit of work, which under a wrapping test transaction
+# would sever the connection the test itself holds.
+pytestmark = pytest.mark.django_db(transaction=True)
 
 EXPECTED_COLUMNS = {"user_id", "blob", "version", "updated_date"}
 
@@ -41,13 +44,12 @@ def test_keybackup_columns_are_exactly_the_minimum():
 
 
 def test_stored_blob_is_bucket_sized_and_date_is_day_coarse(
-    api, active_user, device, auth_headers
+    http, active_user, device, bearer
 ):
-    api.put(
+    http.put(
         KEYBACKUP_URL,
-        {"blob": backup_blob(), "version": 1},
-        format="json",
-        **auth_headers(active_user, device),
+        json={"blob": backup_blob(), "version": 1},
+        headers=bearer(active_user, device),
     )
     backup = KeyBackup.objects.get(user_id=active_user.id)
 

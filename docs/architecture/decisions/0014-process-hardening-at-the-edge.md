@@ -3,6 +3,9 @@
 - Status: Accepted
 - Phase: 2
 - Date: 2026-09-03
+- Landed: 2026-09-04, in the fourth run of phase 2. The trusted-host check, the
+  request deadline, the per-route body cap and the security headers are in place as
+  pure-ASGI middleware, and `ops/systemd/chat.service` carries the uvicorn flags.
 
 ## Context
 
@@ -50,9 +53,15 @@ No CORS policy exists; the web client is served from the API origin.
   limit of [0010](0010-redis-rate-limiting-that-fails-closed.md) meaningful.
   Without it a client sets its own `X-Forwarded-For` and every anonymous counter
   is per-header rather than per-caller.
-- The middleware is pure ASGI rather than a framework middleware so that the
-  deadline covers the WebSocket handshake and the admin mount as well, not only
-  FastAPI routes.
+- The middleware is pure ASGI rather than a framework middleware so that it covers
+  the admin mount as well, not only FastAPI routes. Each of the five passes a
+  websocket scope straight through, which is load-bearing rather than incidental: a
+  request deadline on a long-lived socket would cancel it, and the body cap's counting
+  `receive` would turn a websocket frame into `http.disconnect`. What bounds the
+  socket instead lives in `realtime/gateway.py` — the frame cap, the rate cap, the
+  send-queue bound and the authentication deadline. The consequence to hold in mind is
+  that `ALLOWED_HOSTS` is not checked on a handshake; `ALLOWED_WS_ORIGINS` is the only
+  origin control the socket has.
 - The body cap is per route, not global. nginx's `client_max_body_size 70m`
   covers the largest attachment bucket; a route that accepts a 1 KB JSON body
   must not inherit that ceiling.

@@ -3,6 +3,11 @@
 - Status: Accepted
 - Phase: 2
 - Date: 2026-09-03
+- Landing: 2026-09-04, in the first and second runs of phase 2. The Redis limiter
+  serves every FastAPI route. The REST Framework throttle still counts `attachments`
+  and `voicerooms`, but their scopes — `attachments` and `roomtoken` — are served by
+  no FastAPI route, so no scope is double-counted; the last two apps end this
+  landing.
 
 ## Context
 

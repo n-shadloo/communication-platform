@@ -12,19 +12,22 @@ from django.db import connection
 
 from .conftest import KEYBACKUP_URL, backup_blob
 
-pytestmark = pytest.mark.django_db
+# transaction=True because the ORM bracket of `api.orm.run_unit` closes the
+# connection around every unit of work, which under a wrapping test transaction
+# would sever the connection the test itself holds.
+pytestmark = pytest.mark.django_db(transaction=True)
 
 REMOVED_ROUTES = (
-    ("get", "/api/v1/me/history"),
-    ("post", "/api/v1/me/history"),
-    ("post", "/api/v1/me/history/delete"),
-    ("get", "/api/v1/me/history/usage"),
+    ("GET", "/api/v1/me/history"),
+    ("POST", "/api/v1/me/history"),
+    ("POST", "/api/v1/me/history/delete"),
+    ("GET", "/api/v1/me/history/usage"),
 )
 
 
 @pytest.mark.parametrize("method, url", REMOVED_ROUTES)
-def test_every_history_route_is_gone(api, active_user, device, auth_headers, method, url):
-    response = getattr(api, method)(url, **auth_headers(active_user, device))
+def test_every_history_route_is_gone(http, active_user, device, bearer, method, url):
+    response = http.request(method, url, headers=bearer(active_user, device))
 
     assert response.status_code == 404
 
@@ -62,15 +65,18 @@ def test_no_registered_model_stores_message_content_past_the_queue():
     assert QueuedEnvelope._meta.get_field("blob").bucket_set  # the queue stays bucketed
 
 
-def test_the_key_backup_still_works_end_to_end(api, active_user, device, auth_headers):
-    headers = auth_headers(active_user, device)
+def test_the_key_backup_still_works_end_to_end(http, active_user, device, bearer):
+    headers = bearer(active_user, device)
     payload = backup_blob(b"Z")
 
     assert (
-        api.put(
-            KEYBACKUP_URL, {"blob": payload, "version": 3}, format="json", **headers
+        http.put(
+            KEYBACKUP_URL, json={"blob": payload, "version": 3}, headers=headers
         ).status_code
         == 200
     )
 
-    assert api.get(KEYBACKUP_URL, **headers).json() == {"blob": payload, "version": 3}
+    assert http.get(KEYBACKUP_URL, headers=headers).json() == {
+        "blob": payload,
+        "version": 3,
+    }

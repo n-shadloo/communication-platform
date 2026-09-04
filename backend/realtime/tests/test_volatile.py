@@ -96,7 +96,7 @@ async def test_malformed_signal_frames_are_dropped(active_user, device):
 async def test_alternate_uuid_spellings_still_reach_a_live_target(
     active_user, device, peer, peer_device
 ):
-    """uuid.UUID accepts braces/urn/uppercase; the group name must use the
+    """uuid.UUID accepts braces/urn/uppercase; the topic name must use the
     normalized form or a live target silently misses the signal."""
     comm_a = await connect_ok(bearer(await mint_access(active_user, device)))
     comm_b = await connect_ok(bearer(await mint_access(peer, peer_device)))

@@ -10,43 +10,44 @@ import pytest
 
 from .conftest import KEYBACKUP_URL, backup_blob, make_device
 
-pytestmark = pytest.mark.django_db
+# transaction=True because the ORM bracket of `api.orm.run_unit` closes the
+# connection around every unit of work, which under a wrapping test transaction
+# would sever the connection the test itself holds.
+pytestmark = pytest.mark.django_db(transaction=True)
 
 
 def test_a_new_device_restores_the_key_backup_byte_identical(
-    api, active_user, device, auth_headers
+    http, active_user, device, bearer
 ):
-    device1 = auth_headers(active_user, device)
+    device1 = bearer(active_user, device)
     backup_payload = backup_blob(b"K", size=16384)
 
     assert (
-        api.put(
+        http.put(
             KEYBACKUP_URL,
-            {"blob": backup_payload, "version": 1},
-            format="json",
-            **device1,
+            json={"blob": backup_payload, "version": 1},
+            headers=device1,
         ).status_code
         == 200
     )
 
     # A brand-new device for the same account, with its own full-scope token.
-    device2 = auth_headers(active_user, make_device(active_user, registration_id=2))
-    assert api.get(KEYBACKUP_URL, **device2).json() == {
+    device2 = bearer(active_user, make_device(active_user, registration_id=2))
+    assert http.get(KEYBACKUP_URL, headers=device2).json() == {
         "blob": backup_payload,
         "version": 1,
     }
 
 
 def test_backups_are_scoped_to_their_owner(
-    api, active_user, device, auth_headers, bob, bob_device
+    http, active_user, device, bearer, bob, bob_device
 ):
-    api.put(
+    http.put(
         KEYBACKUP_URL,
-        {"blob": backup_blob(b"A"), "version": 1},
-        format="json",
-        **auth_headers(active_user, device),
+        json={"blob": backup_blob(b"A"), "version": 1},
+        headers=bearer(active_user, device),
     )
 
-    theirs = api.get(KEYBACKUP_URL, **auth_headers(bob, bob_device))
+    theirs = http.get(KEYBACKUP_URL, headers=bearer(bob, bob_device))
 
     assert theirs.status_code == 404

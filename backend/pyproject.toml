@@ -17,6 +17,7 @@ select = ["E", "W", "F", "I"]
 [tool.ruff.lint.isort]
 known-first-party = [
     "accounts",
+    "api",
     "attachments",
     "config",
     "core",
@@ -29,12 +30,14 @@ known-first-party = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-# Channels needs the ASGI application built — and so the app registry populated —
-# before `realtime.consumers` is imported. The import order is load-bearing.
+# The Django ASGI application has to be built — and so the app registry populated —
+# before any router is imported, because every router reads a model. The import order
+# is load-bearing.
 "config/asgi.py" = ["E402"]
 # The settings modules layer over `base` with a star import, which is how Django
-# settings compose; the names a layer overrides come from that star.
-"config/settings/dev.py" = ["F403", "F405"]
+# settings compose; the names a layer overrides come from that star. `dev` also sets
+# its two fallback secrets above that import, because `base` reads both while it runs.
+"config/settings/dev.py" = ["E402", "F403", "F405"]
 "config/settings/prod.py" = ["F403", "F405"]
 # `makemigrations` writes these files, and the long lines in them are Django's own
 # field help texts. Nobody chooses that width, and a rewrap here is lost the next

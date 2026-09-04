@@ -1,5 +1,7 @@
+from django.conf import settings
 from django.contrib import admin
-from django.urls import include, path
+from django.contrib.staticfiles.urls import staticfiles_urlpatterns
+from django.urls import path
 
 from core.env import env
 
@@ -7,13 +9,12 @@ from core.env import env
 # scan for.
 ADMIN_PATH = env("ADMIN_PATH", default="admin/")
 
-urlpatterns = [
-    path(ADMIN_PATH, admin.site.urls),
-    path("api/v1/", include("core.urls")),
-    path("api/v1/", include("accounts.urls")),
-    path("api/v1/", include("devices.urls")),
-    path("api/v1/", include("vault.urls")),
-    path("api/v1/", include("messaging.urls")),
-    path("api/v1/", include("attachments.urls")),
-    path("api/v1/", include("voicerooms.urls")),
-]
+# Every route of this API is served by FastAPI. What Django answers is the admin,
+# and nothing else; `api.app.django_paths` is what refuses it any other path.
+urlpatterns = [path(ADMIN_PATH, admin.site.urls)]
+
+if settings.DEBUG:
+    # The admin's own CSS and JS. uvicorn serves this process rather than
+    # `runserver`, so nothing else would serve them in development; in production
+    # nginx serves STATIC_ROOT and this list is empty.
+    urlpatterns += staticfiles_urlpatterns()

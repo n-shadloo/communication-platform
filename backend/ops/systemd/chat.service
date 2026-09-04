@@ -1,5 +1,5 @@
 [Unit]
-Description=chat backend Daphne ASGI server
+Description=chat backend uvicorn ASGI server
 After=network-online.target postgresql.service redis.service
 Wants=network-online.target
 Requires=postgresql.service redis.service
@@ -14,15 +14,40 @@ WorkingDirectory=/srv/chat/backend
 EnvironmentFile=/srv/chat/backend/.env.production
 Environment=DJANGO_SETTINGS_MODULE=config.settings.prod
 # Bound to loopback only: nginx terminates TLS and reverse-proxies /api and /ws.
-# --access-log /dev/null is load-bearing, not tidiness: daphne writes an HTTP
-# access log to stdout whenever verbosity is 1 or more, which is its default, and
-# that stream is written directly rather than through Django's LOGGING, so
-# ScrubFilter never sees it. Left on, systemd collects every request path into the
-# journal — including the user UUID in the peer-device and key-claim routes, and
-# the admin path — which is the conversation graph at rest that the schema exists
-# to exclude.
-ExecStart=/srv/chat/backend/.venv/bin/daphne \
-    -b 127.0.0.1 -p 8000 --access-log /dev/null \
+#
+# --no-access-log is load-bearing, not tidiness: uvicorn writes an HTTP access
+# line for every request, on its own `uvicorn.access` logger, and a request path
+# in the journal is the conversation graph at rest that the schema exists to
+# exclude — the user UUID appears in the peer-device and key-claim routes, and
+# the admin path appears in all of them. `config/settings/base.py` pins the same
+# logger as the second half of the rule.
+#
+# --forwarded-allow-ips is what makes --proxy-headers safe, and what makes the
+# anonymous rate limit mean anything: without the pin a client sets its own
+# X-Forwarded-For and every anonymous counter becomes per-header.
+#
+# --loop, --http and --ws are pinned rather than left on "auto" so the process
+# fails to start on a missing wheel instead of silently falling back to the pure
+# Python implementations — and so the offline install is proven to carry them.
+# The WebSocket implementation is the sans-io one, which is the `websockets`
+# package either way: `--ws websockets` selects uvicorn's own deprecated wrapper
+# over a legacy module and warns that the flag will start meaning the sans-io one
+# in a future release, and a flag whose meaning changes under a version bump is
+# not a pin.
+#
+# --limit-concurrency bounds what one worker admits at once; past it uvicorn
+# answers 503 rather than queueing work a 1 GB host cannot hold. The
+# graceful-shutdown timeout is the drain window: on SIGTERM uvicorn stops
+# accepting, closes every live WebSocket with 1012, and waits this long for the
+# in-flight requests before it stops regardless.
+ExecStart=/srv/chat/backend/.venv/bin/uvicorn \
+    --host 127.0.0.1 --port 8000 \
+    --proxy-headers --forwarded-allow-ips 127.0.0.1 \
+    --no-access-log \
+    --loop uvloop --http httptools --ws websockets-sansio \
+    --workers ${WEB_CONCURRENCY} \
+    --limit-concurrency 512 \
+    --timeout-graceful-shutdown 10 \
     config.asgi:application
 Restart=on-failure
 RestartSec=5s

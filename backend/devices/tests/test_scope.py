@@ -1,27 +1,17 @@
 """A register-scope token's only power is `POST /me/devices`.
 
-`DeviceJWTAuthentication` authenticates register-scope tokens, so `IsAuthenticated`
-alone is satisfied by one. Every device endpoint except registration must therefore
-carry the scope check; without it, a ten-minute register token could revoke devices.
+`require_register_or_full` is what admits one, and it is declared on that route
+alone; every other device route declares `require_full_device`, which refuses it.
+Without that split, a ten-minute register token could revoke devices.
 """
 
 import pytest
 
-from accounts.tokens import issue_register_scope
 from devices.models import Device
 
-from .conftest import DEVICES_URL, label_blob, pubkey
+from .conftest import DEVICES_URL, label_blob, pubkey, register_payload
 
-pytestmark = pytest.mark.django_db
-
-
-def bearer(access):
-    return {"HTTP_AUTHORIZATION": f"Bearer {access}"}
-
-
-@pytest.fixture
-def register_headers(active_user):
-    return bearer(issue_register_scope(active_user))
+pytestmark = pytest.mark.django_db(transaction=True)
 
 
 def endpoints(device_id, user_id):
@@ -50,15 +40,15 @@ def endpoints(device_id, user_id):
 
 @pytest.mark.parametrize("name", list(endpoints("d", "u")))
 def test_a_register_scope_token_reaches_no_device_endpoint_but_registration(
-    api, active_user, device, register_headers, name
+    http, active_user, device, register_bearer, name
 ):
     method, url, body = endpoints(device.id, active_user.id)[name]
-    kwargs = {"format": "json", **register_headers}
+    headers = register_bearer(active_user)
 
     response = (
-        getattr(api, method)(url, body, **kwargs)
+        getattr(http, method)(url, json=body, headers=headers)
         if body is not None
-        else getattr(api, method)(url, **register_headers)
+        else getattr(http, method)(url, headers=headers)
     )
 
     assert response.status_code == 403, f"{name} admitted a register-scope token"
@@ -66,23 +56,23 @@ def test_a_register_scope_token_reaches_no_device_endpoint_but_registration(
 
 
 def test_a_register_scope_token_cannot_revoke_a_device(
-    api, active_user, device, register_headers
+    http, active_user, device, register_bearer
 ):
     """The headline case, called out on its own because it is destructive."""
-    api.delete(f"{DEVICES_URL}/{device.id}", **register_headers)
+    http.delete(f"{DEVICES_URL}/{device.id}", headers=register_bearer(active_user))
 
     device.refresh_from_db()
     assert device.revoked_date is None
     assert Device.objects.filter(id=device.id, revoked_date__isnull=True).exists()
 
 
-def test_the_same_token_is_still_accepted_for_registration(api, register_headers):
-    """Guards the guard: if the token were simply invalid, the parametrised test above
-    would pass for the wrong reason."""
-    from .conftest import register_payload
-
-    response = api.post(
-        DEVICES_URL, register_payload(), format="json", **register_headers
+def test_the_same_token_is_still_accepted_for_registration(
+    http, active_user, register_bearer
+):
+    """Guards the guard: if the token were simply invalid, the parametrised test
+    above would pass for the wrong reason."""
+    response = http.post(
+        DEVICES_URL, json=register_payload(), headers=register_bearer(active_user)
     )
 
     assert response.status_code == 201

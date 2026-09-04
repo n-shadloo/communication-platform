@@ -3,6 +3,14 @@
 - Status: Accepted
 - Phase: 2
 - Date: 2026-09-03
+- Landed: 2026-09-04, in the last run of phase 2. `python manage.py openapi` writes
+  `backend/openapi.json`, `--check` fails on drift, and CI runs it as a job named
+  `schema`. The document is complete rather than merely present: every route declares
+  a response model for its success status and the envelope for every error status it
+  can answer, and `core/tests/test_openapi.py` fails one that does not — which is the
+  check FastAPI has no counterpart for, since a route with no model reaches the
+  document as an empty schema in silence. The `/openapi.json`, `/docs` and `/redoc`
+  routes exist under `DEBUG` and are absent from the application otherwise.
 
 ## Context
 

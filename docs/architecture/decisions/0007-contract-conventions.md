@@ -3,6 +3,12 @@
 - Status: Accepted
 - Phase: 2
 - Date: 2026-09-03
+- Landed: 2026-09-04, over phase 2. Every convention here holds on every route: the
+  envelope on every error including `404`, `405`, `413`, `429` and `500`, the `400`
+  validation status with `422` never used, keyset pagination on the two routes that
+  page, the version fixed at `v1`, and the logout and `username_taken` changes. The
+  last piece is the retry semantics: every mutating route documents what a retry of
+  it does, and `core/tests/test_endpoint_references.py` fails one that does not.
 
 ## Context
 

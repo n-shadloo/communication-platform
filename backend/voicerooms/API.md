@@ -5,9 +5,8 @@ encrypted name; membership, invites, roles, and media crypto state are client-si
 state carried over the messaging queue, and live participation exists only in
 non-persistent Redis. These endpoints create and rename rooms, read a room with its
 live count, and mint LiveKit join tokens. All paths are under `/api/v1`, JSON with
-base64 blobs, `Authorization: Bearer` with `full` scope required. Serializer
-validation failures return the DRF field-error object directly (no `code` key); the
-project-wide `401` bodies listed in `accounts/API.md` apply here too.
+base64 blobs, `Authorization: Bearer` with `full` scope required. Every error body is
+the `{code, detail}` envelope defined in `core/API.md`.
 
 ## Create a room
 
@@ -17,6 +16,10 @@ project-wide `401` bodies listed in `accounts/API.md` apply here too.
 Creates a room from an encrypted name blob and returns its id. The id is the
 capability: anyone who holds it (learned through an encrypted invite) can read,
 rename, subscribe, and join voice. There is no owner column and no member table.
+
+**Retry semantics.** Not idempotent: a retry after a lost response creates a second
+room with a second id, and the first is unreachable because nobody was told its id.
+An orphan room is one row holding an encrypted name; nothing else refers to it.
 
 **Headers**
 
@@ -43,7 +46,8 @@ rename, subscribe, and join voice. There is no owner column and no member table.
 { "name_blob": "cm9vbS1uYW1lLXBhZGRlZA…" }
 ```
 
-Exactly one name bucket (256 or 1024 bytes) after decoding.
+Exactly one name bucket (256 or 1024 bytes) after decoding. An undeclared field is
+refused rather than ignored.
 
 **Responses**
 
@@ -56,14 +60,26 @@ Exactly one name bucket (256 or 1024 bytes) after decoding.
 ### Invalid request — `400 Bad Request`
 
 ```json
-{ "name_blob": ["This field is required."] }
+{ "code": "invalid_request", "detail": { "name_blob": ["Field required"] } }
 ```
+
+`detail` maps a field path to the messages that failed. No error body echoes request
+input.
 
 ### Off-bucket name — `400 Bad Request`
 
 ```json
 { "code": "bad_bucket", "detail": "Invalid payload." }
 ```
+
+### Body too large — `413 Payload Too Large`
+
+```json
+{ "code": "payload_too_large", "detail": "Request body is too large." }
+```
+
+The cap on this route is 16 KiB, counted as the bytes arrive rather than read from
+`Content-Length`, so an understated header does not defeat it.
 
 ### Register-scope token — `403 Forbidden`
 
@@ -74,10 +90,10 @@ Exactly one name bucket (256 or 1024 bytes) after decoding.
 ### Rate limited — `429 Too Many Requests`
 
 ```json
-{ "detail": "Request was throttled." }
+{ "code": "throttled", "detail": "Request was throttled." }
 ```
 
-Scope `accounts`, default 120/min.
+Scope `accounts`, default 120/min. `Retry-After` carries the seconds to wait.
 
 ## Read or rename a room
 
@@ -87,6 +103,11 @@ Scope `accounts`, default 120/min.
 `GET` returns the room's encrypted name, its day-coarse `updated_date`, and the
 number of devices currently in the live voice session. `PUT` replaces the name blob
 and bumps `updated_date`, which is how peers polling `GET` notice a rename.
+
+**Retry semantics.** `PUT` is idempotent: it replaces the stored blob, so a repeated
+call with the same body leaves the same name. It carries no version, so two clients
+renaming at once settle on whichever write lands last — there is no `409` here, and a
+client that must not lose a rename re-reads before it writes.
 
 **Headers**
 
@@ -132,15 +153,29 @@ Empty body.
 
 ### Unknown room — `404 Not Found`
 
-`GET` returns `{"code": "not_found"}`; `PUT` returns an empty body.
-
-### Invalid request — `400 Bad Request` (PUT)
-
 ```json
-{ "name_blob": ["This field is required."] }
+{ "code": "not_found", "detail": "No such room." }
 ```
 
+Both methods answer this.
+
+### Invalid request — `400 Bad Request`
+
+```json
+{ "code": "invalid_request", "detail": { "name_blob": ["Field required"] } }
+```
+
+A `{room_id}` that is not a UUID is the same code, with `room_id` as the field path.
 An off-bucket name is `400 {"code": "bad_bucket", "detail": "Invalid payload."}`.
+
+### Body too large — `413 Payload Too Large` (PUT)
+
+```json
+{ "code": "payload_too_large", "detail": "Request body is too large." }
+```
+
+The cap on this route is 16 KiB, counted as the bytes arrive rather than read from
+`Content-Length`, so an understated header does not defeat it.
 
 ### Register-scope token — `403 Forbidden`
 
@@ -151,7 +186,7 @@ An off-bucket name is `400 {"code": "bad_bucket", "detail": "Invalid payload."}`
 ### Rate limited — `429 Too Many Requests`
 
 ```json
-{ "detail": "Request was throttled." }
+{ "code": "throttled", "detail": "Request was throttled." }
 ```
 
 Scope `accounts`, default 120/min.
@@ -167,14 +202,18 @@ with the LiveKit API secret. The client connects to the returned LiveKit URL wit
 token before it expires. The token carries no media keys; media encryption is
 negotiated client-side and the server never joins the media path.
 
-Requires a device-bound token, since the LiveKit identity is the device id. Mint on
+The LiveKit identity is the device id, which every full-scope token names. Mint on
 join and re-mint on reconnect; tokens default to a 300-second lifetime.
+
+**Retry semantics.** Safe to repeat: minting writes nothing. Each call signs a fresh
+token with a fresh expiry, and the previous one stays valid until its own expiry
+passes.
 
 **Headers**
 
 | Header | Required | Value |
 |---|---|---|
-| `Authorization` | yes | `Bearer <access token>`, full scope, device-bound |
+| `Authorization` | yes | `Bearer <access token>`, full scope |
 
 **Path parameters**
 
@@ -204,11 +243,13 @@ None.
 }
 ```
 
-### No device binding — `403 Forbidden`
+### Invalid request — `400 Bad Request`
 
 ```json
-{ "code": "device_scope_required" }
+{ "code": "invalid_request", "detail": { "room_id": ["Input should be a valid UUID, invalid character: found `n` at 1"] } }
 ```
+
+A `room_id` that is not a UUID never reaches the room lookup.
 
 ### Register-scope token — `403 Forbidden`
 
@@ -219,13 +260,16 @@ None.
 ### Unknown room — `404 Not Found`
 
 ```json
-{ "code": "not_found" }
+{ "code": "not_found", "detail": "No such room." }
 ```
+
+Checked before the configuration below, so an unknown room never reveals whether
+voice is configured.
 
 ### Voice not configured — `503 Service Unavailable`
 
 ```json
-{ "code": "voice_unconfigured" }
+{ "code": "voice_unconfigured", "detail": "Voice is not configured." }
 ```
 
 Returned when any of `LIVEKIT_URL`, `LIVEKIT_API_KEY`, or `LIVEKIT_API_SECRET` is
@@ -234,7 +278,7 @@ unset.
 ### Rate limited — `429 Too Many Requests`
 
 ```json
-{ "detail": "Request was throttled." }
+{ "code": "throttled", "detail": "Request was throttled." }
 ```
 
 Scope `roomtoken`, default 60/min.

@@ -25,16 +25,6 @@ def make_device(user, registration_id=1):
     )
 
 
-@pytest.fixture(autouse=True)
-def in_memory_channel_layer(settings):
-    """Keep `_push` off Redis: repeated async_to_sync calls against a real channel layer
-    leave closed event loops behind, and the in-memory layer lets a test actually observe
-    what was pushed."""
-    settings.CHANNEL_LAYERS = {
-        "default": {"BACKEND": "channels.layers.InMemoryChannelLayer"},
-    }
-
-
 @pytest.fixture
 def bob(db):
     return User.objects.create_user(username="bob", password=PASSWORD, is_active=True)

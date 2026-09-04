@@ -1,6 +1,7 @@
 import base64
 
 import pytest
+from django.db import connection
 
 from accounts.models import User
 from core.buckets import LABEL_BUCKETS
@@ -10,11 +11,24 @@ from devices.models import (
     PqOneTimePrekey,
     UserIdentity,
 )
-from devices.serializers import PQ_PUBKEY_LEN
+from devices.schemas import PQ_PUBKEY_LEN
 
 PASSWORD = "correct-horse-battery-staple"
 
 DEVICES_URL = "/api/v1/me/devices"
+
+
+def connect_then_wait(barrier):
+    """Open this thread's database connection before it waits at the barrier.
+
+    Connection setup costs 10-20 ms and varies by thread — more than the whole
+    transaction a race test is about, and `CONN_MAX_AGE` is 0, so every unit of work
+    opens its own. Threads released together would otherwise reach the row one at a
+    time on a slow runner, and what the guard proves would depend on the machine
+    instead of on the lock.
+    """
+    connection.ensure_connection()
+    barrier.wait(timeout=10)
 
 
 def pubkey(seed=b"k"):
