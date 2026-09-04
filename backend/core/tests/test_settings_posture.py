@@ -7,6 +7,12 @@ from django.test import SimpleTestCase, override_settings
 from config.settings import prod
 from core.checks import no_foreign_or_telemetry, ws_origin_allowlist_set
 
+# The band's ceiling on concurrent WebSocket connections: fewer than 50 accounts
+# at `MAX_DEVICES_PER_USER` devices each, recorded as A1 in
+# `docs/architecture/DESIGN-RECORD.md`. It lives there rather than in a setting,
+# because nothing in this process enforces it.
+SOCKET_CEILING = 500
+
 
 def deploy_check_ids():
     """The ids `manage.py check --deploy` would report under the current settings,
@@ -194,6 +200,46 @@ class BasePostureTests(SimpleTestCase):
             "--timeout-graceful-shutdown",
         ):
             self.assertIn(flag, unit)
+
+    def test_the_concurrency_limit_leaves_room_for_http_beside_the_sockets(self):
+        """uvicorn's `--limit-concurrency` counts *connections*, and a live
+        WebSocket is one: both protocols share `server_state.connections`, and the
+        HTTP path answers `503` from the length of that shared set. The WebSocket
+        handshake never consults it — the upgrade returns before the check — so
+        sockets take from the budget and never give it back.
+
+        Measured with the limit at 6: six live sockets, and every HTTP request
+        answers uvicorn's own plain-text `503 Service Unavailable`, not even this
+        API's envelope. At the band's ceiling of `SOCKET_CEILING` concurrent
+        sockets, a limit of 512 would leave twelve connections for every send, ack,
+        drain and key claim the deployment makes.
+
+        So the limit carries both: the socket ceiling, plus one keep-alive HTTP
+        connection for each of those devices. 500 live sockets cost 47 MB of
+        resident set (189.8 MB idle against 237.0 MB), and an idle HTTP connection
+        is cheaper than a socket, so the memory stays inside A3's 700 MB ceiling.
+        """
+        unit = (settings.BASE_DIR / "ops" / "systemd" / "chat.service").read_text()
+        limit = int(re.search(r"--limit-concurrency (\d+)", unit).group(1))
+
+        self.assertGreaterEqual(limit, 2 * SOCKET_CEILING)
+
+    def test_the_serving_unit_raises_its_file_descriptor_limit_to_match(self):
+        """A connection is a file descriptor, and systemd's own default soft
+        `LimitNOFILE` is 1024. Admitting more connections than the process has
+        descriptors for moves the failure rather than removing it: the accept fails
+        instead of the concurrency check, and it fails without a `503`.
+
+        The budget is the connection limit, plus the sixteen the database pool
+        holds, plus the Redis client and its subscription, plus the listening
+        socket and stdio.
+        """
+        unit = (settings.BASE_DIR / "ops" / "systemd" / "chat.service").read_text()
+        limit = int(re.search(r"--limit-concurrency (\d+)", unit).group(1))
+        descriptors = re.search(r"LimitNOFILE=(\d+)", unit)
+
+        self.assertIsNotNone(descriptors, "the unit sets no LimitNOFILE")
+        self.assertGreater(int(descriptors.group(1)), limit)
 
     def test_the_units_write_only_what_they_must_and_drop_what_they_never_use(self):
         """`ReadWritePaths` is the whole of what a compromised process can change
