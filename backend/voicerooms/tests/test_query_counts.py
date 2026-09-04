@@ -12,11 +12,16 @@ rather than savepoints, and they are excluded here so the number is the database
 work itself.
 """
 
+import uuid
+
 import pytest
+import redis
+from django.conf import settings
 from django.db import connection
 from django.test.utils import CaptureQueriesContext
 
 from voicerooms.models import Room
+from voicerooms.presence import _key
 
 from .conftest import name_blob_b64
 
@@ -108,3 +113,101 @@ def test_minting_a_join_token_is_one_existence_check(
     )
 
     assert response.status_code == 200
+
+
+@pytest.fixture
+def store():
+    client = redis.Redis.from_url(settings.REDIS_URL)
+    yield client
+    client.close()
+
+
+def test_a_room_with_people_in_it_costs_no_more_than_an_empty_one(
+    http, active_user, device, bearer, room, store
+):
+    """The live count is a Redis read, so a busy room must cost exactly what a
+    quiet one does. A count that had become a column or a join would show up here
+    as an extra statement before it showed up as a slow page."""
+    store.sadd(_key(room.id), "device-a", "device-b", "device-c")
+
+    response = counted(
+        http,
+        "GET",
+        f"{ROOMS_URL}/{room.id}",
+        AUTH_QUERY + 1,
+        headers=bearer(active_user, device),
+    )
+
+    assert response.json()["live_count"] == 3
+
+
+def test_reading_a_room_that_does_not_exist_is_one_lookup_and_no_more(
+    http, active_user, device, bearer
+):
+    """The error path costs the same as the normal one: the refusal comes from the
+    single lookup, not from a second query asking why it was empty."""
+    response = counted(
+        http,
+        "GET",
+        f"{ROOMS_URL}/{uuid.uuid4()}",
+        AUTH_QUERY + 1,
+        headers=bearer(active_user, device),
+    )
+
+    assert response.status_code == 404
+
+
+def test_renaming_a_room_that_does_not_exist_is_one_update_and_no_more(
+    http, active_user, device, bearer
+):
+    """The `404` is read off the row count the `UPDATE` returns, so proving the
+    room is missing must not cost a `SELECT` of its own."""
+    response = counted(
+        http,
+        "PUT",
+        f"{ROOMS_URL}/{uuid.uuid4()}",
+        AUTH_QUERY + 1,
+        json={"name_blob": name_blob_b64()},
+        headers=bearer(active_user, device),
+    )
+
+    assert response.status_code == 404
+
+
+def test_minting_against_an_unknown_room_stops_at_the_existence_check(
+    http, active_user, device, bearer, settings
+):
+    settings.LIVEKIT_URL = "wss://voice.test"
+    settings.LIVEKIT_API_KEY = "lk-test-key"
+    settings.LIVEKIT_API_SECRET = SECRET
+
+    response = counted(
+        http,
+        "POST",
+        f"{ROOMS_URL}/{uuid.uuid4()}/token",
+        AUTH_QUERY + 1,
+        headers=bearer(active_user, device),
+    )
+
+    assert response.status_code == 404
+
+
+@pytest.mark.parametrize(
+    "body", [{"name_blob": "!!!!"}, {"name_blob": ""}, {"owner": "alice"}, []]
+)
+def test_a_body_the_surface_refuses_never_reaches_the_database(
+    http, active_user, device, bearer, body
+):
+    """Validation runs before the unit of work, so a hostile body costs the
+    authentication query and nothing else — which is what keeps a flood of
+    malformed requests off the connection pool."""
+    response = counted(
+        http,
+        "POST",
+        ROOMS_URL,
+        AUTH_QUERY,
+        json=body,
+        headers=bearer(active_user, device),
+    )
+
+    assert response.status_code == 400
