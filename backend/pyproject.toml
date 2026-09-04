@@ -44,9 +44,11 @@ known-first-party = [
 # time the migration is regenerated.
 "*/migrations/*.py" = ["E501"]
 
-# Coverage is measured with branch coverage from this run on. The gate that turns
-# a figure into a floor lands in the next run; until then the number is recorded in
-# the ground truth and nothing fails on it.
+# Coverage is measured with branch coverage, and the floor that turns the figure
+# into a gate is `--cov-fail-under=95` in `pytest.ini` and in the CI test job.
+# Ninety-five rather than the figure the suite happens to reach: a floor set at the
+# measurement fails on the next honest refactor, and one set below it says what the
+# project will not go under.
 #
 # `source` is the repository, not a list of apps, so a new app is measured the day
 # it is created rather than the day somebody remembers to add it here. The two

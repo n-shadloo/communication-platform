@@ -116,7 +116,12 @@ jobs:
       - name: pytest
         # pytest-randomly reorders every run and prints the seed it used, so a
         # failure that depends on test order is reproducible from the log.
-        run: pytest
+        #
+        # Measured, and gated: `--cov-fail-under` is what makes a branch the
+        # suite stopped covering a failed build rather than a number in a report
+        # nobody reads. It repeats `pytest.ini`'s floor on purpose, so the job
+        # states the contract it enforces instead of inheriting it silently.
+        run: pytest --cov --cov-branch --cov-fail-under=95
       - name: No model change is missing its migration
         run: python manage.py makemigrations --check --dry-run
       - name: Deploy checks against the production settings
