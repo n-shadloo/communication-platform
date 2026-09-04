@@ -1,8 +1,9 @@
 """The composed FastAPI application, with the Django application behind it.
 
-FastAPI serves the routes of `core`, `accounts` and `vault`. Every other path —
-the admin, and the REST Framework routes of the apps that have not moved — falls
-through to the Django ASGI application. Run 05 empties that fall-through.
+FastAPI serves the routes of `core`, `accounts`, `vault` and `messaging`. Every
+other path — the admin, and the REST Framework routes of the apps that have not
+moved — falls through to the Django ASGI application. Run 05 empties that
+fall-through.
 """
 
 from contextlib import asynccontextmanager
@@ -23,6 +24,7 @@ from api.middleware import (
 )
 from api.ratelimit import close_client
 from core.routes import router as core_router
+from messaging.routes import router as messaging_router
 from vault.routes import router as vault_router
 
 API_PREFIX = "/api/v1"
@@ -31,9 +33,13 @@ API_PREFIX = "/api/v1"
 def build_limits():
     """The body cap and the deadline of each route class.
 
-    A route that has moved carries the cap its own contract admits. Everything
-    else is still served by the Django catch-all, whose largest body is a 64 MiB
-    attachment; those routes take their own caps with them in run 05.
+    The listed routes carry the cap their own contract admits. Everything else
+    takes the transition class, whose 70 MiB is what nginx admits today: the
+    Django catch-all still serves a 64 MiB attachment, and a `messaging` batch is
+    far above the JSON class in its own right — 256 envelopes of 256 KiB. That
+    route is bounded by the batch cap and the base64 cap its schema declares, and
+    it takes a byte cap of its own in run 05, where changing one is a contract
+    change with somewhere to be recorded.
     """
     json_class = Limits(settings.BODY_CAP_JSON_BYTES, settings.REQUEST_DEADLINE_SECONDS)
     backup_class = Limits(
@@ -91,6 +97,7 @@ def create_app(django_app):
     app.include_router(accounts_anonymous, prefix=API_PREFIX)
     app.include_router(accounts_authenticated, prefix=API_PREFIX)
     app.include_router(vault_router, prefix=API_PREFIX)
+    app.include_router(messaging_router, prefix=API_PREFIX)
     # The Django application is the router's `default`, not a mount at "/". A
     # mount matches every path, so it would answer before the wrong-method 405 of
     # a route that HAS moved; `default` runs only when no route matched at all.

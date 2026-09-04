@@ -10,6 +10,8 @@ from messaging.models import QueuedEnvelope
 
 from .conftest import envelope_blob
 
+pytestmark = pytest.mark.django_db(transaction=True)
+
 SEND_URL = "/api/v1/envelopes"
 
 
@@ -20,9 +22,8 @@ def receive(layer, channel, timeout=5):
     return async_to_sync(_receive)()
 
 
-@pytest.mark.django_db
 def test_an_accepted_envelope_is_pushed_to_the_devices_group(
-    api, active_user, device, auth_headers, bob_devices
+    http, active_user, device, bearer, bob_devices
 ):
     target = bob_devices[0]
     blob = envelope_blob(b"p")
@@ -31,11 +32,10 @@ def test_an_accepted_envelope_is_pushed_to_the_devices_group(
     channel = async_to_sync(layer.new_channel)()
     async_to_sync(layer.group_add)(f"dev.{target.id}", channel)
 
-    resp = api.post(
+    resp = http.post(
         SEND_URL,
-        {"messages": [{"device_id": str(target.id), "blob": blob}]},
-        format="json",
-        **auth_headers(active_user, device),
+        json={"messages": [{"device_id": str(target.id), "blob": blob}]},
+        headers=bearer(active_user, device),
     )
 
     assert resp.status_code == 202
@@ -45,16 +45,16 @@ def test_an_accepted_envelope_is_pushed_to_the_devices_group(
     assert message["seq"] == 1
 
 
-@pytest.mark.django_db
 def test_a_send_to_a_device_with_no_socket_is_a_no_op(
-    api, active_user, device, auth_headers, bob_devices
+    http, active_user, device, bearer, bob_devices
 ):
     """A group_send to a group with no members is dropped; the row is what matters."""
-    resp = api.post(
+    resp = http.post(
         SEND_URL,
-        {"messages": [{"device_id": str(bob_devices[0].id), "blob": envelope_blob()}]},
-        format="json",
-        **auth_headers(active_user, device),
+        json={
+            "messages": [{"device_id": str(bob_devices[0].id), "blob": envelope_blob()}]
+        },
+        headers=bearer(active_user, device),
     )
 
     assert resp.status_code == 202
@@ -63,9 +63,8 @@ def test_a_send_to_a_device_with_no_socket_is_a_no_op(
     )
 
 
-@pytest.mark.django_db
 def test_a_dead_channel_layer_does_not_fail_the_send(
-    api, active_user, device, auth_headers, bob_devices, settings
+    http, active_user, device, bearer, bob_devices, settings
 ):
     """The rows are already committed, so a push failure must not 500; the client
     would retry and duplicate every envelope."""
@@ -76,11 +75,12 @@ def test_a_dead_channel_layer_does_not_fail_the_send(
         },
     }
 
-    resp = api.post(
+    resp = http.post(
         SEND_URL,
-        {"messages": [{"device_id": str(bob_devices[0].id), "blob": envelope_blob()}]},
-        format="json",
-        **auth_headers(active_user, device),
+        json={
+            "messages": [{"device_id": str(bob_devices[0].id), "blob": envelope_blob()}]
+        },
+        headers=bearer(active_user, device),
     )
 
     assert resp.status_code == 202

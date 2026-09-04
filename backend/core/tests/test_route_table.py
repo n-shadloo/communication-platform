@@ -34,6 +34,9 @@ EXPECTED = {
     ("PUT", "/api/v1/me/profile"): (FULL_DEVICE, "accounts"),
     ("GET", "/api/v1/me/keybackup"): (FULL_DEVICE, "accounts"),
     ("PUT", "/api/v1/me/keybackup"): (FULL_DEVICE, "accounts"),
+    ("POST", "/api/v1/envelopes"): (FULL_DEVICE, "envelopes"),
+    ("GET", "/api/v1/me/envelopes"): (FULL_DEVICE, "envelopes"),
+    ("POST", "/api/v1/me/envelopes/ack"): (FULL_DEVICE, "envelopes"),
 }
 
 LIMITER_PREFIX = "rate_limit_"

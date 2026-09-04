@@ -107,6 +107,32 @@ async def _scripted_account_traffic(client):
     return s
 
 
+async def _scripted_envelope_traffic(client, s):
+    """The mailbox half: send an envelope to our own device (self-sync shape),
+    drain it, ack it."""
+    from core.buckets import ENVELOPE_BUCKETS
+
+    auth = {"Authorization": f"Bearer {s['access token']}"}
+    s["envelope blob"] = _b64_filled(min(ENVELOPE_BUCKETS), 0xA5)
+    r = await client.post(
+        "/api/v1/envelopes",
+        json={"messages": [{"device_id": s["device id"], "blob": s["envelope blob"]}]},
+        headers=auth,
+    )
+    assert r.status_code == 202, f"send: {r.status_code}"
+    r = await client.get("/api/v1/me/envelopes", headers=auth)
+    assert r.status_code == 200 and r.json()["envelopes"], "drain returned nothing"
+    envelopes = r.json()["envelopes"]
+    s["queued envelope id"] = envelopes[0]["id"]
+    r = await client.post(
+        "/api/v1/me/envelopes/ack",
+        json={"ids": [e["id"] for e in envelopes]},
+        headers=auth,
+    )
+    assert r.status_code == 200, f"ack: {r.status_code}"
+    return s
+
+
 def _scripted_rest_traffic(s):
     """The REST Framework half of the sequence, for the apps that have not moved.
     Runs in a worker thread via database_sync_to_async; logging is process-global,
@@ -114,12 +140,7 @@ def _scripted_rest_traffic(s):
     from django.core.files.uploadedfile import SimpleUploadedFile
     from rest_framework.test import APIClient
 
-    from core.buckets import (
-        ATTACHMENT_BUCKETS,
-        DEVICELOG_BUCKETS,
-        ENVELOPE_BUCKETS,
-        NAME_BUCKETS,
-    )
+    from core.buckets import ATTACHMENT_BUCKETS, DEVICELOG_BUCKETS, NAME_BUCKETS
 
     api = APIClient()
 
@@ -183,27 +204,6 @@ def _scripted_rest_traffic(s):
     assert r.status_code == 201, f"devicelog append: {r.status_code}"
     r = api.get(f"/api/v1/users/{s['user id']}/devicelog", **auth)
     assert r.status_code == 200, f"devicelog read: {r.status_code}"
-
-    # Send an envelope to our own device (self-sync shape), drain it, ack it.
-    s["envelope blob"] = _b64_filled(min(ENVELOPE_BUCKETS), 0xA5)
-    r = api.post(
-        "/api/v1/envelopes",
-        {"messages": [{"device_id": s["device id"], "blob": s["envelope blob"]}]},
-        format="json",
-        **auth,
-    )
-    assert r.status_code == 202, f"send: {r.status_code}"
-    r = api.get("/api/v1/me/envelopes", **auth)
-    assert r.status_code == 200 and r.json()["envelopes"], "drain returned nothing"
-    envelopes = r.json()["envelopes"]
-    s["queued envelope id"] = envelopes[0]["id"]
-    r = api.post(
-        "/api/v1/me/envelopes/ack",
-        {"ids": [e["id"] for e in envelopes]},
-        format="json",
-        **auth,
-    )
-    assert r.status_code == 200, f"ack: {r.status_code}"
 
     # Upload + download an attachment (download answers via X-Accel-Redirect).
     upload_bytes = b"\x01" * min(ATTACHMENT_BUCKETS)
@@ -338,6 +338,7 @@ async def run_audit(probe=None):
             ) as client:
                 secrets = await _scripted_account_traffic(client)
                 await database_sync_to_async(_scripted_rest_traffic)(secrets)
+                await _scripted_envelope_traffic(client, secrets)
                 await _scripted_fastapi_traffic(client, secrets)
                 await _scripted_socket_traffic(secrets)
                 await _scripted_logout(client, secrets)

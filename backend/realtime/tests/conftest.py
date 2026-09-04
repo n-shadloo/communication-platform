@@ -1,12 +1,14 @@
 import base64
 
+import httpx
 import pytest
 from channels.db import database_sync_to_async
 from channels.testing import WebsocketCommunicator
+from httpx import ASGITransport
 
 from accounts.models import User
 from api.auth import issue_full
-from config.asgi import application
+from config.asgi import api_application, application
 from core.buckets import ENVELOPE_BUCKETS
 from devices.models import Device
 
@@ -58,6 +60,25 @@ def ws(headers=None):
 
 def bearer(access):
     return [(b"authorization", f"Bearer {access}".encode())]
+
+
+async def http_request(method, url, access, **kwargs):
+    """Drive an HTTP route of the composed application from an async test.
+
+    Awaited rather than driven through the root conftest's `AsgiClient`: that one
+    calls `async_to_sync`, which raises on a thread that is already running a
+    loop, and every test here is a coroutine.
+    """
+    async with api_application.router.lifespan_context(api_application):
+        async with httpx.AsyncClient(
+            transport=ASGITransport(app=application), base_url="http://testserver"
+        ) as client:
+            return await client.request(
+                method,
+                url,
+                headers={"Authorization": f"Bearer {access}"},
+                **kwargs,
+            )
 
 
 async def connect_ok(headers):

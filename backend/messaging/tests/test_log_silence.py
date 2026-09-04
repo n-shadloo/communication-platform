@@ -1,108 +1,105 @@
 """Nothing on the messaging or attachment paths logs an identifier or a payload.
 
-`assertLogs` swaps in its own root handler, so the configured `ScrubFilter` is not
-applied to what it captures. That is deliberate: these tests assert the code never
-emits an identifier in the first place; `core/tests/test_scrub.py` covers the filter.
+The capture replaces every handler, so the configured `ScrubFilter` never runs on
+what it collects. That is deliberate, and it is why `caplog` is not used here: the
+filter mutates the record in place on the console handler, so any capture that
+runs after it grades the scrubber rather than the code. `core/tests/test_scrub.py`
+covers the filter itself.
+
+Attachments are still served by the Django catch-all, so this pass drives two
+clients: httpx for the routes FastAPI holds, and the REST Framework client for the
+upload.
 """
 
 import base64
 import logging
-import tempfile
-from pathlib import Path
 
+import pytest
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.test import TestCase, override_settings
-from rest_framework.test import APIClient
 
-from accounts.models import User
-from api.auth import issue_full
 from core.buckets import ATTACHMENT_BUCKETS
+from ops.audit.log_silence import capture_all_logging
 
-from .conftest import PASSWORD, SMALLEST_BUCKET, envelope_blob, make_device
+from .conftest import SMALLEST_BUCKET, envelope_blob, make_device
+
+pytestmark = pytest.mark.django_db(transaction=True)
 
 
-@override_settings(
-    CHANNEL_LAYERS={"default": {"BACKEND": "channels.layers.InMemoryChannelLayer"}}
-)
-class LogSilenceTests(TestCase):
-    def setUp(self):
-        # Uploads must land in a temp dir, never the repo's media_root.
-        tmp = tempfile.TemporaryDirectory()
-        self.addCleanup(tmp.cleanup)
-        attachments_root = override_settings(ATTACHMENTS_ROOT=Path(tmp.name))
-        attachments_root.enable()
-        self.addCleanup(attachments_root.disable)
+@pytest.fixture(autouse=True)
+def _uploads_out_of_the_repository(settings, tmp_path):
+    settings.ATTACHMENTS_ROOT = tmp_path
 
-        self.alice = User.objects.create_user(
-            username="alice", password=PASSWORD, is_active=True
+
+def test_send_drain_ack_and_upload_emit_no_identifier_or_payload(
+    http, api, active_user, device, bearer, auth_headers, bob, bob_devices
+):
+    target = bob_devices[0]
+    blob = envelope_blob(b"z")
+    headers = bearer(active_user, device)
+    upload_bytes = b"\x01" * min(ATTACHMENT_BUCKETS)
+
+    with capture_all_logging() as lines:
+        send = http.post(
+            "/api/v1/envelopes",
+            json={"messages": [{"device_id": str(target.id), "blob": blob}]},
+            headers=headers,
         )
-        self.device = make_device(self.alice, 1)
-        self.bob = User.objects.create_user(
-            username="bob", password=PASSWORD, is_active=True
+        drain = http.get("/api/v1/me/envelopes", headers=bearer(bob, target))
+        http.post(
+            "/api/v1/me/envelopes/ack",
+            json={"ids": [e["id"] for e in drain.json()["envelopes"]]},
+            headers=bearer(bob, target),
         )
-        self.target = make_device(self.bob, 2)
-        access, _refresh = issue_full(self.alice, self.device)
-        self.headers = {"HTTP_AUTHORIZATION": f"Bearer {access}"}
-        self.client = APIClient()
+        upload = api.post(
+            "/api/v1/attachments",
+            {"blob": SimpleUploadedFile("blob", upload_bytes)},
+            format="multipart",
+            **auth_headers(active_user, device),
+        )
 
-    def test_send_drain_ack_and_upload_emit_no_identifier_or_payload(self):
-        blob = envelope_blob(b"z")
-        upload_bytes = b"\x01" * min(ATTACHMENT_BUCKETS)
+    assert send.status_code == 202
+    assert upload.status_code == 201
+    forbidden = {
+        "device id": str(target.id),
+        "sender device id": str(device.id),
+        "user id": str(active_user.id),
+        "recipient user id": str(bob.id),
+        "envelope blob": blob,
+        "attachment id": upload.json()["attachment_id"],
+        "attachment bytes": base64.b64encode(upload_bytes).decode(),
+    }
+    for line in lines:
+        for label, secret in forbidden.items():
+            assert secret not in line, f"{label} leaked into a log line"
 
-        with self.assertLogs(level="DEBUG") as captured:
-            # assertLogs fails outright if nothing is logged, and a clean request logs
-            # nothing at all — which is the point. The canary keeps it honest.
-            logging.getLogger("test.canary").debug("canary")
 
-            send = self.client.post(
-                "/api/v1/envelopes",
-                {"messages": [{"device_id": str(self.target.id), "blob": blob}]},
-                format="json",
-                **self.headers,
-            )
-            drain = self.client.get("/api/v1/me/envelopes", **self.headers)
-            self.client.post(
-                "/api/v1/me/envelopes/ack",
-                {"ids": [e["id"] for e in drain.json()["envelopes"]]},
-                format="json",
-                **self.headers,
-            )
-            upload = self.client.post(
-                "/api/v1/attachments",
-                {"blob": SimpleUploadedFile("blob", upload_bytes)},
-                format="multipart",
-                **self.headers,
-            )
+def test_a_rejected_payload_is_not_echoed_into_the_logs(
+    http, active_user, device, bearer, bob_devices
+):
+    target = bob_devices[0]
+    off_bucket = base64.b64encode(b"q" * (SMALLEST_BUCKET - 1)).decode()
 
-        self.assertEqual(send.status_code, 202)
-        self.assertEqual(upload.status_code, 201)
+    with capture_all_logging() as lines:
+        resp = http.post(
+            "/api/v1/envelopes",
+            json={"messages": [{"device_id": str(target.id), "blob": off_bucket}]},
+            headers=bearer(active_user, device),
+        )
 
-        forbidden = {
-            "device id": str(self.target.id),
-            "sender device id": str(self.device.id),
-            "user id": str(self.alice.id),
-            "recipient user id": str(self.bob.id),
-            "envelope blob": blob,
-            "attachment id": upload.json()["attachment_id"],
-            "attachment bytes": base64.b64encode(upload_bytes).decode(),
-        }
-        for line in captured.output:
-            for label, secret in forbidden.items():
-                self.assertNotIn(secret, line, f"{label} leaked into a log line")
+    assert resp.status_code == 400
+    for line in lines:
+        assert off_bucket not in line
+        assert str(target.id) not in line
 
-    def test_a_rejected_payload_is_not_echoed_into_the_logs(self):
-        off_bucket = base64.b64encode(b"q" * (SMALLEST_BUCKET - 1)).decode()
 
-        with self.assertLogs(level="DEBUG") as captured:
-            logging.getLogger("test.canary").debug("canary")
-            resp = self.client.post(
-                "/api/v1/envelopes",
-                {"messages": [{"device_id": str(self.target.id), "blob": off_bucket}]},
-                format="json",
-                **self.headers,
-            )
+def test_the_capture_is_live_and_unscrubbed(bob):
+    """Guards the guards above. A clean request logs nothing at all, so a loop over
+    an empty list would pass no matter what the code emitted; and a capture that
+    ran behind the console handler would read `[ID]` where the leak was, and pass
+    for the second wrong reason."""
+    planted = make_device(bob, 77)
 
-        self.assertEqual(resp.status_code, 400)
-        for line in captured.output:
-            self.assertNotIn(off_bucket, line)
-            self.assertNotIn(str(self.target.id), line)
+    with capture_all_logging() as lines:
+        logging.getLogger("messaging.tests.canary").debug("device %s", planted.id)
+
+    assert any(str(planted.id) in line for line in lines)

@@ -27,7 +27,10 @@ from core.tests.test_seizure_guard import (
 from devices.models import Device
 from messaging.models import QueuedEnvelope
 
-pytestmark = pytest.mark.django_db
+# transaction=True because the ORM bracket of `api.orm.run_unit` closes the
+# connection around every unit of work, which under a wrapping test transaction
+# would sever the connection the test itself holds.
+pytestmark = pytest.mark.django_db(transaction=True)
 
 DEVICES_URL = "/api/v1/me/devices"
 KEYBACKUP_URL = "/api/v1/me/keybackup"
@@ -116,7 +119,7 @@ def test_revoking_a_device_cuts_its_access_and_destroys_its_state(
 
 
 def test_fanout_writes_independent_copies_and_never_a_sender(
-    api, active_user, device, auth_headers
+    http, active_user, device, bearer
 ):
     """No-graph fan-out: N targets become N independent rows, each knowing only its
     recipient device; the sender appears in no stored value (messaging/tests/
@@ -129,11 +132,10 @@ def test_fanout_writes_independent_copies_and_never_a_sender(
     targets = [_second_device(bob, 9003), _second_device(bob, 9004)]
     blob = _b64(min(ENVELOPE_BUCKETS), 0x5A)
 
-    resp = api.post(
+    resp = http.post(
         ENVELOPES_URL,
-        {"messages": [{"device_id": str(d.id), "blob": blob} for d in targets]},
-        format="json",
-        **auth_headers(active_user, device),
+        json={"messages": [{"device_id": str(d.id), "blob": blob} for d in targets]},
+        headers=bearer(active_user, device),
     )
     assert resp.status_code == 202
 

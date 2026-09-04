@@ -82,6 +82,19 @@ def http():
 
 
 @pytest.fixture
+def new_http():
+    """A client factory, for a race test that drives the surface from threads.
+
+    One `AsgiClient` holds one `httpx.AsyncClient`, and `async_to_sync` builds a
+    fresh event loop for each call in the thread that made it, so a client shared
+    across threads would carry connections bound to a loop that is already gone.
+    Each thread builds its own, and its ORM work then runs on that thread, against
+    that thread's own database connection.
+    """
+    return lambda: AsgiClient(application, api_application)
+
+
+@pytest.fixture
 def api():
     """The REST Framework client. Only for the apps that still run on it."""
     return APIClient()
