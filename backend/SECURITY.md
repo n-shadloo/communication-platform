@@ -232,6 +232,8 @@ The properties above are enforced by the test suite, not by this document:
 `core/tests/test_log_silence.py` + per-app log-silence suites (no identifier, blob, or
 token reaches any log line), `core/tests/test_settings_posture.py` + `manage.py check
 --deploy` (deploy posture, including a hard error on an empty WebSocket origin
-allowlist), per-app at-rest, no-graph, and no-history suites, the adversarial
+allowlist, and `access_log off` in every nginx server block — the reverse proxy sees
+every request path one hop before uvicorn does, and would otherwise inherit a log of
+them from the packaged configuration), per-app at-rest, no-graph, and no-history suites, the adversarial
 cross-signing/PQ/device-log suites in `devices/tests/`, and
 `ops/audit/offline_rehearsal.sh` (the repo rebuilds and passes with no network).

@@ -201,6 +201,35 @@ class BasePostureTests(SimpleTestCase):
         ):
             self.assertIn(flag, unit)
 
+    def test_the_edge_writes_no_access_log_and_no_request_line(self):
+        """The other half of `--no-access-log`, one layer out.
+
+        nginx sees every request the process sees, one hop earlier, and it has no
+        `access_log off` of its own to inherit: the compiled-in default is
+        `access_log logs/access.log combined`, and every packaged `nginx.conf`
+        sets one in the `http` block that a `server` block inherits unless it
+        overrides it. The `combined` format writes `$remote_addr` and `$request`,
+        which is the client address and the whole URI — the peer user UUID of the
+        key-claim and device routes, the operator-chosen admin path, and the
+        bearer capability that downloads an attachment.
+
+        `error_log` carries the same line: an upstream failure is logged at
+        `error` level with `client:` and `request:` fields, so a restarting worker
+        would write the paths the access log no longer does. `crit` is the level
+        above it.
+        """
+        for conf in (settings.BASE_DIR / "ops" / "nginx").glob("*.conf"):
+            body = conf.read_text()
+            # Per server block, not per file: a directive in one block does not
+            # reach the other, and the plaintext block sees a URI too — whatever
+            # path a request named before the redirect sends it on.
+            blocks = len(re.findall(r"^server \{", body, re.M))
+
+            self.assertEqual(body.count("access_log off;"), blocks, conf.name)
+            self.assertEqual(
+                len(re.findall(r"error_log\s+\S+\s+crit;", body)), blocks, conf.name
+            )
+
     def test_the_concurrency_limit_leaves_room_for_http_beside_the_sockets(self):
         """uvicorn's `--limit-concurrency` counts *connections*, and a live
         WebSocket is one: both protocols share `server_state.connections`, and the
