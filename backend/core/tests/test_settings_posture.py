@@ -331,6 +331,24 @@ class ProdPostureTests(SimpleTestCase):
         self.assertEqual(prod.SESSION_COOKIE_SAMESITE, "Strict")
         self.assertEqual(prod.CSRF_COOKIE_SAMESITE, "Strict")
 
+    def test_the_admin_cookies_carry_the_host_prefix(self):
+        """The VPS serves two other projects, on sibling names of the same domain
+        for all this configuration knows. A `__Host-` cookie is accepted only over
+        HTTPS, without a `Domain`, and with `Path=/`, so a sibling site — or a
+        subdomain an attacker controls — cannot set one for the panel and no
+        broader cookie of the same name can shadow it."""
+        from django.conf import global_settings
+
+        def effective(name):
+            return getattr(prod, name, getattr(global_settings, name))
+
+        self.assertEqual(prod.SESSION_COOKIE_NAME, "__Host-sessionid")
+        self.assertEqual(prod.CSRF_COOKIE_NAME, "__Host-csrftoken")
+        self.assertIsNone(effective("SESSION_COOKIE_DOMAIN"))
+        self.assertIsNone(effective("CSRF_COOKIE_DOMAIN"))
+        self.assertEqual(effective("SESSION_COOKIE_PATH"), "/")
+        self.assertEqual(effective("CSRF_COOKIE_PATH"), "/")
+
     def test_hsts_is_a_full_year_with_subdomains_and_preload(self):
         self.assertEqual(prod.SECURE_HSTS_SECONDS, 31536000)
         self.assertTrue(prod.SECURE_HSTS_INCLUDE_SUBDOMAINS)

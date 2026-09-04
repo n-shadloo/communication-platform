@@ -54,6 +54,7 @@ runtime path.
 | `ThreadSensitiveContext` on a WebSocket scope | not entered; every socket's ORM work shares one executor thread | a context per connection, and therefore a thread per connection | [0005](decisions/0005-django-orm-on-a-thread-sensitive-data-path.md) | 2026-09-04 |
 | Redis persistence | `save ""`, `appendonly no` | RDB snapshots on | — (invariant: volatile data never touches disk) | 2026-09-03 |
 | `CACHES` | Django's default, `LocMemCache`, which nothing in the project uses | the same default, but a Redis-backed cache is the usual choice when Redis is already present | [0018](decisions/0018-redis-is-authenticated-and-never-deserialized.md) — every built-in cache backend unpickles what it reads, and Redis is writable by every local process | 2026-09-04 |
+| `SESSION_COOKIE_NAME`, `CSRF_COOKIE_NAME` (production) | `__Host-sessionid`, `__Host-csrftoken` | `sessionid`, `csrftoken` | — (the VPS serves two other projects; a `__Host-` cookie cannot be set by a sibling site or shadowed by a broader one) | 2026-09-04 |
 | `ssl_early_data` | `off` | `off` in nginx, but commonly turned on with TLS 1.3 | — (0-RTT payloads are replayable) | 2026-09-03 |
 | `client_max_body_size` | 70m | 1m | — (the largest attachment bucket is 64 MiB; the application caps the upload route tighter still, at that bucket plus 8 KiB of multipart wrapper) | 2026-09-04 |
 | `ssl_protocols` | `TLSv1.3` | `TLSv1.2 TLSv1.3` | — | 2026-09-03 |
