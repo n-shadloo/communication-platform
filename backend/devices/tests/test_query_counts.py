@@ -1,27 +1,57 @@
-"""Query-shape guards for the device endpoints.
+"""Query-shape guards for the device routes.
 
-These lock in the shape: the list endpoints must stay constant-query however many
-devices an account has, and the claim must stay one bounded set of queries per target
-device, never one per stored prekey.
+These lock in the shape: the list routes must stay constant-query however many
+devices an account has, and a claim must stay one bounded set of queries per
+target device, never one per stored prekey.
 
-Counts include the per-request auth query `DeviceJWTAuthentication` makes and,
-under pytest's per-test transaction, a SAVEPOINT/RELEASE pair per `atomic()` block,
-which in production is a real BEGIN/COMMIT instead.
+Counted end to end through the composed application, so each number includes the
+one query the authentication dependency makes: the device row joined to its
+owner. `transaction=True` makes the transaction statements real BEGIN/COMMIT
+rather than savepoints, and they are excluded here so the number is the database
+work itself.
 """
 
 import pytest
+from django.db import connection
+from django.test.utils import CaptureQueriesContext
 
-from .conftest import DEVICES_URL, make_device, pubkey, stock_prekeys
+from devices.models import DeviceLogRecord
 
-pytestmark = pytest.mark.django_db
+from .conftest import (
+    DEVICES_URL,
+    make_device,
+    pubkey,
+    publish_identity,
+    register_payload,
+    stock_prekeys,
+)
 
-AUTH_QUERIES = 1  # the device row, joined to its owner
+pytestmark = pytest.mark.django_db(transaction=True)
+
+TRANSACTION_STATEMENTS = ("BEGIN", "COMMIT", "SAVEPOINT", "RELEASE", "ROLLBACK")
+
+AUTH_QUERY = 1  # the device row, joined to its owner
 # Live device ids + the device-log head (an ETag input since the log landed).
 # Constant: neither scales with the device count or the log length.
-ETAG_QUERY = 2
+ETAG_QUERIES = 2
 LIST_QUERY = 1
-# savepoint, locked select, delete, release
-CLAIM_QUERIES_PER_DEVICE = 4
+# The target set, then one locked select per device, then one delete for every
+# key the call consumed — hoisted out of the loop, so it is one query whatever
+# the target count.
+CLAIM_TARGETS_QUERY = 1
+CLAIM_DELETE_QUERY = 1
+
+
+def counted(http, method, url, expected, **kwargs):
+    with CaptureQueriesContext(connection) as context:
+        response = http.request(method, url, **kwargs)
+    sqls = [
+        query["sql"]
+        for query in context.captured_queries
+        if not query["sql"].startswith(TRANSACTION_STATEMENTS)
+    ]
+    assert len(sqls) == expected, "\n".join(sqls)
+    return response
 
 
 def peer_url(user_id):
@@ -34,137 +64,141 @@ def claim_url(user_id):
 
 @pytest.mark.parametrize("device_count", [1, 5, 10])
 def test_the_own_device_list_is_constant_query(
-    api, active_user, device, auth_headers, django_assert_num_queries, device_count
+    http, active_user, device, bearer, device_count
 ):
     for i in range(device_count - 1):
         make_device(active_user, registration_id=400 + i)
-    headers = auth_headers(active_user, device)
 
-    with django_assert_num_queries(AUTH_QUERIES + ETAG_QUERY + LIST_QUERY):
-        response = api.get(DEVICES_URL, **headers)
+    response = counted(
+        http,
+        "GET",
+        DEVICES_URL,
+        AUTH_QUERY + ETAG_QUERIES + LIST_QUERY,
+        headers=bearer(active_user, device),
+    )
 
     assert len(response.json()["devices"]) == device_count
 
 
 @pytest.mark.parametrize("device_count", [1, 5, 10])
 def test_the_peer_device_list_is_constant_query(
-    api,
-    active_user,
-    device,
-    auth_headers,
-    peer,
-    peer_device,
-    django_assert_num_queries,
-    device_count,
+    http, active_user, device, bearer, peer, peer_device, device_count
 ):
     for i in range(device_count - 1):
         make_device(peer, registration_id=500 + i)
-    headers = auth_headers(active_user, device)
 
-    with django_assert_num_queries(AUTH_QUERIES + ETAG_QUERY + LIST_QUERY):
-        response = api.get(peer_url(peer.id), **headers)
+    response = counted(
+        http,
+        "GET",
+        peer_url(peer.id),
+        AUTH_QUERY + ETAG_QUERIES + LIST_QUERY,
+        headers=bearer(active_user, device),
+    )
 
     assert len(response.json()["devices"]) == device_count
 
 
-def test_a_304_skips_the_list_query_entirely(
-    api, active_user, device, auth_headers, django_assert_num_queries
-):
-    headers = auth_headers(active_user, device)
-    etag = api.get(DEVICES_URL, **headers)["ETag"]
+def test_a_304_skips_the_list_query_entirely(http, active_user, device, bearer):
+    headers = bearer(active_user, device)
+    etag = http.get(DEVICES_URL, headers=headers).headers["etag"]
 
-    with django_assert_num_queries(AUTH_QUERIES + ETAG_QUERY):
-        response = api.get(DEVICES_URL, HTTP_IF_NONE_MATCH=etag, **headers)
+    response = counted(
+        http,
+        "GET",
+        DEVICES_URL,
+        AUTH_QUERY + ETAG_QUERIES,
+        headers={**headers, "If-None-Match": etag},
+    )
 
     assert response.status_code == 304
 
 
 @pytest.mark.parametrize("pool_size", [1, 20, 200])
 def test_a_claim_does_not_scale_with_the_prekey_pool(
-    api,
-    active_user,
-    device,
-    auth_headers,
-    peer,
-    peer_device,
-    django_assert_num_queries,
-    pool_size,
+    http, active_user, device, bearer, peer, peer_device, pool_size
 ):
-    """The N+1 that would matter most: claiming must cost the same whether the device
-    stores one prekey or two hundred."""
+    """The N+1 that would matter most: claiming must cost the same whether the
+    device stores one prekey or two hundred."""
     stock_prekeys(peer_device, pool_size)
-    headers = auth_headers(active_user, device)
 
-    with django_assert_num_queries(AUTH_QUERIES + 1 + CLAIM_QUERIES_PER_DEVICE):
-        response = api.post(claim_url(peer.id), {}, format="json", **headers)
+    response = counted(
+        http,
+        "POST",
+        claim_url(peer.id),
+        AUTH_QUERY + CLAIM_TARGETS_QUERY + 1 + CLAIM_DELETE_QUERY,
+        json={},
+        headers=bearer(active_user, device),
+    )
 
     assert "otpk" in response.json()["bundles"][0]
 
 
 @pytest.mark.parametrize("device_count", [1, 3, 6])
-def test_a_claim_costs_one_bounded_transaction_per_target_device(
-    api,
-    active_user,
-    device,
-    auth_headers,
-    peer,
-    peer_device,
-    django_assert_num_queries,
-    device_count,
+def test_a_claim_costs_one_locked_select_per_target_and_one_delete_for_the_batch(
+    http, active_user, device, bearer, peer, peer_device, device_count
 ):
-    """The response is a bundle per device, so the per-device transaction is
-    inherent; what must not happen is a query per prekey or a second lookup per
-    device."""
+    """The response is a bundle per device, so the per-device locked select is
+    inherent; what must not happen is a query per prekey, a second lookup per
+    device, or a delete per key."""
     for i in range(device_count - 1):
         stock_prekeys(make_device(peer, registration_id=600 + i), 2)
     stock_prekeys(peer_device, 2)
-    headers = auth_headers(active_user, device)
 
-    with django_assert_num_queries(
-        AUTH_QUERIES + 1 + CLAIM_QUERIES_PER_DEVICE * device_count
-    ):
-        response = api.post(claim_url(peer.id), {}, format="json", **headers)
+    response = counted(
+        http,
+        "POST",
+        claim_url(peer.id),
+        AUTH_QUERY + CLAIM_TARGETS_QUERY + device_count + CLAIM_DELETE_QUERY,
+        json={},
+        headers=bearer(active_user, device),
+    )
 
     assert len(response.json()["bundles"]) == device_count
 
 
 def test_an_exhausted_pool_costs_one_query_less(
-    api, active_user, device, auth_headers, peer, peer_device, django_assert_num_queries
+    http, active_user, device, bearer, peer, peer_device
 ):
     """No prekey to delete, so the delete never runs."""
-    headers = auth_headers(active_user, device)
-
-    with django_assert_num_queries(AUTH_QUERIES + 1 + CLAIM_QUERIES_PER_DEVICE - 1):
-        response = api.post(claim_url(peer.id), {}, format="json", **headers)
+    response = counted(
+        http,
+        "POST",
+        claim_url(peer.id),
+        AUTH_QUERY + CLAIM_TARGETS_QUERY + 1,
+        json={},
+        headers=bearer(active_user, device),
+    )
 
     assert "otpk" not in response.json()["bundles"][0]
 
 
 @pytest.mark.parametrize("log_length", [0, 5, 60])
 def test_the_device_list_stays_constant_query_as_the_log_grows(
-    api, active_user, device, auth_headers, django_assert_num_queries, log_length
+    http, active_user, device, bearer, log_length
 ):
     """The ETag reads only the head record, so a longer log must not add queries
     (or the ETag becomes a per-poll scan of the whole log)."""
-    from devices.models import DeviceLogRecord
-
     DeviceLogRecord.objects.bulk_create(
         [
             DeviceLogRecord(user=active_user, seq=i, blob=b"r" * 256)
             for i in range(log_length)
         ]
     )
-    headers = auth_headers(active_user, device)
 
-    with django_assert_num_queries(AUTH_QUERIES + ETAG_QUERY + LIST_QUERY):
-        response = api.get(DEVICES_URL, **headers)
+    response = counted(
+        http,
+        "GET",
+        DEVICES_URL,
+        AUTH_QUERY + ETAG_QUERIES + LIST_QUERY,
+        headers=bearer(active_user, device),
+    )
 
     expected_head = log_length - 1 if log_length else None
     assert response.json()["log_head_seq"] == expected_head
 
 
 def test_cross_signing_fields_ride_the_existing_queries(
-    api, active_user, device, auth_headers, peer, peer_device, django_assert_num_queries
+    http, active_user, device, bearer, peer, peer_device
 ):
     """cross_sig and bundle_version are columns on the rows the list and claim
     already fetch, so surfacing them must not add a query."""
@@ -172,46 +206,155 @@ def test_cross_signing_fields_ride_the_existing_queries(
     peer_device.bundle_version = 4
     peer_device.save(update_fields=["cross_sig", "bundle_version"])
     stock_prekeys(peer_device, 1)
-    headers = auth_headers(active_user, device)
+    headers = bearer(active_user, device)
 
-    with django_assert_num_queries(AUTH_QUERIES + ETAG_QUERY + LIST_QUERY):
-        listed = api.get(peer_url(peer.id), **headers)
-    with django_assert_num_queries(AUTH_QUERIES + 1 + CLAIM_QUERIES_PER_DEVICE):
-        claimed = api.post(claim_url(peer.id), {}, format="json", **headers)
+    listed = counted(
+        http,
+        "GET",
+        peer_url(peer.id),
+        AUTH_QUERY + ETAG_QUERIES + LIST_QUERY,
+        headers=headers,
+    )
+    claimed = counted(
+        http,
+        "POST",
+        claim_url(peer.id),
+        AUTH_QUERY + CLAIM_TARGETS_QUERY + 1 + CLAIM_DELETE_QUERY,
+        json={},
+        headers=headers,
+    )
 
     assert listed.json()["devices"][0]["cross_sig"] is not None
     assert claimed.json()["bundles"][0]["bundle_version"] == 4
 
 
 @pytest.mark.parametrize("pool_size", [0, 50, 199])
-def test_replenishment_is_constant_query(
-    api, active_user, device, auth_headers, django_assert_num_queries, pool_size
-):
+def test_replenishment_is_constant_query(http, active_user, device, bearer, pool_size):
     """The cap check must not walk the stored pool."""
     stock_prekeys(device, pool_size, start=1000)
-    headers = auth_headers(active_user, device)
-    body = {"otpks": [{"key_id": 1, "pub": pubkey()}]}
-    # savepoint, device lock, cap count, bulk insert, recount, release
-    with django_assert_num_queries(AUTH_QUERIES + 6):
-        response = api.put(
-            f"{DEVICES_URL}/{device.id}/prekeys", body, format="json", **headers
-        )
+
+    # device lock, cap count, bulk insert, recount
+    response = counted(
+        http,
+        "PUT",
+        f"{DEVICES_URL}/{device.id}/prekeys",
+        AUTH_QUERY + 4,
+        json={"otpks": [{"key_id": 1, "pub": pubkey()}]},
+        headers=bearer(active_user, device),
+    )
 
     assert response.status_code == 200
 
 
 def test_registration_is_constant_query_whatever_the_payload(
-    api, active_user, device, auth_headers, django_assert_num_queries
+    http, active_user, device, bearer
 ):
     """200 prekeys go in as one bulk insert, not 200."""
-    from .conftest import publish_identity, register_payload
-
     publish_identity(active_user)
-    headers = auth_headers(active_user, device)
-    payload = register_payload(otpks=200)
-    # savepoint, user lock, cap count, identity-exists check, device insert,
-    # otpk bulk, release. The issued pair writes nothing: no token table exists.
-    with django_assert_num_queries(AUTH_QUERIES + 7):
-        response = api.post(DEVICES_URL, payload, format="json", **headers)
+
+    # user lock, cap count, identity-exists check, device insert, otpk bulk. The
+    # issued pair writes nothing: no token table exists.
+    response = counted(
+        http,
+        "POST",
+        DEVICES_URL,
+        AUTH_QUERY + 5,
+        json=register_payload(otpks=200),
+        headers=bearer(active_user, device),
+    )
 
     assert response.status_code == 201
+
+
+def test_the_device_log_page_is_two_queries_however_long_the_log(
+    http, active_user, device, bearer, peer, peer_device
+):
+    """The page and its head, and nothing per record."""
+    DeviceLogRecord.objects.bulk_create(
+        [DeviceLogRecord(user=peer, seq=i, blob=b"r" * 256) for i in range(120)]
+    )
+
+    response = counted(
+        http,
+        "GET",
+        f"/api/v1/users/{peer.id}/devicelog?limit=100",
+        AUTH_QUERY + 2,
+        headers=bearer(active_user, device),
+    )
+
+    assert len(response.json()["records"]) == 100
+
+
+def test_a_log_append_is_constant_query_whatever_the_batch(
+    http, active_user, device, bearer
+):
+    """50 records go in as one bulk insert, not 50."""
+    from .test_device_log import log_blob
+
+    # user lock, head probe, bulk insert
+    response = counted(
+        http,
+        "POST",
+        "/api/v1/me/devicelog",
+        AUTH_QUERY + 3,
+        json={"records": [{"blob": log_blob()} for _ in range(50)]},
+        headers=bearer(active_user, device),
+    )
+
+    assert response.status_code == 201
+
+
+def test_the_prekey_count_is_one_query_per_pool(http, active_user, device, bearer):
+    stock_prekeys(device, 30)
+
+    response = counted(
+        http,
+        "GET",
+        f"{DEVICES_URL}/{device.id}/prekeys/count",
+        AUTH_QUERY + 2,
+        headers=bearer(active_user, device),
+    )
+
+    assert response.json()["otpk_count"] == 30
+
+
+def test_revocation_is_constant_query(http, active_user, device, bearer):
+    """The cascade is four statements over the device, whatever it holds."""
+    doomed = make_device(active_user, registration_id=8080)
+    stock_prekeys(doomed, 20)
+
+    # locked select, the row update, the two prekey deletes, the mailbox delete
+    response = counted(
+        http,
+        "DELETE",
+        f"{DEVICES_URL}/{doomed.id}",
+        AUTH_QUERY + 5,
+        headers=bearer(active_user, device),
+    )
+
+    assert response.status_code == 204
+
+
+def test_the_peer_identity_is_one_query(
+    http, active_user, device, bearer, peer, peer_device
+):
+    from devices.models import UserIdentity
+
+    UserIdentity.objects.create(
+        user=peer,
+        master_pub=b"m" * 32,
+        self_signing_pub=b"s" * 32,
+        user_signing_pub=b"u" * 32,
+        master_sig=b"g" * 64,
+        version=1,
+    )
+
+    response = counted(
+        http,
+        "GET",
+        f"/api/v1/users/{peer.id}/identity",
+        AUTH_QUERY + 1,
+        headers=bearer(active_user, device),
+    )
+
+    assert response.json()["version"] == 1

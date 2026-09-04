@@ -11,7 +11,7 @@ from devices.models import (
     PqOneTimePrekey,
     UserIdentity,
 )
-from devices.serializers import PQ_PUBKEY_LEN
+from devices.schemas import PQ_PUBKEY_LEN
 
 PASSWORD = "correct-horse-battery-staple"
 

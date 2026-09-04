@@ -15,9 +15,10 @@ Two properties make this stricter than per-app spot checks:
 
 Two clients drive the pass, because two runtimes serve it: an httpx client over the
 composed ASGI application for the routes FastAPI holds, and the REST Framework
-client for the apps that have not moved. The httpx client logs the URL of every
-request it makes, which is a request path in a log line — the suite's `conftest.py`
-disables that logger, because the client is this harness and not the server.
+client for `attachments` and `voicerooms`, which have not moved. The httpx client
+logs the URL of every request it makes, which is a request path in a log line —
+the suite's `conftest.py` disables that logger, because the client is this harness
+and not the server.
 
 Driven by core/tests/test_log_silence.py; needs the test DB, the in-memory channel
 layer, a temp ATTACHMENTS_ROOT, and fake LIVEKIT_* settings (token minting is local
@@ -107,12 +108,77 @@ async def _scripted_account_traffic(client):
     return s
 
 
-async def _scripted_envelope_traffic(client, s):
-    """The mailbox half: send an envelope to our own device (self-sync shape),
-    drain it, ack it."""
-    from core.buckets import ENVELOPE_BUCKETS
+async def _scripted_device_traffic(client, s):
+    """The device registry and the mailbox: register, cross-sign, publish an
+    identity, append and read the device log, then send, drain and ack an
+    envelope. Every one of these carries key material or ciphertext."""
+    from core.buckets import DEVICELOG_BUCKETS, ENVELOPE_BUCKETS
 
+    # No cross_sig here: the bundle it signs covers the device_id this call assigns,
+    # so registration refuses the field. It goes to the prekeys endpoint below, which
+    # is where a real client cross-signs — and where this audit must therefore prove
+    # a cross signature never reaches a log line.
+    r = await client.post(
+        "/api/v1/me/devices",
+        json={
+            "ik_pub": _b64_filled(64, 0x69),
+            "spk_id": 1,
+            "spk_pub": _b64_filled(32, 0x73),
+            "spk_sig": _b64_filled(32, 0x67),
+            "registration_id": 4242,
+            "otpks": [{"key_id": 1, "pub": _b64_filled(32, 0x6F)}],
+        },
+        headers={"Authorization": f"Bearer {s['register-scope access token']}"},
+    )
+    assert r.status_code == 201, f"device register: {r.status_code}"
+    body = r.json()
+    s["device id"] = body["device_id"]
+    s["access token"] = body["access"]
+    s["refresh token"] = body["refresh"]
     auth = {"Authorization": f"Bearer {s['access token']}"}
+
+    # Cross-sign the device now that its device_id is known (CLIENT_CONTRACT.md §M).
+    s["cross signature"] = _b64_filled(64, 0x78)
+    r = await client.put(
+        f"/api/v1/me/devices/{s['device id']}/prekeys",
+        json={"cross_sig": s["cross signature"], "bundle_version": 1},
+        headers=auth,
+    )
+    assert r.status_code == 200, f"cross-sign: {r.status_code}"
+
+    # Publish the cross-signing identity and append a device-log record: both
+    # surfaces carry key material and must stay as silent as the rest.
+    s["master public key"] = _b64_filled(32, 0x6D)
+    r = await client.put(
+        "/api/v1/me/identity",
+        json={
+            "master_pub": s["master public key"],
+            "self_signing_pub": _b64_filled(32, 0x74),
+            "user_signing_pub": _b64_filled(32, 0x75),
+            "master_sig": _b64_filled(64, 0x76),
+            "version": 1,
+        },
+        headers=auth,
+    )
+    assert r.status_code == 200, f"identity publish: {r.status_code}"
+    s["device log blob"] = _b64_filled(min(DEVICELOG_BUCKETS), 0xD1)
+    r = await client.post(
+        "/api/v1/me/devicelog",
+        json={"records": [{"blob": s["device log blob"]}]},
+        headers=auth,
+    )
+    assert r.status_code == 201, f"devicelog append: {r.status_code}"
+    r = await client.get(f"/api/v1/users/{s['user id']}/devicelog", headers=auth)
+    assert r.status_code == 200, f"devicelog read: {r.status_code}"
+    r = await client.get(f"/api/v1/users/{s['user id']}/devices", headers=auth)
+    assert r.status_code == 200, f"peer device list: {r.status_code}"
+    r = await client.post(
+        f"/api/v1/users/{s['user id']}/keys/claim", json={}, headers=auth
+    )
+    assert r.status_code == 200, f"claim: {r.status_code}"
+    s["claimed one-time prekey"] = r.json()["bundles"][0]["otpk"]["pub"]
+
+    # Send an envelope to our own device (self-sync shape), drain it, ack it.
     s["envelope blob"] = _b64_filled(min(ENVELOPE_BUCKETS), 0xA5)
     r = await client.post(
         "/api/v1/envelopes",
@@ -134,76 +200,16 @@ async def _scripted_envelope_traffic(client, s):
 
 
 def _scripted_rest_traffic(s):
-    """The REST Framework half of the sequence, for the apps that have not moved.
-    Runs in a worker thread via database_sync_to_async; logging is process-global,
-    so the capture still sees every record."""
+    """The REST Framework half of the sequence, for the two apps that have not
+    moved. Runs in a worker thread via database_sync_to_async; logging is
+    process-global, so the capture still sees every record."""
     from django.core.files.uploadedfile import SimpleUploadedFile
     from rest_framework.test import APIClient
 
-    from core.buckets import ATTACHMENT_BUCKETS, DEVICELOG_BUCKETS, NAME_BUCKETS
+    from core.buckets import ATTACHMENT_BUCKETS, NAME_BUCKETS
 
     api = APIClient()
-
-    # No cross_sig here: the bundle it signs covers the device_id this call assigns,
-    # so registration refuses the field. It goes to the prekeys endpoint below, which
-    # is where a real client cross-signs — and where this audit must therefore prove
-    # a cross signature never reaches a log line.
-    r = api.post(
-        "/api/v1/me/devices",
-        {
-            "ik_pub": _b64_filled(64, 0x69),
-            "spk_id": 1,
-            "spk_pub": _b64_filled(32, 0x73),
-            "spk_sig": _b64_filled(32, 0x67),
-            "registration_id": 4242,
-            "otpks": [{"key_id": 1, "pub": _b64_filled(32, 0x6F)}],
-        },
-        format="json",
-        HTTP_AUTHORIZATION=f"Bearer {s['register-scope access token']}",
-    )
-    assert r.status_code == 201, f"device register: {r.status_code}"
-    body = r.json()
-    s["device id"] = body["device_id"]
-    s["access token"] = body["access"]
-    s["refresh token"] = body["refresh"]
     auth = {"HTTP_AUTHORIZATION": f"Bearer {s['access token']}"}
-
-    # Cross-sign the device now that its device_id is known (CLIENT_CONTRACT.md §M).
-    s["cross signature"] = _b64_filled(64, 0x78)
-    r = api.put(
-        f"/api/v1/me/devices/{s['device id']}/prekeys",
-        {"cross_sig": s["cross signature"], "bundle_version": 1},
-        format="json",
-        **auth,
-    )
-    assert r.status_code == 200, f"cross-sign: {r.status_code}"
-
-    # Publish the cross-signing identity and append a device-log record: both new
-    # surfaces carry key material and must stay as silent as the rest.
-    s["master public key"] = _b64_filled(32, 0x6D)
-    r = api.put(
-        "/api/v1/me/identity",
-        {
-            "master_pub": s["master public key"],
-            "self_signing_pub": _b64_filled(32, 0x74),
-            "user_signing_pub": _b64_filled(32, 0x75),
-            "master_sig": _b64_filled(64, 0x76),
-            "version": 1,
-        },
-        format="json",
-        **auth,
-    )
-    assert r.status_code == 200, f"identity publish: {r.status_code}"
-    s["device log blob"] = _b64_filled(min(DEVICELOG_BUCKETS), 0xD1)
-    r = api.post(
-        "/api/v1/me/devicelog",
-        {"records": [{"blob": s["device log blob"]}]},
-        format="json",
-        **auth,
-    )
-    assert r.status_code == 201, f"devicelog append: {r.status_code}"
-    r = api.get(f"/api/v1/users/{s['user id']}/devicelog", **auth)
-    assert r.status_code == 200, f"devicelog read: {r.status_code}"
 
     # Upload + download an attachment (download answers via X-Accel-Redirect).
     upload_bytes = b"\x01" * min(ATTACHMENT_BUCKETS)
@@ -337,8 +343,8 @@ async def run_audit(probe=None):
                 transport=transport, base_url="http://testserver"
             ) as client:
                 secrets = await _scripted_account_traffic(client)
+                await _scripted_device_traffic(client, secrets)
                 await database_sync_to_async(_scripted_rest_traffic)(secrets)
-                await _scripted_envelope_traffic(client, secrets)
                 await _scripted_fastapi_traffic(client, secrets)
                 await _scripted_socket_traffic(secrets)
                 await _scripted_logout(client, secrets)

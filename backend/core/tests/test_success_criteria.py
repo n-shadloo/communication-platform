@@ -95,7 +95,7 @@ def test_a_new_device_restores_the_backup_and_no_server_history_exists(
 
 
 def test_revoking_a_device_cuts_its_access_and_destroys_its_state(
-    api, active_user, device, auth_headers
+    http, active_user, device, bearer
 ):
     """After DELETE, the revoked device's tokens die and its queue is gone (the full
     cascade and ETag behaviour live in devices/tests/test_revocation.py)."""
@@ -104,17 +104,17 @@ def test_revoking_a_device_cuts_its_access_and_destroys_its_state(
     QueuedEnvelope.objects.create(
         recipient_device=doomed, seq=1, blob=b"\xa5" * min(ENVELOPE_BUCKETS)
     )
-    doomed_headers = {"HTTP_AUTHORIZATION": f"Bearer {doomed_access}"}
-    assert api.get(DEVICES_URL, **doomed_headers).status_code == 200
+    doomed_headers = {"Authorization": f"Bearer {doomed_access}"}
+    assert http.get(DEVICES_URL, headers=doomed_headers).status_code == 200
 
     assert (
-        api.delete(
-            f"{DEVICES_URL}/{doomed.id}", **auth_headers(active_user, device)
+        http.delete(
+            f"{DEVICES_URL}/{doomed.id}", headers=bearer(active_user, device)
         ).status_code
         == 204
     )
 
-    assert api.get(DEVICES_URL, **doomed_headers).status_code == 401
+    assert http.get(DEVICES_URL, headers=doomed_headers).status_code == 401
     assert QueuedEnvelope.objects.filter(recipient_device=doomed).count() == 0
 
 

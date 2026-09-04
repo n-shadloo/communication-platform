@@ -18,6 +18,7 @@ import jwt
 from django.conf import settings
 from fastapi import Request
 
+from accounts.models import User
 from api.errors import (
     INVALID_TOKEN,
     SCOPE_FORBIDDEN,
@@ -186,6 +187,13 @@ def load_device(claims):
     return device
 
 
+def load_register_user(claims):
+    """The owner of a register-scope token, or None when the account is gone or
+    the operator deactivated it. A register token names no device, so the two
+    device generations have nothing to check here."""
+    return User.objects.filter(id=claims["user_id"], is_active=True).only("id").first()
+
+
 def bearer(request):
     """The token of an `Authorization: Bearer` header, or a 401."""
     header = request.headers.get("authorization")
@@ -211,6 +219,28 @@ async def require_full_device(request: Request) -> Principal:
     if device is None:
         raise ApiError(401, "token_revoked", TOKEN_REVOKED)
     principal = Principal(user=device.user, device=device, claims=claims)
+    request.state.principal = principal
+    return principal
+
+
+async def require_register_or_full(request: Request) -> Principal:
+    """The requirement of device registration, and of nothing else.
+
+    A register-scope token names no device, so the principal it builds carries
+    none; the route it reaches is the one that mints the device the caller lacks.
+    Every other route takes `require_full_device`, which refuses that token.
+    """
+    claims = decode_access(bearer(request))
+    if claims["scope"] == FULL:
+        device = await run_unit(load_device, claims)
+        if device is None:
+            raise ApiError(401, "token_revoked", TOKEN_REVOKED)
+        principal = Principal(user=device.user, device=device, claims=claims)
+    else:
+        user = await run_unit(load_register_user, claims)
+        if user is None:
+            raise ApiError(401, "token_revoked", TOKEN_REVOKED)
+        principal = Principal(user=user, device=None, claims=claims)
     request.state.principal = principal
     return principal
 

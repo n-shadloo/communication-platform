@@ -15,6 +15,7 @@ import pytest
 from django.conf import settings
 
 from api.auth import issue_full, issue_register_scope
+from core.buckets import NAME_BUCKETS
 
 # transaction=True because the ORM bracket of `api.orm.run_unit` closes the
 # connection around every unit of work, which under a wrapping test transaction
@@ -23,6 +24,7 @@ pytestmark = pytest.mark.django_db(transaction=True)
 
 DIRECTORY_URL = "/api/v1/users"
 DEVICES_URL = "/api/v1/me/devices"
+ROOMS_URL = "/api/v1/rooms"  # still REST Framework, until run 05
 PROFILE_URL = "/api/v1/me/profile"
 KEYBACKUP_URL = "/api/v1/me/keybackup"
 
@@ -244,40 +246,49 @@ def test_a_token_cannot_name_another_accounts_device(http, active_user, device, 
 
 class TestBothStacksAgree:
     """Invariant 13: both stacks accept the same tokens, and a token one stack
-    revokes is dead on the other."""
+    revokes is dead on the other.
+
+    `voicerooms` is the REST Framework half now that `devices` and `messaging`
+    have moved; run 05 takes the last of it and this class with it.
+    """
+
+    @staticmethod
+    def create_room(api, access):
+        return api.post(
+            ROOMS_URL,
+            {"name_blob": base64.b64encode(b"n" * min(NAME_BUCKETS)).decode()},
+            format="json",
+            HTTP_AUTHORIZATION=f"Bearer {access}",
+        )
 
     def test_one_token_opens_both_surfaces(self, http, api, active_user, device):
         access, _refresh = issue_full(active_user, device)
 
         assert http.get(DIRECTORY_URL, headers=token(access)).status_code == 200
-        assert (
-            api.get(DEVICES_URL, HTTP_AUTHORIZATION=f"Bearer {access}").status_code == 200
-        )
+        assert self.create_room(api, access).status_code == 201
 
     def test_a_logout_on_one_surface_ends_the_other(self, http, api, active_user, device):
         access, _refresh = issue_full(active_user, device)
 
         assert http.post("/api/v1/auth/logout", headers=token(access)).status_code == 204
 
-        response = api.get(DEVICES_URL, HTTP_AUTHORIZATION=f"Bearer {access}")
+        response = self.create_room(api, access)
         assert response.status_code == 401
         assert response.json()["code"] == "token_revoked"
 
-    def test_a_revocation_on_the_other_surface_ends_this_one(
-        self, http, api, active_user, device, bearer
+    def test_a_revocation_on_one_surface_ends_the_other(
+        self, http, api, active_user, device
     ):
-        """Deleting a device is still a REST Framework route; the token it kills
-        is a FastAPI token too."""
+        """Deleting a device is a FastAPI route; the token it kills is one the
+        REST Framework half verifies through the same two counters."""
         access, _refresh = issue_full(active_user, device)
         other = issue_full(active_user, device)[0]
 
         assert (
-            api.delete(
-                f"{DEVICES_URL}/{device.id}", HTTP_AUTHORIZATION=f"Bearer {other}"
-            ).status_code
+            http.delete(f"{DEVICES_URL}/{device.id}", headers=token(other)).status_code
             == 204
         )
 
-        response = http.get(DIRECTORY_URL, headers=token(access))
+        response = self.create_room(api, access)
         assert response.status_code == 401
         assert response.json()["code"] == "token_revoked"

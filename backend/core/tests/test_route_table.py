@@ -11,13 +11,17 @@ import pytest
 from django.core.handlers.asgi import ASGIHandler
 from fastapi.routing import iter_route_contexts
 
-from api.auth import allow_anonymous, require_full_device
+from api.auth import allow_anonymous, require_full_device, require_register_or_full
 from config.asgi import api_application
 from config.urls import ADMIN_PATH
+from devices.routes import require_own_device
 
 ANONYMOUS = allow_anonymous.__name__
 FULL_DEVICE = require_full_device.__name__
-REQUIREMENTS = frozenset({ANONYMOUS, FULL_DEVICE})
+REGISTER_OR_FULL = require_register_or_full.__name__
+REQUIREMENTS = frozenset({ANONYMOUS, FULL_DEVICE, REGISTER_OR_FULL})
+
+OWN_DEVICE = require_own_device.__name__
 
 # (method, path) -> (authentication requirement, rate-limit scope or None).
 # A route is closed by default: every entry is FULL_DEVICE unless it is one of
@@ -34,10 +38,34 @@ EXPECTED = {
     ("PUT", "/api/v1/me/profile"): (FULL_DEVICE, "accounts"),
     ("GET", "/api/v1/me/keybackup"): (FULL_DEVICE, "accounts"),
     ("PUT", "/api/v1/me/keybackup"): (FULL_DEVICE, "accounts"),
+    ("PUT", "/api/v1/me/identity"): (FULL_DEVICE, "accounts"),
+    ("GET", "/api/v1/users/{user_id}/identity"): (FULL_DEVICE, "accounts"),
+    # Registration is the one route a register-scope token reaches, and it is a
+    # per-method opt-down: the device list on the same path stays full scope.
+    ("POST", "/api/v1/me/devices"): (REGISTER_OR_FULL, "accounts"),
+    ("GET", "/api/v1/me/devices"): (FULL_DEVICE, "accounts"),
+    ("PUT", "/api/v1/me/devices/{device_id}"): (FULL_DEVICE, "accounts"),
+    ("DELETE", "/api/v1/me/devices/{device_id}"): (FULL_DEVICE, "accounts"),
+    ("PUT", "/api/v1/me/devices/{device_id}/prekeys"): (FULL_DEVICE, "accounts"),
+    ("GET", "/api/v1/me/devices/{device_id}/prekeys/count"): (FULL_DEVICE, "accounts"),
+    ("POST", "/api/v1/me/devicelog"): (FULL_DEVICE, "accounts"),
+    ("GET", "/api/v1/users/{user_id}/devicelog"): (FULL_DEVICE, "accounts"),
+    ("GET", "/api/v1/users/{user_id}/devices"): (FULL_DEVICE, "accounts"),
+    ("POST", "/api/v1/users/{user_id}/keys/claim"): (FULL_DEVICE, "claim"),
     ("POST", "/api/v1/envelopes"): (FULL_DEVICE, "envelopes"),
     ("GET", "/api/v1/me/envelopes"): (FULL_DEVICE, "envelopes"),
     ("POST", "/api/v1/me/envelopes/ack"): (FULL_DEVICE, "envelopes"),
 }
+
+# The routes whose path names a device the token itself must be. Recorded here
+# rather than left to each handler, because a route that drops the gate reads
+# exactly like one that never needed it.
+OWN_DEVICE_ROUTES = frozenset(
+    {
+        ("PUT", "/api/v1/me/devices/{device_id}/prekeys"),
+        ("GET", "/api/v1/me/devices/{device_id}/prekeys/count"),
+    }
+)
 
 LIMITER_PREFIX = "rate_limit_"
 
@@ -88,6 +116,16 @@ def test_the_requirement_is_resolved_before_the_limiter(route):
     assert requirement < limiter, route
 
 
+@pytest.mark.parametrize("route", sorted(EXPECTED))
+def test_only_the_recorded_routes_gate_on_the_calling_device(route):
+    """The own-device gate is an authorization dependency on top of the
+    requirement, not a replacement for it: a route that carries it must still
+    declare that it needs a full-scope token."""
+    gated = OWN_DEVICE in served()[route]
+
+    assert gated == (route in OWN_DEVICE_ROUTES), route
+
+
 def test_only_the_recorded_routes_are_open():
     anonymous = {route for route, names in served().items() if ANONYMOUS in names}
 
@@ -119,7 +157,7 @@ def test_the_django_application_still_answers_its_own_paths(http):
     assert admin.status_code == 302
     assert "login" in admin.headers["location"]
 
-    unmoved = http.get("/api/v1/me/devices")
+    unmoved = http.get("/api/v1/rooms")
     assert unmoved.status_code == 401
     assert unmoved.json()["code"] == "unauthenticated"
 

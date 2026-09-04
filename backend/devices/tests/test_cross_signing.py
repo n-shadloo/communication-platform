@@ -14,7 +14,7 @@ from devices.models import Device, UserIdentity
 
 from .conftest import DEVICES_URL, make_device, register_payload
 
-pytestmark = pytest.mark.django_db
+pytestmark = pytest.mark.django_db(transaction=True)
 
 IDENTITY_URL = "/api/v1/me/identity"
 
@@ -54,31 +54,30 @@ def identity_payload(
 
 
 def test_a_published_identity_reads_back_byte_identical(
-    api, active_user, device, auth_headers, peer, peer_device
+    http, active_user, device, bearer, peer, peer_device
 ):
     payload = identity_payload()
-    headers = auth_headers(active_user, device)
+    headers = bearer(active_user, device)
 
-    assert api.put(IDENTITY_URL, payload, format="json", **headers).status_code == 200
+    assert http.put(IDENTITY_URL, json=payload, headers=headers).status_code == 200
 
-    body = api.get(
-        peer_identity_url(active_user.id), **auth_headers(peer, peer_device)
+    body = http.get(
+        peer_identity_url(active_user.id), headers=bearer(peer, peer_device)
     ).json()
     assert body == payload
 
 
 def test_a_stale_or_equal_version_is_rejected_without_mutating_stored_bytes(
-    api, active_user, device, auth_headers
+    http, active_user, device, bearer
 ):
-    headers = auth_headers(active_user, device)
-    api.put(IDENTITY_URL, identity_payload(version=2), format="json", **headers)
+    headers = bearer(active_user, device)
+    http.put(IDENTITY_URL, json=identity_payload(version=2), headers=headers)
 
     for version in (2, 1):
-        response = api.put(
+        response = http.put(
             IDENTITY_URL,
-            identity_payload(version=version, master=b"X"),
-            format="json",
-            **headers,
+            json=identity_payload(version=version, master=b"X"),
+            headers=headers,
         )
         assert response.status_code == 409
         assert response.json()["code"] == "stale_version"
@@ -88,25 +87,23 @@ def test_a_stale_or_equal_version_is_rejected_without_mutating_stored_bytes(
     assert identity.version == 2
 
 
-def test_an_unpublished_identity_is_a_404(api, active_user, device, auth_headers, peer):
-    response = api.get(peer_identity_url(peer.id), **auth_headers(active_user, device))
+def test_an_unpublished_identity_is_a_404(http, active_user, device, bearer, peer):
+    response = http.get(peer_identity_url(peer.id), headers=bearer(active_user, device))
 
     assert response.status_code == 404
     assert response.json()["code"] == "not_found"
 
 
 def test_a_deactivated_users_identity_is_a_404(
-    api, active_user, device, auth_headers, peer, peer_device
+    http, active_user, device, bearer, peer, peer_device
 ):
-    api.put(
-        IDENTITY_URL, identity_payload(), format="json", **auth_headers(peer, peer_device)
-    )
+    http.put(IDENTITY_URL, json=identity_payload(), headers=bearer(peer, peer_device))
     peer.is_active = False
     peer.save(update_fields=["is_active"])
 
     assert (
-        api.get(
-            peer_identity_url(peer.id), **auth_headers(active_user, device)
+        http.get(
+            peer_identity_url(peer.id), headers=bearer(active_user, device)
         ).status_code
         == 404
     )
@@ -123,42 +120,38 @@ def test_a_deactivated_users_identity_is_a_404(
     ],
 )
 def test_malformed_identity_material_is_rejected(
-    api, active_user, device, auth_headers, field, value
+    http, active_user, device, bearer, field, value
 ):
-    response = api.put(
+    response = http.put(
         IDENTITY_URL,
-        identity_payload(**{field: value}),
-        format="json",
-        **auth_headers(active_user, device),
+        json=identity_payload(**{field: value}),
+        headers=bearer(active_user, device),
     )
 
     assert response.status_code == 400
 
 
-def test_unknown_identity_fields_are_rejected(api, active_user, device, auth_headers):
-    response = api.put(
+def test_unknown_identity_fields_are_rejected(http, active_user, device, bearer):
+    response = http.put(
         IDENTITY_URL,
-        identity_payload(recovery_key="oops"),
-        format="json",
-        **auth_headers(active_user, device),
+        json=identity_payload(recovery_key="oops"),
+        headers=bearer(active_user, device),
     )
 
     assert response.status_code == 400
 
 
 def test_the_peer_list_and_claim_surface_the_cross_sig_verbatim(
-    api, active_user, device, auth_headers, peer
+    http, active_user, device, bearer, peer
 ):
     signed = make_device(
         peer, registration_id=700, cross_sig=b"\xc5" * 64, bundle_version=3
     )
-    headers = auth_headers(active_user, device)
+    headers = bearer(active_user, device)
     expected = base64.b64encode(b"\xc5" * 64).decode()
 
-    listed = api.get(peer_devices_url(peer.id), **headers).json()["devices"][0]
-    claimed = api.post(claim_url(peer.id), {}, format="json", **headers).json()[
-        "bundles"
-    ][0]
+    listed = http.get(peer_devices_url(peer.id), headers=headers).json()["devices"][0]
+    claimed = http.post(claim_url(peer.id), json={}, headers=headers).json()["bundles"][0]
 
     for entry in (listed, claimed):
         assert entry["device_id"] == str(signed.id)
@@ -167,7 +160,7 @@ def test_the_peer_list_and_claim_surface_the_cross_sig_verbatim(
 
 
 def test_an_unsigned_device_stays_visibly_unsigned_everywhere(
-    api, active_user, device, auth_headers, peer, peer_device
+    http, active_user, device, bearer, peer, peer_device
 ):
     """Server-side half of "forged enrollment rejected": a device with no cross_sig
     (the state every device is in between registering and its follow-up
@@ -178,10 +171,10 @@ def test_an_unsigned_device_stays_visibly_unsigned_everywhere(
     behaviour, belongs to CLIENT_CONTRACT.md, and is deliberately not simulated
     here."""
     legacy = make_device(peer, registration_id=701)  # pre-cross-signing row
-    headers = auth_headers(active_user, device)
+    headers = bearer(active_user, device)
 
-    listed = api.get(peer_devices_url(peer.id), **headers).json()["devices"]
-    claimed = api.post(claim_url(peer.id), {}, format="json", **headers).json()["bundles"]
+    listed = http.get(peer_devices_url(peer.id), headers=headers).json()["devices"]
+    claimed = http.post(claim_url(peer.id), json={}, headers=headers).json()["bundles"]
 
     by_id = {entry["device_id"]: entry for entry in listed}
     assert by_id[str(legacy.id)]["cross_sig"] is None
@@ -193,28 +186,28 @@ def test_an_unsigned_device_stays_visibly_unsigned_everywhere(
 
 
 def test_a_substituted_master_key_is_served_verbatim_not_smoothed_over(
-    api, active_user, device, auth_headers, peer, peer_device
+    http, active_user, device, bearer, peer, peer_device
 ):
     """Server-side half of "substituted master key alarms": overwriting an identity
     with a different master_pub at a higher version must be returned exactly as
     stored, version incremented — the server does not merge, hide, or reconcile the
     change. The alarm itself (blocking the conversation pending re-verification) is
     client behaviour, specified in CLIENT_CONTRACT.md."""
-    mine = auth_headers(active_user, device)
-    api.put(IDENTITY_URL, identity_payload(version=1, master=b"A"), format="json", **mine)
+    mine = bearer(active_user, device)
+    http.put(IDENTITY_URL, json=identity_payload(version=1, master=b"A"), headers=mine)
 
     replaced = identity_payload(version=2, master=b"B", sig=b"h")
-    assert api.put(IDENTITY_URL, replaced, format="json", **mine).status_code == 200
+    assert http.put(IDENTITY_URL, json=replaced, headers=mine).status_code == 200
 
-    body = api.get(
-        peer_identity_url(active_user.id), **auth_headers(peer, peer_device)
+    body = http.get(
+        peer_identity_url(active_user.id), headers=bearer(peer, peer_device)
     ).json()
     assert body == replaced
     assert body["version"] == 2
 
 
 def test_a_prekey_replenish_can_refresh_the_cross_signature(
-    api, active_user, device, auth_headers
+    http, active_user, device, bearer
 ):
     from .conftest import pubkey
 
@@ -224,11 +217,10 @@ def test_a_prekey_replenish_can_refresh_the_cross_signature(
         "bundle_version": 2,
     }
 
-    response = api.put(
+    response = http.put(
         f"{DEVICES_URL}/{device.id}/prekeys",
-        body,
-        format="json",
-        **auth_headers(active_user, device),
+        json=body,
+        headers=bearer(active_user, device),
     )
 
     assert response.status_code == 200
@@ -239,15 +231,14 @@ def test_a_prekey_replenish_can_refresh_the_cross_signature(
 
 
 def test_a_malformed_cross_sig_at_a_replenish_is_rejected(
-    api, active_user, device, auth_headers
+    http, active_user, device, bearer
 ):
     """Length is checked where a cross_sig is actually accepted. Malformed-input
     guard only — the bytes themselves are never verified."""
-    response = api.put(
+    response = http.put(
         f"{DEVICES_URL}/{device.id}/prekeys",
-        {"cross_sig": "AAAA", "bundle_version": 1},
-        format="json",
-        **auth_headers(active_user, device),
+        json={"cross_sig": "AAAA", "bundle_version": 1},
+        headers=bearer(active_user, device),
     )
 
     assert response.status_code == 400
@@ -257,7 +248,7 @@ def test_a_malformed_cross_sig_at_a_replenish_is_rejected(
 
 @pytest.mark.parametrize("field", ["cross_sig", "bundle_version"])
 def test_a_replenish_with_half_the_cross_signing_pair_is_rejected(
-    api, active_user, device, auth_headers, field
+    http, active_user, device, bearer, field
 ):
     """The prekeys endpoint is where a device's first cross_sig arrives, so the
     same malformed-input guard applies: a signature stored against bundle_version
@@ -265,11 +256,10 @@ def test_a_replenish_with_half_the_cross_signing_pair_is_rejected(
     body = {"cross_sig": b64sig(b"f"), "bundle_version": 2}
     del body[field]
 
-    response = api.put(
+    response = http.put(
         f"{DEVICES_URL}/{device.id}/prekeys",
-        body,
-        format="json",
-        **auth_headers(active_user, device),
+        json=body,
+        headers=bearer(active_user, device),
     )
 
     assert response.status_code == 400
@@ -278,32 +268,28 @@ def test_a_replenish_with_half_the_cross_signing_pair_is_rejected(
     assert device.bundle_version == 0
 
 
-def test_enrollment_can_cross_sign_the_device_id_the_server_assigned(api, active_user):
+def test_enrollment_can_cross_sign_the_device_id_the_server_assigned(
+    http, active_user, register_bearer
+):
     """The whole enrollment order, end to end, with no step the client cannot
     execute. `cross_sig` covers `device_id`, and only the 201 reveals it, so the
     first call goes out unsigned; the full-scope token it returns is what lets the
     device fetch its key backup for the self-signing key and then cross-sign the
     id it now knows. Before this, both halves of that dependency were required
     up front and the only way through was uploading signature-shaped garbage."""
-    from api.auth import issue_register_scope
-
-    first = api.post(
-        DEVICES_URL,
-        register_payload(),
-        format="json",
-        **{"HTTP_AUTHORIZATION": f"Bearer {issue_register_scope(active_user)}"},
+    first = http.post(
+        DEVICES_URL, json=register_payload(), headers=register_bearer(active_user)
     )
     assert first.status_code == 201
     device_id = first.json()["device_id"]
-    full = {"HTTP_AUTHORIZATION": f"Bearer {first.json()['access']}"}
+    full = {"Authorization": f"Bearer {first.json()['access']}"}
 
     # Signing happens here, over the assigned device_id — the client is not
     # guessing, and the server never sees the private half.
-    signed = api.put(
+    signed = http.put(
         f"{DEVICES_URL}/{device_id}/prekeys",
-        {"cross_sig": b64sig(b"z"), "bundle_version": 1},
-        format="json",
-        **full,
+        json={"cross_sig": b64sig(b"z"), "bundle_version": 1},
+        headers=full,
     )
 
     assert signed.status_code == 200

@@ -4,9 +4,8 @@ group-send closes the socket 4003, and the revoked token can never reconnect."""
 import pytest
 from channels.db import database_sync_to_async
 from channels.layers import get_channel_layer
-from rest_framework.test import APIClient
 
-from .conftest import bearer, connect_ok, expect_close, mint_access, ws
+from .conftest import bearer, connect_ok, expect_close, http_request, mint_access, ws
 
 pytestmark = pytest.mark.django_db(transaction=True)
 
@@ -38,9 +37,7 @@ async def test_rest_revocation_closes_the_live_socket_and_bars_reconnect(
     comm = await connect_ok(bearer(doomed_access))
 
     revoker = await mint_access(active_user, device)
-    resp = await database_sync_to_async(APIClient().delete)(
-        f"/api/v1/me/devices/{doomed.id}", HTTP_AUTHORIZATION=f"Bearer {revoker}"
-    )
+    resp = await http_request("DELETE", f"/api/v1/me/devices/{doomed.id}", revoker)
     assert resp.status_code == 204
 
     await expect_close(comm, 4003)

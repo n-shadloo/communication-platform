@@ -14,16 +14,17 @@ from messaging.models import QueuedEnvelope
 
 from .conftest import (
     DEVICES_URL,
+    label_blob,
     make_device,
     stock_pq_prekeys,
     stock_prekeys,
 )
 
-pytestmark = pytest.mark.django_db
+pytestmark = pytest.mark.django_db(transaction=True)
 
 
-def bearer(access):
-    return {"HTTP_AUTHORIZATION": f"Bearer {access}"}
+def access_headers(access):
+    return {"Authorization": f"Bearer {access}"}
 
 
 @pytest.fixture
@@ -44,10 +45,10 @@ def doomed(active_user):
 
 
 def test_revocation_returns_204_and_marks_the_row(
-    api, active_user, device, auth_headers, doomed
+    http, active_user, device, bearer, doomed
 ):
-    response = api.delete(
-        f"{DEVICES_URL}/{doomed.id}", **auth_headers(active_user, device)
+    response = http.delete(
+        f"{DEVICES_URL}/{doomed.id}", headers=bearer(active_user, device)
     )
 
     assert response.status_code == 204
@@ -56,43 +57,38 @@ def test_revocation_returns_204_and_marks_the_row(
 
 
 def test_the_revoked_devices_access_token_is_rejected(
-    api, active_user, device, auth_headers, doomed
+    http, active_user, device, bearer, doomed
 ):
-    """(a) `token_generation` is bumped, so DeviceJWTAuthentication refuses every
-    outstanding access token for it."""
+    """(a) `token_generation` is bumped, so the authentication dependency refuses
+    every outstanding access token for it."""
     access, _refresh = issue_full(active_user, doomed)
-    assert api.get(DEVICES_URL, **bearer(access)).status_code == 200
+    assert http.get(DEVICES_URL, headers=access_headers(access)).status_code == 200
 
-    api.delete(f"{DEVICES_URL}/{doomed.id}", **auth_headers(active_user, device))
+    http.delete(f"{DEVICES_URL}/{doomed.id}", headers=bearer(active_user, device))
 
-    response = api.get(DEVICES_URL, **bearer(access))
+    response = http.get(DEVICES_URL, headers=access_headers(access))
     assert response.status_code == 401
     assert response.json()["code"] == "token_revoked"
 
 
-# transaction=True because refresh is a FastAPI route, and the ORM bracket behind
-# it closes the connection a wrapping test transaction would need.
-@pytest.mark.django_db(transaction=True)
 def test_the_revoked_devices_refresh_token_fails(
-    api, http, active_user, device, auth_headers, doomed
+    http, active_user, device, bearer, doomed
 ):
     """(b) Refresh re-checks the device, so it cannot mint a fresh pair."""
     _access, refresh = issue_full(active_user, doomed)
 
-    api.delete(f"{DEVICES_URL}/{doomed.id}", **auth_headers(active_user, device))
+    http.delete(f"{DEVICES_URL}/{doomed.id}", headers=bearer(active_user, device))
 
     response = http.post("/api/v1/auth/refresh", json={"refresh": refresh})
     assert response.status_code == 401
     assert response.json()["code"] == "token_revoked"
 
 
-def test_the_queue_and_prekeys_are_deleted(
-    api, active_user, device, auth_headers, doomed
-):
+def test_the_queue_and_prekeys_are_deleted(http, active_user, device, bearer, doomed):
     """(c) Nothing of the device's data survives the revoke: classical and PQ
     one-time prekeys and the mailbox, all purged in the one revocation transaction
     (FS/PCS: no key material of a removed device may remain claimable)."""
-    api.delete(f"{DEVICES_URL}/{doomed.id}", **auth_headers(active_user, device))
+    http.delete(f"{DEVICES_URL}/{doomed.id}", headers=bearer(active_user, device))
 
     assert OneTimePrekey.objects.filter(device=doomed).count() == 0
     assert PqOneTimePrekey.objects.filter(device=doomed).count() == 0
@@ -100,77 +96,80 @@ def test_the_queue_and_prekeys_are_deleted(
 
 
 def test_a_revoked_devices_material_is_never_served_to_claimants(
-    api, active_user, device, auth_headers, doomed, peer, peer_device
+    http, active_user, device, bearer, doomed, peer, peer_device
 ):
     """The claim side of the same property: after the revoke, a claim against the
     account neither returns the revoked device nor hands out any of its one-time
     material (classical or PQ)."""
-    api.delete(f"{DEVICES_URL}/{doomed.id}", **auth_headers(active_user, device))
-    peer_headers = auth_headers(peer, peer_device)
+    http.delete(f"{DEVICES_URL}/{doomed.id}", headers=bearer(active_user, device))
 
-    bundles = api.post(
-        f"/api/v1/users/{active_user.id}/keys/claim", {}, format="json", **peer_headers
+    bundles = http.post(
+        f"/api/v1/users/{active_user.id}/keys/claim",
+        json={},
+        headers=bearer(peer, peer_device),
     ).json()["bundles"]
 
     assert str(doomed.id) not in {b["device_id"] for b in bundles}
 
 
 def test_the_revoked_device_leaves_the_peer_list(
-    api, active_user, device, auth_headers, doomed, peer, peer_device
+    http, active_user, device, bearer, doomed, peer, peer_device
 ):
     """(d) Peers stop seeing it, so they stop encrypting to it."""
-    peer_headers = auth_headers(peer, peer_device)
+    peer_headers = bearer(peer, peer_device)
     url = f"/api/v1/users/{active_user.id}/devices"
     assert str(doomed.id) in {
-        d["device_id"] for d in api.get(url, **peer_headers).json()["devices"]
+        d["device_id"] for d in http.get(url, headers=peer_headers).json()["devices"]
     }
 
-    api.delete(f"{DEVICES_URL}/{doomed.id}", **auth_headers(active_user, device))
+    http.delete(f"{DEVICES_URL}/{doomed.id}", headers=bearer(active_user, device))
 
     assert str(doomed.id) not in {
-        d["device_id"] for d in api.get(url, **peer_headers).json()["devices"]
+        d["device_id"] for d in http.get(url, headers=peer_headers).json()["devices"]
     }
 
 
 def test_the_device_list_etag_changes(
-    api, active_user, device, auth_headers, doomed, peer, peer_device
+    http, active_user, device, bearer, doomed, peer, peer_device
 ):
     """(e) Both the owner's siblings and peers notice on their next poll."""
-    own_headers = auth_headers(active_user, device)
-    peer_headers = auth_headers(peer, peer_device)
+    own_headers = bearer(active_user, device)
+    peer_headers = bearer(peer, peer_device)
     peer_url = f"/api/v1/users/{active_user.id}/devices"
-    own_before = api.get(DEVICES_URL, **own_headers)["ETag"]
-    peer_before = api.get(peer_url, **peer_headers)["ETag"]
+    own_before = http.get(DEVICES_URL, headers=own_headers).headers["etag"]
+    peer_before = http.get(peer_url, headers=peer_headers).headers["etag"]
 
-    api.delete(f"{DEVICES_URL}/{doomed.id}", **own_headers)
+    http.delete(f"{DEVICES_URL}/{doomed.id}", headers=own_headers)
 
-    assert api.get(DEVICES_URL, **own_headers)["ETag"] != own_before
-    assert api.get(peer_url, **peer_headers)["ETag"] != peer_before
+    assert http.get(DEVICES_URL, headers=own_headers).headers["etag"] != own_before
+    assert http.get(peer_url, headers=peer_headers).headers["etag"] != peer_before
 
 
-def test_a_sibling_device_is_untouched(api, active_user, device, auth_headers, doomed):
+def test_a_sibling_device_is_untouched(http, active_user, device, bearer, doomed):
     """The cascade is scoped to one device, not the account."""
     stock_prekeys(device, 2, start=500)
     survivor_access, _ = issue_full(active_user, device)
 
-    api.delete(f"{DEVICES_URL}/{doomed.id}", **auth_headers(active_user, device))
+    http.delete(f"{DEVICES_URL}/{doomed.id}", headers=bearer(active_user, device))
 
-    assert api.get(DEVICES_URL, **bearer(survivor_access)).status_code == 200
+    assert (
+        http.get(DEVICES_URL, headers=access_headers(survivor_access)).status_code == 200
+    )
     assert OneTimePrekey.objects.filter(device=device).count() == 2
 
 
-def test_revoking_twice_is_a_404(api, active_user, device, auth_headers, doomed):
-    headers = auth_headers(active_user, device)
-    api.delete(f"{DEVICES_URL}/{doomed.id}", **headers)
+def test_revoking_twice_is_a_404(http, active_user, device, bearer, doomed):
+    headers = bearer(active_user, device)
+    http.delete(f"{DEVICES_URL}/{doomed.id}", headers=headers)
 
-    assert api.delete(f"{DEVICES_URL}/{doomed.id}", **headers).status_code == 404
+    assert http.delete(f"{DEVICES_URL}/{doomed.id}", headers=headers).status_code == 404
 
 
 def test_a_user_cannot_revoke_another_users_device(
-    api, active_user, device, auth_headers, peer, peer_device
+    http, active_user, device, bearer, peer, peer_device
 ):
-    response = api.delete(
-        f"{DEVICES_URL}/{peer_device.id}", **auth_headers(active_user, device)
+    response = http.delete(
+        f"{DEVICES_URL}/{peer_device.id}", headers=bearer(active_user, device)
     )
 
     assert response.status_code == 404  # not 403: the device's existence is not confirmed
@@ -178,33 +177,23 @@ def test_a_user_cannot_revoke_another_users_device(
     assert peer_device.revoked_date is None
 
 
-def test_a_revoked_device_cannot_be_relabelled(
-    api, active_user, device, auth_headers, doomed
-):
-    from .conftest import label_blob
+def test_a_revoked_device_cannot_be_relabelled(http, active_user, device, bearer, doomed):
+    headers = bearer(active_user, device)
+    http.delete(f"{DEVICES_URL}/{doomed.id}", headers=headers)
 
-    headers = auth_headers(active_user, device)
-    api.delete(f"{DEVICES_URL}/{doomed.id}", **headers)
-
-    response = api.put(
-        f"{DEVICES_URL}/{doomed.id}",
-        {"label_blob": label_blob()},
-        format="json",
-        **headers,
+    response = http.put(
+        f"{DEVICES_URL}/{doomed.id}", json={"label_blob": label_blob()}, headers=headers
     )
 
     assert response.status_code == 404
 
 
-def test_relabelling_a_live_device_works(api, active_user, device, auth_headers):
+def test_relabelling_a_live_device_works(http, active_user, device, bearer):
     """Guards the guard above: the 404 is about revocation, not a broken PUT."""
-    from .conftest import label_blob
-
-    response = api.put(
+    response = http.put(
         f"{DEVICES_URL}/{device.id}",
-        {"label_blob": label_blob()},
-        format="json",
-        **auth_headers(active_user, device),
+        json={"label_blob": label_blob()},
+        headers=bearer(active_user, device),
     )
 
     assert response.status_code == 200
