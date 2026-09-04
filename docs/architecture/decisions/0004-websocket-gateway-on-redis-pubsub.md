@@ -3,6 +3,9 @@
 - Status: Accepted
 - Phase: 2
 - Date: 2026-09-03
+- Landed: 2026-09-04, in the fourth run of phase 2. `/ws` is a Starlette WebSocket
+  route of the FastAPI application, `realtime/bus.py` is the fan-out, and Channels,
+  its Redis layer and `CHANNEL_LAYERS` are gone.
 
 ## Context
 
@@ -49,6 +52,32 @@ closes every socket with `1012`.
   itself uses for a group send, so the delivery semantics are unchanged by the
   move. `redis.asyncio` is the maintained async client inside redis-py.
   **Currency:** current.
+
+## The subscription strategy, and its cost
+
+Each worker subscribes and unsubscribes per topic — on a bind, a room join and a room
+leave — rather than holding one pattern subscription and filtering locally.
+
+The pattern costs one command for the life of the process and none afterwards, which
+is the cheaper side of the trade at the control plane. It loses on the data plane, and
+the common case is what decides it: a live push to a device with no socket is a whole
+envelope blob, up to a base64 bucket, and under a pattern subscription Redis carries
+that blob to every worker so each can discard it. Under a per-topic subscription Redis
+drops it server-side, because `PUBLISH` to a channel with no subscribers reaches
+nobody.
+
+What per-topic costs instead: a registry of topic to sockets in each worker, and one
+Redis round trip on each bind, room join and room leave. That is connection-lifecycle
+rate, not frame rate — at band 0, a handful of commands per socket for its whole life.
+A bind also waits for the `SUBSCRIBE` confirmation before it returns, because redis-py
+sends the command without reading its reply and a publish that lands in that window is
+dropped by a server that does not yet hold the subscription; on the revocation path
+that window is a socket outliving its own token.
+
+The flip: if the topic count per worker ever grows past what one subscription
+connection handles comfortably, or churn becomes frame-rate rather than
+connection-rate, the pattern subscription is the fallback and the local registry is
+already the thing that would filter it.
 
 ## Consequences
 

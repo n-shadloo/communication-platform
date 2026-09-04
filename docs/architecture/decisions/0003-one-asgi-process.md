@@ -3,10 +3,13 @@
 - Status: Accepted
 - Phase: 2
 - Date: 2026-09-03
-- Landing: 2026-09-04, in the first run of phase 2. FastAPI is the root ASGI
-  application and the Django application answers what no route claims. daphne,
-  Channels and the mount at `ADMIN_PATH` are unchanged until the WebSocket gateway
-  moves.
+- Landed: 2026-09-04, in the fourth run of phase 2. FastAPI is the root ASGI
+  application for every scope, the Django application answers what no route claims,
+  and `ops/systemd/chat.service` runs uvicorn with uvloop, httptools and the
+  `websockets` sans-io implementation. `--ws` names `websockets-sansio` rather than
+  `websockets`: the latter selects uvicorn's deprecated wrapper over a legacy module
+  and warns that the flag will start meaning the sans-io one in a future release, and
+  a flag whose meaning changes under a version bump is not a pin.
 
 ## Context
 

@@ -89,14 +89,17 @@ async def test_scripted_traffic_across_every_surface_leaks_nothing():
         assert secrets.get(label), f"the audit never exercised the {label} step"
 
 
-async def test_the_audit_catches_a_leak_even_on_a_non_propagating_logger():
-    """django.request has its own handler and propagate=False, the spot assertLogs
-    misses. A deliberate leak there must come back non-empty, or the audit is dead."""
+@pytest.mark.parametrize("logger_name", ["django.request", "uvicorn.access"])
+async def test_the_audit_catches_a_leak_even_on_a_non_propagating_logger(logger_name):
+    """Each of these owns its handler and sets propagate=False, the spot assertLogs
+    misses. A deliberate leak on one must come back non-empty, or the audit is dead.
+
+    `uvicorn.access` is the server's own request line: claimed in `LOGGING` precisely
+    so it goes through the scrub filter rather than a stream of its own, and named
+    here so the audit is proved to reach it and not only Django's loggers."""
 
     def leak(secrets):
-        logging.getLogger("django.request").error(
-            "device %s misbehaved", secrets["device id"]
-        )
+        logging.getLogger(logger_name).error("device %s misbehaved", secrets["device id"])
 
     leaks, _secrets, _lines, _requested = await run_audit(probe=leak)
 

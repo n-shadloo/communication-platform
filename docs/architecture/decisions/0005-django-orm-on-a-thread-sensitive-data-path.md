@@ -3,10 +3,18 @@
 - Status: Accepted
 - Phase: 2
 - Date: 2026-09-03
-- Landing: 2026-09-04, in the first and second runs of phase 2. `CONN_MAX_AGE` is 0
-  with the psycopg pool, and every FastAPI unit of work runs through the bracket
-  inside a per-request `ThreadSensitiveContext`. The WebSocket path still runs on
-  Channels' own helper.
+- Landed: 2026-09-04, in the fourth run of phase 2. `CONN_MAX_AGE` is 0 with the
+  psycopg pool, and every unit of work — the gateway's four included — runs through
+  the `api/orm.py` bracket. One qualification, deliberate: a WebSocket scope enters no
+  `ThreadSensitiveContext`, so every socket's ORM work shares the one process-wide
+  thread-sensitive executor thread rather than taking a thread each. A context per
+  socket would mean a thread per socket, and the assumption ledger's A1 puts up to 500
+  concurrent sockets on a host with 1 GB of RAM. The gateway issues a handful of
+  queries per socket for its whole life — a bind, a `last_active_date` touch, an
+  existence check per room join, a delete per ack — so serialising them costs nothing
+  at this band. The flip trigger is a socket-path query that is not O(1) per
+  lifecycle event, at which point one slow query would stall every socket's database
+  work and the middleware needs a websocket branch.
 
 ## Context
 

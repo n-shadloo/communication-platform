@@ -6,6 +6,64 @@ field, the old behaviour, the new behaviour, and the client action. The current
 contract is `backend/CLIENT_CONTRACT.md` and the per-app `backend/*/API.md`
 references; this file records only what moved.
 
+## Phase 2 — realtime
+
+The `/ws` gateway leaves Django Channels for a Starlette WebSocket route of the same
+FastAPI application, with Redis publish and subscribe behind it
+([ADR-0004](docs/architecture/decisions/0004-websocket-gateway-on-redis-pubsub.md)),
+and the process leaves Daphne for uvicorn
+([ADR-0003](docs/architecture/decisions/0003-one-asgi-process.md)).
+
+**The frame protocol did not change.** Every client frame (`auth`, `ack`, `signal`,
+`subscribe_presence`, `room_subscribe`, `room_leave`, `room_signal`), every server
+frame (`envelope`, `signal`, `presence`, `room_signal`, `room_presence`), their exact
+shapes, the URL, the two handshake paths, the ten-second authentication deadline, the
+Origin policy, and every limit in the table of `backend/realtime/API.md` are as they
+were. What changed is how two refusals arrive, one new close code, one new limit, and
+one delivery property that was always true but is now worth stating.
+
+### A refusal decided before the accept is a failed handshake
+
+| Item | Old behaviour | New behaviour | Client action |
+|---|---|---|---|
+| Unlisted `Origin` header | Documented as close **4403**. Daphne rendered the pre-accept close as a rejected handshake, so the code did not in fact reach the client | Unchanged in substance, and now documented as it behaves: the server answers the upgrade request `403 Forbidden` and no socket is established. 4403 remains the name of the refusal in `backend/realtime/API.md` | Treat a failed handshake as a refusal. Check the `Origin` the client sends against the server's allowlist |
+| Bad `Authorization: Bearer` token on the handshake | Documented as close **4001** "immediately after accept" | The same `403 Forbidden` failed handshake. 4001 still arrives for the browser path, where the socket is accepted first and the token comes in an `auth` frame | On the header path, read a failed handshake as "refresh the access token and reconnect". A handler waiting for 4001 there will never fire |
+
+Both refusals were already decided before the accept; only the documentation was
+wrong about what a client observes. A client that handles 4001 and 4403 only as close
+codes never saw them on the header path and does not regress — but it needs a failed
+handshake to trigger the same recovery.
+
+### New close code
+
+| Code | Meaning | Client action |
+|---|---|---|
+| **1012** | The server is restarting; every live socket is drained with it | Reconnect after a backoff. This is a deploy, not a fault, and must not count toward a failure budget that disables reconnection |
+
+### New limit: the slow consumer
+
+| Item | Old behaviour | New behaviour | Client action |
+|---|---|---|---|
+| Server frames queued for a socket that is not reading | Unbounded in practice; a socket that never read grew the process's memory | At most 256 undelivered server frames. Past that the socket is closed **4008**, the same code as a protocol violation | Read continuously. A 4008 with no preceding protocol error means the client fell behind: reconnect and drain the durable queue over REST |
+
+### Delivery, stated plainly
+
+A live frame is dropped if no socket holds the topic at the instant it is published —
+which now includes the window while a device is reconnecting. This was already true of
+the channel layer, and the durable queue was always the contract; it is stated here
+because publish and subscribe makes it structural rather than incidental. Nothing
+about `envelope` delivery changed: the row stays in the mailbox until it is acked, so
+a missed push costs a poll and never a message.
+
+### Unchanged
+
+The URL, both handshake paths, the `auth` frame and its deadline, the Origin
+allowlist semantics (absent Origin allowed, present-and-unlisted refused, empty
+allowlist allows any and is a deploy-blocking error in production), `WS_MAX_FRAME`,
+`SIGNAL_MAX`, the 100-frames-per-second rate cap, the 500-target presence cap, the
+200-id ack cap, the 100-room subscription cap, close codes 4001, 4003 and 4008 for an
+accepted socket, and every HTTP route of the API.
+
 ## Phase 2 — attachments and voice
 
 The last run of the move to FastAPI
