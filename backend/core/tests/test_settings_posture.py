@@ -38,17 +38,23 @@ class BasePostureTests(SimpleTestCase):
         self.assertTrue(settings.JWT_SIGNING_KEY)
         self.assertNotEqual(settings.JWT_SIGNING_KEY, settings.SECRET_KEY)
 
-    def test_every_route_of_the_first_surface_declares_its_requirement(self):
-        """The FastAPI surface has no project-wide permission default, so the
-        declaration is per route and `core/tests/test_route_table.py` is the gate
-        that proves each one carries it. This asserts the gate exists."""
+    def test_every_served_route_declares_a_requirement_of_its_own(self):
+        """FastAPI has no project-wide permission default, so closed-by-default is
+        a per-route declaration and `core/tests/test_route_table.py` is the gate
+        that proves each one carries it. This asserts the gate covers the whole
+        table rather than a subset of it."""
         from core.tests import test_route_table
 
-        self.assertTrue(test_route_table.EXPECTED)
+        served = set(test_route_table.served())
+
+        self.assertEqual(served, set(test_route_table.EXPECTED))
+        self.assertTrue(served)
+        for route, (requirement, _scope) in test_route_table.EXPECTED.items():
+            self.assertIn(requirement, test_route_table.REQUIREMENTS, route)
 
     def test_the_remaining_rest_framework_routes_share_the_one_verifier(self):
-        """Both stacks accept the same tokens during the transition, because the
-        authentication class is a thin adapter over `api.auth`."""
+        """The routes have all moved, so nothing reads these defaults any more; the
+        block itself leaves with the framework in the next commit."""
         self.assertEqual(
             settings.REST_FRAMEWORK["DEFAULT_AUTHENTICATION_CLASSES"],
             ["accounts.auth.DeviceJWTAuthentication"],

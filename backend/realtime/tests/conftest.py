@@ -8,11 +8,21 @@ from httpx import ASGITransport
 
 from accounts.models import User
 from api.auth import issue_full
+from api.redis import close_client
 from config.asgi import api_application, application
 from core.buckets import ENVELOPE_BUCKETS
 from devices.models import Device
 
 PASSWORD = "correct-horse-battery-staple"
+
+
+@pytest.fixture(autouse=True)
+async def release_redis_client():
+    """Room presence builds a Redis client on the loop that first asks for one, and
+    pytest-asyncio gives each test a loop of its own. Without this each test leaves
+    a client — and its open socket — bound to a loop that is already gone."""
+    yield
+    await close_client()
 
 
 @pytest.fixture(autouse=True)

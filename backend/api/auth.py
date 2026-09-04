@@ -1,9 +1,9 @@
 """Token issue, token verification, and the authentication dependencies.
 
 This module is the only issuer and the only verifier of a token in the system.
-The FastAPI dependencies below, `accounts.auth` for the routes that still run on
-REST Framework, and `realtime.auth` for the WebSocket gateway all reach the same
-two functions, so a token one stack revokes is dead on the other.
+The FastAPI dependencies below and `realtime.auth` for the WebSocket gateway both
+reach the same two functions, so a token the HTTP surface revokes is dead on the
+socket as well.
 
 No token is ever stored. A refresh is rotation plus reuse detection over two
 counters on the device row: `token_generation` kills every token of the device,

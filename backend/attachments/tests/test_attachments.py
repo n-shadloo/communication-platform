@@ -1,7 +1,6 @@
 """The attachment store: the capability id is the only gate."""
 
 import pytest
-from django.core.files.uploadedfile import SimpleUploadedFile
 
 from attachments.models import Attachment
 from core.buckets import ATTACHMENT_BUCKETS
@@ -9,22 +8,21 @@ from core.buckets import ATTACHMENT_BUCKETS
 UPLOAD_URL = "/api/v1/attachments"
 SMALLEST = min(ATTACHMENT_BUCKETS)
 
+# transaction=True because the upload runs its unit of work through the ORM
+# bracket of `api.orm.run_unit`, which closes the connection a wrapping test
+# transaction would need.
+pytestmark = pytest.mark.django_db(transaction=True)
 
-def upload(api, headers, payload=None, size=SMALLEST):
+
+def upload(http, headers, payload=None, size=SMALLEST):
     body = payload if payload is not None else b"\x01" * size
-    return api.post(
-        UPLOAD_URL,
-        {"blob": SimpleUploadedFile("blob", body)},
-        format="multipart",
-        **headers,
-    )
+    return http.post(UPLOAD_URL, files={"blob": ("blob", body)}, headers=headers)
 
 
-@pytest.mark.django_db
 def test_an_upload_returns_a_43_char_capability_id(
-    api, active_user, device, auth_headers, attachments_root
+    http, active_user, device, bearer, attachments_root
 ):
-    resp = upload(api, auth_headers(active_user, device))
+    resp = upload(http, bearer(active_user, device))
 
     assert resp.status_code == 201
     body = resp.json()
@@ -37,12 +35,24 @@ def test_an_upload_returns_a_43_char_capability_id(
     assert attachment.disk_path() == str(stored)
 
 
-@pytest.mark.django_db
-def test_capability_ids_are_unguessable_and_distinct(
-    api, active_user, device, auth_headers
+def test_a_multi_chunk_attachment_round_trips_byte_identically(
+    http, active_user, device, bearer, attachments_root
 ):
-    first = upload(api, auth_headers(active_user, device)).json()["attachment_id"]
-    second = upload(api, auth_headers(active_user, device)).json()["attachment_id"]
+    """A bucket several copy chunks long, so the stored file proves the loop and
+    not just its first pass."""
+    size = next(b for b in sorted(ATTACHMENT_BUCKETS) if b > SMALLEST)
+    payload = bytes(range(256)) * (size // 256)
+
+    cap = upload(http, bearer(active_user, device), payload=payload).json()
+
+    assert cap["size"] == size
+    stored = attachments_root / cap["attachment_id"][:2] / cap["attachment_id"]
+    assert stored.read_bytes() == payload
+
+
+def test_capability_ids_are_unguessable_and_distinct(http, active_user, device, bearer):
+    first = upload(http, bearer(active_user, device)).json()["attachment_id"]
+    second = upload(http, bearer(active_user, device)).json()["attachment_id"]
 
     assert first != second
     # base64url of 32 random bytes: no padding, no path separators.
@@ -50,104 +60,142 @@ def test_capability_ids_are_unguessable_and_distinct(
         assert "/" not in cap and "+" not in cap and "=" not in cap
 
 
-@pytest.mark.django_db
-def test_an_off_bucket_upload_is_rejected(api, active_user, device, auth_headers):
-    resp = upload(
-        api, auth_headers(active_user, device), payload=b"\x01" * (SMALLEST - 1)
+def test_an_off_bucket_upload_is_rejected(
+    http, active_user, device, bearer, attachments_root
+):
+    resp = upload(http, bearer(active_user, device), payload=b"\x01" * (SMALLEST - 1))
+
+    assert resp.status_code == 400
+    assert resp.json() == {"code": "bad_bucket", "detail": "Invalid payload."}
+    assert Attachment.objects.count() == 0
+    # Refused before anything reached the disk, so no file is left behind either.
+    assert list(attachments_root.rglob("*")) == []
+
+
+def test_a_missing_file_is_an_invalid_request(http, active_user, device, bearer):
+    resp = http.post(
+        UPLOAD_URL,
+        files={"wrong": ("blob", b"\x01" * SMALLEST)},
+        headers=bearer(active_user, device),
     )
 
     assert resp.status_code == 400
-    assert resp.json()["code"] == "bad_bucket"
+    assert resp.json()["code"] == "invalid_request"
     assert Attachment.objects.count() == 0
 
 
-@pytest.mark.django_db
-def test_a_missing_file_is_a_400(api, active_user, device, auth_headers):
-    resp = api.post(
-        UPLOAD_URL, {}, format="multipart", **auth_headers(active_user, device)
+def test_a_json_body_is_an_invalid_request(http, active_user, device, bearer):
+    """The route reads a multipart form and nothing else."""
+    resp = http.post(
+        UPLOAD_URL, json={"blob": "not-a-file"}, headers=bearer(active_user, device)
     )
 
     assert resp.status_code == 400
-    assert resp.json()["code"] == "bad_request"
+    assert resp.json()["code"] == "invalid_request"
 
 
-@pytest.mark.django_db
+def test_a_second_part_is_refused(http, active_user, device, bearer):
+    """`max_files=1` with `max_fields=0`: one file part named `blob`, and nothing
+    else. Without the limits Starlette admits a thousand parts, each with a spool
+    file of its own."""
+    resp = http.post(
+        UPLOAD_URL,
+        files={
+            "blob": ("blob", b"\x01" * SMALLEST),
+            "extra": ("extra", b"\x01" * SMALLEST),
+        },
+        headers=bearer(active_user, device),
+    )
+
+    assert resp.status_code == 400
+    assert resp.json()["code"] == "invalid_request"
+    assert Attachment.objects.count() == 0
+
+
+def test_no_error_body_echoes_the_request(http, active_user, device, bearer):
+    resp = http.post(
+        UPLOAD_URL,
+        data={"marker": "canary-value-that-must-not-come-back"},
+        headers=bearer(active_user, device),
+    )
+
+    assert resp.status_code == 400
+    assert "canary-value-that-must-not-come-back" not in resp.text
+
+
 def test_the_quota_is_enforced_per_user(
-    api, active_user, device, auth_headers, settings, bob, bob_device
+    http, active_user, device, bearer, settings, bob, bob_device, attachments_root
 ):
     settings.ATTACH_USER_QUOTA_BYTES = SMALLEST
 
-    first = upload(api, auth_headers(active_user, device))
-    second = upload(api, auth_headers(active_user, device))
+    first = upload(http, bearer(active_user, device))
+    second = upload(http, bearer(active_user, device))
     # The quota is per uploader, so another account is unaffected.
-    other = upload(api, auth_headers(bob, bob_device))
+    other = upload(http, bearer(bob, bob_device))
 
     assert first.status_code == 201
     assert second.status_code == 413
     assert second.json()["code"] == "quota_exceeded"
     assert other.status_code == 201
     assert Attachment.objects.filter(uploader_id=active_user.id).count() == 1
+    # The refused upload's bytes are gone: one file for each of the two rows.
+    assert len([p for p in attachments_root.rglob("*") if p.is_file()]) == 2
 
 
-@pytest.mark.django_db
-def test_a_download_hands_the_bytes_to_nginx(api, active_user, device, auth_headers):
-    cap = upload(api, auth_headers(active_user, device)).json()["attachment_id"]
+def test_a_download_hands_the_bytes_to_nginx(http, active_user, device, bearer):
+    cap = upload(http, bearer(active_user, device)).json()["attachment_id"]
 
-    resp = api.get(f"{UPLOAD_URL}/{cap}", **auth_headers(active_user, device))
+    resp = http.get(f"{UPLOAD_URL}/{cap}", headers=bearer(active_user, device))
 
     assert resp.status_code == 200
-    assert resp["X-Accel-Redirect"] == f"/_protected_attachments/{cap[:2]}/{cap}"
+    assert resp.headers["X-Accel-Redirect"] == f"/_protected_attachments/{cap[:2]}/{cap}"
     # Opaque bytes: fixed type, never sniffed, never rendered, never cached.
-    assert resp["Content-Type"] == "application/octet-stream"
-    assert resp["X-Content-Type-Options"] == "nosniff"
-    assert resp["Content-Disposition"] == "attachment"
-    assert resp["Cache-Control"] == "private, no-store"
-    # Django hands off the path; it never streams the bytes itself.
+    assert resp.headers["Content-Type"] == "application/octet-stream"
+    assert resp.headers["X-Content-Type-Options"] == "nosniff"
+    assert resp.headers["Content-Disposition"] == "attachment"
+    assert resp.headers["Cache-Control"] == "private, no-store"
+    # This process hands the path over; it never streams the bytes itself.
     assert resp.content == b""
 
 
-@pytest.mark.django_db
 def test_any_authenticated_user_may_fetch_by_capability(
-    api, active_user, device, auth_headers, bob, bob_device
+    http, active_user, device, bearer, bob, bob_device
 ):
     """The unguessable id is the access control; a per-recipient ACL would rebuild
     the conversation graph."""
-    cap = upload(api, auth_headers(active_user, device)).json()["attachment_id"]
+    cap = upload(http, bearer(active_user, device)).json()["attachment_id"]
 
-    resp = api.get(f"{UPLOAD_URL}/{cap}", **auth_headers(bob, bob_device))
+    resp = http.get(f"{UPLOAD_URL}/{cap}", headers=bearer(bob, bob_device))
 
     assert resp.status_code == 200
 
 
-@pytest.mark.django_db
 @pytest.mark.parametrize("missing", ["a" * 43, "nope", "..", "%2e%2e%2fetc%2fpasswd"])
-def test_an_unknown_capability_is_a_404(api, active_user, device, auth_headers, missing):
-    resp = api.get(f"{UPLOAD_URL}/{missing}", **auth_headers(active_user, device))
+def test_an_unknown_capability_is_a_404(http, active_user, device, bearer, missing):
+    resp = http.get(f"{UPLOAD_URL}/{missing}", headers=bearer(active_user, device))
 
     assert resp.status_code == 404
-    assert "X-Accel-Redirect" not in resp
+    assert resp.json()["code"] == "not_found"
+    assert "X-Accel-Redirect" not in resp.headers
 
 
-@pytest.mark.django_db
-def test_anonymous_access_is_rejected(api, active_user, device, auth_headers):
-    cap = upload(api, auth_headers(active_user, device)).json()["attachment_id"]
+def test_anonymous_access_is_rejected(http, active_user, device, bearer):
+    cap = upload(http, bearer(active_user, device)).json()["attachment_id"]
 
-    assert api.post(UPLOAD_URL, {}, format="multipart").status_code == 401
-    assert api.get(f"{UPLOAD_URL}/{cap}").status_code == 401
+    assert http.post(UPLOAD_URL, files={"blob": ("blob", b"")}).status_code == 401
+    assert http.get(f"{UPLOAD_URL}/{cap}").status_code == 401
 
 
-@pytest.mark.django_db
 def test_a_register_scope_token_cannot_upload_or_download(
-    api, active_user, device, auth_headers
+    http, active_user, device, bearer, register_bearer
 ):
-    cap = upload(api, auth_headers(active_user, device)).json()["attachment_id"]
-    register = auth_headers(active_user, scope="register")
+    cap = upload(http, bearer(active_user, device)).json()["attachment_id"]
+    register = register_bearer(active_user)
 
-    assert upload(api, register).status_code == 403
-    assert api.get(f"{UPLOAD_URL}/{cap}", **register).status_code == 403
+    assert upload(http, register).status_code == 403
+    assert http.get(f"{UPLOAD_URL}/{cap}", headers=register).status_code == 403
 
 
-@pytest.mark.django_db
 def test_the_model_stores_no_recipient_or_acl_data():
     names = {f.name for f in Attachment._meta.get_fields()}
 

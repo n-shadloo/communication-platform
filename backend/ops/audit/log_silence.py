@@ -13,12 +13,11 @@ Two properties make this stricter than per-app spot checks:
   has its own (django.request/django.server/daphne set propagate=False, so a
   root-only swap, which is what assertLogs does, never sees them).
 
-Two clients drive the pass, because two runtimes serve it: an httpx client over the
-composed ASGI application for the routes FastAPI holds, and the REST Framework
-client for `attachments` and `voicerooms`, which have not moved. The httpx client
-logs the URL of every request it makes, which is a request path in a log line —
-the suite's `conftest.py` disables that logger, because the client is this harness
-and not the server.
+One httpx client over the composed ASGI application drives every HTTP route, and a
+Channels communicator drives the socket. The httpx client logs the URL of every
+request it makes, which is a request path in a log line — the suite's
+`conftest.py` disables that logger, because the client is this harness and not the
+server.
 
 Driven by core/tests/test_log_silence.py; needs the test DB, the in-memory channel
 layer, a temp ATTACHMENTS_ROOT, and fake LIVEKIT_* settings (token minting is local
@@ -199,48 +198,42 @@ async def _scripted_device_traffic(client, s):
     return s
 
 
-def _scripted_rest_traffic(s):
-    """The REST Framework half of the sequence, for the two apps that have not
-    moved. Runs in a worker thread via database_sync_to_async; logging is
-    process-global, so the capture still sees every record."""
-    from django.core.files.uploadedfile import SimpleUploadedFile
-    from rest_framework.test import APIClient
-
+async def _scripted_blob_traffic(client, s):
+    """The attachment store and the voice rooms: a multipart upload, the redirect
+    that serves it back, a room, and a LiveKit join token. The upload is the one
+    body of this API that is bytes rather than JSON, and the join token is the one
+    thing this server signs with an infrastructure secret."""
     from core.buckets import ATTACHMENT_BUCKETS, NAME_BUCKETS
 
-    api = APIClient()
-    auth = {"HTTP_AUTHORIZATION": f"Bearer {s['access token']}"}
+    auth = {"Authorization": f"Bearer {s['access token']}"}
 
     # Upload + download an attachment (download answers via X-Accel-Redirect).
     upload_bytes = b"\x01" * min(ATTACHMENT_BUCKETS)
-    r = api.post(
-        "/api/v1/attachments",
-        {"blob": SimpleUploadedFile("blob", upload_bytes)},
-        format="multipart",
-        **auth,
+    r = await client.post(
+        "/api/v1/attachments", files={"blob": ("blob", upload_bytes)}, headers=auth
     )
     assert r.status_code == 201, f"upload: {r.status_code}"
     s["attachment id"] = r.json()["attachment_id"]
-    r = api.get(f"/api/v1/attachments/{s['attachment id']}", **auth)
+    r = await client.get(f"/api/v1/attachments/{s['attachment id']}", headers=auth)
     assert r.status_code == 200, f"download: {r.status_code}"
 
     # Create a room and mint a LiveKit join token (local HS256 signing).
     s["room name blob"] = _b64_filled(min(NAME_BUCKETS), 0xB6)
-    r = api.post(
-        "/api/v1/rooms", {"name_blob": s["room name blob"]}, format="json", **auth
+    r = await client.post(
+        "/api/v1/rooms", json={"name_blob": s["room name blob"]}, headers=auth
     )
     assert r.status_code == 201, f"room create: {r.status_code}"
     s["room id"] = r.json()["room_id"]
-    r = api.post(f"/api/v1/rooms/{s['room id']}/token", **auth)
+    r = await client.post(f"/api/v1/rooms/{s['room id']}/token", headers=auth)
     assert r.status_code == 200, f"room token: {r.status_code}"
     s["livekit join token"] = r.json()["token"]
     return s
 
 
-async def _scripted_fastapi_traffic(client, s):
-    """The half FastAPI serves: the directory, the profile blobs, the key backup,
-    a token rotation, and the logout that ends the session. Adds each payload and
-    each issued token to the secret set."""
+async def _scripted_account_state_traffic(client, s):
+    """The account's own state: the directory, the profile blobs, the key backup,
+    and a token rotation. Adds each payload and each issued token to the secret
+    set."""
     from core.buckets import BACKUP_BUCKETS, PROFILE_BUCKETS
 
     auth = {"Authorization": f"Bearer {s['access token']}"}
@@ -324,7 +317,6 @@ async def run_audit(probe=None):
     `probe(secrets)` is a test hook, called inside the capture window after the
     scripted traffic, so the suite can prove the audit still catches a deliberate
     leak."""
-    from channels.db import database_sync_to_async
     from httpx import ASGITransport, AsyncClient
 
     # Import the ASGI application before the capture opens. That import runs
@@ -344,8 +336,8 @@ async def run_audit(probe=None):
             ) as client:
                 secrets = await _scripted_account_traffic(client)
                 await _scripted_device_traffic(client, secrets)
-                await database_sync_to_async(_scripted_rest_traffic)(secrets)
-                await _scripted_fastapi_traffic(client, secrets)
+                await _scripted_blob_traffic(client, secrets)
+                await _scripted_account_state_traffic(client, secrets)
                 await _scripted_socket_traffic(secrets)
                 await _scripted_logout(client, secrets)
         if probe is not None:

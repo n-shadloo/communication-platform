@@ -125,9 +125,8 @@ REFRESH_TOKEN_DAYS = env_int("REFRESH_DAYS", default=14)
 REGISTER_SCOPE_ACCESS_MIN = env_int("REGISTER_SCOPE_ACCESS_MIN", default=10)
 
 # --- Rate limits (ADR-0010) -----------------------------------------------------
-# One table, read by the FastAPI limiter and by the REST Framework throttle of the
-# apps that have not moved. A scope both stacks serve counts once on each during
-# the transition; run 05 leaves one counter.
+# One table, read by the one limiter. A request counts against exactly one scope,
+# named by the route that declares it.
 THROTTLE_RATES = {
     "register": env("THROTTLE_REGISTER", default="10/hour"),
     "login": env("THROTTLE_LOGIN", default="20/hour"),
@@ -141,14 +140,17 @@ THROTTLE_RATES = {
 
 # --- Request limits (ADR-0014) --------------------------------------------------
 # One process on 1 GB of RAM has no headroom for an unbounded body or a request
-# that never ends, and no second host to fail over to. The upload class covers the
-# routes the Django catch-all still serves, whose largest body is a 64 MiB
-# attachment; nginx caps the same value at 70m.
+# that never ends, and no second host to fail over to. The batch cap covers the
+# `devices` and `messaging` bodies, whose length is a list cap times a base64 cap;
+# nginx caps the same value at 70m. The attachment upload takes the largest
+# attachment bucket plus the overhead below, which is the multipart wrapper around
+# the file part: two boundary lines and the Content-Disposition header.
 REQUEST_DEADLINE_SECONDS = env_int("REQUEST_DEADLINE_SECONDS", default=15)
 UPLOAD_DEADLINE_SECONDS = env_int("UPLOAD_DEADLINE_SECONDS", default=120)
 BODY_CAP_JSON_BYTES = env_int("BODY_CAP_JSON_BYTES", default=16 * 1024)
 BODY_CAP_BACKUP_BYTES = env_int("BODY_CAP_BACKUP_BYTES", default=2 * 1024 * 1024)
-BODY_CAP_UPLOAD_BYTES = env_int("BODY_CAP_UPLOAD_BYTES", default=70 * 1024 * 1024)
+BODY_CAP_BATCH_BYTES = env_int("BODY_CAP_BATCH_BYTES", default=70 * 1024 * 1024)
+MULTIPART_OVERHEAD_BYTES = env_int("MULTIPART_OVERHEAD_BYTES", default=8 * 1024)
 
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": ["accounts.auth.DeviceJWTAuthentication"],

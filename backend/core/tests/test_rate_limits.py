@@ -2,8 +2,8 @@
 
 Counters are volatile data, so they live in Redis and never on disk, and they
 live outside the process so that raising `WEB_CONCURRENCY` cannot multiply the
-effective limit by the worker count. The scope names and the `N/period` syntax
-are the ones the REST Framework throttle used, so no deployment is re-tuned.
+effective limit by the worker count. The scope names and the `N/period` syntax are
+the ones the deployment already holds, so no operator value is re-tuned.
 """
 
 import pytest

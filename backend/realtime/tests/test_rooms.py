@@ -27,11 +27,6 @@ def make_room():
     return Room.objects.create(name_blob=b"r" * min(NAME_BUCKETS))
 
 
-@database_sync_to_async
-def live_count(room_id):
-    return room_live_count(room_id)
-
-
 async def subscribe_ok(comm, room_id):
     """Subscribe and consume the socket's own join echo (it is in the group when the
     presence broadcast fires), so later receives are deterministic."""
@@ -92,12 +87,12 @@ async def test_live_count_follows_join_leave_and_disconnect(
     comm_a = await connect_ok(bearer(await mint_access(active_user, device)))
     comm_b = await connect_ok(bearer(await mint_access(peer, peer_device)))
 
-    assert await live_count(room_id) == 0
+    assert await room_live_count(room_id) == 0
     await subscribe_ok(comm_a, room_id)
-    assert await live_count(room_id) == 1
+    assert await room_live_count(room_id) == 1
     await subscribe_ok(comm_b, room_id)
     assert (await comm_a.receive_json_from(timeout=2))["state"] == "join"
-    assert await live_count(room_id) == 2
+    assert await room_live_count(room_id) == 2
 
     # Explicit leave: the peer is told, the count drops, nothing is written.
     before = await table_counts()
@@ -109,11 +104,11 @@ async def test_live_count_follows_join_leave_and_disconnect(
         "device_id": str(device.id),
         "state": "leave",
     }
-    assert await live_count(room_id) == 1
+    assert await room_live_count(room_id) == 1
 
     # Disconnect leaves every room without an explicit room_leave frame.
     await comm_b.disconnect()
-    assert await live_count(room_id) == 0
+    assert await room_live_count(room_id) == 0
     assert await table_counts() == before, "presence traffic changed a table"
     await comm_a.disconnect()
 
@@ -124,7 +119,7 @@ async def test_subscribing_to_a_nonexistent_room_is_ignored(active_user, device)
 
     await comm.send_json_to({"type": "room_subscribe", "room_id": ghost})
     await probe(comm, device.id)  # consumer alive, no join echo came
-    assert await live_count(ghost) == 0
+    assert await room_live_count(ghost) == 0
 
     # And the socket did not silently join the group: a signal to it goes nowhere.
     await comm.send_json_to({"type": "room_signal", "room_id": ghost, "blob": "x"})
@@ -211,7 +206,7 @@ async def test_alternate_room_uuid_spellings_land_in_one_group(
 
     await comm_b.send_json_to({"type": "room_signal", "room_id": room_id, "blob": "s"})
     assert (await comm_a.receive_json_from(timeout=2))["blob"] == "s"
-    assert await live_count(room_id) == 2
+    assert await room_live_count(room_id) == 2
     await comm_a.disconnect()
     await comm_b.disconnect()
 
@@ -229,13 +224,13 @@ async def test_room_subscriptions_are_capped_per_connection(
     await comm.send_json_to({"type": "room_subscribe", "room_id": str(room_two.id)})
 
     await probe(comm, device.id)  # over-cap subscribe dropped quietly
-    assert await live_count(str(room_two.id)) == 0
+    assert await room_live_count(str(room_two.id)) == 0
 
     # Re-subscribing a room already held is not "new" and stays allowed.
     await comm.send_json_to({"type": "room_subscribe", "room_id": str(room_one.id)})
     frame = await comm.receive_json_from(timeout=2)
     assert frame["state"] == "join"
-    assert await live_count(str(room_one.id)) == 1
+    assert await room_live_count(str(room_one.id)) == 1
     await comm.disconnect()
 
 

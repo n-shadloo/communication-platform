@@ -5,7 +5,6 @@ import pytest
 from asgiref.sync import async_to_sync
 from django.core.cache import cache
 from httpx import ASGITransport
-from rest_framework.test import APIClient
 
 from accounts.models import User
 from api.auth import issue_full, issue_register_scope
@@ -76,8 +75,8 @@ def clear_throttle_cache():
 
 @pytest.fixture
 def http():
-    """Drives every route this phase moved, through the whole composed stack:
-    the middleware, the FastAPI routes, and the Django catch-all behind them."""
+    """Drives every route of this API through the whole composed stack: the
+    middleware, the FastAPI routes, and the Django admin behind them."""
     return AsgiClient(application, api_application)
 
 
@@ -92,12 +91,6 @@ def new_http():
     that thread's own database connection.
     """
     return lambda: AsgiClient(application, api_application)
-
-
-@pytest.fixture
-def api():
-    """The REST Framework client. Only for the apps that still run on it."""
-    return APIClient()
 
 
 @pytest.fixture
@@ -137,21 +130,6 @@ def register_bearer():
 
     def build(user):
         return {"Authorization": f"Bearer {issue_register_scope(user)}"}
-
-    return build
-
-
-@pytest.fixture
-def auth_headers():
-    """WSGI-style headers for the REST Framework client. `scope="register"` mints
-    the short-lived token whose only power is adding a device."""
-
-    def build(user, device=None, scope="full"):
-        if scope == "register":
-            access = issue_register_scope(user)
-        else:
-            access, _refresh = issue_full(user, device)
-        return {"HTTP_AUTHORIZATION": f"Bearer {access}"}
 
     return build
 

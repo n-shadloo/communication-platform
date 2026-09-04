@@ -5,14 +5,10 @@ import uuid
 from channels.generic.websocket import AsyncJsonWebsocketConsumer
 from django.conf import settings
 
+from voicerooms.presence import room_join, room_leave
+
 from .auth import _room_exists as _room_exists_query
-from .auth import (
-    authenticate_access,
-    delete_envelopes,
-    room_join_async,
-    room_leave_async,
-    touch_active,
-)
+from .auth import authenticate_access, delete_envelopes, touch_active
 
 AUTH_DEADLINE_SECONDS = 10
 RATE_WINDOW_SECONDS = 1.0
@@ -183,7 +179,7 @@ class GatewayConsumer(AsyncJsonWebsocketConsumer):
         self.rooms.add(room_id)
         await self.channel_layer.group_add(f"room.{room_id}", self.channel_name)
         await self._room_presence(room_id, "join")
-        await room_join_async(room_id, self.device.id)
+        await room_join(room_id, self.device.id)
 
     async def _handle_room_leave(self, content):
         room_id = str(content.get("room_id") or "")
@@ -249,7 +245,7 @@ class GatewayConsumer(AsyncJsonWebsocketConsumer):
     async def _leave_room(self, room_id):
         self.rooms.discard(room_id)
         await self._room_presence(room_id, "leave")
-        await room_leave_async(room_id, self.device.id)
+        await room_leave(room_id, self.device.id)
         await self.channel_layer.group_discard(f"room.{room_id}", self.channel_name)
 
     async def _room_presence(self, room_id, state):

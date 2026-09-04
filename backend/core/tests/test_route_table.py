@@ -1,14 +1,13 @@
-"""The route table of the first surface, and the gate that keeps it closed.
+"""The route table of this API, and the gate that keeps it closed.
 
-FastAPI has no project-wide permission default the way REST Framework does, so a
-route whose author forgot the dependency is public and nothing reports it. This
-walks every route the application serves and asserts that each one carries
-exactly the requirement the phase records, that the requirement is resolved
-before the limiter that keys on it, and that the table holds nothing else.
+FastAPI has no project-wide permission default, so a route whose author forgot the
+dependency is public and nothing reports it. This walks every route the
+application serves and asserts that each one carries exactly the requirement the
+phase records, that the requirement is resolved before the limiter that keys on
+it, and that the table holds nothing else.
 """
 
 import pytest
-from django.core.handlers.asgi import ASGIHandler
 from fastapi.routing import iter_route_contexts
 
 from api.auth import allow_anonymous, require_full_device, require_register_or_full
@@ -55,6 +54,12 @@ EXPECTED = {
     ("POST", "/api/v1/envelopes"): (FULL_DEVICE, "envelopes"),
     ("GET", "/api/v1/me/envelopes"): (FULL_DEVICE, "envelopes"),
     ("POST", "/api/v1/me/envelopes/ack"): (FULL_DEVICE, "envelopes"),
+    ("POST", "/api/v1/attachments"): (FULL_DEVICE, "attachments"),
+    ("GET", "/api/v1/attachments/{attachment_id}"): (FULL_DEVICE, "attachments"),
+    ("POST", "/api/v1/rooms"): (FULL_DEVICE, "accounts"),
+    ("GET", "/api/v1/rooms/{room_id}"): (FULL_DEVICE, "accounts"),
+    ("PUT", "/api/v1/rooms/{room_id}"): (FULL_DEVICE, "accounts"),
+    ("POST", "/api/v1/rooms/{room_id}/token"): (FULL_DEVICE, "roomtoken"),
 }
 
 # The routes whose path names a device the token itself must be. Recorded here
@@ -135,9 +140,9 @@ def test_only_the_recorded_routes_are_open():
 
 
 def test_the_django_application_answers_only_what_no_route_claims():
-    """It is the router's `default`, not a mount: a mount at "/" matches every
-    path and would answer before the wrong-method refusal of a moved route."""
-    assert isinstance(api_application.router.default, ASGIHandler)
+    """It is reached through the router's `default`, not a mount: a mount at "/"
+    matches every path and would answer before the wrong-method refusal of a route
+    this API serves."""
     assert not any(
         route.path == "/" for route in api_application.routes if hasattr(route, "path")
     )
@@ -150,16 +155,18 @@ def test_a_trailing_slash_is_never_a_redirect():
 
 
 @pytest.mark.django_db(transaction=True)
-def test_the_django_application_still_answers_its_own_paths(http):
-    """The admin and the routes that have not moved are reached through the
-    catch-all, so the transition topology is what this asserts, not Django alone."""
+def test_the_django_application_answers_the_admin_and_nothing_else(http):
+    """The admin is the whole of what Django serves, so what this asserts is the
+    composed topology and not Django alone."""
     admin = http.get(f"/{ADMIN_PATH}")
     assert admin.status_code == 302
     assert "login" in admin.headers["location"]
 
-    unmoved = http.get("/api/v1/rooms")
-    assert unmoved.status_code == 401
-    assert unmoved.json()["code"] == "unauthenticated"
+    # Not Django's HTML 404 page: an unclaimed path is this API's own envelope.
+    stray = http.get("/api/v1/nothing-here")
+    assert stray.status_code == 404
+    assert stray.json() == {"code": "not_found", "detail": "No such route or resource."}
+    assert stray.headers["content-type"].startswith("application/json")
 
 
 @pytest.mark.parametrize("path", ["/docs", "/redoc", "/openapi.json"])

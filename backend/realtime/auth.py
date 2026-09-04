@@ -59,17 +59,3 @@ def _room_exists(room_id):
     from voicerooms.models import Room
 
     return Room.objects.filter(id=room_id).exists()
-
-
-@database_sync_to_async
-def room_join_async(room_id, device_id):
-    from voicerooms.presence import room_join
-
-    room_join(room_id, device_id)
-
-
-@database_sync_to_async
-def room_leave_async(room_id, device_id):
-    from voicerooms.presence import room_leave
-
-    room_leave(room_id, device_id)

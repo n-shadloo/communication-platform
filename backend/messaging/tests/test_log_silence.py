@@ -6,16 +6,15 @@ filter mutates the record in place on the console handler, so any capture that
 runs after it grades the scrubber rather than the code. `core/tests/test_scrub.py`
 covers the filter itself.
 
-Attachments are still served by the Django catch-all, so this pass drives two
-clients: httpx for the routes FastAPI holds, and the REST Framework client for the
-upload.
+The upload rides along because it is the one body of this API that is bytes rather
+than JSON: a multipart part and a capability id are two more shapes that must never
+reach a log line.
 """
 
 import base64
 import logging
 
 import pytest
-from django.core.files.uploadedfile import SimpleUploadedFile
 
 from core.buckets import ATTACHMENT_BUCKETS
 from ops.audit.log_silence import capture_all_logging
@@ -31,7 +30,7 @@ def _uploads_out_of_the_repository(settings, tmp_path):
 
 
 def test_send_drain_ack_and_upload_emit_no_identifier_or_payload(
-    http, api, active_user, device, bearer, auth_headers, bob, bob_devices
+    http, active_user, device, bearer, bob, bob_devices
 ):
     target = bob_devices[0]
     blob = envelope_blob(b"z")
@@ -50,11 +49,10 @@ def test_send_drain_ack_and_upload_emit_no_identifier_or_payload(
             json={"ids": [e["id"] for e in drain.json()["envelopes"]]},
             headers=bearer(bob, target),
         )
-        upload = api.post(
+        upload = http.post(
             "/api/v1/attachments",
-            {"blob": SimpleUploadedFile("blob", upload_bytes)},
-            format="multipart",
-            **auth_headers(active_user, device),
+            files={"blob": ("blob", upload_bytes)},
+            headers=headers,
         )
 
     assert send.status_code == 202
