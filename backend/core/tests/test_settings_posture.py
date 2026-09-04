@@ -52,13 +52,30 @@ class BasePostureTests(SimpleTestCase):
         for route, (requirement, _scope) in test_route_table.EXPECTED.items():
             self.assertIn(requirement, test_route_table.REQUIREMENTS, route)
 
-    def test_the_remaining_rest_framework_routes_share_the_one_verifier(self):
-        """The routes have all moved, so nothing reads these defaults any more; the
-        block itself leaves with the framework in the next commit."""
+    def test_the_installed_applications_are_exactly_the_declared_set(self):
+        """One HTTP surface, one set of defaults. A second API framework here is a
+        block of defaults that no code reads and every reader trusts, and the list
+        is short enough to pin rather than to spot-check."""
         self.assertEqual(
-            settings.REST_FRAMEWORK["DEFAULT_AUTHENTICATION_CLASSES"],
-            ["accounts.auth.DeviceJWTAuthentication"],
+            settings.INSTALLED_APPS,
+            [
+                "django.contrib.admin",
+                "django.contrib.auth",
+                "django.contrib.contenttypes",
+                "django.contrib.sessions",
+                "django.contrib.messages",
+                "django.contrib.staticfiles",
+                "core",
+                "accounts",
+                "devices",
+                "vault",
+                "messaging",
+                "attachments",
+                "voicerooms",
+                "realtime",
+            ],
         )
+        self.assertFalse(hasattr(settings, "REST_FRAMEWORK"))
 
     def test_the_orm_holds_no_persistent_connection_and_takes_the_pool(self):
         """Nothing fires Django's request signals in this process, so a persistent

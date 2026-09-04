@@ -15,7 +15,6 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
-    "rest_framework",
     "core",
     "accounts",
     "devices",
@@ -151,27 +150,6 @@ BODY_CAP_JSON_BYTES = env_int("BODY_CAP_JSON_BYTES", default=16 * 1024)
 BODY_CAP_BACKUP_BYTES = env_int("BODY_CAP_BACKUP_BYTES", default=2 * 1024 * 1024)
 BODY_CAP_BATCH_BYTES = env_int("BODY_CAP_BATCH_BYTES", default=70 * 1024 * 1024)
 MULTIPART_OVERHEAD_BYTES = env_int("MULTIPART_OVERHEAD_BYTES", default=8 * 1024)
-
-REST_FRAMEWORK = {
-    "DEFAULT_AUTHENTICATION_CLASSES": ["accounts.auth.DeviceJWTAuthentication"],
-    # Fail closed on scope as well as identity: DeviceJWTAuthentication authenticates
-    # register-scope tokens, so IsAuthenticated alone would admit them to any view
-    # that forgets the check. POST /me/devices is the one endpoint expected to opt
-    # down.
-    "DEFAULT_PERMISSION_CLASSES": [
-        "rest_framework.permissions.IsAuthenticated",
-        "accounts.permissions.IsFullScope",
-    ],
-    "DEFAULT_THROTTLE_CLASSES": ["rest_framework.throttling.ScopedRateThrottle"],
-    "DEFAULT_THROTTLE_RATES": THROTTLE_RATES,
-    "UNAUTHENTICATED_USER": None,
-    "DEFAULT_RENDERER_CLASSES": ["rest_framework.renderers.JSONRenderer"],
-    "DEFAULT_PARSER_CLASSES": [
-        "rest_framework.parsers.JSONParser",
-        "rest_framework.parsers.MultiPartParser",
-    ],
-    "EXCEPTION_HANDLER": "core.exceptions.api_exception_handler",
-}
 
 # Storage limits and retention.
 ATTACHMENTS_ROOT = Path(env("ATTACHMENTS_ROOT", default=str(BASE_DIR / "media_root")))
