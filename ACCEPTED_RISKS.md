@@ -300,7 +300,7 @@ log of paths hands that attacker the one thing the design protects.
   `/ws` gateway at DEBUG with the scrubber bypassed and finding no identifier.
 - `manage.py check --deploy` reports posture, and `GET /api/v1/health` reports
   liveness with no database or Redis connection of its own.
-- The suite is the substitute for production observation: 2570 tests at 98.7
+- The suite is the substitute for production observation: 2571 tests at 98.7
   percent branch coverage, query counts pinned for every route and every gateway
   unit, and a load curve and query plans in
   [`docs/architecture/GROUND-TRUTH.md`](docs/architecture/GROUND-TRUTH.md) §4.1 and
