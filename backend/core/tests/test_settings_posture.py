@@ -108,26 +108,58 @@ class BasePostureTests(SimpleTestCase):
         for logger in ("django.request", "django.server"):
             self.assertEqual(logging["loggers"][logger]["level"], "ERROR")
 
-    def test_the_pubsub_push_logger_is_claimed(self):
-        """redis-py logs every publish-and-subscribe push it receives — the topic,
-        so a device id, and the payload, so a ciphertext blob — and installs a
-        `StreamHandler` to stdout for it the first time a `PubSub` is built,
-        unless the logger already exists. Claiming it here is what creates it, and
-        what routes anything it does emit through ScrubFilter."""
-        claimed = settings.LOGGING["loggers"]["push_response"]
+    def test_every_library_that_can_log_an_identifier_is_claimed(self):
+        """Each of these writes a device id, a request path or a ciphertext blob at
+        its own default level, and each is claimed here so it goes through the
+        console handler — and therefore through ScrubFilter — instead of through a
+        stream of its own. `push_response` is the one that matters most: redis-py
+        installs a `StreamHandler` to stdout for it the first time a `PubSub` is
+        built, unless the logger already exists."""
+        loggers = settings.LOGGING["loggers"]
 
-        self.assertEqual(claimed["handlers"], ["console"])
-        self.assertEqual(claimed["level"], "WARNING")
-        self.assertFalse(claimed["propagate"])
+        for name in (
+            "uvicorn",
+            "uvicorn.error",
+            "uvicorn.access",
+            "websockets",
+            "push_response",
+        ):
+            self.assertEqual(loggers[name]["handlers"], ["console"], name)
+            self.assertEqual(loggers[name]["level"], "WARNING", name)
+            self.assertFalse(loggers[name]["propagate"], name)
 
-    def test_the_asgi_unit_disables_its_servers_own_access_log(self):
-        """The Django half of access logging is off above, but the ASGI server
-        keeps its own, written to stdout rather than through Django's LOGGING, so
-        ScrubFilter cannot reach it. Without the flag every request path reaches
-        the journal, user UUIDs in the peer-key routes included."""
+    def test_the_asgi_unit_runs_uvicorn_with_the_hardened_flags(self):
+        """The flags of ADR-0014, read from the unit that actually runs.
+
+        `--no-access-log` is the load-bearing one: uvicorn writes a request line
+        for every request, and a request path in the journal is the conversation
+        graph the schema refuses to hold. The forwarded-header pin is what makes
+        the anonymous rate limit mean anything, and the pinned loop, HTTP and
+        WebSocket implementations are what make the process fail loudly on a
+        missing wheel rather than fall back to a pure-Python one.
+        """
         unit = (settings.BASE_DIR / "ops" / "systemd" / "chat.service").read_text()
 
-        self.assertIn("--access-log /dev/null", unit)
+        self.assertIn("/uvicorn", unit)
+        for flag in (
+            "--no-access-log",
+            "--proxy-headers",
+            "--forwarded-allow-ips 127.0.0.1",
+            "--loop uvloop",
+            "--http httptools",
+            "--ws websockets-sansio",
+            "--workers ${WEB_CONCURRENCY}",
+            "--limit-concurrency",
+            "--timeout-graceful-shutdown",
+        ):
+            self.assertIn(flag, unit)
+
+    def test_the_worker_count_has_a_documented_default(self):
+        """`--workers ${WEB_CONCURRENCY}` is an empty argument if the operator's
+        environment file does not set it, and uvicorn then fails to start."""
+        example = (settings.BASE_DIR / ".env.example").read_text()
+
+        self.assertIn("WEB_CONCURRENCY=1", example)
 
     def test_core_deploy_check_reports_nothing(self):
         self.assertEqual(no_foreign_or_telemetry(None), [])

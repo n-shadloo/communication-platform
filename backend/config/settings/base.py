@@ -36,7 +36,7 @@ MIDDLEWARE = [
 ]
 
 ROOT_URLCONF = "config.urls"
-WSGI_APPLICATION = None  # ASGI-only
+WSGI_APPLICATION = None  # ASGI-only; uvicorn runs `config.asgi:application`
 
 TEMPLATES = [
     {
@@ -190,7 +190,24 @@ LOGGING = {
         # No request/access logging: never record method, path, or bodies.
         "django.request": {"handlers": ["console"], "level": "ERROR", "propagate": False},
         "django.server": {"handlers": ["console"], "level": "ERROR", "propagate": False},
-        "daphne": {"handlers": ["console"], "level": "WARNING", "propagate": False},
+        # The server's own loggers. `--no-access-log` already stops uvicorn from
+        # writing a request line, and these are the second half of the same rule:
+        # each is named here so it goes through the console handler, and therefore
+        # through the scrub filter, rather than through a root logger it does not
+        # propagate to. WARNING keeps the connection-level chatter — which carries
+        # a client address and a request path — out of the journal.
+        "uvicorn": {"handlers": ["console"], "level": "WARNING", "propagate": False},
+        "uvicorn.error": {
+            "handlers": ["console"],
+            "level": "WARNING",
+            "propagate": False,
+        },
+        "uvicorn.access": {
+            "handlers": ["console"],
+            "level": "WARNING",
+            "propagate": False,
+        },
+        "websockets": {"handlers": ["console"], "level": "WARNING", "propagate": False},
         # redis-py logs every publish-and-subscribe push it receives — the topic
         # and the payload, so a device id and a ciphertext blob — and installs a
         # `StreamHandler` to stdout for it the first time a `PubSub` is built
