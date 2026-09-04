@@ -15,6 +15,14 @@ and, in development, the static files the admin renders with. Any other path is 
 API's own `404`, never a Django page. Django keeps the ORM, the migrations, the admin
 and the settings.
 
+`openapi.json` is the generated contract of that surface: `python manage.py openapi`
+writes it and `--check` fails when the committed file is not what the routes produce,
+which CI runs as its own job. Under `DEBUG` the same document is served at
+`/openapi.json` with the interactive views at `/docs` and `/redoc`; all three are
+closed otherwise, because a route map is reconnaissance on a server whose posture is to
+reveal nothing, and the two interactive views load their JavaScript from a public CDN,
+so the committed file is the reference that works offline.
+
 ## Protocol and transport
 
 **REST.** All HTTP endpoints live under `/api/v1`, JSON in and JSON out. The one
@@ -126,6 +134,7 @@ online to transfer it. There is no server history API.
 | `realtime` | The `/ws` gateway, the Redis publish-and-subscribe bus behind it, and its socket-side auth |
 | `core` | Size buckets, opaque blob field, env helpers, log scrubbing, health endpoint, deploy checks |
 | `config` | Settings (`base`/`dev`/`prod`), the ASGI entry point, root URLconf |
+| `openapi.json` | The generated OpenAPI document of the whole surface, committed so a contract change is a diff in review. `manage.py openapi` writes it; `--check` gates it |
 | `ops` | Deployment units, nginx/coturn/LiveKit/redis config, offline-install and audit tooling |
 | `requirements` | Pinned, hashed dependencies. `vendor/` holds the offline wheel cache that `ops/vendor.sh` builds; it is not tracked in git |
 
@@ -140,13 +149,20 @@ python3.12 -m venv .venv && source .venv/bin/activate
 pip install -r requirements/dev.txt
 cp .env.example .env        # fill in dev values
 set -a; source .env; set +a
+python manage.py migrate
 pytest
+python manage.py openapi --check
 python manage.py check --deploy
 ```
 
 Tests use `config.settings.dev` (see `pytest.ini`) and require both services running.
 The dev settings fall back to insecure dev keys for `DJANGO_SECRET_KEY` and
 `JWT_SIGNING_KEY` when unset; everything else reads from the environment.
+
+Each app holds exactly one `0001_initial` migration. A developer database that
+recorded the history before it was regenerated cannot be migrated onto this one — drop
+and recreate it, as `ops/postgres/README.md` describes. A route change that alters the
+contract needs `python manage.py openapi` and the regenerated file committed with it.
 
 ## Configuration
 

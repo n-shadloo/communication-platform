@@ -1,3 +1,5 @@
+import re
+
 from django.conf import settings
 from django.test import SimpleTestCase, override_settings
 
@@ -5,6 +7,21 @@ from config.settings import prod
 from core.checks import no_foreign_or_telemetry, ws_origin_allowlist_set
 
 BANNED_TELEMETRY = {"sentry_sdk", "ddtrace", "newrelic", "elasticapm"}
+
+# The modules that read the environment. Every other module reads `settings`.
+CONFIGURED_BY = ("config/settings/base.py", "config/settings/dev.py", "config/urls.py")
+READS_ENV = re.compile(r"\benv(?:_bool|_int|_list)?\(\s*[\"']([A-Z][A-Z0-9_]*)[\"']")
+DECLARES = re.compile(r"^([A-Z][A-Z0-9_]*)=", re.M)
+DOCUMENTED = re.compile(r"^\| `([A-Z][A-Z0-9_]*)` \|", re.M)
+
+# Variables the example carries that no Python module reads, each with the process
+# that does read it. Nothing else may be in the file.
+READ_OUTSIDE_PYTHON = {
+    "DJANGO_SETTINGS_MODULE": "django, to find the settings module at all",
+    "WEB_CONCURRENCY": "the systemd unit, as uvicorn's --workers argument",
+    "TURN_REALM": "ops/coturn/turnserver.conf",
+    "TURN_STATIC_AUTH_SECRET": "ops/coturn/turnserver.conf",
+}
 
 
 class BasePostureTests(SimpleTestCase):
@@ -153,6 +170,42 @@ class BasePostureTests(SimpleTestCase):
             "--timeout-graceful-shutdown",
         ):
             self.assertIn(flag, unit)
+
+    def test_the_example_environment_lists_every_variable_the_code_reads(self):
+        """An operator fills in `.env.example` and expects a working deployment. A
+        variable the code reads and the example omits is a default nobody chose."""
+        read = set()
+        for name in CONFIGURED_BY:
+            read |= set(READS_ENV.findall((settings.BASE_DIR / name).read_text()))
+        declared = set(DECLARES.findall((settings.BASE_DIR / ".env.example").read_text()))
+
+        self.assertEqual(read - declared, set())
+
+    def test_the_example_environment_lists_nothing_the_code_ignores(self):
+        """A variable in the example that nothing reads is a setting an operator
+        believes they configured. The four the file carries for another process are
+        recorded above with the process that reads each one."""
+        read = set()
+        for name in CONFIGURED_BY:
+            read |= set(READS_ENV.findall((settings.BASE_DIR / name).read_text()))
+        declared = set(DECLARES.findall((settings.BASE_DIR / ".env.example").read_text()))
+
+        self.assertEqual(declared - read, set(READ_OUTSIDE_PYTHON))
+
+    def test_the_configuration_table_of_the_readme_matches_the_code(self):
+        """`backend/README.md` is where the operator reads what a variable does and
+        what it defaults to. A row that no code reads describes a knob that does
+        nothing; a variable with no row is one nobody can find."""
+        documented = set(
+            DOCUMENTED.findall((settings.BASE_DIR / "README.md").read_text())
+        )
+        read = set()
+        for name in CONFIGURED_BY:
+            read |= set(READS_ENV.findall((settings.BASE_DIR / name).read_text()))
+
+        # `WEB_CONCURRENCY` is read by the systemd unit rather than by Python, and
+        # the operator sets it in the same file, so the table carries it too.
+        self.assertEqual(documented, read | {"WEB_CONCURRENCY"})
 
     def test_the_worker_count_has_a_documented_default(self):
         """`--workers ${WEB_CONCURRENCY}` is an empty argument if the operator's
