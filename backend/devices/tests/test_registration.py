@@ -1,7 +1,6 @@
 import pytest
-from django.urls import reverse
 
-from accounts.tokens import issue_register_scope
+from api.auth import issue_register_scope
 from devices.models import Device, OneTimePrekey
 
 from .conftest import (
@@ -39,7 +38,7 @@ def test_a_register_scope_token_registers_a_device_and_gets_full_tokens(api, act
     assert OneTimePrekey.objects.filter(device=device).count() == 3
     # The issued token is genuinely full scope: it reaches an endpoint the register
     # token could not.
-    assert api.get(reverse("user-directory"), **bearer(body["access"])).status_code == 200
+    assert api.get(DEVICES_URL, **bearer(body["access"])).status_code == 200
 
 
 def test_a_full_scope_token_may_also_register_another_device(

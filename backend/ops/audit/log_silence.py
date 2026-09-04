@@ -13,6 +13,12 @@ Two properties make this stricter than per-app spot checks:
   has its own (django.request/django.server/daphne set propagate=False, so a
   root-only swap, which is what assertLogs does, never sees them).
 
+Two clients drive the pass, because two runtimes serve it: an httpx client over the
+composed ASGI application for the routes FastAPI holds, and the REST Framework
+client for the apps that have not moved. The httpx client logs the URL of every
+request it makes, which is a request path in a log line — the suite's `conftest.py`
+disables that logger, because the client is this harness and not the server.
+
 Driven by core/tests/test_log_silence.py; needs the test DB, the in-memory channel
 layer, a temp ATTACHMENTS_ROOT, and fake LIVEKIT_* settings (token minting is local
 PyJWT; no network is ever touched).
@@ -62,15 +68,52 @@ def _b64_filled(size, fill):
     return base64.b64encode(bytes([fill]) * size).decode()
 
 
-def _scripted_rest_traffic():
-    """The REST half of the sequence. Returns {label: generated secret}, everything a
-    log line must never contain. Runs in a worker thread via database_sync_to_async;
-    logging is process-global, so the capture still sees every record."""
+def _activate(user_id):
+    from accounts.models import User
+
+    User.objects.filter(id=user_id).update(is_active=True)
+
+
+async def _scripted_account_traffic(client):
+    """The account half: register, activate, log in. Returns {label: generated
+    secret}, everything a log line must never contain."""
+    from channels.db import database_sync_to_async
     from django.core.cache import cache
+
+    await database_sync_to_async(cache.clear)()  # rate counters are shared
+    s = {
+        "username": f"aud{random_secrets.token_hex(6)}",
+        "password": random_secrets.token_urlsafe(24),
+    }
+
+    # Register, then activate. Activation is the owner's admin action; its
+    # server-side effect is the is_active flip.
+    r = await client.post(
+        "/api/v1/auth/register",
+        json={"username": s["username"], "password": s["password"]},
+    )
+    assert r.status_code == 201, f"register: {r.status_code}"
+    s["user id"] = r.json()["user_id"]
+    await database_sync_to_async(_activate)(s["user id"])
+
+    # Login with no device: the register-scope token whose only power is
+    # POST /me/devices.
+    r = await client.post(
+        "/api/v1/auth/login",
+        json={"username": s["username"], "password": s["password"]},
+    )
+    assert r.status_code == 200, f"login: {r.status_code}"
+    s["register-scope access token"] = r.json()["access"]
+    return s
+
+
+def _scripted_rest_traffic(s):
+    """The REST Framework half of the sequence, for the apps that have not moved.
+    Runs in a worker thread via database_sync_to_async; logging is process-global,
+    so the capture still sees every record."""
     from django.core.files.uploadedfile import SimpleUploadedFile
     from rest_framework.test import APIClient
 
-    from accounts.models import User
     from core.buckets import (
         ATTACHMENT_BUCKETS,
         DEVICELOG_BUCKETS,
@@ -79,31 +122,6 @@ def _scripted_rest_traffic():
     )
 
     api = APIClient()
-    cache.clear()  # DRF throttle counters live in the shared cache
-    s = {
-        "username": f"aud{random_secrets.token_hex(6)}",
-        "password": random_secrets.token_urlsafe(24),
-    }
-
-    # Register, then activate. Activation is the owner's admin action; its
-    # server-side effect is the is_active flip.
-    r = api.post(
-        "/api/v1/auth/register",
-        {"username": s["username"], "password": s["password"]},
-        format="json",
-    )
-    assert r.status_code == 201, f"register: {r.status_code}"
-    s["user id"] = r.json()["user_id"]
-    User.objects.filter(id=s["user id"]).update(is_active=True)
-
-    # Login with no device: the register-scope token whose only power is POST /me/devices.
-    r = api.post(
-        "/api/v1/auth/login",
-        {"username": s["username"], "password": s["password"]},
-        format="json",
-    )
-    assert r.status_code == 200, f"login: {r.status_code}"
-    s["register-scope access token"] = r.json()["access"]
 
     # No cross_sig here: the bundle it signs covers the device_id this call assigns,
     # so registration refuses the field. It goes to the prekeys endpoint below, which
@@ -213,6 +231,53 @@ def _scripted_rest_traffic():
     return s
 
 
+async def _scripted_fastapi_traffic(client, s):
+    """The half FastAPI serves: the directory, the profile blobs, the key backup,
+    a token rotation, and the logout that ends the session. Adds each payload and
+    each issued token to the secret set."""
+    from core.buckets import BACKUP_BUCKETS, PROFILE_BUCKETS
+
+    auth = {"Authorization": f"Bearer {s['access token']}"}
+
+    r = await client.get("/api/v1/users", headers=auth)
+    assert r.status_code == 200, f"directory: {r.status_code}"
+
+    s["profile blob"] = _b64_filled(min(PROFILE_BUCKETS), 0xC3)
+    r = await client.put(
+        "/api/v1/me/profile",
+        json={"blob": s["profile blob"], "version": 1},
+        headers=auth,
+    )
+    assert r.status_code == 200, f"profile write: {r.status_code}"
+    r = await client.get(f"/api/v1/users/{s['user id']}/profile", headers=auth)
+    assert r.status_code == 200, f"peer profile read: {r.status_code}"
+
+    s["key backup blob"] = _b64_filled(min(BACKUP_BUCKETS), 0xB4)
+    r = await client.put(
+        "/api/v1/me/keybackup",
+        json={"blob": s["key backup blob"], "version": 1},
+        headers=auth,
+    )
+    assert r.status_code == 200, f"key backup write: {r.status_code}"
+    r = await client.get("/api/v1/me/keybackup", headers=auth)
+    assert r.status_code == 200, f"key backup read: {r.status_code}"
+
+    # Rotation issues a second pair; both halves must stay out of every log line.
+    r = await client.post("/api/v1/auth/refresh", json={"refresh": s["refresh token"]})
+    assert r.status_code == 200, f"refresh: {r.status_code}"
+    s["rotated access token"] = r.json()["access"]
+    s["rotated refresh token"] = r.json()["refresh"]
+
+
+async def _scripted_logout(client, s):
+    """Last, because it ends every token of the device."""
+    r = await client.post(
+        "/api/v1/auth/logout",
+        headers={"Authorization": f"Bearer {s['rotated access token']}"},
+    )
+    assert r.status_code == 204, f"logout: {r.status_code}"
+
+
 async def _scripted_socket_traffic(s):
     """The realtime half: authenticated connect, a volatile signal round-trip to our own
     device, disconnect. Adds the signal blob to the secret set."""
@@ -254,18 +319,28 @@ async def run_audit(probe=None):
     scripted traffic, so the suite can prove the audit still catches a deliberate
     leak."""
     from channels.db import database_sync_to_async
+    from httpx import ASGITransport, AsyncClient
 
     # Import the ASGI application before the capture opens. That import runs
     # django.setup(), which re-applies LOGGING through dictConfig and replaces the
     # handlers this audit swapped in. Inside the capture window it would kill the
     # capture halfway through, and every assertion after that point would grade an
     # empty list instead of the real log stream.
-    import config.asgi  # noqa: F401
+    import config.asgi
 
+    transport = ASGITransport(app=config.asgi.application)
+    lifespan = config.asgi.api_application.router.lifespan_context
     with capture_all_logging() as lines:
         logging.getLogger("ops.audit.canary").debug(CANARY_OPEN)
-        secrets = await database_sync_to_async(_scripted_rest_traffic)()
-        await _scripted_socket_traffic(secrets)
+        async with lifespan(config.asgi.api_application):
+            async with AsyncClient(
+                transport=transport, base_url="http://testserver"
+            ) as client:
+                secrets = await _scripted_account_traffic(client)
+                await database_sync_to_async(_scripted_rest_traffic)(secrets)
+                await _scripted_fastapi_traffic(client, secrets)
+                await _scripted_socket_traffic(secrets)
+                await _scripted_logout(client, secrets)
         if probe is not None:
             probe(secrets)
         logging.getLogger("ops.audit.canary").debug(CANARY_CLOSE)

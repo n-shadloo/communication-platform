@@ -5,7 +5,7 @@ from channels.db import database_sync_to_async
 from channels.testing import WebsocketCommunicator
 
 from accounts.models import User
-from accounts.tokens import issue_full
+from api.auth import issue_full
 from config.asgi import application
 from core.buckets import ENVELOPE_BUCKETS
 from devices.models import Device
@@ -43,7 +43,7 @@ def peer_device(peer):
 @database_sync_to_async
 def mint_access(user, device):
     """A valid full-scope access token for a test device. DB-wrapped because the
-    blacklist app records every refresh issued."""
+    token reads the device's two generation counters off the row."""
     access, _refresh = issue_full(user, device)
     return access
 

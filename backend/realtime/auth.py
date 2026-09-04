@@ -1,31 +1,41 @@
 from channels.db import database_sync_to_async
-from rest_framework_simplejwt.exceptions import TokenError
-from rest_framework_simplejwt.tokens import AccessToken
+
+from api.auth import FULL, decode_access, load_device
+from api.errors import ApiError
 
 
 @database_sync_to_async
 def authenticate_access(token_str):
-    """Validate an access token exactly like DeviceJWTAuthentication: full scope and
-    a live device required. Returns (user, device) on success, None on any failure."""
-    from devices.models import Device
-
+    """Validate an access token through the one verifier, exactly as the HTTP
+    surface does: full scope, a live device, an active account. Returns
+    (user, device) on success, None on any failure."""
     try:
-        token = AccessToken(token_str)  # signature + expiry
-    except TokenError:
+        claims = decode_access(token_str)
+    except ApiError:
         return None
-    if token.get("scope") != "full":
+    if claims["scope"] != FULL:
         return None
-    try:
-        device = Device.objects.select_related("user").get(
-            id=token.get("device_id"),
-            user_id=token.get("user_id"),
-            revoked_date__isnull=True,
-        )
-    except Device.DoesNotExist:
-        return None
-    if token.get("tgen") != device.token_generation or not device.user.is_active:
+    device = load_device(claims)
+    if device is None:
         return None
     return device.user, device
+
+
+def close_device_sockets(device_id):
+    """Best-effort: tell the realtime consumer, if any, to drop this device's
+    sockets. Safe no-op when none exists, and silent because the error would
+    name a device id. Run 06 replaces the body when the gateway moves."""
+    try:
+        from asgiref.sync import async_to_sync
+        from channels.layers import get_channel_layer
+
+        layer = get_channel_layer()
+        if layer:
+            async_to_sync(layer.group_send)(
+                f"dev.{device_id}", {"type": "connection.close"}
+            )
+    except Exception:
+        pass
 
 
 @database_sync_to_async

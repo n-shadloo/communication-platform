@@ -1,6 +1,6 @@
 """Query-shape guard for the upload path.
 
-Counts include the two per-request auth queries `DeviceJWTAuthentication` makes.
+Counts include the one per-request auth query `DeviceJWTAuthentication` makes.
 """
 
 import pytest
@@ -9,7 +9,7 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from attachments.models import Attachment
 from core.buckets import ATTACHMENT_BUCKETS
 
-AUTH_QUERIES = 2
+AUTH_QUERIES = 1  # the device row, joined to its owner
 UPLOAD_URL = "/api/v1/attachments"
 SMALLEST = min(ATTACHMENT_BUCKETS)
 

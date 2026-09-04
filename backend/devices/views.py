@@ -12,7 +12,8 @@ from rest_framework.views import APIView
 
 from accounts.models import User
 from accounts.permissions import IsFullScope
-from accounts.tokens import issue_full
+from api.auth import issue_full
+from realtime.auth import close_device_sockets
 
 from .models import (
     Device,
@@ -334,24 +335,8 @@ class MyDeviceDetailView(APIView):
             PqOneTimePrekey.objects.filter(device=device).delete()
             device.queue.all().delete()  # its mailbox
 
-        self._close_sockets(device_id)
+        close_device_sockets(device_id)
         return Response(status=status.HTTP_204_NO_CONTENT)
-
-    @staticmethod
-    def _close_sockets(device_id):
-        """Best-effort: tell the realtime consumer, if any, to drop this device's
-        sockets. Safe no-op when none exists."""
-        try:
-            from asgiref.sync import async_to_sync
-            from channels.layers import get_channel_layer
-
-            layer = get_channel_layer()
-            if layer:
-                async_to_sync(layer.group_send)(
-                    f"dev.{device_id}", {"type": "connection.close"}
-                )
-        except Exception:
-            pass
 
 
 class _OwnDeviceView(APIView):

@@ -9,7 +9,7 @@ import pytest
 from django.db import connection
 from django.test.utils import CaptureQueriesContext
 
-from accounts.tokens import issue_full
+from api.auth import issue_full
 from core.buckets import ENVELOPE_BUCKETS
 from messaging.models import QueuedEnvelope
 from realtime.auth import authenticate_access, delete_envelopes, touch_active

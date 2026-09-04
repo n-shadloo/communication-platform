@@ -11,7 +11,7 @@ from django.test import TestCase
 from rest_framework.test import APIClient
 
 from accounts.models import User
-from accounts.tokens import issue_full, issue_register_scope
+from api.auth import issue_full, issue_register_scope
 
 from .conftest import (
     DEVICES_URL,

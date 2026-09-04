@@ -17,7 +17,7 @@ from django.test import TransactionTestCase
 from rest_framework.test import APIClient
 
 from accounts.models import User
-from accounts.tokens import issue_full
+from api.auth import issue_full
 from core.buckets import DEVICELOG_BUCKETS
 from devices.models import DeviceLogRecord
 

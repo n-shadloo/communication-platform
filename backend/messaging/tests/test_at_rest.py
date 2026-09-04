@@ -121,7 +121,7 @@ def test_an_acked_envelope_leaves_no_trace_in_a_raw_table_dump(
     )
     assert resp.status_code == 202
 
-    from accounts.tokens import issue_full
+    from api.auth import issue_full
 
     owner_access, _ = issue_full(recipient.user, recipient)
     owner_headers = {"HTTP_AUTHORIZATION": f"Bearer {owner_access}"}

@@ -6,9 +6,8 @@ poll.
 """
 
 import pytest
-from django.urls import reverse
 
-from accounts.tokens import issue_full
+from api.auth import issue_full
 from core.buckets import ENVELOPE_BUCKETS
 from devices.models import Device, OneTimePrekey, PqOneTimePrekey
 from messaging.models import QueuedEnvelope
@@ -62,24 +61,27 @@ def test_the_revoked_devices_access_token_is_rejected(
     """(a) `token_generation` is bumped, so DeviceJWTAuthentication refuses every
     outstanding access token for it."""
     access, _refresh = issue_full(active_user, doomed)
-    assert api.get(reverse("user-directory"), **bearer(access)).status_code == 200
+    assert api.get(DEVICES_URL, **bearer(access)).status_code == 200
 
     api.delete(f"{DEVICES_URL}/{doomed.id}", **auth_headers(active_user, device))
 
-    response = api.get(reverse("user-directory"), **bearer(access))
+    response = api.get(DEVICES_URL, **bearer(access))
     assert response.status_code == 401
     assert response.json()["code"] == "token_revoked"
 
 
+# transaction=True because refresh is a FastAPI route, and the ORM bracket behind
+# it closes the connection a wrapping test transaction would need.
+@pytest.mark.django_db(transaction=True)
 def test_the_revoked_devices_refresh_token_fails(
-    api, active_user, device, auth_headers, doomed
+    api, http, active_user, device, auth_headers, doomed
 ):
     """(b) Refresh re-checks the device, so it cannot mint a fresh pair."""
     _access, refresh = issue_full(active_user, doomed)
 
     api.delete(f"{DEVICES_URL}/{doomed.id}", **auth_headers(active_user, device))
 
-    response = api.post("/api/v1/auth/refresh", {"refresh": refresh}, format="json")
+    response = http.post("/api/v1/auth/refresh", json={"refresh": refresh})
     assert response.status_code == 401
     assert response.json()["code"] == "token_revoked"
 
@@ -153,9 +155,7 @@ def test_a_sibling_device_is_untouched(api, active_user, device, auth_headers, d
 
     api.delete(f"{DEVICES_URL}/{doomed.id}", **auth_headers(active_user, device))
 
-    assert (
-        api.get(reverse("user-directory"), **bearer(survivor_access)).status_code == 200
-    )
+    assert api.get(DEVICES_URL, **bearer(survivor_access)).status_code == 200
     assert OneTimePrekey.objects.filter(device=device).count() == 2
 
 

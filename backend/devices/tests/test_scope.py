@@ -7,7 +7,7 @@ carry the scope check; without it, a ten-minute register token could revoke devi
 
 import pytest
 
-from accounts.tokens import issue_register_scope
+from api.auth import issue_register_scope
 from devices.models import Device
 
 from .conftest import DEVICES_URL, label_blob, pubkey

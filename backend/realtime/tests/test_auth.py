@@ -6,7 +6,7 @@ from channels.db import database_sync_to_async
 from channels.layers import get_channel_layer
 from django.utils import timezone
 
-from accounts.tokens import issue_register_scope
+from api.auth import issue_register_scope
 
 from .conftest import bearer, connect_ok, expect_close, mint_access, probe, ws
 
@@ -50,7 +50,7 @@ async def test_garbage_token_closes_4001(db):
 async def test_refresh_token_is_not_an_access_token(active_user, device):
     """A refresh JWT is validly signed but has the wrong token_type; REST rejects it
     and so must the socket."""
-    from accounts.tokens import issue_full
+    from api.auth import issue_full
 
     _access, refresh = await database_sync_to_async(issue_full)(active_user, device)
 
@@ -73,14 +73,28 @@ async def test_register_scope_token_closes_4001_and_joins_no_group(active_user):
 async def test_register_scope_with_device_claims_still_closes_4001(active_user, device):
     """Scope is enforced in its own right, not via the missing device claim: even a
     register-scope token carrying a live device's id and tgen opens no socket."""
-    from rest_framework_simplejwt.tokens import AccessToken
+    import uuid
+    from datetime import datetime, timedelta, timezone
+
+    import jwt
+    from django.conf import settings
 
     def forge():
-        token = AccessToken.for_user(active_user)
-        token["device_id"] = str(device.id)
-        token["tgen"] = device.token_generation
-        token["scope"] = "register"
-        return str(token)
+        issued = datetime.now(timezone.utc)
+        return jwt.encode(
+            {
+                "user_id": str(active_user.id),
+                "device_id": str(device.id),
+                "tgen": device.token_generation,
+                "scope": "register",
+                "typ": "access",
+                "jti": uuid.uuid4().hex,
+                "iat": issued,
+                "exp": issued + timedelta(minutes=10),
+            },
+            settings.JWT_SIGNING_KEY,
+            algorithm=settings.JWT_ALGORITHM,
+        )
 
     comm = ws(bearer(await database_sync_to_async(forge)()))
     connected, code = await comm.connect(timeout=2)

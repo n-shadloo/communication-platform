@@ -4,8 +4,8 @@ These lock in the shape, not a micro-benchmark: the drain must stay one indexed 
 no matter how full the mailbox is, and the fan-out's device check must stay one query
 no matter how many recipients there are.
 
-Counts include the two per-request auth queries `DeviceJWTAuthentication` makes (the
-user row and the device row) and, under pytest's per-test transaction, a
+Counts include the one per-request auth query `DeviceJWTAuthentication` makes (the
+device row, joined to its owner) and, under pytest's per-test transaction, a
 SAVEPOINT/RELEASE pair per `atomic()` block. In production, with autocommit, those
 savepoints are a real BEGIN/COMMIT instead.
 """
@@ -16,7 +16,7 @@ from messaging.models import QueuedEnvelope
 
 from .conftest import SMALLEST_BUCKET, envelope_blob, make_device
 
-AUTH_QUERIES = 2
+AUTH_QUERIES = 1  # the device row, joined to its owner
 
 DRAIN_URL = "/api/v1/me/envelopes"
 SEND_URL = "/api/v1/envelopes"

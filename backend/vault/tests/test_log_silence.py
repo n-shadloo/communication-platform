@@ -1,55 +1,50 @@
 """No vault endpoint logs an identifier or a payload.
 
-`assertLogs` installs its own handler, so the configured ScrubFilter is not applied
+`caplog` installs its own handler, so the configured ScrubFilter is not applied
 here. That is the point: this asserts the code never emits an id or blob in the
 first place.
 """
 
 import logging
 
-from django.test import TestCase
-from rest_framework.test import APIClient
+import pytest
 
-from accounts.models import User
-from accounts.tokens import issue_full
+from .conftest import KEYBACKUP_URL, backup_blob
 
-from .conftest import PASSWORD, backup_blob, make_device
+# transaction=True because the ORM bracket of `api.orm.run_unit` closes the
+# connection around every unit of work, which under a wrapping test transaction
+# would sever the connection the test itself holds.
+pytestmark = pytest.mark.django_db(transaction=True)
 
 
-class VaultLogSilenceTests(TestCase):
-    def setUp(self):
-        self.owner = User.objects.create_user(
-            username="alice", password=PASSWORD, is_active=True
+def test_backup_paths_emit_no_identifier_or_blob(
+    http, active_user, device, bearer, caplog
+):
+    backup_payload = backup_blob(b"S")
+    headers = bearer(active_user, device)
+
+    with caplog.at_level(logging.DEBUG):
+        # A clean request logs nothing at all, so the canary is what proves the
+        # capture was live rather than the assertions passing vacuously.
+        logging.getLogger("test.canary").debug("canary")
+
+        put = http.put(
+            KEYBACKUP_URL,
+            json={"blob": backup_payload, "version": 1},
+            headers=headers,
         )
-        self.device = make_device(self.owner, 1)
-        access, _refresh = issue_full(self.owner, self.device)
-        self.headers = {"HTTP_AUTHORIZATION": f"Bearer {access}"}
-        self.client = APIClient()
+        get = http.get(KEYBACKUP_URL, headers=headers)
 
-    def test_backup_paths_emit_no_identifier_or_blob(self):
-        backup_payload = backup_blob(b"S")
+    assert put.status_code == 200
+    assert get.status_code == 200
+    assert any("canary" in record.getMessage() for record in caplog.records)
 
-        with self.assertLogs(level="DEBUG") as captured:
-            # assertLogs fails if nothing is logged; a clean request logs nothing at all,
-            # so the canary keeps the block honest.
-            logging.getLogger("test.canary").debug("canary")
-
-            put = self.client.put(
-                "/api/v1/me/keybackup",
-                {"blob": backup_payload, "version": 1},
-                format="json",
-                **self.headers,
-            )
-            get = self.client.get("/api/v1/me/keybackup", **self.headers)
-
-        self.assertEqual(put.status_code, 200)
-        self.assertEqual(get.status_code, 200)
-
-        forbidden = {
-            "owner id": str(self.owner.id),
-            "device id": str(self.device.id),
-            "backup blob": backup_payload,
-        }
-        for line in captured.output:
-            for label, secret in forbidden.items():
-                self.assertNotIn(secret, line, f"{label} leaked into a log line")
+    forbidden = {
+        "owner id": str(active_user.id),
+        "device id": str(device.id),
+        "backup blob": backup_payload,
+    }
+    for record in caplog.records:
+        line = record.getMessage()
+        for label, secret in forbidden.items():
+            assert secret not in line, f"{label} leaked into a log line"

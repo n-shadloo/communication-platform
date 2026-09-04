@@ -17,7 +17,7 @@ from django.test import TransactionTestCase
 from rest_framework.test import APIClient
 
 from accounts.models import User
-from accounts.tokens import issue_full
+from api.auth import issue_full
 from devices.models import PqOneTimePrekey
 from devices.serializers import PQ_PUBKEY_LEN
 from devices.views import MAX_STORED_PQ_OTPKS

@@ -46,6 +46,10 @@ async def test_scripted_traffic_across_every_surface_leaks_nothing():
         "room id",
         "livekit join token",
         "signal blob",
+        "profile blob",
+        "key backup blob",
+        "rotated access token",
+        "rotated refresh token",
     ):
         assert secrets.get(label), f"the audit never exercised the {label} step"
 

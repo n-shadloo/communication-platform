@@ -285,7 +285,7 @@ def test_enrollment_can_cross_sign_the_device_id_the_server_assigned(api, active
     device fetch its key backup for the self-signing key and then cross-sign the
     id it now knows. Before this, both halves of that dependency were required
     up front and the only way through was uploading signature-shaped garbage."""
-    from accounts.tokens import issue_register_scope
+    from api.auth import issue_register_scope
 
     first = api.post(
         DEVICES_URL,

@@ -15,7 +15,7 @@ from django.test import TestCase, override_settings
 from rest_framework.test import APIClient
 
 from accounts.models import User
-from accounts.tokens import issue_full
+from api.auth import issue_full
 from core.buckets import ATTACHMENT_BUCKETS
 
 from .conftest import PASSWORD, SMALLEST_BUCKET, envelope_blob, make_device

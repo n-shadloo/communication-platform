@@ -1,4 +1,3 @@
-from datetime import timedelta
 from pathlib import Path
 
 from core.env import env, env_int, env_list
@@ -17,7 +16,6 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "rest_framework",
-    "rest_framework_simplejwt.token_blacklist",
     "core",
     "accounts",
     "devices",
@@ -67,7 +65,14 @@ DATABASES = {
         "PASSWORD": env("POSTGRES_PASSWORD"),
         "HOST": env("POSTGRES_HOST", default="127.0.0.1"),
         "PORT": env("POSTGRES_PORT", default="5432"),
-        "CONN_MAX_AGE": env_int("DB_CONN_MAX_AGE", default=60),
+        "CONN_MAX_AGE": env_int("DB_CONN_MAX_AGE", default=0),
+        "OPTIONS": {
+            "pool": {
+                "min_size": env_int("DB_POOL_MIN_SIZE", default=1),
+                "max_size": env_int("DB_POOL_MAX_SIZE", default=16),
+                "timeout": env_int("DB_POOL_TIMEOUT", default=10),
+            }
+        },
     }
 }
 
@@ -110,6 +115,41 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 # No email is ever sent by this system.
 EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
 
+# --- Authentication (ADR-0006): PyJWT, and no token table -----------------------
+# A token table would be a per-device login record at rest, which the threat model
+# refuses to keep. Revocation is two counters on the device row instead.
+JWT_SIGNING_KEY = env("JWT_SIGNING_KEY")
+JWT_ALGORITHM = "HS256"
+ACCESS_TOKEN_MINUTES = env_int("ACCESS_MIN", default=15)
+REFRESH_TOKEN_DAYS = env_int("REFRESH_DAYS", default=14)
+REGISTER_SCOPE_ACCESS_MIN = env_int("REGISTER_SCOPE_ACCESS_MIN", default=10)
+
+# --- Rate limits (ADR-0010) -----------------------------------------------------
+# One table, read by the FastAPI limiter and by the REST Framework throttle of the
+# apps that have not moved. A scope both stacks serve counts once on each during
+# the transition; run 05 leaves one counter.
+THROTTLE_RATES = {
+    "register": env("THROTTLE_REGISTER", default="10/hour"),
+    "login": env("THROTTLE_LOGIN", default="20/hour"),
+    "refresh": env("THROTTLE_REFRESH", default="120/hour"),
+    "accounts": env("THROTTLE_ACCOUNTS", default="120/min"),
+    "claim": env("THROTTLE_CLAIM", default="120/min"),
+    "envelopes": env("THROTTLE_ENVELOPES", default="600/min"),
+    "attachments": env("THROTTLE_ATTACHMENTS", default="60/min"),
+    "roomtoken": env("THROTTLE_ROOMTOKEN", default="60/min"),
+}
+
+# --- Request limits (ADR-0014) --------------------------------------------------
+# One process on 1 GB of RAM has no headroom for an unbounded body or a request
+# that never ends, and no second host to fail over to. The upload class covers the
+# routes the Django catch-all still serves, whose largest body is a 64 MiB
+# attachment; nginx caps the same value at 70m.
+REQUEST_DEADLINE_SECONDS = env_int("REQUEST_DEADLINE_SECONDS", default=15)
+UPLOAD_DEADLINE_SECONDS = env_int("UPLOAD_DEADLINE_SECONDS", default=120)
+BODY_CAP_JSON_BYTES = env_int("BODY_CAP_JSON_BYTES", default=16 * 1024)
+BODY_CAP_BACKUP_BYTES = env_int("BODY_CAP_BACKUP_BYTES", default=2 * 1024 * 1024)
+BODY_CAP_UPLOAD_BYTES = env_int("BODY_CAP_UPLOAD_BYTES", default=70 * 1024 * 1024)
+
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": ["accounts.auth.DeviceJWTAuthentication"],
     # Fail closed on scope as well as identity: DeviceJWTAuthentication authenticates
@@ -121,16 +161,7 @@ REST_FRAMEWORK = {
         "accounts.permissions.IsFullScope",
     ],
     "DEFAULT_THROTTLE_CLASSES": ["rest_framework.throttling.ScopedRateThrottle"],
-    "DEFAULT_THROTTLE_RATES": {
-        "register": env("THROTTLE_REGISTER", default="10/hour"),
-        "login": env("THROTTLE_LOGIN", default="20/hour"),
-        "refresh": env("THROTTLE_REFRESH", default="120/hour"),
-        "accounts": env("THROTTLE_ACCOUNTS", default="120/min"),
-        "claim": env("THROTTLE_CLAIM", default="120/min"),
-        "envelopes": env("THROTTLE_ENVELOPES", default="600/min"),
-        "attachments": env("THROTTLE_ATTACHMENTS", default="60/min"),
-        "roomtoken": env("THROTTLE_ROOMTOKEN", default="60/min"),
-    },
+    "DEFAULT_THROTTLE_RATES": THROTTLE_RATES,
     "UNAUTHENTICATED_USER": None,
     "DEFAULT_RENDERER_CLASSES": ["rest_framework.renderers.JSONRenderer"],
     "DEFAULT_PARSER_CLASSES": [
@@ -139,20 +170,6 @@ REST_FRAMEWORK = {
     ],
     "EXCEPTION_HANDLER": "core.exceptions.api_exception_handler",
 }
-
-SIMPLE_JWT = {
-    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=env_int("ACCESS_MIN", default=15)),
-    "REFRESH_TOKEN_LIFETIME": timedelta(days=env_int("REFRESH_DAYS", default=14)),
-    "ROTATE_REFRESH_TOKENS": True,
-    "BLACKLIST_AFTER_ROTATION": True,
-    "ALGORITHM": "HS256",
-    "SIGNING_KEY": env("JWT_SIGNING_KEY"),
-    "AUTH_HEADER_TYPES": ("Bearer",),
-    "USER_ID_FIELD": "id",
-    "USER_ID_CLAIM": "user_id",
-}
-
-REGISTER_SCOPE_ACCESS_MIN = env_int("REGISTER_SCOPE_ACCESS_MIN", default=10)
 
 # Storage limits and retention.
 ATTACHMENTS_ROOT = Path(env("ATTACHMENTS_ROOT", default=str(BASE_DIR / "media_root")))

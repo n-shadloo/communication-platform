@@ -15,7 +15,7 @@ import base64
 
 import pytest
 
-from accounts.tokens import issue_full
+from api.auth import issue_full
 from core.buckets import BACKUP_BUCKETS, ENVELOPE_BUCKETS
 from core.tests.test_seizure_guard import (
     dual_user_fk_offenders,
@@ -62,27 +62,33 @@ def test_nothing_readable_or_graph_shaped_can_exist_at_rest():
         assert audit() == [], f"{audit.__name__} found violations"
 
 
+# transaction=True because the key backup is a FastAPI route now, and the ORM
+# bracket behind it closes the connection a wrapping test transaction would need.
+@pytest.mark.django_db(transaction=True)
 def test_a_new_device_restores_the_backup_and_no_server_history_exists(
-    api, active_user, device, auth_headers
+    http, active_user, device, bearer
 ):
     """A brand-new device reads the key backup back byte-identical — and that is
     all the server has for it. History is client-to-client on enrollment; the old
     "log in on a new device and your chats are there" flow is superseded, and the
     server-side half of it must stay gone (vault/tests/test_no_history.py pins the
     full removal)."""
-    first = auth_headers(active_user, device)
+    first = bearer(active_user, device)
     backup = _b64(min(BACKUP_BUCKETS), 0x4B)
 
     assert (
-        api.put(
-            KEYBACKUP_URL, {"blob": backup, "version": 1}, format="json", **first
+        http.put(
+            KEYBACKUP_URL, json={"blob": backup, "version": 1}, headers=first
         ).status_code
         == 200
     )
 
-    fresh = auth_headers(active_user, _second_device(active_user, 9001))
-    assert api.get(KEYBACKUP_URL, **fresh).json() == {"blob": backup, "version": 1}
-    assert api.get("/api/v1/me/history", **fresh).status_code == 404
+    fresh = bearer(active_user, _second_device(active_user, 9001))
+    assert http.get(KEYBACKUP_URL, headers=fresh).json() == {
+        "blob": backup,
+        "version": 1,
+    }
+    assert http.get("/api/v1/me/history", headers=fresh).status_code == 404
 
 
 def test_revoking_a_device_cuts_its_access_and_destroys_its_state(

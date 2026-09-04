@@ -105,6 +105,19 @@ class FieldManifestTests(SimpleTestCase):
             f"Every stored blob must be exact-bucket-validated: {problems}",
         )
 
+    def test_no_model_holds_a_token_at_rest(self):
+        """A token table is a per-device login record at rest, which is why
+        revocation lives in two counters on the device row instead. No model may
+        store a token, a JTI, or a blacklist entry."""
+        offenders = [
+            f"{label_of(model)}.{field.name}"
+            for model in apps.get_models()
+            for field in columns(model)
+            if field.name in {"token", "jti", "blacklisted_at", "outstanding_token"}
+        ]
+
+        self.assertEqual(offenders, [], f"a token reached the schema: {offenders}")
+
     def test_guard_actually_sees_the_known_ciphertext_fields(self):
         # Without this the two checks above would pass vacuously if introspection broke.
         found = {f"{label}.{field.name}" for label, field in blob_fields()}

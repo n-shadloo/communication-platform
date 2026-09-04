@@ -24,15 +24,45 @@ class BasePostureTests(SimpleTestCase):
         self.assertIsNone(settings.WSGI_APPLICATION)
         self.assertEqual(settings.ASGI_APPLICATION, "config.asgi.application")
 
-    def test_refresh_tokens_rotate_and_blacklist(self):
-        self.assertTrue(settings.SIMPLE_JWT["ROTATE_REFRESH_TOKENS"])
-        self.assertTrue(settings.SIMPLE_JWT["BLACKLIST_AFTER_ROTATION"])
+    def test_no_token_application_is_installed(self):
+        """A token table is a per-device login record at rest. Revocation lives in
+        two counters on the device row, so nothing keeps one."""
+        self.assertFalse(
+            any("simplejwt" in app for app in settings.INSTALLED_APPS),
+            settings.INSTALLED_APPS,
+        )
+        self.assertFalse(hasattr(settings, "SIMPLE_JWT"))
 
-    def test_api_authenticates_with_the_device_aware_class(self):
+    def test_tokens_are_signed_with_a_pinned_symmetric_algorithm(self):
+        self.assertEqual(settings.JWT_ALGORITHM, "HS256")
+        self.assertTrue(settings.JWT_SIGNING_KEY)
+        self.assertNotEqual(settings.JWT_SIGNING_KEY, settings.SECRET_KEY)
+
+    def test_every_route_of_the_first_surface_declares_its_requirement(self):
+        """The FastAPI surface has no project-wide permission default, so the
+        declaration is per route and `core/tests/test_route_table.py` is the gate
+        that proves each one carries it. This asserts the gate exists."""
+        from core.tests import test_route_table
+
+        self.assertTrue(test_route_table.EXPECTED)
+
+    def test_the_remaining_rest_framework_routes_share_the_one_verifier(self):
+        """Both stacks accept the same tokens during the transition, because the
+        authentication class is a thin adapter over `api.auth`."""
         self.assertEqual(
             settings.REST_FRAMEWORK["DEFAULT_AUTHENTICATION_CLASSES"],
             ["accounts.auth.DeviceJWTAuthentication"],
         )
+
+    def test_the_orm_holds_no_persistent_connection_and_takes_the_pool(self):
+        """Nothing fires Django's request signals in this process, so a persistent
+        connection would never be reaped or health-checked. The pool is what
+        removes the setup cost that CONN_MAX_AGE=0 would otherwise pay."""
+        default = settings.DATABASES["default"]
+
+        self.assertEqual(default["CONN_MAX_AGE"], 0)
+        self.assertIn("pool", default["OPTIONS"])
+        self.assertGreaterEqual(default["OPTIONS"]["pool"]["max_size"], 1)
 
     def test_datastores_are_localhost_only(self):
         self.assertIn(settings.DATABASES["default"]["HOST"], {"127.0.0.1", "localhost"})

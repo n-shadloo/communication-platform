@@ -12,7 +12,7 @@ from django.test import TransactionTestCase, override_settings
 from rest_framework.test import APIClient
 
 from accounts.models import User
-from accounts.tokens import issue_full
+from api.auth import issue_full
 from devices.models import Device
 from messaging.models import QueuedEnvelope
 

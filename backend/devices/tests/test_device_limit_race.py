@@ -12,10 +12,16 @@ from django.test import TransactionTestCase
 from rest_framework.test import APIClient
 
 from accounts.models import User
-from accounts.tokens import issue_register_scope
+from api.auth import issue_register_scope
 from devices.models import Device
 
-from .conftest import DEVICES_URL, PASSWORD, make_device, register_payload
+from .conftest import (
+    DEVICES_URL,
+    PASSWORD,
+    connect_then_wait,
+    make_device,
+    register_payload,
+)
 
 CONCURRENT_REGISTRATIONS = 4
 
@@ -43,7 +49,7 @@ class DeviceLimitRaceTests(TransactionTestCase):
 
         def register():
             try:
-                start.wait(timeout=10)
+                connect_then_wait(start)
                 headers = {
                     "HTTP_AUTHORIZATION": f"Bearer {issue_register_scope(self.user)}"
                 }
@@ -80,7 +86,7 @@ class DeviceLimitRaceTests(TransactionTestCase):
 
         def naive_register():
             try:
-                start.wait(timeout=10)
+                connect_then_wait(start)
                 with transaction.atomic():
                     n = (
                         Device.objects.select_for_update()

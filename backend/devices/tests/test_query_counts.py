@@ -4,11 +4,9 @@ These lock in the shape: the list endpoints must stay constant-query however man
 devices an account has, and the claim must stay one bounded set of queries per target
 device, never one per stored prekey.
 
-Counts include the per-request auth queries `DeviceJWTAuthentication` makes and,
+Counts include the per-request auth query `DeviceJWTAuthentication` makes and,
 under pytest's per-test transaction, a SAVEPOINT/RELEASE pair per `atomic()` block,
-which in production is a real BEGIN/COMMIT instead. Headers are always built before
-the assertion block: `auth_headers` mints a refresh token, which writes an
-outstanding-token row of its own.
+which in production is a real BEGIN/COMMIT instead.
 """
 
 import pytest
@@ -17,7 +15,7 @@ from .conftest import DEVICES_URL, make_device, pubkey, stock_prekeys
 
 pytestmark = pytest.mark.django_db
 
-AUTH_QUERIES = 2  # the user row and the device row
+AUTH_QUERIES = 1  # the device row, joined to its owner
 # Live device ids + the device-log head (an ETag input since the log landed).
 # Constant: neither scales with the device count or the log length.
 ETAG_QUERY = 2
@@ -212,8 +210,8 @@ def test_registration_is_constant_query_whatever_the_payload(
     headers = auth_headers(active_user, device)
     payload = register_payload(otpks=200)
     # savepoint, user lock, cap count, identity-exists check, device insert,
-    # otpk bulk, release, then the refresh-token row the issued pair writes
-    with django_assert_num_queries(AUTH_QUERIES + 8):
+    # otpk bulk, release. The issued pair writes nothing: no token table exists.
+    with django_assert_num_queries(AUTH_QUERIES + 7):
         response = api.post(DEVICES_URL, payload, format="json", **headers)
 
     assert response.status_code == 201

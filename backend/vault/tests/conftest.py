@@ -2,7 +2,6 @@ import base64
 
 import pytest
 
-from accounts.models import User
 from core.buckets import BACKUP_BUCKETS
 from devices.models import Device
 
@@ -29,11 +28,7 @@ def make_device(user, registration_id=1):
 
 
 @pytest.fixture
-def bob(db):
-    """A second activated account; its key backup must stay independent of alice's."""
-    return User.objects.create_user(username="bob", password=PASSWORD, is_active=True)
-
-
-@pytest.fixture
 def bob_device(bob):
+    """A device for the second account; its key backup must stay independent of
+    alice's."""
     return make_device(bob, 99)
