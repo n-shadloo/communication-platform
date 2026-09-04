@@ -407,9 +407,14 @@ accepted rather than closed: AR-7 and AR-8 above.
   delete for the batch; the per-device select is the response shape and not an N+1.
 - **The drain query and the keyset pages.** Index scans of 19 and 11 buffers, flat
   against mailbox depth and log length.
-- **Redis round trips.** One per request for the limiter in steady state — the `EXPIRE`
-  runs only on the first hit of a window, and pipelining the pair saves 0.05 ms, so it
-  was left alone; one per bind, room join and room leave; one per fan-out now.
+- **Redis round trips.** Per request: one for the limiter in steady state, since the
+  `EXPIRE` runs only on the first hit of a window; pipelining that pair saves 0.05 ms
+  and was left alone. Per frame: one publish for a signal or a room signal, and one
+  for a whole fan-out where it used to be one for each target. Per room join or
+  leave: four — the topic subscribe, the presence publish, and the set operation with
+  the TTL that refreshes it — which is connection-lifecycle rate rather than frame
+  rate, and pipelining the last two would save the same 0.05 ms, so it was left alone
+  for the same measured reason.
 - **The pool against the worker count and the connection ceiling.** 17 connections at
   the default worker count against PostgreSQL's default of 100, and the pool proved not
   to be the binding constraint under contention.
