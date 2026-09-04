@@ -161,6 +161,12 @@ ATTACH_TTL_DAYS = env_int("ATTACH_TTL_DAYS", default=30)
 # message or a group control event, and the device must then repair the affected
 # pairwise sessions — see queue_pruned_through.
 ENVELOPE_TTL_DAYS = env_int("ENVELOPE_TTL_DAYS", default=7)
+# The ceiling on the undelivered bytes one mailbox holds. Any member can address
+# any mailbox, so without it a member's sends are a write primitive against the
+# disk of the host; with it the worst case is the ceiling times the device count.
+# A device whose mailbox would pass it is refused whole and named in
+# `full_devices`, and the sender retries once the device has drained.
+MAILBOX_MAX_BYTES = env_int("MAILBOX_MAX_BYTES", default=32 * 1024 * 1024)
 MAX_DEVICES_PER_USER = env_int("MAX_DEVICES_PER_USER", default=10)
 
 # Realtime gateway bounds.

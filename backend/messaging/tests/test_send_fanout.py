@@ -32,7 +32,7 @@ def test_one_message_to_three_devices_becomes_three_independent_rows(
     resp = send(http, bearer(active_user, device), items)
 
     assert resp.status_code == 202
-    assert resp.json() == {"accepted": 3, "stale_devices": []}
+    assert resp.json() == {"accepted": 3, "stale_devices": [], "full_devices": []}
     rows = QueuedEnvelope.objects.all()
     assert rows.count() == 3
     # Independent copies: one row per device, no shared row and no shared payload.
@@ -80,7 +80,11 @@ def test_a_revoked_device_is_reported_stale_and_enqueues_nothing(
         ],
     )
 
-    assert resp.json() == {"accepted": 1, "stale_devices": [str(dead.id)]}
+    assert resp.json() == {
+        "accepted": 1,
+        "stale_devices": [str(dead.id)],
+        "full_devices": [],
+    }
     assert not QueuedEnvelope.objects.filter(recipient_device_id=dead.id).exists()
     assert QueuedEnvelope.objects.filter(recipient_device_id=alive.id).count() == 1
 
@@ -97,7 +101,11 @@ def test_a_deactivated_users_device_is_stale(
         [{"device_id": str(bob_devices[0].id), "blob": envelope_blob()}],
     )
 
-    assert resp.json() == {"accepted": 0, "stale_devices": [str(bob_devices[0].id)]}
+    assert resp.json() == {
+        "accepted": 0,
+        "stale_devices": [str(bob_devices[0].id)],
+        "full_devices": [],
+    }
     assert QueuedEnvelope.objects.count() == 0
 
 
@@ -108,7 +116,7 @@ def test_an_unknown_device_is_stale_not_an_error(http, active_user, device, bear
         http, bearer(active_user, device), [{"device_id": ghost, "blob": envelope_blob()}]
     )
 
-    assert resp.json() == {"accepted": 0, "stale_devices": [ghost]}
+    assert resp.json() == {"accepted": 0, "stale_devices": [ghost], "full_devices": []}
 
 
 def test_a_rejected_item_queues_nothing_for_the_rest_of_the_batch(
@@ -230,3 +238,77 @@ def test_anonymous_send_is_rejected(http, bob_devices):
 
     assert resp.status_code == 401
     assert QueuedEnvelope.objects.count() == 0
+
+
+# --- The mailbox ceiling -----------------------------------------------------------
+
+
+def fill(device, count, size):
+    """`count` undelivered envelopes of `size` bytes in this mailbox, with the
+    counter where the send would have left it."""
+    QueuedEnvelope.objects.bulk_create(
+        [
+            QueuedEnvelope(recipient_device=device, seq=i + 1, blob=b"q" * size)
+            for i in range(count)
+        ]
+    )
+    device.queue_seq = count
+    device.save(update_fields=["queue_seq"])
+
+
+def test_a_full_mailbox_refuses_only_that_device(
+    http, active_user, device, bearer, bob_devices, settings
+):
+    """Any member can address any mailbox, and a mailbox with no ceiling is the
+    disk of the host. A device whose undelivered bytes would pass the ceiling is
+    refused whole and named in `full_devices`; the rest of the batch proceeds."""
+    from .conftest import SMALLEST_BUCKET
+
+    settings.MAILBOX_MAX_BYTES = 2 * SMALLEST_BUCKET
+    full, free = bob_devices
+    fill(full, 2, SMALLEST_BUCKET)
+    items = [
+        {"device_id": str(full.id), "blob": envelope_blob(b"F")},
+        {"device_id": str(free.id), "blob": envelope_blob(b"G")},
+    ]
+
+    resp = send(http, bearer(active_user, device), items)
+
+    assert resp.status_code == 202
+    assert resp.json() == {
+        "accepted": 1,
+        "stale_devices": [],
+        "full_devices": [str(full.id)],
+    }
+    assert QueuedEnvelope.objects.filter(recipient_device=full).count() == 2
+    assert QueuedEnvelope.objects.filter(recipient_device=free).count() == 1
+    full.refresh_from_db()
+    assert full.queue_seq == 2  # the counter never ran ahead of the rows
+
+
+def test_the_batch_itself_counts_against_the_ceiling(
+    http, active_user, device, bearer, bob_devices, settings
+):
+    """The bytes of this batch are part of what the mailbox would hold, so a batch
+    that alone passes the ceiling is refused, and one that lands exactly on it is
+    not."""
+    from .conftest import SMALLEST_BUCKET
+
+    settings.MAILBOX_MAX_BYTES = 2 * SMALLEST_BUCKET
+    target = bob_devices[0]
+    three = [
+        {"device_id": str(target.id), "blob": envelope_blob(bytes([65 + i]))}
+        for i in range(3)
+    ]
+    two = three[:2]
+
+    refused = send(http, bearer(active_user, device), three)
+    accepted = send(http, bearer(active_user, device), two)
+
+    assert refused.json() == {
+        "accepted": 0,
+        "stale_devices": [],
+        "full_devices": [str(target.id)],
+    }
+    assert accepted.json() == {"accepted": 2, "stale_devices": [], "full_devices": []}
+    assert QueuedEnvelope.objects.filter(recipient_device=target).count() == 2

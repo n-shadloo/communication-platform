@@ -75,6 +75,7 @@ class AckIn(RequestModel):
 class SendOut(BaseModel):
     accepted: int
     stale_devices: list[str]
+    full_devices: list[str]
 
 
 class EnvelopeOut(BaseModel):

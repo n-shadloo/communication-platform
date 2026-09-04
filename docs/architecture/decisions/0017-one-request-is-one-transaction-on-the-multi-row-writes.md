@@ -82,6 +82,8 @@ product that destroys a key a second device happened to number the same.
   documented PostgreSQL behaviour. Measured here: a send is 3 queries at 1, 6 and
   20 recipients, and 3 for ten envelopes to one mailbox; a claim is 1 target read
   plus 1 locked select per device plus 1 delete.
+  Phase 4 added one aggregate to the send for the mailbox ceiling, so it is 4
+  queries from 2026-09-04; `GROUND-TRUTH.md` carries the current number.
   **Currency:** current, PostgreSQL 16.
 
 ## Consequences

@@ -95,8 +95,9 @@ A full seizure of this server (disk + database) reveals, in total:
   keys, cross-signing public keys and their opaque signatures, day-granularity activity;
 - per-user **device-list log records** — opaque client-signed blobs, day-coarse dates;
 - that **delivery happened, to which device, at hour granularity** — pending queue rows
-  (at most 7 days deep) tie an opaque blob to a recipient device, never to a sender or
-  a conversation; acked rows are deleted outright;
+  (at most 7 days deep, and at most `MAILBOX_MAX_BYTES` for each device) tie an opaque
+  blob to a recipient device, never to a sender or a conversation; acked rows are
+  deleted outright;
 - that **rooms exist**, each an ID plus an encrypted name — no membership, no
   participant history;
 - per-user **attachment upload counts, bucketed sizes, and days** — no recipient data

@@ -154,8 +154,11 @@ group key; a group exists only in its members' clients.
   `PUT /me/devices/{device_id}/prekeys`) before a pool empties.
 - **Fan-out.** Encrypt the group message once per recipient device and send the copies
   with `POST /envelopes`, up to 256 items per call; a larger fan-out is several calls.
-  Read `accepted` and `stale_devices` from every response: drop a stale device from
-  the group's session set and refresh that user's device list.
+  Read `accepted`, `stale_devices` and `full_devices` from every response: drop a
+  stale device from the group's session set and refresh that user's device list;
+  keep a full device in the set and retry its items later, because it is live and
+  its mailbox has merely reached its ceiling (`MAILBOX_MAX_BYTES`, default 32 MiB
+  of undelivered bytes).
 - **Queue, acknowledgement, and time to live.** The server stores one padded row per
   recipient device with a per-device `seq`, deletes the row on ack, and prunes an
   undelivered row after `ENVELOPE_TTL_DAYS` (default 7). The drain response carries

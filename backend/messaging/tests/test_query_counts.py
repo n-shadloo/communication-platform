@@ -1,7 +1,7 @@
 """Query-shape guards for the hot paths.
 
 These lock in the shape, not a micro-benchmark: the drain must stay one indexed
-query no matter how full the mailbox is, and a send must stay a fixed three
+query no matter how full the mailbox is, and a send must stay a fixed four
 statements no matter how many recipients it names.
 
 Counted end to end through the composed application, so each number includes the
@@ -25,9 +25,10 @@ pytestmark = pytest.mark.django_db(transaction=True)
 TRANSACTION_STATEMENTS = ("BEGIN", "COMMIT", "SAVEPOINT", "RELEASE", "ROLLBACK")
 
 AUTH_QUERY = 1  # the device row, joined to its owner
-# The locked liveness read, one bulk counter update, one bulk insert. Fixed: none
-# of the three scales with the batch size or the recipient count.
-SEND_QUERIES = 3
+# The locked liveness read, the aggregate of the undelivered bytes each target
+# holds, one bulk counter update, one bulk insert. Fixed: none of the four scales
+# with the batch size or the recipient count.
+SEND_QUERIES = 4
 
 DRAIN_URL = "/api/v1/me/envelopes"
 SEND_URL = "/api/v1/envelopes"
@@ -77,11 +78,11 @@ def test_the_drain_is_one_query_whatever_the_mailbox_holds(
 
 
 @pytest.mark.parametrize("recipients", [1, 6, 20])
-def test_a_send_is_three_queries_however_many_recipients(
+def test_a_send_is_four_queries_however_many_recipients(
     http, active_user, device, bearer, bob, recipients
 ):
-    """The N+1 that matters: neither the liveness read, nor the counter advance,
-    nor the insert may become a query per recipient."""
+    """The N+1 that matters: neither the liveness read, nor the ceiling aggregate,
+    nor the counter advance, nor the insert may become a query per recipient."""
     targets = [make_device(bob, 200 + i) for i in range(recipients)]
     items = [
         {"device_id": str(d.id), "blob": envelope_blob(bytes([65 + (i % 26)]))}
@@ -100,7 +101,7 @@ def test_a_send_is_three_queries_however_many_recipients(
     assert response.json()["accepted"] == recipients
 
 
-def test_several_envelopes_to_one_device_cost_the_same_three_queries(
+def test_several_envelopes_to_one_device_cost_the_same_four_queries(
     http, active_user, device, bearer, bob
 ):
     """The counter advance is computed under the lock this call already holds, so

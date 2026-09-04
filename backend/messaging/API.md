@@ -42,6 +42,14 @@ reported in `stale_devices`; the sender should drop those devices from its sessi
 state and refresh the peer's device list. The whole batch validates before anything
 is written: one off-bucket blob rejects the entire request.
 
+Every mailbox has a ceiling, `MAILBOX_MAX_BYTES` of undelivered bytes (default
+32 MiB). A device whose mailbox would pass it with this batch's items is refused
+whole — nothing is written for it and its sequence does not move — and reported in
+`full_devices`; the rest of the batch proceeds. A full device is live, not stale:
+keep it in the session set and retry its items once it has drained. The ceiling is
+what keeps a member's sends from being a write primitive against the disk of the
+host, since any member can address any mailbox.
+
 **One call is one transaction.** Every accepted item of a batch is committed together
 with the counter advance behind its sequence number, so the batch is queued whole or
 not at all — never a partial batch, and never a mailbox whose counter ran ahead of
@@ -89,8 +97,15 @@ deduplicates on its own message id; `CLIENT_CONTRACT.md` §H is where that duty 
 ### Accepted — `202 Accepted`
 
 ```json
-{ "accepted": 2, "stale_devices": ["b3a91c77-2e5d-4f28-a1c9-8d64e0f3b522"] }
+{
+  "accepted": 2,
+  "stale_devices": ["b3a91c77-2e5d-4f28-a1c9-8d64e0f3b522"],
+  "full_devices": ["2a77d4b9-e611-4c0f-9f1c-6a2e3b7d4e0f"]
+}
 ```
+
+`accepted` counts the items written; an item to a stale or a full device is not
+among them.
 
 ### Invalid request — `400 Bad Request`
 

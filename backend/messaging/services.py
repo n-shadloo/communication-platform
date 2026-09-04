@@ -8,7 +8,10 @@ never fail the request.
 
 import base64
 
+from django.conf import settings
 from django.db import transaction
+from django.db.models import Sum
+from django.db.models.functions import Length
 
 from devices.models import Device
 from messaging.models import QueuedEnvelope
@@ -30,8 +33,16 @@ def send(messages):
     the lock off the account rows the liveness filter joins; taking those too would
     contend with the account-row lock registration and the device log hold.
 
-    Returns the accepted rows, in the order the batch named them, and the ids the
-    batch could not reach.
+    Every mailbox has a ceiling, `MAILBOX_MAX_BYTES` of undelivered bytes. Any
+    member can address any mailbox, so a mailbox with no ceiling is a write
+    primitive against the disk of the host. A device whose mailbox would pass it
+    with this batch's items is refused whole — its counter does not move and none
+    of its rows are written — and named to the sender, who retries once the device
+    has drained. Measured under the lock, so two concurrent sends cannot both fit
+    into the same headroom.
+
+    Returns the accepted rows, in the order the batch named them, the ids the
+    batch could not reach, and the ids whose mailbox is full.
     """
     wanted = sorted({message.device_id for message in messages})  # one id per device
     with transaction.atomic():
@@ -42,12 +53,31 @@ def send(messages):
             .only("id", "queue_seq")
             .order_by("id")
         }
+        held = {
+            row["recipient_device_id"]: row["held"]
+            for row in QueuedEnvelope.objects.filter(recipient_device_id__in=targets)
+            .values("recipient_device_id")
+            .annotate(held=Sum(Length("blob")))
+        }
+        incoming = {}
+        for message in messages:
+            if message.device_id in targets:
+                incoming[message.device_id] = incoming.get(message.device_id, 0) + len(
+                    message.raw
+                )
+        full = {
+            device_id
+            for device_id, new in incoming.items()
+            if held.get(device_id, 0) + new > settings.MAILBOX_MAX_BYTES
+        }
         stale = []
         rows = []
         for message in messages:
             device = targets.get(message.device_id)
             if device is None:
                 stale.append(str(message.device_id))
+                continue
+            if device.id in full:
                 continue
             device.queue_seq += 1
             rows.append(
@@ -59,9 +89,12 @@ def send(messages):
             )
         # Both are no-ops on an empty list, so a batch that reached nothing live
         # costs no write query at all.
-        Device.objects.bulk_update(targets.values(), ["queue_seq"])
+        Device.objects.bulk_update(
+            [device for device in targets.values() if device.id not in full],
+            ["queue_seq"],
+        )
         QueuedEnvelope.objects.bulk_create(rows)
-    return rows, stale
+    return rows, stale, [str(device_id) for device_id in sorted(full)]
 
 
 async def push(envelopes):

@@ -1326,6 +1326,13 @@
             "title": "Accepted",
             "type": "integer"
           },
+          "full_devices": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Full Devices",
+            "type": "array"
+          },
           "stale_devices": {
             "items": {
               "type": "string"
@@ -1336,7 +1343,8 @@
         },
         "required": [
           "accepted",
-          "stale_devices"
+          "stale_devices",
+          "full_devices"
         ],
         "title": "SendOut",
         "type": "object"

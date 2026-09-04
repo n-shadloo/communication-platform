@@ -268,6 +268,7 @@ the route's own reference.
 | Item | Old behaviour | New behaviour | Client action |
 |---|---|---|---|
 | `POST /api/v1/auth/login` after five failed attempts on one name within fifteen minutes | Every attempt answered `401 invalid_credentials`; only the per-address limiter stood between a guesser with many addresses and the password | `429 {"code": "throttled", "detail": "Too many sign-in attempts for this name. Wait and try again."}` with `Retry-After` in seconds, for that name, until the cool-off ends. The lock applies to a name whether or not an account holds it, so it confirms nothing about existence, and a successful sign-in clears the count | Back off for `Retry-After` seconds and tell the user. Do not treat the refusal as a wrong password, and do not retry inside the window |
+| `POST /api/v1/envelopes` to a device whose undelivered bytes would pass `MAILBOX_MAX_BYTES` (default 32 MiB) with this batch | Every item to a live device was queued; a mailbox had no ceiling | The device is refused whole — nothing is written for it and its sequence does not move — and named in a new `full_devices` list beside `stale_devices`; the rest of the batch proceeds and `accepted` counts only what was written | Read `full_devices` on every send. Keep a full device in the session set and retry its items once it has drained; a full device is live, not stale |
 
 ## What the client can build against now
 
