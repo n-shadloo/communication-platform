@@ -19,6 +19,7 @@ import pytest
 from django.apps import apps
 from django.contrib import admin as django_admin
 from django.contrib.admin.models import ADDITION, CHANGE, DELETION, LogEntry
+from django.contrib.messages import get_messages
 from django.contrib.staticfiles import finders
 from django.core.management import call_command
 from django.db import connection
@@ -984,3 +985,139 @@ def test_the_retention_window_is_configured_and_documented():
     assert (
         "ADMIN_AUDIT_RETENTION_DAYS" in (settings.BASE_DIR / ".env.example").read_text()
     )
+
+
+# --- The set-password dialog -----------------------------------------------------
+
+
+def test_the_set_password_dialog_refuses_two_that_do_not_match(client, owner, alice):
+    """A mistyped confirmation must leave the account exactly as it was: the
+    operator is the only one who can undo a password they did not mean to set."""
+    response = client.post(
+        reverse("admin:accounts_user_set_password", args=[alice.pk]),
+        {
+            "password": "another-long-password",
+            "confirm": "a-different-long-password",
+            "_form_submitted": "1",
+        },
+    )
+
+    alice.refresh_from_db()
+    assert response.status_code == 200
+    assert alice.check_password(PASSWORD)
+    assert LogEntry.objects.filter(change_message="Set a new password.").count() == 0
+
+
+def test_the_set_password_dialog_holds_the_same_rules_as_registration(
+    client, owner, alice
+):
+    """The dialog runs Django's configured validators, so the panel cannot set a
+    password the client registration path would have refused."""
+    response = client.post(
+        reverse("admin:accounts_user_set_password", args=[alice.pk]),
+        {"password": "short", "confirm": "short", "_form_submitted": "1"},
+    )
+
+    alice.refresh_from_db()
+    assert response.status_code == 200
+    assert alice.check_password(PASSWORD)
+    assert LogEntry.objects.count() == 0
+
+
+def test_the_set_password_dialog_refuses_an_empty_submission(client, owner, alice):
+    """The field is required, so a submission with nothing in it is the form
+    saying so — not a password of zero length reaching the validators."""
+    response = client.post(
+        reverse("admin:accounts_user_set_password", args=[alice.pk]),
+        {"password": "", "confirm": "", "_form_submitted": "1"},
+    )
+
+    alice.refresh_from_db()
+    assert response.status_code == 200
+    assert alice.check_password(PASSWORD)
+    assert LogEntry.objects.count() == 0
+
+
+# --- The change form -------------------------------------------------------------
+
+
+def test_deactivating_on_the_change_form_closes_the_sockets_after_the_commit(
+    client, owner, alice, device, django_capture_on_commit_callbacks, monkeypatch
+):
+    """The bulk action is not the only way to deactivate an account: the change
+    form is, and a socket authenticated once at connect would otherwise keep
+    relaying until it happened to drop."""
+    alice.is_active = True
+    alice.save(update_fields=["is_active"])
+    closed = []
+    monkeypatch.setattr("accounts.admin.close_device_sockets", closed.append)
+
+    with django_capture_on_commit_callbacks(execute=True) as callbacks:
+        response = client.post(reverse("admin:accounts_user_change", args=[alice.pk]), {})
+
+    alice.refresh_from_db()
+    assert response.status_code == 302
+    assert alice.is_active is False
+    assert len(callbacks) == 1
+    assert closed == [device.pk]
+
+
+def test_activating_on_the_change_form_closes_nothing(
+    client, owner, alice, device, django_capture_on_commit_callbacks, monkeypatch
+):
+    """The other side of the same branch: a save that switches activation on has
+    no session to end."""
+    closed = []
+    monkeypatch.setattr("accounts.admin.close_device_sockets", closed.append)
+
+    with django_capture_on_commit_callbacks(execute=True) as callbacks:
+        client.post(
+            reverse("admin:accounts_user_change", args=[alice.pk]), {"is_active": "on"}
+        )
+
+    alice.refresh_from_db()
+    assert alice.is_active is True
+    assert callbacks == []
+    assert closed == []
+
+
+# --- An action with nothing to do ------------------------------------------------
+
+
+def test_revoking_the_devices_of_an_account_that_has_none_writes_nothing(
+    client, owner, alice
+):
+    """An action that changed nothing must say so rather than claim a revocation:
+    an audit row for work that never happened is a false record."""
+    response = _post_action(
+        client, "admin:accounts_user_changelist", "revoke_all_devices", [alice.pk]
+    )
+
+    assert response.status_code == 302
+    assert LogEntry.objects.count() == 0
+    assert [str(message) for message in get_messages(response.wsgi_request)] == [
+        "Nothing to do: no selected row needed the change."
+    ]
+
+
+def test_revoking_the_devices_of_one_account_leaves_another_accounts_alone(
+    client, owner, alice, device
+):
+    other = User.objects.create_user(username="carol", password=PASSWORD)
+    theirs = Device.objects.create(
+        user=other,
+        ik_pub=b"k" * 32,
+        spk_id=1,
+        spk_pub=b"k" * 32,
+        spk_sig=b"s" * 64,
+        registration_id=202,
+    )
+
+    _post_action(
+        client, "admin:accounts_user_changelist", "revoke_all_devices", [alice.pk]
+    )
+
+    device.refresh_from_db()
+    theirs.refresh_from_db()
+    assert device.revoked_date is not None
+    assert theirs.revoked_date is None

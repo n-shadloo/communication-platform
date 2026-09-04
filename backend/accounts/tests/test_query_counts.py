@@ -174,3 +174,79 @@ def test_a_profile_write_reads_the_row_once(http, active_user, device, bearer):
     )
 
     assert response.status_code == 200
+
+
+def test_a_taken_name_still_costs_exactly_one_insert(http):
+    """The conflict is the unique index, not a probe: an existence check before
+    the write would add a query here and still lose the race."""
+    http.post(REGISTER_URL, json={"username": "zed", "password": PASSWORD})
+
+    response = counted(
+        http, "POST", REGISTER_URL, 1, json={"username": "zed", "password": PASSWORD}
+    )
+
+    assert response.status_code == 409
+    assert response.json()["code"] == "username_taken"
+
+
+def test_an_unknown_name_reads_the_account_table_once_and_writes_nothing(http):
+    response = counted(
+        http, "POST", LOGIN_URL, 1, json={"username": "ghost", "password": PASSWORD}
+    )
+
+    assert response.status_code == 401
+    assert User.objects.count() == 0
+
+
+def test_a_locked_name_reaches_the_database_not_at_all(http, active_user):
+    """The cool-off is read from Redis before the account row is: a name under
+    lock buys neither a query nor an Argon2 verification."""
+    from core.lockout import FAILURE_THRESHOLD
+
+    for _ in range(FAILURE_THRESHOLD):
+        assert (
+            http.post(
+                LOGIN_URL, json={"username": "alice", "password": "the-wrong-one"}
+            ).status_code
+            == 401
+        )
+
+    response = counted(
+        http, "POST", LOGIN_URL, 0, json={"username": "alice", "password": PASSWORD}
+    )
+
+    assert response.status_code == 429
+
+
+def test_a_missing_profile_is_still_one_lookup(http, active_user, device, bearer):
+    """The 404 must not cost a second query looking for the user behind it."""
+    headers = bearer(active_user, device)
+
+    mine = counted(http, "GET", MY_PROFILE_URL, AUTH_QUERY + 1, headers=headers)
+    theirs = counted(
+        http,
+        "GET",
+        f"/api/v1/users/{active_user.id}/profile",
+        AUTH_QUERY + 1,
+        headers=headers,
+    )
+
+    assert mine.status_code == theirs.status_code == 404
+
+
+def test_a_first_profile_write_is_the_locked_read_and_one_insert(
+    http, active_user, device, bearer
+):
+    """The create branch: `select_for_update` finds nothing, and the INSERT that
+    follows must not be preceded by a second read of the same row."""
+    response = counted(
+        http,
+        "PUT",
+        MY_PROFILE_URL,
+        AUTH_QUERY + 2,
+        json={"blob": blob_of(PROFILE_BUCKETS[0]), "version": 1},
+        headers=bearer(active_user, device),
+    )
+
+    assert response.status_code == 200
+    assert ProfileBlob.objects.count() == 1

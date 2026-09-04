@@ -16,6 +16,7 @@ import pytest
 from django.conf import settings
 
 from api.auth import issue_full, issue_register_scope
+from devices.models import Device
 
 # transaction=True because the ORM bracket of `api.orm.run_unit` closes the
 # connection around every unit of work, which under a wrapping test transaction
@@ -241,3 +242,68 @@ def test_a_token_cannot_name_another_accounts_device(http, active_user, device, 
 
     assert response.status_code == 401
     assert response.json()["code"] == "token_revoked"
+
+
+def test_a_token_whose_generation_runs_ahead_of_the_row_is_refused(
+    http, active_user, device
+):
+    """The check is equality, not `>=`: a forged claim that names a generation the
+    row has not reached yet would otherwise survive every future revocation."""
+    access = signed(live_claims(active_user, device, tgen=device.token_generation + 1))
+
+    response = http.get(DIRECTORY_URL, headers=token(access))
+
+    assert response.status_code == 401
+    assert response.json()["code"] == "token_revoked"
+
+
+def test_a_token_naming_a_device_that_never_existed_is_refused(http, active_user, device):
+    access = signed(live_claims(active_user, device, device_id=str(uuid.uuid4())))
+
+    response = http.get(DIRECTORY_URL, headers=token(access))
+
+    assert response.status_code == 401
+    assert response.json()["code"] == "token_revoked"
+
+
+def test_revoking_one_device_leaves_the_other_devices_token_alive(
+    http, active_user, device
+):
+    """Revocation is per device, and the account's other sessions are not part of
+    it: the counter that dies is the one on the revoked row."""
+    second = Device.objects.create(
+        user=active_user,
+        ik_pub=b"ik",
+        spk_id=2,
+        spk_pub=b"spk",
+        spk_sig=b"sig",
+        registration_id=3003,
+    )
+    revoked_access, _ = issue_full(active_user, device)
+    surviving_access, _ = issue_full(active_user, second)
+    device.revoked_date = "2026-01-01"
+    device.save(update_fields=["revoked_date"])
+
+    assert http.get(DIRECTORY_URL, headers=token(revoked_access)).status_code == 401
+    assert http.get(DIRECTORY_URL, headers=token(surviving_access)).status_code == 200
+
+
+@pytest.mark.parametrize("scheme", ["Bearer", "bearer", "BEARER", "BeArEr"])
+def test_the_bearer_scheme_is_matched_case_insensitively(
+    http, active_user, device, scheme
+):
+    """RFC 7235 makes the scheme case-insensitive, and a client that sends it in
+    lower case is not an attacker."""
+    access, _refresh = issue_full(active_user, device)
+
+    response = http.get(DIRECTORY_URL, headers={"Authorization": f"{scheme} {access}"})
+
+    assert response.status_code == 200
+
+
+def test_padding_around_the_token_is_ignored(http, active_user, device):
+    access, _refresh = issue_full(active_user, device)
+
+    response = http.get(DIRECTORY_URL, headers={"Authorization": f"Bearer   {access}  "})
+
+    assert response.status_code == 200
