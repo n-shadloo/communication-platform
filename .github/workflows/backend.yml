@@ -131,6 +131,6 @@ jobs:
       - name: The offline tree imports
         run: |
           "$RUNNER_TEMP/offline/bin/python" -c "
-          import django, psycopg, redis
-          print('django', django.get_version())
+          import django, fastapi, psycopg, psycopg_pool, pydantic, redis
+          print('django', django.get_version(), 'fastapi', fastapi.__version__)
           "
