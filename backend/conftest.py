@@ -6,6 +6,8 @@ import redis
 from asgiref.sync import async_to_sync
 from django.conf import settings
 from httpx import ASGITransport
+from hypothesis import HealthCheck
+from hypothesis import settings as hypothesis_settings
 
 from accounts.models import User
 from api.auth import issue_full, issue_register_scope
@@ -21,6 +23,26 @@ BASE_URL = "http://testserver"
 # grade the server. The server imports no HTTP client: httpx is a test-only
 # dependency and this logger does not exist in production.
 logging.getLogger("httpx").disabled = True
+
+# The property tests run under `pytest-randomly`, which reseeds the global RNG for
+# every test, so an entropy-driven Hypothesis would explore a different set of
+# examples in each of the two orders the gate gives it. `derandomize` fixes the
+# examples to the test itself: a property that fails, fails in both runs, and the
+# failing example is in the log rather than behind a seed nobody recorded.
+#
+# The budget is fixed for the same reason the gate has to finish: this is a suite,
+# not a fuzzing campaign. `database=None` keeps the run from writing a `.hypothesis`
+# directory into the tree, and the deadline is off because a per-example wall-clock
+# limit turns a loaded machine into a red build.
+hypothesis_settings.register_profile(
+    "chatapp",
+    max_examples=200,
+    derandomize=True,
+    deadline=None,
+    database=None,
+    suppress_health_check=[HealthCheck.function_scoped_fixture],
+)
+hypothesis_settings.load_profile("chatapp")
 
 
 class AsgiClient:
