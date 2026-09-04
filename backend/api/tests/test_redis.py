@@ -8,14 +8,57 @@ observable at all.
 """
 
 import asyncio
+import socket
+import threading
+import time
+import uuid
 
 import pytest
 import redis
 from django.conf import settings
 
-from api.redis import close_client, get_client
+from api.redis import close_client, get_client, timeouts
+from core import lockout
+from realtime import bus
+from voicerooms.presence import live_counts
 
 KEY = "api-tests:redis-client"
+
+# The headroom a timeout assertion allows above the value it was given. Every
+# client below talks to a listener on loopback that answers nothing, so the whole
+# wait is the timeout; this covers scheduling on a machine running the rest of the
+# suite beside it.
+PATIENCE = 1.0
+
+
+@pytest.fixture
+def black_hole():
+    """A listener that accepts a connection and then answers nothing.
+
+    Not a closed port: a refused connection is a different failure, and every
+    client already learns about that one immediately. This is the store that is
+    still there and has stopped speaking.
+    """
+    listener = socket.socket()
+    listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    listener.bind(("127.0.0.1", 0))
+    listener.listen(8)
+    accepted = []
+
+    def hold_everything():
+        while True:
+            try:
+                accepted.append(listener.accept()[0])
+            except OSError:
+                return
+
+    threading.Thread(target=hold_everything, daemon=True).start()
+    try:
+        yield f"redis://127.0.0.1:{listener.getsockname()[1]}/0"
+    finally:
+        listener.close()
+        for connection in accepted:
+            connection.close()
 
 
 @pytest.fixture
@@ -88,3 +131,90 @@ async def test_a_shutdown_with_no_client_to_release_is_not_an_error(released_cli
     await close_client()
 
     assert await get_client().ping() is True
+
+
+class TestCommandTimeouts:
+    """A store that never answers, which is the failure a refused connection does
+    not cover.
+
+    A stopped Redis refuses the connection and every caller learns immediately. A
+    Redis that is still listening — blocked on a long command, or on the far side
+    of a network that moved under it — accepts the connection and then says
+    nothing, and without a timeout the caller waits for ever. On the HTTP surface
+    the request deadline would eventually answer `503`; the gateway has no
+    deadline at all, so the wait would end only when the client gave up. Each test
+    below asserts the same two things about one of the four clients this process
+    builds: it waited at least the configured timeout, and it came back.
+    """
+
+    async def test_the_configured_value_is_read_when_a_client_is_built(self, settings):
+        """The normal path. Read on each call rather than bound at import, so a
+        deployment that tunes the value gets the client it configured."""
+        settings.REDIS_COMMAND_TIMEOUT_SECONDS = 7
+
+        assert timeouts() == {"socket_timeout": 7, "socket_connect_timeout": 7}
+
+    @pytest.mark.parametrize("configured", [0.15, 0.4])
+    async def test_the_async_client_gives_up_on_a_store_that_never_answers(
+        self, settings, black_hole, released_client, configured
+    ):
+        settings.REDIS_URL = black_hole
+        settings.REDIS_COMMAND_TIMEOUT_SECONDS = configured
+
+        started = time.monotonic()
+        with pytest.raises(redis.TimeoutError):
+            await get_client().incr(KEY)
+        waited = time.monotonic() - started
+
+        assert configured <= waited < configured + PATIENCE
+
+    @pytest.mark.parametrize("configured", [0.15, 0.4])
+    def test_the_login_lockout_refuses_rather_than_waits(
+        self, settings, black_hole, monkeypatch, configured
+    ):
+        """`locked_for` fails closed, and a control that refuses traffic cannot
+        spend a whole request deciding to."""
+        settings.REDIS_URL = black_hole
+        settings.REDIS_COMMAND_TIMEOUT_SECONDS = configured
+        monkeypatch.setattr("core.lockout._store", None)
+
+        started = time.monotonic()
+        with pytest.raises(lockout.LockoutUnavailable):
+            lockout.locked_for("operator", lockout.API)
+        waited = time.monotonic() - started
+
+        assert configured <= waited < configured + PATIENCE
+
+    @pytest.mark.parametrize("configured", [0.15, 0.4])
+    def test_dropping_the_sockets_of_a_device_comes_back(
+        self, settings, black_hole, configured
+    ):
+        """Revocation runs on the ORM thread inside the unit of work that revoked
+        the device. A publish that never returns would hold that transaction open
+        against the device row for as long as the store stays silent."""
+        settings.REDIS_URL = black_hole
+        settings.REDIS_COMMAND_TIMEOUT_SECONDS = configured
+
+        started = time.monotonic()
+        bus.close_device_sockets(uuid.uuid4())
+        waited = time.monotonic() - started
+
+        assert configured <= waited < configured + PATIENCE
+
+    @pytest.mark.parametrize("configured", [0.15, 0.4])
+    def test_the_live_room_counts_of_the_panel_come_back_as_zero(
+        self, settings, black_hole, configured
+    ):
+        """The changelist reads one count per row on the page; a silent store
+        would hang the panel rather than render it with the counts it cannot
+        have."""
+        settings.REDIS_URL = black_hole
+        settings.REDIS_COMMAND_TIMEOUT_SECONDS = configured
+        room_id = uuid.uuid4()
+
+        started = time.monotonic()
+        counts = live_counts([room_id])
+        waited = time.monotonic() - started
+
+        assert counts == {str(room_id): 0}
+        assert configured <= waited < configured + PATIENCE

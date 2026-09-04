@@ -29,7 +29,7 @@ import json
 import redis
 from django.conf import settings
 
-from api.redis import get_client
+from api.redis import get_client, timeouts
 
 # The control event. Not a server frame: it names an action on the socket rather
 # than something to forward, and `realtime/gateway.py` is the only reader.
@@ -199,7 +199,7 @@ def close_device_sockets(device_id):
     """
     client = None
     try:
-        client = redis.Redis.from_url(settings.REDIS_URL)
+        client = redis.Redis.from_url(settings.REDIS_URL, **timeouts())
         client.publish(device_topic(device_id), json.dumps({"type": CLOSE}))
     except Exception:
         pass

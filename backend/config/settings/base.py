@@ -89,6 +89,20 @@ DATABASES = {
 # store another process on the host can write to (ADR-0018). `CACHES` therefore
 # stays on Django's process-local default, which nothing in this project uses.
 REDIS_URL = env("REDIS_URL", default="redis://127.0.0.1:6379/0")
+# Both the connect timeout and the per-command timeout of every Redis client this
+# process builds. Without one, a Redis that accepts the connection and then stops
+# answering — a blocked instance, or a half-open socket after the network moved
+# under it — holds its caller for ever. On the HTTP surface the request deadline
+# would eventually answer `503`; the WebSocket gateway has no deadline at all, so
+# a presence announcement or a room join would wait until the client gave up.
+# Loopback commands on this host are sub-millisecond, so two seconds is a hang and
+# never a slow answer, and the throttled routes fail closed on it exactly as they
+# already do when Redis refuses the connection (ADR-0010).
+#
+# It does not silence the fan-out bus: redis-py hands `math.inf` to the blocking
+# pub/sub read, which opts that one read out of the socket timeout while the
+# reconnect, AUTH and re-subscribe it performs around it still honour it.
+REDIS_COMMAND_TIMEOUT_SECONDS = env_int("REDIS_COMMAND_TIMEOUT_SECONDS", default=2)
 # Argon2id first. Password hashing protects auth only, never content.
 PASSWORD_HASHERS = [
     "django.contrib.auth.hashers.Argon2PasswordHasher",

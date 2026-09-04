@@ -39,6 +39,8 @@ from django.dispatch import receiver
 from django.utils.translation import gettext_lazy as _
 from unfold.forms import AuthenticationForm
 
+from api.redis import timeouts
+
 # Five attempts and fifteen minutes. One person who mistypes a password twice is
 # never inconvenienced; an online guesser gets 20 attempts an hour against an
 # Argon2id hash of a password of at least ten characters.
@@ -72,7 +74,7 @@ def _redis():
     """
     global _store
     if _store is None:
-        _store = redis.Redis.from_url(settings.REDIS_URL)
+        _store = redis.Redis.from_url(settings.REDIS_URL, **timeouts())
     return _store
 
 

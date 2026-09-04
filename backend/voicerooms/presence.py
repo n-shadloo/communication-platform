@@ -16,7 +16,7 @@ synchronous client there would block it for the round trip.
 import redis
 from django.conf import settings
 
-from api.redis import get_client
+from api.redis import get_client, timeouts
 
 # Self-healing bound: a worker that dies without running disconnect() strands its
 # members in the set, so every join/leave refreshes a day-long TTL. A room whose
@@ -62,7 +62,7 @@ def live_counts(room_ids):
     keys = [str(room_id) for room_id in room_ids]
     client = None
     try:
-        client = redis.Redis.from_url(settings.REDIS_URL)
+        client = redis.Redis.from_url(settings.REDIS_URL, **timeouts())
         pipeline = client.pipeline()
         for key in keys:
             pipeline.scard(_key(key))

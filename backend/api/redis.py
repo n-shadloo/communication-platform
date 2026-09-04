@@ -21,6 +21,20 @@ from redis.asyncio import Redis
 _clients = {}
 
 
+def timeouts():
+    """The connect and command timeouts every Redis client of this process is built
+    with, the synchronous ones included.
+
+    Read on each call rather than bound at import, so the value a client is built
+    with is the one the settings hold when it is built.
+    `config/settings/base.py` carries why the process has them at all.
+    """
+    return {
+        "socket_timeout": settings.REDIS_COMMAND_TIMEOUT_SECONDS,
+        "socket_connect_timeout": settings.REDIS_COMMAND_TIMEOUT_SECONDS,
+    }
+
+
 def get_client():
     """The client of the running loop, built on first use.
 
@@ -34,7 +48,7 @@ def get_client():
     loop = asyncio.get_running_loop()
     client = _clients.get(loop)
     if client is None:
-        client = Redis.from_url(settings.REDIS_URL)
+        client = Redis.from_url(settings.REDIS_URL, **timeouts())
         _clients[loop] = client
     return client
 

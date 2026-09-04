@@ -184,6 +184,7 @@ Every environment variable the code reads, with its default:
 | `DB_POOL_MAX_SIZE` | `16` | psycopg connection pool, maximum size; the ceiling on what one process takes from `max_connections` |
 | `DB_POOL_TIMEOUT` | `10` | Seconds to wait for a pooled connection |
 | `REDIS_URL` | `redis://127.0.0.1:6379/0` | Redis URL for the rate counters, the login lockout, the gateway bus, and room presence. Production carries the `requirepass` value as `redis://:<password>@127.0.0.1:6379/0`; `check --deploy` refuses a URL without one (`core.E004`) |
+| `REDIS_COMMAND_TIMEOUT_SECONDS` | `2` | Connect and per-command timeout, seconds, for every Redis client of the process; a store that accepts the connection and then stops answering fails the command instead of holding its caller. The blocking pub/sub read of the gateway bus opts out of it |
 | `JWT_SIGNING_KEY` | — (required) | HS256 signing key for all JWTs; at least 32 characters and never equal to `DJANGO_SECRET_KEY`, or `check --deploy` refuses it (`core.E005`) |
 | `ACCESS_MIN` | `15` | Access-token lifetime, minutes |
 | `REFRESH_DAYS` | `14` | Refresh-token lifetime, days |
