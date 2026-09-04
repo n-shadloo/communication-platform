@@ -51,8 +51,12 @@ def test_username_is_relowercased_on_every_save():
     assert user.username == "bob_2"
 
 
-def test_last_login_is_never_written():
-    # A NULL last_login keeps login timing out of the database entirely.
+def test_a_new_account_carries_no_last_login():
+    """The column starts NULL, which is all this proves. Whether a *login* writes
+    it depends on which login: the API surface never does — pinned in
+    `test_auth_api.py` — and a panel sign-in does, because Django's own
+    `update_last_login` receiver is connected to `user_logged_in` and the panel
+    uses Django's login view. `ACCEPTED_RISKS.md` AR-11 carries that seam."""
     user = User.objects.create_user(username="bob", password="a-long-enough-pw")
 
     assert user.last_login is None

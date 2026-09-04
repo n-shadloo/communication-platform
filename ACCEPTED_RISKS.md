@@ -364,6 +364,51 @@ than a real lookup, and the per-route rate limit bounds the call rate either way
 **Trigger.** Run 13 brings `attachments/` into scope. The row ends when that route
 answers `404` to an unstorable id, with a test that has been seen red.
 
+## AR-11 — A panel sign-in writes a login timestamp at rest
+
+**What is exposed.** `accounts.User` inherits `last_login` from
+`AbstractBaseUser`, and `django.contrib.auth` connects its own
+`update_last_login` receiver to the `user_logged_in` signal. The panel signs in
+through Django's login view, which sends that signal, so every operator sign-in
+writes a timestamp to the account row. `accounts/admin.py` then shows it as a
+read-only field.
+
+This sits against the reasoning behind
+[ADR-0006](docs/architecture/decisions/0006-device-bound-tokens-on-pyjwt.md),
+which stores no token because a per-device login record at rest is the login
+history a seizure would otherwise yield. A per-account sign-in timestamp is a
+smaller version of the same thing, and no invariant in the list names it.
+
+**Why this is carried.** It is deliberate rather than inherited by accident: the
+field is in `fields` and in `readonly_fields` of the account page, so the
+operator reads it. On a single-operator server the one thing it answers is "did
+somebody else sign in as me", which is the only login history worth having and
+cannot be had without storing it. Removing the receiver would take that away to
+protect an account only the operator uses, on a row that already carries the
+username and the activation state.
+
+**What reduces it today.**
+
+- The client-facing surface writes nothing. `accounts.services.login`
+  authenticates against the hash directly and never calls
+  `django.contrib.auth.login`, so it sends no signal and the column stays NULL
+  for every non-operator account. That is pinned by
+  `accounts/tests/test_auth_api.py::test_the_api_login_writes_no_login_timing`,
+  which fails if a refactor moves that route onto the Django helper.
+- One account signs into the panel, so the timestamp describes the operator and
+  nobody else. It is one row and one column, not a table that grows.
+- It records the most recent sign-in only. No history accumulates.
+- Every administrative act already writes an audit row, so the panel's own
+  record of operator activity is the larger artefact and is intentional.
+
+**What it would cost.** A seizure learns when the operator last signed in. It
+learns nothing about any member, because no member's row ever carries the value.
+
+**Trigger.** A second panel account exists, so the column starts describing
+somebody other than the operator — or the operator decides the answer to "did
+somebody else sign in as me" is not worth a stored timestamp, at which point
+disconnecting the receiver in `accounts.apps` is a two-line change.
+
 ## Appendix A — The security audit
 
 The security audit of phase 4 ran on 2026-09-04 over the tree at the merge of phase 3

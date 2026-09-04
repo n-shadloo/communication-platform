@@ -797,3 +797,27 @@ class TestRegistrationCannotTakeOverAName:
 
         assert response.status_code == 409
         assert User.objects.filter(username="bob", is_active=False).count() == 1
+
+
+def test_the_api_login_writes_no_login_timing(http, active_user, device):
+    """ADR-0006 stores no token because a per-device login record at rest is the
+    login history a seizure would otherwise yield. A `last_login` written by the
+    client-facing login would be that record by another name, so this route must
+    leave the column alone.
+
+    `login` in `accounts/services.py` authenticates against the hash directly and
+    never calls `django.contrib.auth.login`, so it sends no `user_logged_in` and
+    Django's `update_last_login` receiver never fires. That is the property; this
+    test is what keeps a later refactor onto the Django helper from ending it
+    silently."""
+    before = User.objects.get(pk=active_user.pk).last_login
+
+    response = http.post(
+        LOGIN_URL,
+        json={"username": "alice", "password": PASSWORD, "device_id": str(device.id)},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["scope"] == "full"
+    assert before is None
+    assert User.objects.get(pk=active_user.pk).last_login is None
