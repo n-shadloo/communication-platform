@@ -95,14 +95,20 @@ def empty_database():
     pool's idle connection would still hold the database open when the drop runs.
     """
     name = f"{connections['default'].settings_dict['NAME']}_{ALIAS}"
+    # `CREATE DATABASE` and `DROP DATABASE` take no bound parameter, so the name is
+    # interpolated into the statement. It is the configured database name plus a
+    # constant, never a request value, and this is what keeps it that way: anything
+    # but a plain identifier never reaches the statement.
+    assert name.replace("_", "").isalnum(), name
+    quoted = connections["default"].ops.quote_name(name)
     settings_dict = copy.deepcopy(connections["default"].settings_dict)
     settings_dict["NAME"] = name
     settings_dict["OPTIONS"] = {
         key: value for key, value in settings_dict["OPTIONS"].items() if key != "pool"
     }
     with connections["default"].cursor() as cursor:
-        cursor.execute(f'DROP DATABASE IF EXISTS "{name}"')
-        cursor.execute(f'CREATE DATABASE "{name}"')
+        cursor.execute(f"DROP DATABASE IF EXISTS {quoted}")
+        cursor.execute(f"CREATE DATABASE {quoted}")
     backend = load_backend(settings_dict["ENGINE"])
     connections[ALIAS] = backend.DatabaseWrapper(settings_dict, alias=ALIAS)
     try:
@@ -111,7 +117,7 @@ def empty_database():
         connections[ALIAS].close()
         del connections[ALIAS]
         with connections["default"].cursor() as cursor:
-            cursor.execute(f'DROP DATABASE IF EXISTS "{name}"')
+            cursor.execute(f"DROP DATABASE IF EXISTS {quoted}")
 
 
 def test_every_app_owns_exactly_one_migration():
