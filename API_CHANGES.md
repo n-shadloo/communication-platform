@@ -285,6 +285,39 @@ response byte-identical: `backend/openapi.json` does not move.
 Only a pool timeout reads this way. Django wraps every psycopg `OperationalError` in
 one class, and a deadlock or a dropped connection is still `500 server_error`.
 
+## What the reviews of phase 4 corrected
+
+The contract, seam, architecture and panel reviews of phase 4 moved no route, no
+status code and no response byte.
+
+### The document now declares the format of what it sends
+
+Every id this API returns is a UUID and every `_date` it returns is a calendar day, but
+`backend/openapi.json` declared each of them as a bare `string`. The same values were
+already `"format": "uuid"` where a client *sends* them — every `{user_id}`,
+`{device_id}` and `{room_id}` path parameter, `LoginIn.device_id`,
+`OutgoingItemIn.device_id`, `ClaimIn.device_ids` and `AckIn.ids` — so a generated client
+got one type on the way in and another on the way out for one value.
+
+| Field | Old declaration | New declaration |
+|---|---|---|
+| `user_id` in `RegisterOut`, `RegisterScopeOut`, `FullScopeOut`, `DirectoryUserOut` | `string` | `string`, `"format": "uuid"` |
+| `device_id` in `FullScopeOut`, `DeviceRegisteredOut`, `OwnDeviceOut`, `PeerDeviceOut`, `ClaimedBundleOut` | `string` | `string`, `"format": "uuid"` |
+| `room_id` in `RoomCreatedOut`, `RoomOut` | `string` | `string`, `"format": "uuid"` |
+| `id` in `EnvelopeOut` — the id `POST /api/v1/me/envelopes/ack` takes back | `string` | `string`, `"format": "uuid"` |
+| `stale_devices`, `full_devices` in `SendOut` | `array` of `string` | `array` of `string`, `"format": "uuid"` |
+| `created_date`, `last_active_date` in `OwnDeviceOut`, `updated_date` in `RoomOut` | `string` | `string`, `"format": "date"` |
+
+**No response byte moved.** A UUID still serialises to the same canonical lowercase
+form and a date to the same `YYYY-MM-DD`; only the published description changed.
+`attachment_id` is deliberately absent from the table: an attachment id is a 43-character
+capability, not a UUID, and it stays an unformatted string in the path and in the body
+alike.
+
+**Client action.** None, unless the client is generated from the schema and its
+generator maps `format` to a type — a regenerated client may now type these fields as
+`UUID` and `Date` rather than `String`. The values it receives are unchanged.
+
 ## What the client can build against now
 
 **The surface is frozen at `v1` from this merge.** It is published two ways and they

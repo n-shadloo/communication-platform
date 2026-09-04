@@ -19,6 +19,7 @@ peers can check them.
 
 import base64
 import binascii
+import datetime
 import uuid
 from typing import Annotated, Any
 
@@ -330,17 +331,17 @@ class IdentityOut(BaseModel):
 
 
 class DeviceRegisteredOut(BaseModel):
-    device_id: str
+    device_id: uuid.UUID
     access: str
     refresh: str
     scope: str
 
 
 class OwnDeviceOut(BaseModel):
-    device_id: str
+    device_id: uuid.UUID
     label_blob: str | None
-    created_date: str
-    last_active_date: str | None
+    created_date: datetime.date
+    last_active_date: datetime.date | None
     this_device: bool
 
 
@@ -350,7 +351,7 @@ class OwnDeviceListOut(BaseModel):
 
 
 class PeerDeviceOut(BaseModel):
-    device_id: str
+    device_id: uuid.UUID
     ik_pub: str
     registration_id: int
     cross_sig: str | None
@@ -405,7 +406,7 @@ class ClaimedBundleOut(BaseModel):
     look unsigned rather than absent.
     """
 
-    device_id: str
+    device_id: uuid.UUID
     registration_id: int
     ik_pub: str
     spk_id: int

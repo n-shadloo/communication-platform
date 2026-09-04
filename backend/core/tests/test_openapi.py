@@ -253,3 +253,62 @@ def test_the_document_generates_with_no_warning():
         create_app(django_asgi_app).openapi()
 
     assert [str(warning.message) for warning in raised] == []
+
+
+JSON_MEDIA = "application/json"
+
+
+def string_schemas(node, name=None):
+    """Every string-typed schema the JSON surface declares, with the property name
+    that introduced it. A plain recursive walk: a format may sit under a property,
+    a list item, a nullable `anyOf` branch, a parameter or a media type, and
+    reading those by position would miss whichever shape moves next.
+
+    The multipart body of the upload route is skipped. Its `blob` part is the one
+    field of this API that travels as bytes rather than as base64 text, so it
+    carries `binary` where every JSON `blob` carries none, and that difference is
+    the contract rather than a drift in it.
+    """
+    if isinstance(node, dict):
+        if node.get("type") == "string" and name is not None:
+            yield name, node
+        for key, value in node.items():
+            if key == "properties" and isinstance(value, dict):
+                for field, schema in value.items():
+                    yield from string_schemas(schema, field)
+            elif key == "parameters" and isinstance(value, list):
+                for parameter in value:
+                    yield from string_schemas(
+                        parameter.get("schema", {}), parameter["name"]
+                    )
+            elif key == "content" and isinstance(value, dict):
+                yield from string_schemas(value.get(JSON_MEDIA, {}), name)
+            else:
+                yield from string_schemas(value, name)
+    elif isinstance(node, list):
+        for item in node:
+            yield from string_schemas(item, name)
+
+
+FORMATS = {}
+for _name, _schema in string_schemas(DOCUMENT):
+    FORMATS.setdefault(_name, set()).add(_schema.get("format"))
+
+
+@pytest.mark.parametrize("field", sorted(FORMATS))
+def test_a_field_name_carries_one_format_wherever_it_appears(field):
+    """A `device_id` a route takes and a `device_id` a route returns are the same
+    value, so a generated client may not get `UUID` on one and `String` on the
+    other. One name, one declared format, request side and response side alike."""
+    assert FORMATS[field] == {next(iter(FORMATS[field]))}, (
+        f"{field} is declared with {sorted(str(f) for f in FORMATS[field])}"
+    )
+
+
+@pytest.mark.parametrize(
+    "field", sorted(name for name in FORMATS if name.endswith("_date"))
+)
+def test_every_date_field_declares_the_date_format(field):
+    """Every `_date` on this surface is a `DateField`, so it is a calendar day and
+    never a timestamp. Declared as a bare string a client reads it as free text."""
+    assert FORMATS[field] == {"date"}, field

@@ -111,7 +111,7 @@ class ProfileIn(BlobIn):
 
 
 class RegisterOut(BaseModel):
-    user_id: str
+    user_id: uuid.UUID
 
 
 class TokenPairOut(BaseModel):
@@ -126,7 +126,7 @@ class RegisterScopeOut(BaseModel):
 
     scope: Literal["register"]
     access: str
-    user_id: str
+    user_id: uuid.UUID
 
 
 class FullScopeOut(BaseModel):
@@ -135,8 +135,8 @@ class FullScopeOut(BaseModel):
     scope: Literal["full"]
     access: str
     refresh: str
-    user_id: str
-    device_id: str
+    user_id: uuid.UUID
+    device_id: uuid.UUID
 
 
 # Discriminated on `scope`, which is the field the client reads to tell the two
@@ -146,7 +146,7 @@ LoginOut = Annotated[RegisterScopeOut | FullScopeOut, Field(discriminator="scope
 
 
 class DirectoryUserOut(BaseModel):
-    user_id: str
+    user_id: uuid.UUID
     username: str
 
 

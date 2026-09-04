@@ -108,6 +108,7 @@
             "title": "Cross Sig"
           },
           "device_id": {
+            "format": "uuid",
             "title": "Device Id",
             "type": "string"
           },
@@ -328,6 +329,7 @@
             "type": "string"
           },
           "device_id": {
+            "format": "uuid",
             "title": "Device Id",
             "type": "string"
           },
@@ -368,6 +370,7 @@
       "DirectoryUserOut": {
         "properties": {
           "user_id": {
+            "format": "uuid",
             "title": "User Id",
             "type": "string"
           },
@@ -416,6 +419,7 @@
             "type": "string"
           },
           "id": {
+            "format": "uuid",
             "title": "Id",
             "type": "string"
           },
@@ -472,6 +476,7 @@
             "type": "string"
           },
           "device_id": {
+            "format": "uuid",
             "title": "Device Id",
             "type": "string"
           },
@@ -485,6 +490,7 @@
             "type": "string"
           },
           "user_id": {
+            "format": "uuid",
             "title": "User Id",
             "type": "string"
           }
@@ -764,10 +770,12 @@
       "OwnDeviceOut": {
         "properties": {
           "created_date": {
+            "format": "date",
             "title": "Created Date",
             "type": "string"
           },
           "device_id": {
+            "format": "uuid",
             "title": "Device Id",
             "type": "string"
           },
@@ -785,6 +793,7 @@
           "last_active_date": {
             "anyOf": [
               {
+                "format": "date",
                 "type": "string"
               },
               {
@@ -859,6 +868,7 @@
             "title": "Cross Sig"
           },
           "device_id": {
+            "format": "uuid",
             "title": "Device Id",
             "type": "string"
           },
@@ -1186,6 +1196,7 @@
       "RegisterOut": {
         "properties": {
           "user_id": {
+            "format": "uuid",
             "title": "User Id",
             "type": "string"
           }
@@ -1209,6 +1220,7 @@
             "type": "string"
           },
           "user_id": {
+            "format": "uuid",
             "title": "User Id",
             "type": "string"
           }
@@ -1224,6 +1236,7 @@
       "RoomCreatedOut": {
         "properties": {
           "room_id": {
+            "format": "uuid",
             "title": "Room Id",
             "type": "string"
           }
@@ -1261,10 +1274,12 @@
             "type": "string"
           },
           "room_id": {
+            "format": "uuid",
             "title": "Room Id",
             "type": "string"
           },
           "updated_date": {
+            "format": "date",
             "title": "Updated Date",
             "type": "string"
           }
@@ -1328,6 +1343,7 @@
           },
           "full_devices": {
             "items": {
+              "format": "uuid",
               "type": "string"
             },
             "title": "Full Devices",
@@ -1335,6 +1351,7 @@
           },
           "stale_devices": {
             "items": {
+              "format": "uuid",
               "type": "string"
             },
             "title": "Stale Devices",
