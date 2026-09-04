@@ -1,5 +1,8 @@
 from pathlib import Path
 
+from django.urls import reverse_lazy
+from django.utils.translation import gettext_lazy as _
+
 from core.env import env, env_int, env_list
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
@@ -9,6 +12,11 @@ DEBUG = False
 ALLOWED_HOSTS = env_list("DJANGO_ALLOWED_HOSTS", default=[])
 
 INSTALLED_APPS = [
+    # `unfold` before `django.contrib.admin`, and the order is load-bearing: the
+    # admin's AppConfig.ready() runs autodiscover(), and unfold's replaces
+    # `admin.site` with an `UnfoldAdminSite`. Reversed, every registration lands on
+    # the site that is then thrown away and the panel index lists nothing.
+    "unfold",
     "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
@@ -41,7 +49,9 @@ WSGI_APPLICATION = None  # ASGI-only; uvicorn runs `config.asgi:application`
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
-        "DIRS": [],
+        # Ahead of every application, which is what lets `templates/admin/index.html`
+        # and `templates/403.html` win over the ones `unfold` and Django ship.
+        "DIRS": [BASE_DIR / "templates"],
         "APP_DIRS": True,
         "OPTIONS": {
             "context_processors": [
@@ -172,6 +182,116 @@ X_FRAME_OPTIONS = "DENY"
 SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SAMESITE = "Strict"
 CSRF_COOKIE_SAMESITE = "Strict"
+
+# --- The admin panel (ADR-0011) -------------------------------------------------
+# The cookie session exists for the admin alone; the API is token-auth and reads
+# none of these. The two settings do different jobs and both are wanted: the age is
+# the server-side ceiling the session record carries, and the browser-close flag
+# drops `Max-Age` from the cookie so a closed browser ends the session before that
+# ceiling does.
+SESSION_COOKIE_AGE = 8 * 60 * 60
+SESSION_EXPIRE_AT_BROWSER_CLOSE = True
+# The admin is the only session-authenticated surface in this process, so its index
+# is the only place a sign-in can land. This is not a preference: django-unfold
+# 0.105.0's `admin/login.html` drops the hidden `next` field that Django's own
+# template carries, so a sign-in with no `?next=` falls through to
+# `LOGIN_REDIRECT_URL` — which by default is `/accounts/profile/`, a path this
+# deployment answers with the API's `not_found` envelope. `UNFOLD["LOGIN"]
+# ["redirect_after"]` does not fix it: the key is declared in unfold's settings and
+# read nowhere else in the release.
+LOGIN_REDIRECT_URL = reverse_lazy("admin:index")
+# How long an audit row survives. `manage.py prune` deletes the rest.
+ADMIN_AUDIT_RETENTION_DAYS = env_int("ADMIN_AUDIT_RETENTION_DAYS", default=90)
+
+# The panel is designed in `core/panel.py`; this is only its configuration. Every
+# key below is read by django-unfold 0.105.0 — an unknown key changes nothing and
+# reports nothing, so nothing speculative belongs here.
+UNFOLD = {
+    "SITE_TITLE": _("Chat operations"),
+    "SITE_HEADER": _("Chat operations"),
+    "SITE_SUBHEADER": _("Operator back office"),
+    # No public site to return to: `/` is a 404 by design. Without this the header
+    # and the account menu both draw a "View site" link to it.
+    "SITE_URL": None,
+    # The audit log is the one history surface. Django's per-object history page
+    # reads the same rows behind a second URL for each object.
+    "SHOW_HISTORY": False,
+    "SHOW_VIEW_ON_SITE": False,
+    "SHOW_LANGUAGES": False,
+    "SHOW_BACK_BUTTON": True,
+    # `search_models` False keeps the command palette off the rows: it would run a
+    # `search_fields` query for each registered model on every keystroke, and for
+    # `Attachment` the row it found could only be named by its capability id.
+    "COMMAND": {"search_models": False, "show_history": False},
+    "LOGIN": {"form": "core.lockout.AdminLoginForm"},
+    "DASHBOARD_CALLBACK": "core.panel.dashboard",
+    "SIDEBAR": {
+        "show_search": False,
+        # The drawer this opens lists every registered model under its app label,
+        # which is the database's shape rather than the operator's.
+        "show_all_applications": False,
+        # Named for what the operator does, not for the applications the models
+        # live in. A non-empty tree replaces the automatic app list entirely.
+        "navigation": [
+            {
+                "title": _("Overview"),
+                "items": [
+                    {
+                        "title": _("Dashboard"),
+                        "icon": "space_dashboard",
+                        "permission": "core.panel.is_owner",
+                        "link": reverse_lazy("admin:index"),
+                    }
+                ],
+            },
+            {
+                "title": _("People"),
+                "items": [
+                    {
+                        "title": _("Accounts"),
+                        "icon": "person",
+                        "permission": "core.panel.is_owner",
+                        "link": reverse_lazy("admin:accounts_user_changelist"),
+                    },
+                    {
+                        "title": _("Devices"),
+                        "icon": "smartphone",
+                        "permission": "core.panel.is_owner",
+                        "link": reverse_lazy("admin:devices_device_changelist"),
+                    },
+                ],
+            },
+            {
+                "title": _("Storage and voice"),
+                "items": [
+                    {
+                        "title": _("Attachments"),
+                        "icon": "attach_file",
+                        "permission": "core.panel.is_owner",
+                        "link": reverse_lazy("admin:attachments_attachment_changelist"),
+                    },
+                    {
+                        "title": _("Voice rooms"),
+                        "icon": "graphic_eq",
+                        "permission": "core.panel.is_owner",
+                        "link": reverse_lazy("admin:voicerooms_room_changelist"),
+                    },
+                ],
+            },
+            {
+                "title": _("Audit"),
+                "items": [
+                    {
+                        "title": _("Administrative actions"),
+                        "icon": "history",
+                        "permission": "core.panel.is_owner",
+                        "link": reverse_lazy("admin:admin_logentry_changelist"),
+                    }
+                ],
+            },
+        ],
+    },
+}
 
 LOGGING = {
     "version": 1,

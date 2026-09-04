@@ -1,0 +1,42 @@
+{# The gate in front of the one destructive action on the attachments page.       #}
+{#                                                                                #}
+{# Django's own `delete_selected_confirmation.html` would do this job, but it      #}
+{# lists `str(obj)` for every selected row, and for an attachment that string is   #}
+{# the capability that downloads the bytes. This page states the same consequence  #}
+{# — how many rows, how many bytes freed — and names nothing.                      #}
+{#                                                                                #}
+{# Written against django-unfold 0.105.0: it extends `unfold/layouts/base.html`,   #}
+{# which supplies the sidebar, the branding and the title, so `content` is the     #}
+{# only block it owns. Context: `AttachmentAdmin.purge_attachments`.               #}
+{% extends "unfold/layouts/base.html" %}
+
+{% load i18n unfold %}
+
+{% block content %}
+    {% component "unfold/components/card.html" with title=title %}
+        {% component "unfold/components/text.html" %}
+            {% blocktranslate count counter=count %}This deletes {{ counter }} attachment and the bytes behind it. It cannot be undone.{% plural %}This deletes {{ counter }} attachments and the bytes behind them. It cannot be undone.{% endblocktranslate %}
+        {% endcomponent %}
+
+        {% component "unfold/components/text.html" %}
+            {% blocktranslate %}{{ freed }} of storage is freed.{% endblocktranslate %}
+        {% endcomponent %}
+
+        {% component "unfold/components/text.html" %}
+            {% translate "A device that has not yet fetched one of these attachments will never be able to." %}
+        {% endcomponent %}
+
+        <form method="post" class="flex flex-row gap-3 items-center mt-4">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="purge_attachments">
+            <input type="hidden" name="index" value="0">
+            <input type="hidden" name="confirmed" value="yes">
+            {% for pk in selected %}
+                <input type="hidden" name="{{ action_checkbox_name }}" value="{{ pk }}">
+            {% endfor %}
+
+            {% component "unfold/components/button.html" with submit=1 variant="danger" %}{% translate "Yes, delete them" %}{% endcomponent %}
+            {% component "unfold/components/button.html" with href=cancel_url variant="default" %}{% translate "Cancel" %}{% endcomponent %}
+        </form>
+    {% endcomponent %}
+{% endblock %}

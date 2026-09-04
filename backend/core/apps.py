@@ -6,4 +6,7 @@ class CoreConfig(AppConfig):
     name = "core"
 
     def ready(self):
-        from . import checks  # noqa: F401  (registers the deploy checks)
+        from . import (
+            checks,  # noqa: F401  (registers the deploy checks)
+            lockout,  # noqa: F401  (binds the admin login-failure signals)
+        )

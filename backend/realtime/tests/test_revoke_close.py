@@ -59,17 +59,32 @@ async def test_admin_deactivation_closes_the_users_live_sockets(active_user, dev
     time, must be told, otherwise a deactivated account keeps its volatile relay
     until the connection happens to drop."""
     from django.contrib import admin as django_admin
+    from django.test import RequestFactory
 
-    from accounts.admin import UserAdmin
+    from accounts.admin import AccountAdmin
     from accounts.models import User
 
     comm = await connect_ok(bearer(await mint_access(active_user, device)))
 
     def deactivate_via_admin_action():
-        UserAdmin(User, django_admin.site).deactivate_accounts(
-            None, User.objects.filter(id=active_user.id)
+        # A real request with a real operator on it: the action writes an audit row
+        # naming the actor, and the socket close it registers runs on commit.
+        request = RequestFactory().post("/")
+        request.user = User.objects.create_superuser(
+            username="operator", password="a-long-enough-pw"
+        )
+        request._messages = _SwallowMessages()
+        AccountAdmin(User, django_admin.site).deactivate_accounts(
+            request, User.objects.filter(id=active_user.id)
         )
 
     await run_unit(deactivate_via_admin_action)
 
     await expect_close(comm, 4003)
+
+
+class _SwallowMessages:
+    """`django.contrib.messages` needs middleware this bare request never ran."""
+
+    def add(self, level, message, extra_tags=""):
+        pass

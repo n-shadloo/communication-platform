@@ -76,10 +76,17 @@ class BasePostureTests(SimpleTestCase):
     def test_the_installed_applications_are_exactly_the_declared_set(self):
         """One HTTP surface, one set of defaults. A second API framework here is a
         block of defaults that no code reads and every reader trusts, and the list
-        is short enough to pin rather than to spot-check."""
+        is short enough to pin rather than to spot-check.
+
+        The order is pinned with the list because one pair of it is load-bearing:
+        `unfold` before `django.contrib.admin`. Reversed, the admin's `ready()` runs
+        autodiscover first and unfold then replaces the site those registrations
+        landed on, so the panel lists nothing and `manage.py check` still passes.
+        """
         self.assertEqual(
             settings.INSTALLED_APPS,
             [
+                "unfold",
                 "django.contrib.admin",
                 "django.contrib.auth",
                 "django.contrib.contenttypes",
@@ -95,6 +102,10 @@ class BasePostureTests(SimpleTestCase):
                 "voicerooms",
                 "realtime",
             ],
+        )
+        self.assertLess(
+            settings.INSTALLED_APPS.index("unfold"),
+            settings.INSTALLED_APPS.index("django.contrib.admin"),
         )
         self.assertFalse(hasattr(settings, "REST_FRAMEWORK"))
 
