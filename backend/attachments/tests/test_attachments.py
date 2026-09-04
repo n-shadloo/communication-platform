@@ -200,3 +200,16 @@ def test_the_model_stores_no_recipient_or_acl_data():
     names = {f.name for f in Attachment._meta.get_fields()}
 
     assert names == {"id", "uploader", "size", "created_date"}
+
+
+def test_a_nul_byte_in_a_capability_id_is_a_404(http, active_user, device, bearer):
+    """PostgreSQL text carries no NUL, so the lookup is refused rather than
+    answered, and without the guard the route raises instead of answering (AR-10).
+    A capability id is base64url of 32 random bytes, so no stored id can hold one:
+    an id carrying it is an id nobody has."""
+    resp = http.get(f"{UPLOAD_URL}/a%00b", headers=bearer(active_user, device))
+
+    assert resp.status_code == 404
+    assert resp.json() == {"code": "not_found", "detail": "No such attachment."}
+
+
