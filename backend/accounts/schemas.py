@@ -7,7 +7,7 @@ converted. Every string and integer carries the bound its serializer carried.
 """
 
 import uuid
-from typing import Annotated
+from typing import Annotated, Literal
 
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
@@ -117,6 +117,32 @@ class RegisterOut(BaseModel):
 class TokenPairOut(BaseModel):
     access: str
     refresh: str
+
+
+class RegisterScopeOut(BaseModel):
+    """The login answer when the request named no live device of the account: a
+    short token whose only power is `POST /me/devices`. It carries no refresh
+    token, because the pair a refresh rotates is bound to a device."""
+
+    scope: Literal["register"]
+    access: str
+    user_id: str
+
+
+class FullScopeOut(BaseModel):
+    """The login answer when the request named a live device of the account."""
+
+    scope: Literal["full"]
+    access: str
+    refresh: str
+    user_id: str
+    device_id: str
+
+
+# Discriminated on `scope`, which is the field the client reads to tell the two
+# apart, so the document carries the same branch the handler does rather than a
+# free-form object a client has to probe.
+LoginOut = Annotated[RegisterScopeOut | FullScopeOut, Field(discriminator="scope")]
 
 
 class DirectoryUserOut(BaseModel):

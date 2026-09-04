@@ -16,9 +16,11 @@ from api.auth import Principal, require_full_device, require_register_or_full
 from api.errors import ApiError
 from api.orm import run_unit
 from api.ratelimit import rate_limit
+from api.schema import FULL_DEVICE, REGISTER_OR_FULL, errors
 from devices import services
 from devices.schemas import (
     ClaimIn,
+    ClaimOut,
     DeviceLogAppendIn,
     DeviceLogAppendOut,
     DeviceLogPageOut,
@@ -62,6 +64,15 @@ async def require_own_device(
     "/me/devices",
     response_model=DeviceRegisteredOut,
     status_code=status.HTTP_201_CREATED,
+    responses=errors(
+        *REGISTER_OR_FULL,
+        "invalid_request",
+        "bad_bucket",
+        "identity_required",
+        "device_limit",
+        "payload_too_large",
+        "throttled",
+    ),
     dependencies=[Depends(rate_limit("accounts"))],
 )
 async def register_device(
@@ -76,6 +87,12 @@ async def register_device(
 @authenticated.get(
     "/me/devices",
     response_model=OwnDeviceListOut,
+    responses={
+        status.HTTP_304_NOT_MODIFIED: {
+            "description": "`If-None-Match` carried the current ETag."
+        },
+        **errors(*FULL_DEVICE, "throttled"),
+    },
     dependencies=[Depends(rate_limit("accounts"))],
 )
 async def own_devices(
@@ -94,7 +111,19 @@ async def own_devices(
 
 
 @authenticated.put(
-    "/me/devices/{device_id}", dependencies=[Depends(rate_limit("accounts"))]
+    "/me/devices/{device_id}",
+    # An empty body, so the document declares the status and no content rather
+    # than the untyped object FastAPI would publish for a route with no model.
+    response_class=Response,
+    responses=errors(
+        *FULL_DEVICE,
+        "invalid_request",
+        "bad_bucket",
+        "not_found",
+        "payload_too_large",
+        "throttled",
+    ),
+    dependencies=[Depends(rate_limit("accounts"))],
 )
 async def relabel_device(
     device_id: uuid.UUID,
@@ -108,6 +137,7 @@ async def relabel_device(
 @authenticated.delete(
     "/me/devices/{device_id}",
     status_code=status.HTTP_204_NO_CONTENT,
+    responses=errors(*FULL_DEVICE, "invalid_request", "not_found", "throttled"),
     dependencies=[Depends(rate_limit("accounts"))],
 )
 async def revoke_device(
@@ -126,6 +156,14 @@ async def revoke_device(
 @authenticated.put(
     "/me/devices/{device_id}/prekeys",
     response_model=OtpkCountOut,
+    responses=errors(
+        *FULL_DEVICE,
+        "forbidden",
+        "invalid_request",
+        "prekey_limit",
+        "payload_too_large",
+        "throttled",
+    ),
     dependencies=[Depends(rate_limit("accounts")), Depends(require_own_device)],
 )
 async def replenish_prekeys(device_id: uuid.UUID, payload: PrekeyReplenishIn):
@@ -135,13 +173,27 @@ async def replenish_prekeys(device_id: uuid.UUID, payload: PrekeyReplenishIn):
 @authenticated.get(
     "/me/devices/{device_id}/prekeys/count",
     response_model=PrekeyCountOut,
+    responses=errors(*FULL_DEVICE, "forbidden", "invalid_request", "throttled"),
     dependencies=[Depends(rate_limit("accounts")), Depends(require_own_device)],
 )
 async def prekey_count(device_id: uuid.UUID):
     return await run_unit(services.prekey_counts, device_id)
 
 
-@authenticated.put("/me/identity", dependencies=[Depends(rate_limit("accounts"))])
+@authenticated.put(
+    "/me/identity",
+    # An empty body, so the document declares the status and no content rather
+    # than the untyped object FastAPI would publish for a route with no model.
+    response_class=Response,
+    responses=errors(
+        *FULL_DEVICE,
+        "invalid_request",
+        "stale_version",
+        "payload_too_large",
+        "throttled",
+    ),
+    dependencies=[Depends(rate_limit("accounts"))],
+)
 async def publish_identity(
     payload: IdentityIn, principal: Principal = Depends(require_full_device)
 ):
@@ -152,6 +204,7 @@ async def publish_identity(
 @authenticated.get(
     "/users/{user_id}/identity",
     response_model=IdentityOut,
+    responses=errors(*FULL_DEVICE, "invalid_request", "not_found", "throttled"),
     dependencies=[Depends(rate_limit("accounts"))],
 )
 async def peer_identity(user_id: uuid.UUID):
@@ -162,6 +215,13 @@ async def peer_identity(user_id: uuid.UUID):
     "/me/devicelog",
     response_model=DeviceLogAppendOut,
     status_code=status.HTTP_201_CREATED,
+    responses=errors(
+        *FULL_DEVICE,
+        "invalid_request",
+        "bad_bucket",
+        "payload_too_large",
+        "throttled",
+    ),
     dependencies=[Depends(rate_limit("accounts"))],
 )
 async def append_device_log(
@@ -173,6 +233,7 @@ async def append_device_log(
 @authenticated.get(
     "/users/{user_id}/devicelog",
     response_model=DeviceLogPageOut,
+    responses=errors(*FULL_DEVICE, "invalid_request", "throttled"),
     dependencies=[Depends(rate_limit("accounts"))],
 )
 async def peer_device_log(
@@ -184,6 +245,12 @@ async def peer_device_log(
 @authenticated.get(
     "/users/{user_id}/devices",
     response_model=PeerDeviceListOut,
+    responses={
+        status.HTTP_304_NOT_MODIFIED: {
+            "description": "`If-None-Match` carried the current ETag."
+        },
+        **errors(*FULL_DEVICE, "invalid_request", "throttled"),
+    },
     dependencies=[Depends(rate_limit("accounts"))],
 )
 async def peer_devices(
@@ -200,11 +267,16 @@ async def peer_devices(
 
 
 @authenticated.post(
-    "/users/{user_id}/keys/claim", dependencies=[Depends(rate_limit("claim"))]
+    "/users/{user_id}/keys/claim",
+    response_model=ClaimOut,
+    # A device with no PQ material omits the PQ members entirely rather than
+    # sending them as nulls, and an exhausted pool omits `otpk` the same way:
+    # that absence is exactly the difference a client reads to tell a
+    # classical-only bundle from a hybrid one. `exclude_unset` is what keeps the
+    # declared model from filling them back in.
+    response_model_exclude_unset=True,
+    responses=errors(*FULL_DEVICE, "invalid_request", "payload_too_large", "throttled"),
+    dependencies=[Depends(rate_limit("claim"))],
 )
-async def claim_keys(user_id: uuid.UUID, payload: ClaimIn) -> dict:
-    """No response model: a device with no PQ material omits the PQ fields
-    entirely, and a declared model would publish them as nulls instead — which is
-    exactly the difference a client reads to tell a classical-only bundle from a
-    hybrid one."""
+async def claim_keys(user_id: uuid.UUID, payload: ClaimIn):
     return await run_unit(services.claim, user_id, payload.device_ids)

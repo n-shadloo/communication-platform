@@ -15,6 +15,7 @@ from api.auth import Principal, require_full_device
 from api.errors import ApiError
 from api.orm import run_unit
 from api.ratelimit import rate_limit
+from api.schema import FULL_DEVICE, errors
 from voicerooms import services
 from voicerooms.livekit import mint_join_token
 from voicerooms.presence import room_live_count
@@ -27,6 +28,13 @@ router = APIRouter(tags=["voicerooms"], dependencies=[Depends(require_full_devic
     "/rooms",
     response_model=RoomCreatedOut,
     status_code=status.HTTP_201_CREATED,
+    responses=errors(
+        *FULL_DEVICE,
+        "invalid_request",
+        "bad_bucket",
+        "payload_too_large",
+        "throttled",
+    ),
     dependencies=[Depends(rate_limit("accounts"))],
 )
 async def create_room(payload: RoomNameIn):
@@ -39,6 +47,7 @@ async def create_room(payload: RoomNameIn):
 @router.get(
     "/rooms/{room_id}",
     response_model=RoomOut,
+    responses=errors(*FULL_DEVICE, "invalid_request", "not_found", "throttled"),
     dependencies=[Depends(rate_limit("accounts"))],
 )
 async def read_room(room_id: uuid.UUID):
@@ -48,7 +57,21 @@ async def read_room(room_id: uuid.UUID):
     return {**room, "live_count": await room_live_count(room_id)}
 
 
-@router.put("/rooms/{room_id}", dependencies=[Depends(rate_limit("accounts"))])
+@router.put(
+    "/rooms/{room_id}",
+    # An empty body, so the document declares the status and no content rather
+    # than the untyped object FastAPI would publish for a route with no model.
+    response_class=Response,
+    responses=errors(
+        *FULL_DEVICE,
+        "invalid_request",
+        "bad_bucket",
+        "not_found",
+        "payload_too_large",
+        "throttled",
+    ),
+    dependencies=[Depends(rate_limit("accounts"))],
+)
 async def rename_room(room_id: uuid.UUID, payload: RoomNameIn):
     await run_unit(services.rename, room_id, payload.raw)
     return Response(status_code=status.HTTP_200_OK)
@@ -57,6 +80,13 @@ async def rename_room(room_id: uuid.UUID, payload: RoomNameIn):
 @router.post(
     "/rooms/{room_id}/token",
     response_model=RoomTokenOut,
+    responses=errors(
+        *FULL_DEVICE,
+        "invalid_request",
+        "not_found",
+        "throttled",
+        "voice_unconfigured",
+    ),
     dependencies=[Depends(rate_limit("roomtoken"))],
 )
 async def mint_room_token(

@@ -16,7 +16,7 @@ from starlette.websockets import WebSocketClose
 
 from accounts.routes import anonymous as accounts_anonymous
 from accounts.routes import authenticated as accounts_authenticated
-from api import errors
+from api import errors, schema
 from api.middleware import (
     BodyCap,
     Limits,
@@ -159,18 +159,23 @@ async def lifespan(app):
 
 
 def create_app(django_app):
+    # ADR-0008: the schema and the two documentation routes describe every route
+    # and every payload of a server whose posture is to reveal nothing, so they
+    # exist in development only. `manage.py openapi` is how the document is
+    # produced everywhere else, and it reads the same generator the routes below
+    # would serve.
+    published = settings.DEBUG
     app = FastAPI(
         title="communication platform",
         version="v1",
         lifespan=lifespan,
-        # The schema and the two documentation routes describe every route and
-        # every payload of a server whose posture is to reveal nothing. ADR-0008
-        # makes `manage.py openapi` the way the document is produced.
-        docs_url=None,
-        redoc_url=None,
-        openapi_url=None,
+        generate_unique_id_function=schema.operation_id,
+        docs_url="/docs" if published else None,
+        redoc_url="/redoc" if published else None,
+        openapi_url="/openapi.json" if published else None,
     )
     errors.install(app)
+    schema.install(app)
     app.include_router(core_router, prefix=API_PREFIX)
     app.include_router(accounts_anonymous, prefix=API_PREFIX)
     app.include_router(accounts_authenticated, prefix=API_PREFIX)

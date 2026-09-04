@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, status
 from api.auth import Principal, require_full_device
 from api.orm import run_unit
 from api.ratelimit import rate_limit
+from api.schema import FULL_DEVICE, errors
 from messaging import services
 from messaging.schemas import AckIn, AckOut, DrainOut, SendIn, SendOut, clamp_limit
 
@@ -19,6 +20,13 @@ router = APIRouter(tags=["messaging"], dependencies=[Depends(require_full_device
     "/envelopes",
     response_model=SendOut,
     status_code=status.HTTP_202_ACCEPTED,
+    responses=errors(
+        *FULL_DEVICE,
+        "invalid_request",
+        "bad_bucket",
+        "payload_too_large",
+        "throttled",
+    ),
     dependencies=[Depends(rate_limit("envelopes"))],
 )
 async def send_envelopes(payload: SendIn):
@@ -35,6 +43,7 @@ async def send_envelopes(payload: SendIn):
 @router.get(
     "/me/envelopes",
     response_model=DrainOut,
+    responses=errors(*FULL_DEVICE, "throttled"),
     dependencies=[Depends(rate_limit("envelopes"))],
 )
 async def drain_envelopes(
@@ -57,6 +66,7 @@ async def drain_envelopes(
 @router.post(
     "/me/envelopes/ack",
     response_model=AckOut,
+    responses=errors(*FULL_DEVICE, "invalid_request", "payload_too_large", "throttled"),
     dependencies=[Depends(rate_limit("envelopes"))],
 )
 async def ack_envelopes(

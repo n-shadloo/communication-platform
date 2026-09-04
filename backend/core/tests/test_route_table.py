@@ -8,11 +8,14 @@ it, and that the table holds nothing else.
 """
 
 import pytest
+from django.test import override_settings
 from fastapi.routing import iter_route_contexts
 
+from api.app import create_app, wrap
 from api.auth import allow_anonymous, require_full_device, require_register_or_full
-from config.asgi import api_application
+from config.asgi import api_application, django_asgi_app
 from config.urls import ADMIN_PATH
+from conftest import AsgiClient
 from devices.routes import require_own_device
 
 ANONYMOUS = allow_anonymous.__name__
@@ -74,22 +77,44 @@ OWN_DEVICE_ROUTES = frozenset(
 
 LIMITER_PREFIX = "rate_limit_"
 
+# The interactive documentation and the schema route, which FastAPI adds itself
+# and only when `DEBUG` opens them. They are plain Starlette routes: they declare
+# no dependency, so they carry no requirement and no limiter, and every
+# assertion over the API table below reads the surface without them. The two
+# tests at the foot of this file are what holds them to development.
+DOCUMENTATION = {
+    "/openapi.json",
+    "/docs",
+    "/docs/oauth2-redirect",
+    "/redoc",
+}
 
-def served():
+
+def served(app=api_application):
     """(method, path) -> the names of the dependencies the route declares.
 
-    HTTP only. The `/ws` gateway declares no dependency because it authenticates
-    inside the frame protocol instead, and it is held by the two tests below
-    rather than by this table.
+    HTTP only, and the API surface only. The `/ws` gateway declares no dependency
+    because it authenticates inside the frame protocol instead, and it is held by
+    the two tests below rather than by this table; the documentation routes carry
+    no `dependant` at all.
     """
     table = {}
-    for context in iter_route_contexts(api_application.routes):
-        if context.methods is None:
+    for context in iter_route_contexts(app.routes):
+        if context.methods is None or context.path in DOCUMENTATION:
             continue
         names = [dep.call.__name__ for dep in context.dependant.dependencies]
         for method in context.methods:
             table[(method, context.path)] = names
     return table
+
+
+def documentation(app):
+    """The documentation and schema paths the application publishes."""
+    return {
+        context.path
+        for context in iter_route_contexts(app.routes)
+        if context.path in DOCUMENTATION
+    }
 
 
 def websocket_routes():
@@ -200,8 +225,25 @@ def test_the_django_application_answers_the_admin_and_nothing_else(http):
     assert stray.headers["content-type"].startswith("application/json")
 
 
-@pytest.mark.parametrize("path", ["/docs", "/redoc", "/openapi.json"])
-def test_the_schema_and_its_documentation_are_closed(http, path):
+def test_the_documentation_routes_exist_in_development(http):
+    """`DEBUG` is what opens them, and the suite composes the application under the
+    development settings, so the surface it drives is the one a developer gets."""
+    assert documentation(api_application) == DOCUMENTATION
+    assert http.get("/docs").status_code == 200
+
+
+@pytest.mark.parametrize("path", sorted(DOCUMENTATION))
+def test_the_schema_and_its_documentation_are_closed_outside_debug(path):
     """The document lists every route, every model and every parameter of a server
-    whose posture is to reveal nothing."""
-    assert http.get(path).status_code == 404
+    whose posture is to reveal nothing, so outside development the routes are not
+    registered at all — an unregistered path is this API's own `not_found`
+    envelope, never a page that says a document exists somewhere.
+    """
+    with override_settings(DEBUG=False):
+        closed = create_app(django_asgi_app)
+
+    assert documentation(closed) == set()
+
+    answer = AsgiClient(wrap(closed), closed).get(path)
+    assert answer.status_code == 404
+    assert answer.json() == {"code": "not_found", "detail": "No such route or resource."}

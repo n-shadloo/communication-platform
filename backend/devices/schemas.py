@@ -386,3 +386,39 @@ class DeviceLogPageOut(BaseModel):
     records: list[DeviceLogRecordOut]
     has_more: bool
     head_seq: int | None
+
+
+class ClaimedOtpkOut(BaseModel):
+    key_id: int
+    pub: str
+
+
+class ClaimedBundleOut(BaseModel):
+    """One X3DH bundle.
+
+    The four PQ members and `otpk` are absent from the body when the device holds
+    no such material, never null and never zero-filled: a classical-only bundle
+    must be visibly classical-only, and an exhausted one-time pool must be
+    visibly exhausted. The route serialises with `exclude_unset`, so a member the
+    service left out of the dict does not reach the client. `cross_sig` is the
+    opposite case and is always present, null included — an unsigned device must
+    look unsigned rather than absent.
+    """
+
+    device_id: str
+    registration_id: int
+    ik_pub: str
+    spk_id: int
+    spk_pub: str
+    spk_sig: str
+    cross_sig: str | None
+    bundle_version: int
+    pq_spk_id: int | None = None
+    pq_spk_pub: str | None = None
+    pq_spk_sig: str | None = None
+    pq_otpk: ClaimedOtpkOut | None = None
+    otpk: ClaimedOtpkOut | None = None
+
+
+class ClaimOut(BaseModel):
+    bundles: list[ClaimedBundleOut]

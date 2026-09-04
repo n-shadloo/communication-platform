@@ -26,6 +26,7 @@ from api.middleware import (
 )
 from config.asgi import api_application
 from core.buckets import ATTACHMENT_BUCKETS
+from core.tests.test_route_table import DOCUMENTATION
 
 CAP = Limits(body_bytes=16, deadline_seconds=0.05)
 
@@ -249,15 +250,25 @@ class TestTheRouteLimitTable:
 
     def test_every_route_the_api_serves_names_a_class(self):
         """A route missing from the table takes the fallback in silence, and the
-        fallback is 16 KiB — small enough to refuse a legal prekey batch."""
+        fallback is 16 KiB — small enough to refuse a legal prekey batch.
+
+        The documentation routes are the exception the table records rather than
+        carries: they read no body, they exist only under `DEBUG`, and the
+        fallback is the right class for a GET that takes none.
+        """
         per_route, _fallback = route_limits()
         served = {
             context.path
             for context in iter_route_contexts(api_application.routes)
-            if context.methods is not None
+            if context.methods is not None and context.path not in DOCUMENTATION
         }
 
         assert served == set(per_route)
+
+    def test_no_documentation_route_names_a_class_of_its_own(self):
+        per_route, _fallback = route_limits()
+
+        assert DOCUMENTATION & set(per_route) == set()
 
     def test_the_gateway_is_the_one_route_outside_the_table(self):
         """A body cap counts a request body and a deadline bounds a request; a

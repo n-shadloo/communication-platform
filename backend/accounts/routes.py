@@ -15,6 +15,7 @@ from accounts import services
 from accounts.schemas import (
     DirectoryOut,
     LoginIn,
+    LoginOut,
     ProfileIn,
     ProfileOut,
     RefreshIn,
@@ -26,6 +27,7 @@ from api.auth import Principal, allow_anonymous, decode_refresh, require_full_de
 from api.errors import TOKEN_REVOKED, ApiError
 from api.orm import run_unit
 from api.ratelimit import rate_limit
+from api.schema import FULL_DEVICE, errors
 
 anonymous = APIRouter(tags=["accounts"], dependencies=[Depends(allow_anonymous)])
 authenticated = APIRouter(tags=["accounts"], dependencies=[Depends(require_full_device)])
@@ -35,14 +37,28 @@ authenticated = APIRouter(tags=["accounts"], dependencies=[Depends(require_full_
     "/auth/register",
     response_model=RegisterOut,
     status_code=status.HTTP_201_CREATED,
+    responses=errors(
+        "invalid_request", "username_taken", "payload_too_large", "throttled"
+    ),
     dependencies=[Depends(rate_limit("register"))],
 )
 async def register(payload: RegisterIn):
     return await run_unit(services.register, payload.username, payload.password)
 
 
-@anonymous.post("/auth/login", dependencies=[Depends(rate_limit("login"))])
-async def login(payload: LoginIn) -> dict:
+@anonymous.post(
+    "/auth/login",
+    response_model=LoginOut,
+    responses=errors(
+        "invalid_request",
+        "invalid_credentials",
+        "account_inactive",
+        "payload_too_large",
+        "throttled",
+    ),
+    dependencies=[Depends(rate_limit("login"))],
+)
+async def login(payload: LoginIn):
     """Two success shapes: a full-scope pair when `device_id` names a live device
     of this account, and a register-scope token otherwise."""
     return await run_unit(
@@ -56,6 +72,13 @@ async def login(payload: LoginIn) -> dict:
 @anonymous.post(
     "/auth/refresh",
     response_model=TokenPairOut,
+    responses=errors(
+        "invalid_request",
+        "invalid_token",
+        "token_revoked",
+        "payload_too_large",
+        "throttled",
+    ),
     dependencies=[Depends(rate_limit("refresh"))],
 )
 async def refresh(payload: RefreshIn):
@@ -69,6 +92,7 @@ async def refresh(payload: RefreshIn):
 @authenticated.post(
     "/auth/logout",
     status_code=status.HTTP_204_NO_CONTENT,
+    responses=errors(*FULL_DEVICE, "throttled"),
     dependencies=[Depends(rate_limit("accounts"))],
 )
 async def logout(principal: Principal = Depends(require_full_device)):
@@ -80,7 +104,10 @@ async def logout(principal: Principal = Depends(require_full_device)):
 
 
 @authenticated.get(
-    "/users", response_model=DirectoryOut, dependencies=[Depends(rate_limit("accounts"))]
+    "/users",
+    response_model=DirectoryOut,
+    responses=errors(*FULL_DEVICE, "throttled"),
+    dependencies=[Depends(rate_limit("accounts"))],
 )
 async def user_directory():
     return await run_unit(services.directory)
@@ -89,6 +116,7 @@ async def user_directory():
 @authenticated.get(
     "/users/{user_id}/profile",
     response_model=ProfileOut,
+    responses=errors(*FULL_DEVICE, "invalid_request", "not_found", "throttled"),
     dependencies=[Depends(rate_limit("accounts"))],
 )
 async def peer_profile(user_id: uuid.UUID):
@@ -98,13 +126,28 @@ async def peer_profile(user_id: uuid.UUID):
 @authenticated.get(
     "/me/profile",
     response_model=ProfileOut,
+    responses=errors(*FULL_DEVICE, "not_found", "throttled"),
     dependencies=[Depends(rate_limit("accounts"))],
 )
 async def my_profile(principal: Principal = Depends(require_full_device)):
     return await run_unit(services.my_profile, principal.user.id)
 
 
-@authenticated.put("/me/profile", dependencies=[Depends(rate_limit("accounts"))])
+@authenticated.put(
+    "/me/profile",
+    # An empty body, so the document declares the status and no content rather
+    # than the untyped object FastAPI would publish for a route with no model.
+    response_class=Response,
+    responses=errors(
+        *FULL_DEVICE,
+        "invalid_request",
+        "bad_bucket",
+        "stale_version",
+        "payload_too_large",
+        "throttled",
+    ),
+    dependencies=[Depends(rate_limit("accounts"))],
+)
 async def write_my_profile(
     payload: ProfileIn, principal: Principal = Depends(require_full_device)
 ):

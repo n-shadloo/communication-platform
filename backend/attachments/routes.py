@@ -19,6 +19,7 @@ from api.auth import Principal, require_full_device
 from api.errors import ApiError
 from api.orm import run_unit
 from api.ratelimit import rate_limit
+from api.schema import FULL_DEVICE, errors
 from attachments import services
 from attachments.models import Attachment
 from attachments.schemas import AttachmentOut
@@ -99,10 +100,48 @@ def _discard(path):
     Path(path).unlink(missing_ok=True)
 
 
+# Declared rather than introspected: the route parses the multipart body itself,
+# under limits FastAPI exposes no parameter for, so it declares no `UploadFile`
+# and the generator sees no body at all. This is the one non-JSON body of the
+# API, and a document that omitted it would send a client hunting.
+MULTIPART_BODY = {
+    "requestBody": {
+        "required": True,
+        "content": {
+            MULTIPART: {
+                "schema": {
+                    "type": "object",
+                    "required": [FIELD],
+                    "properties": {
+                        FIELD: {
+                            "type": "string",
+                            "format": "binary",
+                            "description": (
+                                "One already-encrypted, already-padded blob, of "
+                                "exactly one attachment bucket length."
+                            ),
+                        }
+                    },
+                }
+            }
+        },
+    }
+}
+
+
 @router.post(
     "/attachments",
     response_model=AttachmentOut,
     status_code=status.HTTP_201_CREATED,
+    openapi_extra=MULTIPART_BODY,
+    responses=errors(
+        *FULL_DEVICE,
+        "invalid_request",
+        "bad_bucket",
+        "payload_too_large",
+        "quota_exceeded",
+        "throttled",
+    ),
     dependencies=[Depends(rate_limit("attachments"))],
 )
 async def upload_attachment(
@@ -136,6 +175,20 @@ async def upload_attachment(
 
 @router.get(
     "/attachments/{attachment_id}",
+    # nginx replaces the body, so this process declares the bytes the client
+    # receives rather than the empty response it returns itself.
+    response_class=Response,
+    responses={
+        status.HTTP_200_OK: {
+            "description": "The stored blob.",
+            "content": {
+                "application/octet-stream": {
+                    "schema": {"type": "string", "format": "binary"}
+                }
+            },
+        },
+        **errors(*FULL_DEVICE, "not_found", "throttled"),
+    },
     dependencies=[Depends(rate_limit("attachments"))],
 )
 async def download_attachment(attachment_id: str):
