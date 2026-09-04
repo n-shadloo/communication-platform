@@ -247,6 +247,16 @@ class PrekeyReplenishIn(RequestModel):
             raise PydanticCustomError(
                 "cross_sig_pair", "cross_sig and bundle_version must be sent together"
             )
+        # A sent `null` is half a pair in substance, whichever half it is: a
+        # cross_sig stored against no version is one peers must reject, and
+        # `Device.bundle_version` cannot hold null at all — without this the value
+        # reached the column and the route answered `500` rather than refusing the
+        # body. The union above exists so that "not sent" is expressible, and
+        # nothing else.
+        if "bundle_version" in sent and self.bundle_version is None:
+            raise PydanticCustomError(
+                "cross_sig_pair", "bundle_version must be a number when it is sent"
+            )
         _reject_duplicate_key_ids(self.otpks)
         _reject_duplicate_key_ids(self.pq_otpks)
         return self

@@ -271,6 +271,57 @@ def test_a_replenish_with_half_the_cross_signing_pair_is_rejected(
     assert device.bundle_version == 0
 
 
+@pytest.mark.parametrize(
+    "body",
+    [
+        {"cross_sig": None, "bundle_version": None},
+        {"cross_sig": None, "bundle_version": None, "otpks": []},
+    ],
+    ids=["the pair alone", "the pair beside an empty replenishment"],
+)
+def test_a_replenish_that_sends_a_null_version_is_rejected(
+    http, active_user, device, bearer, body
+):
+    """The other half of the guard above. `bundle_version` is declared optional so
+    that "not sent" is expressible, but `Device.bundle_version` cannot hold null:
+    a sent null reached the column and the route answered `500`. Both keys present
+    and null passes the pairing check, which is exactly why the null needs a guard
+    of its own."""
+    response = http.put(
+        f"{DEVICES_URL}/{device.id}/prekeys",
+        json=body,
+        headers=bearer(active_user, device),
+    )
+
+    assert response.status_code == 400
+    assert response.json()["code"] == "invalid_request"
+    device.refresh_from_db()
+    assert device.cross_sig is None
+    assert device.bundle_version == 0
+
+
+def test_a_replenish_may_still_retract_a_signature_against_a_new_version(
+    http, active_user, device, bearer
+):
+    """The boundary the guard must not cross: `cross_sig` is nullable, so clearing
+    the signature while naming the version it was cleared at is a legitimate write
+    and still answers `200`."""
+    device.cross_sig = b"\xc5" * 64
+    device.bundle_version = 2
+    device.save(update_fields=["cross_sig", "bundle_version"])
+
+    response = http.put(
+        f"{DEVICES_URL}/{device.id}/prekeys",
+        json={"cross_sig": None, "bundle_version": 3},
+        headers=bearer(active_user, device),
+    )
+
+    assert response.status_code == 200
+    device.refresh_from_db()
+    assert device.cross_sig is None
+    assert device.bundle_version == 3
+
+
 def test_enrollment_can_cross_sign_the_device_id_the_server_assigned(
     http, active_user, register_bearer
 ):
