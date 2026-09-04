@@ -3,6 +3,7 @@
 import pytest
 
 from attachments.models import Attachment
+from attachments.services import purge
 from core.buckets import ATTACHMENT_BUCKETS
 
 UPLOAD_URL = "/api/v1/attachments"
@@ -213,3 +214,84 @@ def test_a_nul_byte_in_a_capability_id_is_a_404(http, active_user, device, beare
     assert resp.json() == {"code": "not_found", "detail": "No such attachment."}
 
 
+def test_the_largest_bucket_round_trips_and_is_stored_at_its_exact_length(
+    http, active_user, device, bearer, attachments_root
+):
+    """The ceiling of the surface: 64 MiB is a thousand copy chunks, and it must
+    reach the disk whole and at exactly the bucket length. The route cap sits just
+    above it, so this is also the largest body the cap admits."""
+    largest = max(ATTACHMENT_BUCKETS)
+    payload = bytes(range(256)) * (largest // 256)
+
+    cap = upload(http, bearer(active_user, device), payload=payload).json()
+
+    assert cap["size"] == largest
+    stored = attachments_root / cap["attachment_id"][:2] / cap["attachment_id"]
+    assert stored.stat().st_size == largest
+    assert stored.read_bytes() == payload
+
+
+def test_two_uploads_of_identical_bytes_never_share_a_file_or_a_capability(
+    http, active_user, device, bearer, bob, bob_device, attachments_root
+):
+    """No deduplication, and no shared-blob link at rest: identical ciphertext from
+    two accounts is two capabilities over two files. A shared file would tell an
+    operator with the disk that these two accounts hold the same object."""
+    payload = b"\x07" * SMALLEST
+
+    mine = upload(http, bearer(active_user, device), payload=payload).json()
+    theirs = upload(http, bearer(bob, bob_device), payload=payload).json()
+
+    assert mine["attachment_id"] != theirs["attachment_id"]
+    stored = [path for path in attachments_root.rglob("*") if path.is_file()]
+    assert len(stored) == 2
+    assert {path.read_bytes() for path in stored} == {payload}
+
+
+def test_the_upload_response_names_the_capability_and_nothing_about_the_account(
+    http, active_user, device, bearer
+):
+    """The body a recipient's sender copies into an encrypted message: two fields,
+    and no uploader, no path and no account anywhere in the response."""
+    response = upload(http, bearer(active_user, device))
+
+    assert set(response.json()) == {"attachment_id", "size"}
+    assert active_user.username not in response.text
+    assert str(active_user.id) not in response.text
+
+
+def test_a_retried_upload_stores_a_second_capability_that_also_fetches(
+    http, active_user, device, bearer
+):
+    """Documented in `attachments/API.md`: the upload is not idempotent, because
+    nothing links an attachment to a message. The client that lost the first
+    response holds an id it will never use, and both remain fetchable."""
+    headers = bearer(active_user, device)
+    payload = b"\x09" * SMALLEST
+
+    first = upload(http, headers, payload=payload).json()["attachment_id"]
+    second = upload(http, headers, payload=payload).json()["attachment_id"]
+
+    assert first != second
+    assert http.get(f"{UPLOAD_URL}/{first}", headers=headers).status_code == 200
+    assert http.get(f"{UPLOAD_URL}/{second}", headers=headers).status_code == 200
+
+
+def test_a_purged_attachment_stops_answering_for_everyone(
+    http, active_user, device, bearer, bob, bob_device, attachments_root
+):
+    """The end of an attachment's life, driven the way the operator's action and
+    the retention sweep both drive it: the row and the bytes go together, and the
+    capability that was fetchable a moment ago is now an id nobody has."""
+    headers = bearer(active_user, device)
+    cap = upload(http, headers).json()["attachment_id"]
+    assert http.get(f"{UPLOAD_URL}/{cap}", headers=headers).status_code == 200
+
+    purge(Attachment.objects.filter(id=cap))
+
+    assert http.get(f"{UPLOAD_URL}/{cap}", headers=headers).status_code == 404
+    assert http.get(f"{UPLOAD_URL}/{cap}", headers=bearer(bob, bob_device)).json() == {
+        "code": "not_found",
+        "detail": "No such attachment.",
+    }
+    assert [path for path in attachments_root.rglob("*") if path.is_file()] == []
