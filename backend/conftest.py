@@ -12,6 +12,7 @@ from hypothesis import settings as hypothesis_settings
 from accounts.models import User
 from api.auth import issue_full, issue_register_scope
 from config.asgi import api_application, application
+from core.tests import artefact
 from devices.models import Device
 
 PASSWORD = "correct-horse-battery-staple"
@@ -77,7 +78,23 @@ class AsgiClient:
             return await self._client.request(method, url, **kwargs)
 
     def request(self, method, url, **kwargs):
-        return async_to_sync(self._request)(method, url, **kwargs)
+        response = async_to_sync(self._request)(method, url, **kwargs)
+        # Every response this client produces is held to `backend/openapi.json`,
+        # which makes the whole suite the sample rather than one file of contract
+        # tests. The document is what a client generates from, so a body it does
+        # not describe is a client that breaks on a field nobody published, and a
+        # status it does not declare is a branch no generated client has.
+        # `core/tests/artefact.py` carries the mechanism, and the four refusals
+        # this surface answers before it has chosen a route, which belong to no
+        # operation and are let through on any of them.
+        artefact.check(
+            method,
+            response.request.url.path,
+            response.status_code,
+            response.headers.get("content-type", ""),
+            response.content,
+        )
+        return response
 
     def get(self, url, **kwargs):
         return self.request("GET", url, **kwargs)

@@ -16,6 +16,7 @@ from api.orm import run_unit
 from api.redis import close_client
 from config.asgi import application
 from core.buckets import ENVELOPE_BUCKETS
+from core.tests import artefact
 from devices.models import Device
 from realtime.bus import stop_subscriber
 from realtime.tests.socket import WebSocketCommunicator
@@ -85,12 +86,24 @@ async def http_request(method, url, access, **kwargs):
     async with httpx.AsyncClient(
         transport=ASGITransport(app=application), base_url="http://testserver"
     ) as client:
-        return await client.request(
+        response = await client.request(
             method,
             url,
             headers={"Authorization": f"Bearer {access}"},
             **kwargs,
         )
+    # Held to `backend/openapi.json` like every response the root conftest's client
+    # produces. This helper exists because that client cannot be called from a
+    # coroutine, and a route driven only from here would otherwise be the one route
+    # the contract never sees.
+    artefact.check(
+        method,
+        response.request.url.path,
+        response.status_code,
+        response.headers.get("content-type", ""),
+        response.content,
+    )
+    return response
 
 
 async def connect_ok(headers, outbound_max=0):
