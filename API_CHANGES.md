@@ -136,7 +136,9 @@ concern and not the client's.
 
 ## Changed response fields
 
-No success body changed. Every change below is in an error body.
+No success body changed **in the rebuild**. Every change in this section is in an error
+body; the one success body that has moved since arrived later and is recorded under
+[What the security audit bounded](#what-the-security-audit-bounded).
 
 | Item | Old behaviour | New behaviour | Client action |
 |---|---|---|---|
@@ -288,7 +290,8 @@ one class, and a deadlock or a dropped connection is still `500 server_error`.
 ## What the reviews of phase 4 corrected
 
 The contract, seam, architecture and panel reviews of phase 4 moved no route, no
-status code and no response byte.
+status code and no response byte. Two things a client can observe are stated here for
+the first time, and one thing this file said about itself was wrong.
 
 ### The document now declares the format of what it sends
 
@@ -317,6 +320,29 @@ alike.
 **Client action.** None, unless the client is generated from the schema and its
 generator maps `format` to a type — a regenerated client may now type these fields as
 `UUID` and `Date` rather than `String`. The values it receives are unchanged.
+
+### `HEAD` and `OPTIONS` are refused
+
+Before the rebuild, Django REST Framework answered `HEAD` on every route that served
+`GET`, and answered `OPTIONS` with a metadata document this API never meant to publish.
+FastAPI registers only the methods a route declares, so both now answer
+`405 {"code": "method_not_allowed", "detail": "That method is not allowed."}` with
+`Allow` naming the methods of the one route object.
+
+**Client action.** None for a client that issues neither. A reachability probe uses
+`GET /api/v1/health`, which is what it was always for.
+
+The refusal itself is `_ROUTING_REFUSALS` in
+[`backend/api/errors.py`](backend/api/errors.py), which is what puts the envelope on a
+`405` where Starlette's own handler answers a bare body.
+
+### One standing claim in this file was stale
+
+The **Changed response fields** section opens "No success body changed." That was true
+of the rebuild it describes and is no longer true of this file as a whole: the mailbox
+ceiling the security audit added put a `full_devices` list into the `202` body of
+`POST /api/v1/envelopes`, recorded under **What the security audit bounded**. The
+sentence now says which change it is scoped to.
 
 ## What the client can build against now
 
