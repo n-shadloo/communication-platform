@@ -1,3 +1,4 @@
+import base64
 import os
 from contextlib import contextmanager
 from datetime import timedelta
@@ -433,3 +434,299 @@ def test_a_skipped_sweep_exits_zero(active_user, settings, capsys):
 
     assert prune.SKIPPED in capsys.readouterr().out
     assert QueuedEnvelope.objects.count() == 1
+
+
+# --- Retention, one class at a time, at the exact cutoff ---------------------------
+
+
+class FrozenClock:
+    """The clock the sweep reads, stopped.
+
+    Each retention class computes its cutoff as `now - TTL` at the moment the step
+    runs, so a row exactly at the cutoff cannot be written against the wall clock:
+    whatever instant the test picked has already passed by the time the command
+    reads it. Substituted for the module's `timezone` rather than patched globally,
+    so nothing else in the process — an `auto_now` column, an issued token — moves
+    with it.
+    """
+
+    def __init__(self, instant):
+        self._instant = instant
+
+    def now(self):
+        return self._instant
+
+
+@pytest.fixture
+def stopped_clock(monkeypatch):
+    """A fixed instant, far enough from every real timestamp that a row written by
+    a fixture cannot land inside a window by accident."""
+    instant = timezone.now().replace(microsecond=0)
+    monkeypatch.setattr(prune, "timezone", FrozenClock(instant))
+    return instant
+
+
+def at(row, stamp):
+    QueuedEnvelope.objects.filter(id=row.id).update(queued_hour=stamp)
+    return row
+
+
+@pytest.mark.django_db
+def test_the_envelope_cutoff_keeps_the_row_that_lands_exactly_on_it(
+    device, settings, stopped_clock
+):
+    """`queued_hour < cutoff`, strictly. The boundary matters because the column is
+    coarsened to the hour: with `<=` the whole hour that lands on the cutoff would
+    go a full hour early, and the client would be told it lost envelopes whose TTL
+    had not run out."""
+    settings.ENVELOPE_TTL_DAYS = 7
+    cutoff = stopped_clock - timedelta(days=7)
+    outside = at(queue_row(device, 1), cutoff - timedelta(microseconds=1))
+    on_it = at(queue_row(device, 2), cutoff)
+    inside = at(queue_row(device, 3), cutoff + timedelta(microseconds=1))
+
+    output = run_prune()
+
+    assert sorted(QueuedEnvelope.objects.values_list("seq", flat=True)) == [
+        on_it.seq,
+        inside.seq,
+    ]
+    assert not QueuedEnvelope.objects.filter(id=outside.id).exists()
+    assert "envelopes pruned: 1" in output
+
+
+@pytest.mark.django_db
+def test_the_attachment_cutoff_keeps_the_row_that_lands_exactly_on_it(
+    active_user, attachments_root, settings, stopped_clock
+):
+    """A date, not an instant: the column holds the upload's day, so the window is
+    whole days and the day on the cutoff is still inside it."""
+    settings.ATTACH_TTL_DAYS = 30
+    cutoff = stopped_clock.date() - timedelta(days=30)
+    rows = {}
+    for label, created in (
+        ("outside", cutoff - timedelta(days=1)),
+        ("on_it", cutoff),
+        ("inside", cutoff + timedelta(days=1)),
+    ):
+        attachment, path = stored_attachment(active_user, attachments_root)
+        Attachment.objects.filter(id=attachment.id).update(created_date=created)
+        rows[label] = (attachment, path)
+
+    output = run_prune()
+
+    assert not Attachment.objects.filter(id=rows["outside"][0].id).exists()
+    assert not rows["outside"][1].exists()
+    assert Attachment.objects.filter(id=rows["on_it"][0].id).exists()
+    assert Attachment.objects.filter(id=rows["inside"][0].id).exists()
+    assert "attachments pruned: 1 (files removed: 1)" in output
+
+
+@pytest.mark.django_db
+def test_the_audit_cutoff_keeps_the_row_that_lands_exactly_on_it(
+    active_user, settings, stopped_clock
+):
+    """Ninety days of administrative history: long enough to answer what changed
+    last quarter, short enough that a seizure takes one quarter rather than the
+    life of the deployment."""
+    settings.ADMIN_AUDIT_RETENTION_DAYS = 90
+    cutoff = stopped_clock - timedelta(days=90)
+    marks = {}
+    for label, action_time in (
+        ("outside", cutoff - timedelta(microseconds=1)),
+        ("on_it", cutoff),
+        ("inside", cutoff + timedelta(microseconds=1)),
+    ):
+        entry = LogEntry.objects.create(
+            user=active_user, object_repr="x", action_flag=ADDITION, change_message=""
+        )
+        LogEntry.objects.filter(pk=entry.pk).update(action_time=action_time)
+        marks[label] = entry.pk
+
+    output = run_prune()
+
+    assert sorted(LogEntry.objects.values_list("pk", flat=True)) == sorted(
+        [marks["on_it"], marks["inside"]]
+    )
+    assert "audit rows pruned: 1" in output
+
+
+# --- The watermark across batches -------------------------------------------------
+
+
+@pytest.mark.django_db(transaction=True)
+def test_the_watermark_takes_the_highest_seq_of_the_whole_run_not_of_one_batch(
+    active_user, settings, monkeypatch
+):
+    """One row per batch, in oldest-first order, so the batch carrying the highest
+    seq is not the last one the run sees. `Greatest` is what keeps the mark where
+    the highest batch left it instead of following the final batch down."""
+    settings.ENVELOPE_TTL_DAYS = 7
+    monkeypatch.setattr(prune, "BATCH", 1)
+    device = make_device(active_user, 110)
+    for seq, age in ((9, 11), (3, 10), (5, 9)):
+        queue_row(device, seq, age_days=age)
+
+    run_prune()
+
+    device.refresh_from_db()
+    assert device.queue_pruned_through == 9
+    assert QueuedEnvelope.objects.count() == 0
+
+
+@pytest.mark.django_db(transaction=True)
+def test_the_attachment_sweep_also_deletes_in_batches(
+    active_user, attachments_root, settings, monkeypatch
+):
+    """The same bound as the other two sweeps, and for the same reason: one
+    unbounded pass would hold a row lock on every expired attachment while it
+    unlinked each file in turn."""
+    settings.ATTACH_TTL_DAYS = 30
+    monkeypatch.setattr(prune, "BATCH", 2)
+    for _ in range(5):
+        stored_attachment(active_user, attachments_root, age_days=31)
+
+    with CaptureQueriesContext(connection) as context:
+        output = run_prune()
+
+    assert len(deletes_of(context, "attachments_attachment")) == 3  # 2 + 2 + 1
+    assert Attachment.objects.count() == 0
+    assert "attachments pruned: 5 (files removed: 5)" in output
+
+
+@pytest.mark.django_db(transaction=True)
+def test_a_batch_whose_files_all_refuse_to_unlink_ends_the_sweep_instead_of_spinning(
+    active_user, attachments_root, settings, monkeypatch
+):
+    """The rare one, and the one that would take the host down rather than a
+    request: nothing was deleted, so the same rows come back on the next pass of
+    the same loop for ever. They keep their rows and the next run retries them,
+    which is the contract a single stuck file already has."""
+    settings.ATTACH_TTL_DAYS = 30
+    stuck = [
+        stored_attachment(active_user, attachments_root, age_days=31) for _ in range(2)
+    ]
+
+    def refuse_everything(path, *args, **kwargs):
+        raise PermissionError(13, "Permission denied")
+
+    monkeypatch.setattr(os, "remove", refuse_everything)
+
+    output = run_prune()
+
+    assert "attachments pruned: 0 (files removed: 0)" in output
+    assert Attachment.objects.count() == 2
+    for _attachment, path in stuck:
+        assert path.exists()
+
+
+@pytest.mark.django_db(transaction=True)
+def test_an_ack_between_the_scan_and_the_watermark_leaves_the_mark_where_it_was(
+    active_user, settings
+):
+    """The sweep lock excludes another sweep, not a client.
+
+    The batch's ids are listed and then aggregated as two statements of one
+    read-committed transaction, so a device that acked its whole mailbox in
+    between leaves the aggregate empty — and an unguarded `UPDATE` built from an
+    empty mapping would be a `Case` with no branches. The run ends with nothing
+    pruned and the mark untouched, which is the truth: those envelopes were
+    delivered, not lost.
+    """
+    settings.ENVELOPE_TTL_DAYS = 7
+    device = make_device(active_user, 111)
+    queue_row(device, 1, age_days=8)
+    queue_row(device, 2, age_days=8)
+    acked = []
+
+    def ack_between(execute, sql, params, many, context):
+        if not acked and sql.startswith("SELECT") and "MAX(" in sql:
+            acked.append(True)
+            with another_session() as session:
+                session.execute("DELETE FROM messaging_queuedenvelope")
+        return execute(sql, params, many, context)
+
+    with connection.execute_wrapper(ack_between):
+        output = run_prune()
+
+    assert acked == [True], "the aggregate never ran; this proved nothing"
+    assert "envelopes pruned: 0" in output
+    assert QueuedEnvelope.objects.count() == 0
+    device.refresh_from_db()
+    assert device.queue_pruned_through == 0
+
+
+# --- What a failure is allowed to say ---------------------------------------------
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.parametrize(
+    "step, manager",
+    [
+        ("envelope sweep", QueuedEnvelope),
+        ("attachment sweep", Attachment),
+        ("audit sweep", LogEntry),
+    ],
+)
+def test_a_failed_step_names_the_step_and_the_exception_class_and_nothing_else(
+    active_user, settings, step, manager
+):
+    """The whole message, not a substring of it. A database error carries the
+    statement that raised it, and the statements here carry envelope ids, so
+    anything appended from the exception would write a mailbox into the journal.
+    `from None` is the other half: the raised error carries no cause and
+    suppresses its context, so no traceback of the original — and no statement —
+    reaches an operator's terminal either."""
+    settings.ENVELOPE_TTL_DAYS = 7
+    settings.ATTACH_TTL_DAYS = 30
+    settings.ADMIN_AUDIT_RETENTION_DAYS = 90
+    leaky = DatabaseError("SELECT blob FROM messaging_queuedenvelope WHERE id = 'x'")
+
+    with mock.patch.object(manager.objects, "filter", side_effect=leaky):
+        with pytest.raises(CommandError) as raised:
+            run_prune()
+
+    assert str(raised.value) == f"the {step} failed: DatabaseError"
+    assert raised.value.__cause__ is None
+    # `from None` suppresses the chain, which is what keeps the original error —
+    # and the statement it carries — out of anything Django prints.
+    assert raised.value.__suppress_context__ is True
+
+
+@pytest.mark.django_db(transaction=True)
+def test_the_output_carries_no_identifier_no_payload_and_no_path(
+    active_user, attachments_root, settings
+):
+    """Everything this command writes lands in the timer's journal, which is on
+    disk and outside the schema's control. Counts are the whole vocabulary: an id
+    is a graph edge, a path names an attachment, and the bytes are the thing the
+    system exists to keep."""
+    settings.ENVELOPE_TTL_DAYS = 7
+    settings.ATTACH_TTL_DAYS = 30
+    settings.ADMIN_AUDIT_RETENTION_DAYS = 90
+    device = make_device(active_user, 112)
+    row = queue_row(device, 1, age_days=8)
+    blob = bytes(QueuedEnvelope.objects.get(id=row.id).blob)
+    attachment, path = stored_attachment(active_user, attachments_root, age_days=31)
+    entry = LogEntry.objects.create(
+        user=active_user, object_repr="x", action_flag=ADDITION, change_message=""
+    )
+    LogEntry.objects.filter(pk=entry.pk).update(
+        action_time=timezone.now() - timedelta(days=91)
+    )
+
+    output = run_prune()
+
+    forbidden = {
+        "envelope id": str(row.id),
+        "device id": str(device.id),
+        "user id": str(active_user.id),
+        "attachment id": attachment.id,
+        "attachment path": str(path),
+        "attachments root": str(attachments_root),
+        "audit row id": str(entry.pk),
+        "envelope payload": base64.b64encode(blob).decode(),
+        "envelope payload in hex": blob.hex(),
+    }
+    for label, secret in forbidden.items():
+        assert secret not in output, f"{label} reached the command output"

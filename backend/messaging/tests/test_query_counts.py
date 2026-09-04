@@ -177,3 +177,52 @@ def test_an_empty_ack_touches_the_database_not_at_all(http, active_user, device,
     )
 
     assert response.json() == {"deleted": 0}
+
+
+def test_a_send_that_reaches_only_full_mailboxes_writes_nothing(
+    http, active_user, device, bearer, bob, settings
+):
+    """The refusal happens under the lock the liveness read already holds, so a
+    batch refused whole costs the liveness read and the ceiling aggregate and
+    stops there: no counter update, no insert, and no query per refused device."""
+    settings.MAILBOX_MAX_BYTES = SMALLEST_BUCKET
+    target = make_device(bob, 310)
+    fill(target, 1)
+
+    response = counted(
+        http,
+        "POST",
+        SEND_URL,
+        AUTH_QUERY + 2,
+        json={"messages": [{"device_id": str(target.id), "blob": envelope_blob(b"F")}]},
+        headers=bearer(active_user, device),
+    )
+
+    assert response.json()["full_devices"] == [str(target.id)]
+
+
+def test_an_ack_that_matches_nothing_is_still_one_delete(
+    http, active_user, device, bearer, bob_devices
+):
+    """The scoping is a clause of the delete, not a read before it: an id from
+    another mailbox must not cost a lookup to discover it belongs to somebody
+    else, because that lookup would be the oracle the scoping exists to deny."""
+    fill(bob_devices[0], 5)
+    ids = [
+        str(row_id)
+        for row_id in QueuedEnvelope.objects.filter(
+            recipient_device_id=bob_devices[0].id
+        ).values_list("id", flat=True)
+    ]
+
+    response = counted(
+        http,
+        "POST",
+        "/api/v1/me/envelopes/ack",
+        AUTH_QUERY + 1,
+        json={"ids": ids},
+        headers=bearer(active_user, device),
+    )
+
+    assert response.json() == {"deleted": 0}
+    assert QueuedEnvelope.objects.count() == 5

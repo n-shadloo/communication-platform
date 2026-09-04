@@ -7,6 +7,7 @@ from unittest import mock
 
 import pytest
 import redis
+from django.utils import timezone
 from redis.asyncio import Redis
 from redis.asyncio.client import Pipeline
 
@@ -260,3 +261,81 @@ def test_the_push_re_encodes_nothing_the_client_already_sent(
 
     assert resp.status_code == 202
     assert encodings == []
+
+
+def test_the_pushed_frame_is_the_documented_four_fields_and_nothing_more(
+    http, active_user, device, bearer, bob_devices, listener
+):
+    """What the gateway forwards is what the socket receives, so the frame is
+    asserted whole. A field more would be one no client contract names; a field
+    less would leave the client with an envelope it cannot ack, because `id` is
+    the only handle the ack route takes."""
+    target = bob_devices[0]
+    blob = envelope_blob(b"f")
+
+    with listener(target.id) as subscriber:
+        resp = http.post(
+            SEND_URL,
+            json={"messages": [{"device_id": str(target.id), "blob": blob}]},
+            headers=bearer(active_user, device),
+        )
+
+        assert resp.status_code == 202
+        frame = subscriber.receive()
+
+    row = QueuedEnvelope.objects.get(recipient_device_id=target.id)
+    assert frame == {"type": "envelope", "id": str(row.id), "seq": 1, "blob": blob}
+
+
+def test_a_stale_target_is_pushed_nothing_because_nothing_was_queued(
+    http, active_user, device, bearer, bob_devices, listener
+):
+    """A revoked device may still hold a live socket for the moment it takes the
+    gateway to notice, and a frame for a row that was never written would be an
+    envelope id the client could ack for ever."""
+    target = bob_devices[0]
+    target.revoked_date = timezone.now().date()
+    target.save(update_fields=["revoked_date"])
+
+    with listener(target.id) as subscriber:
+        resp = http.post(
+            SEND_URL,
+            json={"messages": [{"device_id": str(target.id), "blob": envelope_blob()}]},
+            headers=bearer(active_user, device),
+        )
+
+        assert resp.json()["stale_devices"] == [str(target.id)]
+        assert subscriber.received_nothing()
+
+    assert QueuedEnvelope.objects.count() == 0
+
+
+def test_a_full_mailbox_is_pushed_nothing_while_its_neighbour_still_is(
+    http, active_user, device, bearer, bob_devices, listener, settings
+):
+    """The refusal is per device and so is the push: the device that was refused
+    hears nothing, and the one that was accepted in the same batch still does."""
+    from .conftest import SMALLEST_BUCKET
+
+    settings.MAILBOX_MAX_BYTES = SMALLEST_BUCKET
+    full, free = bob_devices
+    QueuedEnvelope.objects.create(
+        recipient_device=full, seq=1, blob=b"q" * SMALLEST_BUCKET
+    )
+    blob = envelope_blob(b"G")
+
+    with listener(full.id) as refused, listener(free.id) as accepted:
+        resp = http.post(
+            SEND_URL,
+            json={
+                "messages": [
+                    {"device_id": str(full.id), "blob": envelope_blob(b"F")},
+                    {"device_id": str(free.id), "blob": blob},
+                ]
+            },
+            headers=bearer(active_user, device),
+        )
+
+        assert resp.json()["full_devices"] == [str(full.id)]
+        assert accepted.receive()["blob"] == blob
+        assert refused.received_nothing()

@@ -312,3 +312,80 @@ def test_the_batch_itself_counts_against_the_ceiling(
     }
     assert accepted.json() == {"accepted": 2, "stale_devices": [], "full_devices": []}
     assert QueuedEnvelope.objects.filter(recipient_device=target).count() == 2
+
+
+def test_one_batch_can_report_all_three_classes_at_once(
+    http, active_user, device, bearer, bob_devices, carol_device, settings
+):
+    """The composite case a real fan-out hits: a group where one member revoked a
+    device, one is offline with a full mailbox, and the rest are live. Each class
+    is answered separately — the live copies are queued whatever the other two
+    did — because a batch refused whole would make one stale peer enough to stop
+    a group conversation."""
+    from .conftest import SMALLEST_BUCKET
+
+    settings.MAILBOX_MAX_BYTES = SMALLEST_BUCKET
+    dead, full = bob_devices
+    live = carol_device
+    dead.revoked_date = timezone.now().date()
+    dead.save(update_fields=["revoked_date"])
+    fill(full, 1, SMALLEST_BUCKET)
+
+    resp = send(
+        http,
+        bearer(active_user, device),
+        [
+            {"device_id": str(dead.id), "blob": envelope_blob(b"A")},
+            {"device_id": str(full.id), "blob": envelope_blob(b"B")},
+            {"device_id": str(live.id), "blob": envelope_blob(b"C")},
+        ],
+    )
+
+    assert resp.json() == {
+        "accepted": 1,
+        "stale_devices": [str(dead.id)],
+        "full_devices": [str(full.id)],
+    }
+    assert QueuedEnvelope.objects.filter(recipient_device=live).count() == 1
+    assert QueuedEnvelope.objects.filter(recipient_device=full).count() == 1
+    assert not QueuedEnvelope.objects.filter(recipient_device=dead).exists()
+
+
+def test_a_device_revoked_between_two_sends_turns_from_accepted_to_stale(
+    http, active_user, device, bearer, bob_devices
+):
+    """Liveness is read inside the transaction of each send, so the answer follows
+    the revocation rather than a cached device list — which is what tells the
+    sender to drop the device from its session state."""
+    target = bob_devices[0]
+    headers = bearer(active_user, device)
+    item = [{"device_id": str(target.id), "blob": envelope_blob()}]
+
+    before = send(http, headers, item)
+    target.revoked_date = timezone.now().date()
+    target.save(update_fields=["revoked_date"])
+    after = send(http, headers, item)
+
+    assert before.json()["accepted"] == 1
+    assert after.json() == {
+        "accepted": 0,
+        "stale_devices": [str(target.id)],
+        "full_devices": [],
+    }
+    assert QueuedEnvelope.objects.filter(recipient_device=target).count() == 1
+
+
+def test_a_device_can_address_its_own_mailbox(http, active_user, device, bearer):
+    """Self-sync is an ordinary send: a client encrypts for its own other devices,
+    and for itself when it needs to hand state to a future session. Nothing in the
+    route treats the sender's device differently, because nothing in the route
+    knows which device sent."""
+    resp = send(
+        http,
+        bearer(active_user, device),
+        [{"device_id": str(device.id), "blob": envelope_blob(b"S")}],
+    )
+
+    assert resp.json() == {"accepted": 1, "stale_devices": [], "full_devices": []}
+    drained = http.get("/api/v1/me/envelopes", headers=bearer(active_user, device)).json()
+    assert [one["seq"] for one in drained["envelopes"]] == [1]
