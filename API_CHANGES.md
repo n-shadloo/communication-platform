@@ -238,6 +238,27 @@ it; the padding buckets of every other blob type and `400 bad_bucket` with no ec
 the payload; the `409 stale_version` rule on both versioned blobs; and every throttle
 scope name, its environment variable and its default.
 
+## The operator can now remove things the client could reach
+
+The admin panel landed in phase 3
+([ADR-0011](docs/architecture/decisions/0011-django-unfold-admin-panel.md)). It moved
+no route, no field, no status code and no error code: `backend/openapi.json` is
+byte-identical across the change, and no request a client makes behaves differently.
+
+What did change is what an operator can do to state a client is holding a reference
+to. Two of them are new, and a client that assumed permanence will see a `404` it
+could not see before.
+
+| Item | Old behaviour | New behaviour | Client action |
+|---|---|---|---|
+| `GET /api/v1/rooms/{id}`, `PUT /api/v1/rooms/{id}`, `POST /api/v1/rooms/{id}/token` | A room, once created, existed forever. Nothing deleted one — no route, no retention sweep | The operator can delete a room from the panel. All three routes then answer `404 not_found` | Treat a room id as revocable, not permanent. On `404 not_found`, drop the room from the local list rather than retrying; the members will have been told out of band |
+| `GET /api/v1/attachments/{id}` | The bytes were reachable until `ATTACH_TTL_DAYS` expired them | The operator can also delete an attachment before its TTL, from the panel. The route then answers `404 not_found`, exactly as it does after expiry | None. This is the same `404` a client already had to handle for an expired attachment, arriving sooner. Do not distinguish the two: a missing attachment and a pruned one are one answer, by design |
+| Account deactivation, device revocation | Both already existed — deactivation in the stock admin, revocation as `DELETE /api/v1/me/devices/{id}` | Unchanged in effect. The panel now performs both through the same service functions the API uses, so an operator revocation has exactly the consequences a client revocation has: the tokens die, the one-time key material and the mailbox go, and any live socket closes with `4003` | None |
+
+Nothing else about the panel is observable to a client. It is served at `ADMIN_PATH`
+by the Django application mounted behind FastAPI, and every other path is still this
+API's own `404`.
+
 ## What the client can build against now
 
 **The surface is frozen at `v1` from this merge.** It is published two ways and they

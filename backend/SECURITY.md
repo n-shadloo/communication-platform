@@ -100,7 +100,18 @@ A full seizure of this server (disk + database) reveals, in total:
 - that **rooms exist**, each an ID plus an encrypted name — no membership, no
   participant history;
 - per-user **attachment upload counts, bucketed sizes, and days** — no recipient data
-  of any kind.
+  of any kind;
+- the **admin audit log** — one row per administrative act the operator performed
+  through the panel, holding the operator's account, a timestamp, the affected object
+  and a plain-language sentence. It names what the operator did, so it shows which
+  accounts were activated or deactivated, which devices were revoked and which
+  attachments were deleted, at second granularity. It carries no blob, no key, no
+  token and no password. `manage.py prune` deletes a row older than
+  `ADMIN_AUDIT_RETENTION_DAYS`, **90 days** by default, so a seizure takes at most one
+  quarter of operator history rather than the life of the deployment. One residue is
+  worth naming: the row for a deleted attachment holds that attachment's id in
+  `object_id`, which is the capability that used to download it — the row and its
+  bytes are gone by the time the audit row exists, so it opens nothing.
 
 No plaintext, no content key, no sender↔recipient pair, no group roster — anywhere at
 rest.

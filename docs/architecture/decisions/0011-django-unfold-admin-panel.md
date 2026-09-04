@@ -3,6 +3,9 @@
 - Status: Accepted
 - Phase: 3
 - Date: 2026-09-03
+- Landed: 2026-09-04. How the panel is built, and every library surface it stands
+  on, is [`docs/admin/PANEL-RECORD.md`](../../admin/PANEL-RECORD.md); this record
+  fixes only what the panel may show.
 
 ## Context
 
@@ -61,5 +64,12 @@ operator". Every asset is served from the project.
 - Lockout state in Redis and nowhere else keeps invariant 7 true. It also means a
   Redis restart clears the lockout.
 - The absence of a second factor is an accepted risk with a named trigger, not an
-  oversight. It belongs in `ACCEPTED_RISKS.md` when that file lands.
+  oversight. It is AR-1 in `ACCEPTED_RISKS.md`, which landed with the panel.
+- Building the panel found one exposure this record did not anticipate.
+  `Attachment.id` is not an identifier but a bearer capability — the download route
+  serves the bytes to any live token that presents it — so "no token" makes the
+  attachment page a harder problem than the other four. The panel resolves it by
+  removing every surface that would put the id in visible text or in a URL, which
+  costs that model its change form and its per-object delete view. What remains is
+  AR-2.
 - `django-unfold-expert` owns the panel's code. This ADR fixes what it may show.
