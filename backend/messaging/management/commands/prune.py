@@ -19,8 +19,8 @@ from messaging.models import QueuedEnvelope
 # holds a row lock on every matching row until it commits: a week of undelivered
 # ciphertext is up to the mailbox ceiling times the device count, and the sweep
 # runs beside live traffic rather than in a window. A thousand rows is one
-# short-lived transaction per pass — measured at 847 buffers to select and 1.4 ms
-# on a seeded 245 MB copy — and the pass repeats until nothing is left.
+# short-lived transaction per pass — measured at 991 buffers to select and 5.04 ms
+# on a seeded 247 MB copy — and the pass repeats until nothing is left.
 BATCH = 1000
 
 # The advisory-lock key of the sweep, in the two-integer form so it cannot collide
@@ -106,8 +106,9 @@ class Command(BaseCommand):
         pruned = 0
         while True:
             with transaction.atomic():
-                # Oldest first, through the `queued_hour` index, so the batch is
-                # selected without reading the table.
+                # Oldest first, through the `queued_hour` index. With nothing
+                # expired — the common pass — the probe is two buffers and never
+                # reaches the table at all; a full batch of a thousand costs 991.
                 ids = list(
                     QueuedEnvelope.objects.filter(queued_hour__lt=cutoff)
                     .order_by("queued_hour")
@@ -126,7 +127,9 @@ class Command(BaseCommand):
                 # neither does — which is why the pair, and not the whole sweep, is
                 # what the transaction spans.
                 #
-                # Aggregates only — seq per device, never ids or blobs into Python.
+                # The batch's ids are held to bound the delete, and nothing else
+                # comes back: the watermark is an aggregate, one seq per device,
+                # and no blob is read into this process at any point.
                 highest = {
                     row["recipient_device_id"]: row["top"]
                     for row in batch.values("recipient_device_id").annotate(
