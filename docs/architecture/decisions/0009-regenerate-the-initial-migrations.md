@@ -3,6 +3,14 @@
 - Status: Accepted
 - Phase: 2
 - Date: 2026-09-03
+- Landed: 2026-09-04, in the last run of phase 2, after the schema stopped moving.
+  Sixteen files became six, one `0001_initial` for each app that owns a table. The
+  schema is unchanged — the same 104 columns, 47 indexes and 61 constraints, measured
+  by applying both histories to two scratch databases and diffing them, and differing
+  only in the physical column order of `devices_device`. `core/tests/test_migrations.py`
+  replays the history onto an empty database of its own and unapplies every app to
+  zero. `backend/ops/postgres/README.md` carries the drop-and-recreate step the
+  deployment takes before its first migrate of this version.
 
 ## Context
 

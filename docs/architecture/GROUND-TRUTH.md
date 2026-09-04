@@ -6,7 +6,7 @@ it or delete it, and never lengthen the window to bring one back inside it.
 
 Scope note, and the reason several sections are thin: the VPS does not serve yet.
 The system is at scale band 0, pre-launch, with no real traffic and no production
-database. Every entry here was measured on the repository at commit `0a31cb0` or
+database. Every entry here was measured on the repository at commit `32617e7` or
 on the developer machine. A row that names the VPS states what the committed
 operator configuration sets, not what a running host reports, and says so. The
 first production measurement replaces it.
@@ -43,7 +43,9 @@ runtime path.
 | `AUTH_PASSWORD_VALIDATORS` | minimum length 10, common-password check only | four validators, minimum length 8 | — | 2026-09-03 |
 | `DB_CONN_MAX_AGE` | 0 | 0 | [0005](decisions/0005-django-orm-on-a-thread-sensitive-data-path.md) | 2026-09-04 |
 | `DATABASES["default"]["OPTIONS"]["pool"]` | `{min_size: 1, max_size: 16, timeout: 10}` | no pool | [0005](decisions/0005-django-orm-on-a-thread-sensitive-data-path.md) | 2026-09-04 |
-| FastAPI `openapi_url`, `docs_url`, `redoc_url` | `None` | `/openapi.json`, `/docs`, `/redoc` | [0008](decisions/0008-fastapi-generates-the-openapi-document.md) closes them outside `DEBUG`; the surface publishes no route map until `manage.py openapi` lands | 2026-09-04 |
+| FastAPI `openapi_url`, `docs_url`, `redoc_url` | their defaults under `DEBUG`, `None` otherwise, so the three routes — and the `/docs/oauth2-redirect` route FastAPI adds beside them — are absent from the application in production | `/openapi.json`, `/docs`, `/redoc`, always registered | [0008](decisions/0008-fastapi-generates-the-openapi-document.md) | 2026-09-04 |
+| FastAPI `generate_unique_id_function` | the route's handler name | the route name, the path and one method taken from an unordered set | [0008](decisions/0008-fastapi-generates-the-openapi-document.md) — the default moves a client's method name when a path moves, and gives one identifier to both operations of a two-method route | 2026-09-04 |
+| The `422` FastAPI declares on every route that takes a parameter | removed from the generated document, with the two components only it referenced | declared, referencing `HTTPValidationError` | [0007](decisions/0007-contract-conventions.md) replaced the validation handler, so no route can produce that body | 2026-09-04 |
 | FastAPI `router.redirect_slashes` | `False` | `True` | [0007](decisions/0007-contract-conventions.md) | 2026-09-04 |
 | FastAPI `router.default` | a dispatcher that hands `ADMIN_PATH` (and `STATIC_URL` under `DEBUG`) to the Django ASGI application and raises the router's own 404 for everything else | Starlette's own 404 | [0002](decisions/0002-fastapi-as-the-only-http-api-surface.md) | 2026-09-04 |
 | Multipart limits on the upload route | `max_files=1`, `max_fields=0`, and a spool threshold of 64 KiB, set by parsing the form in the route rather than declaring an `UploadFile` parameter | `max_files=1000`, `max_fields=1000`, and a spool threshold of 1 MiB | [0014](decisions/0014-process-hardening-at-the-edge.md) | 2026-09-04 |
@@ -73,11 +75,12 @@ runtime path.
 | Pinned development distributions | 13 | `grep -cE '^[a-zA-Z0-9._-]+==' requirements/dev.txt` | 2026-09-04 |
 | Project apps | 8 — `core`, `accounts`, `devices`, `vault`, `messaging`, `attachments`, `voicerooms`, `realtime` | `INSTALLED_APPS` | 2026-09-03 |
 | Project models | 11 | `django.apps.apps.get_models()` filtered to the project apps | 2026-09-03 |
-| Migration files | 16 — accounts 1, attachments 1, devices 10, messaging 1, vault 2, voicerooms 1 | `ls -1 */migrations/0*.py \| wc -l` | 2026-09-04 |
-| Tracked Python files | 182 | `git ls-files '*.py' \| wc -l` | 2026-09-04 |
-| Test files | 68 | `git ls-files '*/test_*.py' \| wc -l` | 2026-09-04 |
-| Tests collected | 733, plus 44 subtests | `pytest -q` | 2026-09-04 |
-| URL routes declared | 1 `path()` entry across the `urls.py` files — the admin — plus `staticfiles_urlpatterns()` under `DEBUG`, 32 FastAPI method-and-path pairs over 27 distinct paths, and one WebSocket route at `/ws` with no HTTP method | `grep -rhn "path(" --include='urls.py' . \| wc -l`, and `core/tests/test_route_table.py` for the FastAPI table | 2026-09-04 |
+| Migration files | 6 — one `0001_initial` for each app that owns a table, per [0009](decisions/0009-regenerate-the-initial-migrations.md), down from 16 | `git ls-files 'backend/*/migrations/0*.py' \| wc -l`. Run over the working tree instead and `backend/.venv` adds 23 of Django's own | 2026-09-04 |
+| Tracked Python files | 179 | `git ls-files '*.py' \| wc -l` | 2026-09-04 |
+| Test files | 71 | `git ls-files '*/test_*.py' \| wc -l` | 2026-09-04 |
+| Tests collected | 1102, plus 44 subtests. Almost all of the rise over the previous run's 733 is parametrisation: the generated document and the endpoint references are walked once for each of the 32 operations | `pytest -q` | 2026-09-04 |
+| The OpenAPI document | 32 operations over 27 paths, 52 components, 120 240 bytes at `backend/openapi.json` | `python manage.py openapi`, then `wc -c` | 2026-09-04 |
+| URL routes declared | 1 `path()` entry across the `urls.py` files — the admin — plus `staticfiles_urlpatterns()` under `DEBUG`, 32 FastAPI method-and-path pairs over 27 distinct paths, and one WebSocket route at `/ws` with no HTTP method. Under `DEBUG` only, FastAPI adds four of its own: `/openapi.json`, `/docs`, `/docs/oauth2-redirect` and `/redoc` | `grep -rhn "path(" --include='urls.py' . \| wc -l`, and `core/tests/test_route_table.py` for the FastAPI table | 2026-09-04 |
 | Project apps | `api/` is a Python package and not an installed app: it holds no model and appears in no `INSTALLED_APPS` | `INSTALLED_APPS` | 2026-09-04 |
 | Production hardware | 1 vCPU, 1 GB RAM, single VPS | operator statement; no host metric exists yet | 2026-09-03 |
 | Accounts, devices, groups | 0 accounts in production; the band caps the design at fewer than 50 accounts, at most 10 devices for each account, and at most 50 members in a group | pre-launch; the caps are the stated scale band, not a measurement | 2026-09-03 |
@@ -91,10 +94,11 @@ table whose size follows traffic, and nothing has measured it.
 
 | Operation | The duration | The conditions of the run | verified |
 |---|---|---|---|
-| Full test suite | 39.5 s, 733 passed | Developer machine, `pytest -q`, native PostgreSQL 16 and Redis 7 on loopback, random order (`pytest-randomly` seed reported per run) | 2026-09-04 |
-| Full test suite, second order | 39.1 s, 733 passed | Same machine, a different `pytest-randomly` order in the same session. The spread between the two orders is the cost of the `transaction=True` tests, whose table truncation lands in a different place each run | 2026-09-04 |
+| Full test suite | 38.5 s, 1102 passed | Developer machine, `pytest -q`, native PostgreSQL 16 and Redis 7 on loopback, random order (`pytest-randomly` seed reported per run) | 2026-09-04 |
+| Full test suite, second order | 38.4 s, 1102 passed | Same machine, a different `pytest-randomly` order in the same session. The spread between the two orders is the cost of the `transaction=True` tests, whose table truncation lands in a different place each run | 2026-09-04 |
 | Gateway suite against a real Redis bus | 6.8 s, 56 passed | Developer machine, `pytest realtime/ -q -p no:randomly`. Every socket test drives the composed ASGI application on the test's own event loop and fans out through Redis publish and subscribe; three of them run a real uvicorn on an ephemeral port | 2026-09-04 |
-| `AddField` for `Device.refresh_generation` | 5.1 ms over a 200 000-row probe table, with no rewrite | `psql`, inside a rolled-back transaction: the `relfilenode` was unchanged, and `pg_locks` showed ACCESS EXCLUSIVE on the table alone | 2026-09-04 |
+| The regenerated migration history against the one it replaced | The same schema: 104 columns, 47 indexes and 61 constraints, identical name for name and definition for definition. The one difference is the physical column order of `devices_device`, where the four columns the old history appended now sit in model order | Both histories applied to a scratch database of their own on the developer machine, then `information_schema.columns`, `pg_indexes` and `pg_constraint` dumped from each and diffed. The `AddField` for `Device.refresh_generation` this row used to time is part of `devices.0001_initial` now and no longer runs against a populated table | 2026-09-04 |
+| Every `0001_initial`, forward and back | Every statement is a `CREATE TABLE`, a `CREATE INDEX` or an `ALTER TABLE … ADD CONSTRAINT` against a relation the same migration created, so each ACCESS EXCLUSIVE lock is on a relation no other session can name. Every app reaches `zero` again, `accounts` cascading through `admin` on the way | `python manage.py sqlmigrate <app> 0001` read statement by statement, and `core/tests/test_migrations.py` for the replay | 2026-09-04 |
 | Test-database teardown | warns on roughly one run in three: `database "test_chatapp" is being accessed by other users`, one session | Developer machine, `pytest -q` repeated. It is a teardown warning and never a failure; the suite is green either way, and CI is unaffected because each run builds a fresh database. Reproduced with `DB_POOL_MIN_SIZE=0`, so it is not the pool's idle connection but a connection a worker thread still holds when `destroy_test_db` runs | 2026-09-04 |
 | Send fan-out | 3 queries of its own, at 1, 6 and 20 recipients alike, and 3 for ten envelopes to one mailbox: one locked liveness read, one bulk counter update, one bulk insert. A batch that reaches only stale devices costs the liveness read alone. The authentication dependency adds one query to every route | `CaptureQueriesContext` over the composed application, transaction statements excluded, in `messaging/tests/test_query_counts.py` | 2026-09-04 |
 | Prekey claim | 1 target read, 1 locked select per target device, and 1 delete for the batch — 3 queries of its own for one device with a pool of 1, 20 or 200 keys, and 8 for six devices. An exhausted pool costs one less, because nothing is deleted | `CaptureQueriesContext` over the composed application, transaction statements excluded, in `devices/tests/test_query_counts.py` | 2026-09-04 |

@@ -76,7 +76,7 @@ Never mark a row resolved without the trigger it names.
 | `ACCEPTED_RISKS.md` | Lands with the admin in phase 3. `API_CHANGES.md` landed on 2026-09-03, in the second run of phase 1, and is no longer deferred |
 | `backend/ops/RUNBOOK.md` | Phase 5 |
 | `docs/admin/` | Phase 3 |
-| Regenerating every `0001_initial` and deleting the earlier migrations | The schema stops changing, at the end of phase 2 |
+| Regenerating every `0001_initial` and deleting the earlier migrations | Resolved on 2026-09-04: the trigger fired at the end of phase 2, sixteen files became six, and from phase 3 the history is append-only |
 | coturn still reads its certificate from a public-CA path (`/etc/letsencrypt/live/...`) while nginx now terminates with the private CA pair | The first end-to-end voice rehearsal on the VPS |
 | A `verified` date check in CI over `GROUND-TRUTH.md` | The first entry passes the 90-day window |
 | Any second application host, read replica, worker fleet or cache tier | Band 1 is reached and measured, not assumed |
@@ -91,9 +91,9 @@ Never mark a row resolved without the trigger it names.
 | [0004](decisions/0004-websocket-gateway-on-redis-pubsub.md) | The WebSocket gateway fans out over Redis publish and subscribe | Accepted | 2 | 2026-09-04 | — |
 | [0005](decisions/0005-django-orm-on-a-thread-sensitive-data-path.md) | The Django ORM is the only data access layer | Accepted | 2 | 2026-09-04 | — |
 | [0006](decisions/0006-device-bound-tokens-on-pyjwt.md) | Device-bound tokens on PyJWT, with no token table | Accepted | 2 | 2026-09-04 | — |
-| [0007](decisions/0007-contract-conventions.md) | Contract conventions | Accepted | 2 | landing, 2026-09-04 | — |
-| [0008](decisions/0008-fastapi-generates-the-openapi-document.md) | FastAPI generates the OpenAPI document | Accepted | 2 | — | — |
-| [0009](decisions/0009-regenerate-the-initial-migrations.md) | Regenerate the initial migrations | Accepted | 2 | — | — |
+| [0007](decisions/0007-contract-conventions.md) | Contract conventions | Accepted | 2 | 2026-09-04 | — |
+| [0008](decisions/0008-fastapi-generates-the-openapi-document.md) | FastAPI generates the OpenAPI document | Accepted | 2 | 2026-09-04 | — |
+| [0009](decisions/0009-regenerate-the-initial-migrations.md) | Regenerate the initial migrations | Accepted | 2 | 2026-09-04 | — |
 | [0010](decisions/0010-redis-rate-limiting-that-fails-closed.md) | Redis rate limiting that fails closed | Accepted | 2 | landing, 2026-09-04 | — |
 | [0011](decisions/0011-django-unfold-admin-panel.md) | A django-unfold admin panel that shows no secret | Accepted | 3 | — | — |
 | [0012](decisions/0012-pinned-hashed-and-untracked-wheel-cache.md) | Pinned, hashed dependencies and an untracked wheel cache | Accepted | 1 | — | — |
