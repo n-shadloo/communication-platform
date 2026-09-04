@@ -271,6 +271,20 @@ the route's own reference.
 | `POST /api/v1/envelopes` to a device whose undelivered bytes would pass `MAILBOX_MAX_BYTES` (default 32 MiB) with this batch | Every item to a live device was queued; a mailbox had no ceiling | The device is refused whole — nothing is written for it and its sequence does not move — and named in a new `full_devices` list beside `stale_devices`; the rest of the batch proceeds and `accepted` counts only what was written | Read `full_devices` on every send. Keep a full device in the session set and retry its items once it has drained; a full device is live, not stale |
 | `POST /api/v1/me/devicelog` when the account's log would pass `MAX_DEVICELOG_RECORDS` (default 10 000) records | Every well-formed append was stored; the log had no ceiling | `409 {"code": "devicelog_limit", "detail": "The device-list log of this account is full."}`, and nothing of the batch is stored | Append only on a device-set change or an identity rotation, as §J of `backend/CLIENT_CONTRACT.md` already says; a client that reaches the ceiling has a defect |
 
+## Saturation now says so
+
+One observable change came out of the performance, background-work and migration
+audits. Everything else they touched — an index, a batched retention sweep, a pipelined
+fan-out, the base64 the push stopped reproducing — leaves every request and every
+response byte-identical: `backend/openapi.json` does not move.
+
+| Item | Old behaviour | New behaviour | Client action |
+|---|---|---|---|
+| Any route, when the database connection pool has nothing free and the acquisition times out | `500 {"code": "server_error", "detail": "Internal error."}` — which tells a client the request itself was at fault and it should stop | `503 {"code": "unavailable", "detail": "The service is temporarily unavailable."}` — the same envelope the rate limiter already answers when Redis is gone, and a code every route already declared | Retry a `503 unavailable` with backoff. Nothing new to handle: every route already declared the status and the code, and a `500` was never something to retry. `backend/core/API.md` now names this as its third source |
+
+Only a pool timeout reads this way. Django wraps every psycopg `OperationalError` in
+one class, and a deadlock or a dropped connection is still `500 server_error`.
+
 ## What the client can build against now
 
 **The surface is frozen at `v1` from this merge.** It is published two ways and they

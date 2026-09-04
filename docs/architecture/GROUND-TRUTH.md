@@ -20,7 +20,7 @@ file holds no decision.
 | Component | Where it runs | What it reaches | verified |
 |---|---|---|---|
 | nginx | VPS, ports 80 and 443, TLS 1.3 only, `ssl_early_data off` | `127.0.0.1:8000` for `/api/` and `/ws`, `127.0.0.1:7880` for `/rtc` | 2026-09-03 (configured, `backend/ops/nginx/chat.nimashadloo.dev.conf`) |
-| ASGI application | VPS, uvicorn on `127.0.0.1:8000`, systemd unit `chat.service` (writes `media_root` and nothing else), user `deploy`, `WEB_CONCURRENCY` workers (default 1), uvloop and httptools, the `websockets` sans-io implementation. In-process: FastAPI is the root application for every scope — every API route, the `/ws` gateway, and the Django ASGI application answering `ADMIN_PATH` alone | PostgreSQL and Redis on loopback | 2026-09-04 (configured, `backend/ops/systemd/chat.service`; composition observed in `backend/config/asgi.py`) |
+| ASGI application | VPS, uvicorn on `127.0.0.1:8000`, systemd unit `chat.service` (writes `media_root` and nothing else, `LimitNOFILE` 4096, `--limit-concurrency` 1024), user `deploy`, `WEB_CONCURRENCY` workers (default 1), uvloop and httptools, the `websockets` sans-io implementation. In-process: FastAPI is the root application for every scope — every API route, the `/ws` gateway, and the Django ASGI application answering `ADMIN_PATH` alone | PostgreSQL and Redis on loopback | 2026-09-04 (configured, `backend/ops/systemd/chat.service`; composition observed in `backend/config/asgi.py`) |
 | PostgreSQL 16 | VPS, loopback | — | 2026-09-03 (configured) |
 | Redis 7 | VPS, loopback, `bind 127.0.0.1`, `protected-mode yes`, `requirepass` set at deploy time — `check --deploy` refuses a `REDIS_URL` without a password (`core.E004`) | — | 2026-09-04 (configured, `backend/ops/redis/redis-chatapp.conf`; the check in `backend/core/checks.py`) |
 | LiveKit SFU | VPS, `127.0.0.1:7880`, RTC UDP 50100–50200, TCP 7881, `turn.enabled: false`, `use_external_ip: false` | the participants' media | 2026-09-03 (configured, `backend/ops/livekit/livekit.yaml`) |
@@ -73,13 +73,13 @@ runtime path.
 | uvicorn / uvloop / httptools / websockets | 0.52.4 / 0.22.1 / 0.8.0 / 17.1 | `requirements/prod.txt` | 2026-09-04 |
 | redis-py | 8.0.1 | `requirements/prod.txt` | 2026-09-04 |
 | httpx, cryptography (test only) | 0.28.1, 49.0.0 | `requirements/dev.txt` | 2026-09-04 |
-| Pinned production distributions | 29, down from 42 when Channels, daphne and the sixteen packages only they pulled in left | `grep -cE '^[a-zA-Z0-9._-]+==' requirements/prod.txt` | 2026-09-04 |
+| Pinned production distributions | 30, down from 42 when Channels, daphne and the sixteen packages only they pulled in left. The row read 29 before this run and was off by one against the command beside it | `grep -cE '^[a-zA-Z0-9._-]+==' requirements/prod.txt` | 2026-09-04 |
 | Pinned development distributions | 13 | `grep -cE '^[a-zA-Z0-9._-]+==' requirements/dev.txt` | 2026-09-04 |
 | Project apps | 8 — `core`, `accounts`, `devices`, `vault`, `messaging`, `attachments`, `voicerooms`, `realtime` | `INSTALLED_APPS` | 2026-09-03 |
 | Project models | 11 | `django.apps.apps.get_models()` filtered to the project apps | 2026-09-03 |
-| Migration files | 6 — one `0001_initial` for each app that owns a table, per [0009](decisions/0009-regenerate-the-initial-migrations.md), down from 16 | `git ls-files 'backend/*/migrations/0*.py' \| wc -l`. Run over the working tree instead and `backend/.venv` adds 23 of Django's own | 2026-09-04 |
-| Tracked Python files | 185 | `git ls-files '*.py' \| wc -l` | 2026-09-04 |
-| Test files | 71 | `git ls-files '*/test_*.py' \| wc -l` | 2026-09-04 |
+| Migration files | 7 — one `0001_initial` for each app that owns a table, per [0009](decisions/0009-regenerate-the-initial-migrations.md), plus `messaging.0002_index_the_retention_filter`, the first migration of the append-only era | `git ls-files 'backend/*/migrations/0*.py' \| wc -l`. Run over the working tree instead and `backend/.venv` adds 23 of Django's own | 2026-09-04 |
+| Tracked Python files | 189 | `git ls-files '*.py' \| wc -l` | 2026-09-04 |
+| Test files | 74 | `git ls-files '*/test_*.py' \| wc -l` | 2026-09-04 |
 | Tests collected | 1172, plus 48 subtests. The rise over the previous run's 1102 is the phase-4 security audit: every fix landed with the test that failed before it, and the audit's own gates — the planted pickle, the deploy checks read through the registry, the ceilings, the scrubbed traceback | `pytest -q` | 2026-09-04 |
 | The OpenAPI document | 32 operations over 27 paths, 52 components, 120 716 bytes at `backend/openapi.json` | `python manage.py openapi`, then `wc -c` | 2026-09-04 |
 | URL routes declared | 1 `path()` entry across the `urls.py` files — the admin — plus `staticfiles_urlpatterns()` under `DEBUG`, 32 FastAPI method-and-path pairs over 27 distinct paths, and one WebSocket route at `/ws` with no HTTP method. Under `DEBUG` only, FastAPI adds four of its own: `/openapi.json`, `/docs`, `/docs/oauth2-redirect` and `/redoc` | `grep -rhn "path(" --include='urls.py' . \| wc -l`, and `core/tests/test_route_table.py` for the FastAPI table | 2026-09-04 |
@@ -101,12 +101,74 @@ table whose size follows traffic, and nothing has measured it.
 | Gateway suite against a real Redis bus | 6.8 s, 56 passed | Developer machine, `pytest realtime/ -q -p no:randomly`. Every socket test drives the composed ASGI application on the test's own event loop and fans out through Redis publish and subscribe; three of them run a real uvicorn on an ephemeral port | 2026-09-04 |
 | The regenerated migration history against the one it replaced | The same schema: 104 columns, 47 indexes and 61 constraints, identical name for name and definition for definition. The one difference is the physical column order of `devices_device`, where the four columns the old history appended now sit in model order | Both histories applied to a scratch database of their own on the developer machine, then `information_schema.columns`, `pg_indexes` and `pg_constraint` dumped from each and diffed. The `AddField` for `Device.refresh_generation` this row used to time is part of `devices.0001_initial` now and no longer runs against a populated table | 2026-09-04 |
 | Every `0001_initial`, forward and back | Every statement is a `CREATE TABLE`, a `CREATE INDEX` or an `ALTER TABLE … ADD CONSTRAINT` against a relation the same migration created, so each ACCESS EXCLUSIVE lock is on a relation no other session can name. Every app reaches `zero` again, `accounts` cascading through `admin` on the way | `python manage.py sqlmigrate <app> 0001` read statement by statement, and `core/tests/test_migrations.py` for the replay | 2026-09-04 |
+| `messaging.0002_index_the_retention_filter` | One statement, `CREATE INDEX CONCURRENTLY "ix_queue_queued_hour" ON "messaging_queuedenvelope" ("queued_hour")`, which takes SHARE UPDATE EXCLUSIVE and blocks neither reads nor writes. The migration is `atomic = False`, and its SQL carries no `BEGIN`. The index is 1544 kB at 200 000 rows | `python manage.py sqlmigrate messaging 0002`, and `core/tests/test_migrations.py`, which reads the same output against the recorded lock class | 2026-09-04 |
 | Test-database teardown | warns on roughly one run in three: `database "test_chatapp" is being accessed by other users`, one session | Developer machine, `pytest -q` repeated. It is a teardown warning and never a failure; the suite is green either way, and CI is unaffected because each run builds a fresh database. Reproduced with `DB_POOL_MIN_SIZE=0`, so it is not the pool's idle connection but a connection a worker thread still holds when `destroy_test_db` runs | 2026-09-04 |
 | Send fan-out | 4 queries of its own, at 1, 6 and 20 recipients alike, and 4 for ten envelopes to one mailbox: one locked liveness read, one aggregate of the undelivered bytes each target holds (the mailbox ceiling), one bulk counter update, one bulk insert. A batch that reaches only stale devices costs the liveness read alone. The authentication dependency adds one query to every route | `CaptureQueriesContext` over the composed application, transaction statements excluded, in `messaging/tests/test_query_counts.py` | 2026-09-04 |
 | Prekey claim | 1 target read, 1 locked select per target device, and 1 delete for the batch — 3 queries of its own for one device with a pool of 1, 20 or 200 keys, and 8 for six devices. An exhausted pool costs one less, because nothing is deleted | `CaptureQueriesContext` over the composed application, transaction statements excluded, in `devices/tests/test_query_counts.py` | 2026-09-04 |
 | Attachment upload | 3 queries of its own — the uploader's row lock, one `SUM` aggregate, one insert — at 0 and at 25 attachments already held. The download is 1. The authentication dependency adds one query to every route | `CaptureQueriesContext` over the composed application, transaction statements excluded, in `attachments/tests/test_query_counts.py` | 2026-09-04 |
 | Offline install of the regenerated set | 54 hash-verified wheels collected and installed with `--no-index` | `pip download --require-hashes --only-binary=:all: -r requirements/dev.txt`, then `pip install --no-index --find-links` into a fresh venv, on the developer machine | 2026-09-04 |
 | Hash-verified dependency install | 7 s to fetch and install the two added wheels | `pip install --require-hashes -r requirements/dev.txt` on the developer machine, online | 2026-09-03 |
+
+| Retention sweep, 99 962 expired envelopes of 200 000 | 5.95 s wall, 100 batches of 1000 | `time manage.py prune` against the seeded copy below. Includes interpreter and Django start-up | 2026-09-04 |
+| Retention sweep, nothing expired | 0.33 s wall, almost all of it interpreter and Django start-up. The envelope probe itself is 2 buffers and 0.027 ms | The same command against the same copy with nothing past its TTL | 2026-09-04 |
+| Live push of one maximum batch | 131 ms of event-loop CPU: `json.dumps` of 256 payloads carrying a 349 528-character base64 blob each. The 53 ms of `base64.b64encode` that used to precede it is gone — the string the sender sent is handed through instead — and the 256 publishes are one pipelined round trip rather than 37.1 ms of sequential ones | `time.perf_counter` around the encode-and-serialize loop, 256 × the 262 144 bucket, on the developer machine | 2026-09-04 |
+| Redis fan-out, sequential against pipelined | 256 publishes: 37.1 ms against 1.5 ms. 500 publishes (the presence-target ceiling): 55.9 ms against 2.5 ms. `INCR` then `EXPIRE` as two round trips against one pipeline: 0.22 ms against 0.17 ms per request, which is why the rate limiter was left alone | `redis.asyncio` against the loopback instance on the developer machine | 2026-09-04 |
+| One worker's resident set against its live socket count | 189.8 MB idle, 201.0 MB at 100 sockets, 214.4 MB at 250, 237.0 MB at 500 — 47 MB for the band's whole socket ceiling, about 94 kB each. It does not fall when the sockets close: the allocator keeps the pages | `ps -o rss=` against a real uvicorn on the developer machine, holding open `websockets` clients | 2026-09-04 |
+| The concurrency limit against live sockets | With `--limit-concurrency 6`, six live WebSockets make every HTTP request answer uvicorn's own plain-text `503 Service Unavailable` — not this API's envelope. Both protocols share `server_state.connections`, the HTTP path sheds from the length of that shared set, and the WebSocket handshake never consults it, because the upgrade returns before the check. With the limit at 1024, 500 live sockets leave HTTP answering `200` | A real uvicorn on the developer machine, 6 then 500 `websockets` clients held open across an HTTP request | 2026-09-04 |
+| Connection pool under contention | 60 concurrent drains through a pool of `max_size` 1 with a 1 s acquisition timeout: 60 × `200`, no timeout. The pool is not the binding constraint at these service times | `curl` × 60 against a real uvicorn on the seeded copy, `DB_POOL_MAX_SIZE=1 DB_POOL_TIMEOUT=1` | 2026-09-04 |
+
+### 4.1 The request rate of one worker
+
+Closed-loop, one uvicorn worker with the production flags, real PostgreSQL 16 and
+Redis 7 on loopback, throttle rates raised so the numbers are the routes rather
+than the limiter, against the seeded copy below. **Measured on the developer
+machine, which has more than one core**, so the generator and the ORM threads did
+not contend with the event loop the way they will on the VPS: read the shape — a
+knee, then a decline — rather than the absolute rate. Verified 2026-09-04.
+
+| Route (queries) | c=1 | c=8 | c=32 | c=128 |
+|---|---|---|---|---|
+| `GET /health` (0) | 1894 rps, p50 0.51 ms, p95 0.66 | 1352 rps, p50 3.07, p95 3.93 | 956 rps, p50 24.3, p95 90.9 | 796 rps, p50 116, p95 444 |
+| `GET /me/envelopes` (2, 137 kB body) | 358 rps, p50 2.69, p95 3.43 | 576 rps, p50 13.3, p95 18.5 | 577 rps, p50 53.5, p95 72.2 | 88 rps, p50 749, p95 4292 |
+| `GET /users` (2) | 557 rps, p50 1.74, p95 2.10 | 1014 rps, p50 7.54, p95 12.1 | 360 rps, p50 61.3, p95 256 | 233 rps, p50 388, p95 1555 |
+| `GET /me/devices` (4) | 409 rps, p50 2.42, p95 2.69 | 706 rps, p50 11.0, p95 14.6 | 366 rps, p50 55.5, p95 262 | 116 rps, p50 800, p95 2774 |
+
+The knee is between 8 and 32 concurrent requests. Past it throughput falls and
+p95 grows faster than concurrency, which is one event loop saturating. Every
+response was `200`; nothing was shed and nothing reached its deadline.
+
+### 4.2 Query plans
+
+`EXPLAIN (ANALYZE, BUFFERS)` on a seeded copy of the band's shape: 50 accounts,
+500 devices, 200 000 undelivered envelopes at the 1024 bucket (247 MB with its
+indexes), 25 000 device-log records, 20 000 attachments, 50 000 admin audit rows.
+Developer machine, PostgreSQL 16, verified 2026-09-04. A buffer is 8 kB.
+
+| Query | Plan | Buffers | Time |
+|---|---|---|---|
+| The retention pass with nothing expired, as it ran before this run: a `MAX(seq)` aggregate over the whole expired set, with no index | `Parallel Seq Scan` over the whole table | 28 736 | 26.5 ms |
+| The same aggregate, with the index | `Index Scan using ix_queue_queued_hour` | 2 | 0.012 ms |
+| The retention probe with nothing expired, as the batched sweep runs it now | `Index Scan using ix_queue_queued_hour`, `Limit` | 2 | 0.027 ms |
+| One retention batch of 1000 ids | `Index Scan using ix_queue_queued_hour`, `Limit` | 991 | 5.04 ms |
+| Expired attachments (20 000 rows, 9746 matching) | `Seq Scan` — 5.9 MB table, no index warranted | 272 | 1.39 ms |
+| Expired audit rows (50 000 rows, 27 445 matching) | `Seq Scan` — 5.5 MB table, no index warranted | 468 | 7.48 ms |
+| The drain page of a 400-row mailbox | `Index Scan using uq_queue_device_seq`, `Limit` | 19 | 0.10 ms |
+| The drain page of a 32 768-row mailbox | the same index scan | 19 | 0.09 ms |
+| The mailbox ceiling aggregate, 400-row mailbox | `Bitmap Heap Scan` on `uq_queue_device_seq` | 64 | 0.58 ms |
+| The mailbox ceiling aggregate, 10 000-row mailbox | the same bitmap heap scan | 1 520 | 1.16 ms |
+| The mailbox ceiling aggregate at the 32 MiB ceiling | `Parallel Seq Scan` — one device now holds 16% of the table, so the index stops being selective | 33 196 | 17.9 ms |
+| The locked liveness read of 20 send targets | `LockRows` over a `Sort` over a hash join | 63 | 0.61 ms |
+| The device-log keyset page | `Index Scan using uq_devicelog_user_seq`, `Limit` | 11 | 0.16 ms |
+| The device-log head probe | `Index Only Scan Backward`, 0 heap fetches | 3 | 0.10 ms |
+| The attachment quota aggregate, 400 held | `Bitmap Heap Scan` on the uploader index | 269 | 0.90 ms |
+| The attachment quota aggregate at the 2 GiB quota ceiling (32 400 held) | `Seq Scan` — the table is narrow, so the whole scan is 5.4 MB | 694 | 1.82 ms |
+
+Two of these grow with a ceiling rather than with the band, and both are recorded
+as accepted risks with their triggers in
+[`../../ACCEPTED_RISKS.md`](../../ACCEPTED_RISKS.md): the mailbox ceiling
+aggregate (AR-7) and the attachment quota aggregate (AR-8). Neither is indexed
+today, because at the band's real depths both are already cheap and an index on
+either is maintained on the hottest write path in the system.
 
 No restore drill, no failover drill, and no deploy has been timed. Those rows stay
 absent until a drill produces them. ADR 0015 places the operator runbook at
@@ -145,4 +207,6 @@ one discovered from the repository rather than assumed.
 | Broker | None. There is no task queue and no Celery application; the only scheduled work is the `prune` management command under a systemd timer | 2026-09-04 (observed) |
 | Cache | One Redis instance, `REDIS_URL`. The rate limiter, the login lockout, the room presence sets and the gateway's fan-out bus all use it, and every one of them reads strings through the redis client: the Django cache framework is not on Redis, so no value read from the instance is ever deserialized ([0018](decisions/0018-redis-is-authenticated-and-never-deserialized.md)). `api/redis.py` holds one `redis.asyncio` client for each running event loop, and the limiter, presence and the bus share it, so one process draws one pool plus the one connection the subscription holds. The limiter keys its counters under `ratelimit:`, the lockout keys its counter and its flag under `lock:<surface>:` for each of the two password surfaces, presence keys its sets under `roomlive:`, and the bus publishes to `ws:dev:<device id>` and `ws:room:<room id>`, which are channels rather than keys and store nothing. There is one counter stack, and no scope is counted twice | 2026-09-04 (observed, `api/redis.py`, `api/ratelimit.py`, `voicerooms/presence.py`, `realtime/bus.py`) |
 | Process set | One uvicorn master with `WEB_CONCURRENCY` workers, default 1. Each worker serves HTTP and WebSocket alike and opens one Redis subscription connection of its own, so the subscription count tracks the worker count | 2026-09-04 (configured, `backend/ops/systemd/chat.service`) |
+| Connection budget | `max_size` 16 per worker, so 16 × `WEB_CONCURRENCY` plus one for the maintenance timer while it runs: 17 at the default, against PostgreSQL's own default `max_connections` of 100. The VPS value of `max_connections` is not measured. `--limit-concurrency 512` bounds **connections**, live WebSockets included, so it is sized for the device ceiling of the band rather than for HTTP concurrency — the two share one knob and uvicorn offers no second | 2026-09-04 (observed, `config/settings/base.py`, `backend/ops/systemd/chat.service`) |
+| Threads | One per in-flight HTTP request that touches the ORM: `api/middleware.ThreadSensitive` opens a `ThreadSensitiveContext` for each request, and asgiref builds a `ThreadPoolExecutor(max_workers=1)` for each context. A WebSocket scope enters no context, so every socket's ORM work shares the one process-wide thread-sensitive executor thread | 2026-09-04 (observed, `api/middleware.py`, `asgiref.sync.SyncToAsync.__call__`) |
 | Lifespan | uvicorn sends both messages. Nothing is built at startup all the same, because what the process holds is keyed by running event loop: the shared Redis client, the bus subscriber and its reader task are built on first use. The shutdown drains every live socket with `1012`, stops the subscriber, then closes the client, in that order | 2026-09-04 (observed, `api/app.py`, `realtime/bus.py`, `realtime/gateway.py`) |

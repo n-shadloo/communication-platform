@@ -213,7 +213,68 @@ operator — at which point the socket path lands.
 
 ---
 
-## Appendix — Audit coverage
+## AR-7 — The mailbox ceiling aggregate reads the whole queue table for a device at its ceiling
+
+**What is exposed.** Every send sums the undelivered bytes each target device already
+holds, so that a mailbox past `MAILBOX_MAX_BYTES` is refused rather than allowed to
+grow. The sum is `SUM(length(blob))` over that device's rows, and its cost follows the
+depth of the mailbox. Measured on a seeded copy (`docs/architecture/GROUND-TRUTH.md`
+§4.2): 64 buffers at 400 rows, 1520 at 10 000, and at the 32 MiB ceiling — 32 768 rows
+of the smallest bucket — the planner abandons the index, because one device then holds
+16% of the table, and reads 33 196 buffers, the whole 247 MB. On the VPS's single vCPU
+there is no parallel worker to split that.
+
+**Why this is carried.** Band 0 holds no production rows at all, and a device that
+drains normally holds tens. Reaching the ceiling takes a device offline for the whole
+`ENVELOPE_TTL_DAYS` window while a peer sends it 32 MiB. The alternative is a
+denormalised `queue_bytes` counter on the device row, which four write paths would have
+to keep true — send, ack, the retention sweep and revocation — and a counter that drifts
+either refuses a mailbox that is empty or admits one that is full. That is a
+consistency burden taken on for a depth nothing has ever reached.
+
+**What reduces it today.** The ceiling itself, which is what stops the depth growing
+without bound; the retention sweep, which empties a mailbox after
+`ENVELOPE_TTL_DAYS`; and the drain, which is an index scan of 19 buffers at any depth,
+so a device that comes back does not pay this cost to collect its mail.
+
+**If it were exploited.** A member who fills one device's mailbox to its ceiling makes
+every subsequent send to that device read the queue table end to end. On one vCPU that
+is roughly 18 ms of the event loop per send, and it stops when the sweep or a drain
+empties the mailbox.
+
+**Trigger that ends the acceptance.** The first mailbox observed above 10 000
+undelivered rows, or a send p95 above 1 s (A2's threshold). Either one makes the
+counter worth its four write paths.
+
+---
+
+## AR-8 — The attachment quota aggregate scales with the account's attachment count
+
+**What is exposed.** Every upload sums the sizes an account already stores, to charge
+the upload against `ATTACH_USER_QUOTA_BYTES` before its row is written. The sum reads
+one row for each attachment the account holds.
+
+**Why this is carried.** The attachment table is four narrow columns, so even at the
+quota ceiling the scan is small: measured at 32 400 attachments for one uploader
+(2 GiB at the smallest bucket), a sequential scan of 694 buffers — 5.4 MB — in 1.82 ms.
+A covering index on `(uploader_id) INCLUDE (size)` makes it 4 buffers and 0.046 ms, and
+costs 640 kB at 20 000 rows plus maintenance on every upload. That index buys 1.8 ms on
+a route the limiter caps at 60 requests a minute.
+
+**What reduces it today.** The per-account quota, which bounds the row count; the
+retention sweep, which removes rows after `ATTACH_TTL_DAYS`; and the throttle scope,
+which bounds how often the sum runs.
+
+**If it were exploited.** An account at its quota ceiling makes each of its own uploads
+read 5.4 MB. It affects that account's uploads and nothing else.
+
+**Trigger that ends the acceptance.** The attachment table above 200 000 rows, or the
+upload route's p95 above 100 ms with the aggregate named as the cost. Then the covering
+index lands with its plan.
+
+---
+
+## Appendix A — The security audit
 
 The security audit of phase 4 ran on 2026-09-04 over the tree at the merge of phase 3
 (`9bd941c`). Method: the review-time sweep of the `secure-code-auditor` skill — the
@@ -297,3 +358,83 @@ accepted rather than closed are AR-4, AR-5 and AR-6 above.
   key material or signatures was in scope.
 - Anything that needs a running target — timing beyond the login's dummy hash, request
   smuggling through the nginx-to-uvicorn chain, the padding oracle class.
+
+---
+
+## Appendix B — The performance, background-work and migration audits
+
+These three ran on 2026-09-04 over the tree at `b4707fa`, after the security audit
+closed. Method: the measure-first loop of `django-performance-optimizer` — a seeded
+copy of the band's shape, `EXPLAIN (ANALYZE, BUFFERS)` on every hot query, a closed-loop
+load run against a real uvicorn — then the mandates of `django-async-jobs` over the
+scheduled command and the gateway, and of `django-migration-safety` over the history.
+Every measurement is in [`docs/architecture/GROUND-TRUTH.md`](docs/architecture/GROUND-TRUTH.md)
+§4, §4.1 and §4.2; the capacity model they produced is in
+[`docs/architecture/DESIGN-RECORD.md`](docs/architecture/DESIGN-RECORD.md) §2.
+
+### What the audits closed
+
+| Finding | Audit | Closed by |
+|---|---|---|
+| The hourly retention sweep read the whole 247 MB queue table on every pass, including the common pass with nothing to delete: 28 736 buffers and 26.5 ms, against 2 buffers and 0.027 ms with an index | Performance | `97cae03` — `ix_queue_queued_hour`, built concurrently |
+| The live push re-encoded every blob the sender had already sent as base64: 53 ms of event-loop CPU on a maximum batch, reproducing the request body | Performance | `fceaafc` — the string is handed through from `send` |
+| The push and the presence announcement awaited one Redis publish per target: 37.1 ms for a 256-envelope batch and 55.9 ms for a 500-device presence set, against 1.5 ms and 2.5 ms pipelined | Performance | `fceaafc` — `bus.publish_many` |
+| The sweep deleted every expired row in one statement, holding a row lock on each until it committed, against a table every send writes to | Background work | `35d9eb1` — batches of a thousand, with the watermark and the delete of each batch in one transaction |
+| The sweep raised `queue_pruned_through` one device at a time inside that transaction | Background work | `35d9eb1` — one `UPDATE` for the batch, with `Greatest` |
+| The sweep had no exclusion, so an operator running it by hand beside the timer could interleave two watermark-then-delete passes and tell a device it lost envelopes still in its mailbox | Background work | `35d9eb1` — a session advisory lock; declining it exits 0 |
+| A failed sweep escaped as a traceback carrying the statement that raised it, and those statements carry envelope ids | Background work | `35d9eb1` — a `CommandError` naming the step and the exception class, and exit status 1 |
+| An exhausted connection pool reached the client as `500 server_error`, which tells it to stop rather than retry | Performance | `b4707fa` — `503 unavailable`, narrowed to `PoolTimeout` |
+| `--limit-concurrency` counts live WebSockets as well as requests, and the handshake never consults it, so at the band's ceiling of 500 sockets its 512 left twelve connections for the whole HTTP surface — past which uvicorn answered its own plain-text `503`, not this API's envelope. Reproduced with the limit at 6 | Performance | the commit that raised it to 1024 with `LimitNOFILE=4096`, sized from the measured 47 MB that 500 sockets cost |
+| The migration history was gated only by a one-file-per-app assertion, which refuses a second migration rather than reviewing it; the lock class of every operation was prose in the ground truth and nothing failed when it stopped being true | Migration | `22a7ad4` — a recorded history, a lock class for every operation, the `atomic` flag checked against what the migration carries, and `sqlmigrate` run rather than remembered |
+
+Every fix landed with a test that failed on the code before it. Two findings were
+accepted rather than closed: AR-7 and AR-8 above.
+
+### Examined and clean
+
+- **Every route.** Query counts end to end through the composed application for all 32
+  operations and the four gateway units, each pinned in its app's `test_query_counts.py`
+  and each parameterised over the dimension that could turn it into an N+1. The
+  `only()` discipline holds: the device the token loads carries `queue_pruned_through`
+  so the drain costs no second read, and the peer list and the claim read exactly the
+  columns they serve.
+- **The batch-send transaction and its lock order.** `SELECT … ORDER BY id FOR UPDATE OF`
+  the device rows alone, measured at 63 buffers for 20 targets, with `LockRows` above
+  the `Sort` — unchanged by this run and re-measured.
+- **The ETag computation.** Two queries, constant against device count and log length,
+  and a `304` skips the list query entirely.
+- **The claim transaction.** One locked `SKIP LOCKED` select per target device and one
+  delete for the batch; the per-device select is the response shape and not an N+1.
+- **The drain query and the keyset pages.** Index scans of 19 and 11 buffers, flat
+  against mailbox depth and log length.
+- **Redis round trips.** One per request for the limiter in steady state — the `EXPIRE`
+  runs only on the first hit of a window, and pipelining the pair saves 0.05 ms, so it
+  was left alone; one per bind, room join and room leave; one per fan-out now.
+- **The pool against the worker count and the connection ceiling.** 17 connections at
+  the default worker count against PostgreSQL's default of 100, and the pool proved not
+  to be the binding constraint under contention.
+- **The request deadlines.** The measured HTTP knee is between 8 and 32 concurrent
+  requests, and every response in the load run was `200` with nothing near a
+  deadline at four times that. Recorded rather than bounded, because a bound at the
+  knee would shed traffic the process serves today. The concurrency limit itself
+  was a finding, above.
+- **The bus.** Publish after commit on every path — the send, the revocation, the logout
+  and the refresh replay — with a test that proves a rolled-back send publishes nothing.
+  No retry storm: a failed publish is swallowed once, and the subscriber's reader waits
+  a second between reads while the connection is down. No identifier in any failure
+  path.
+- **The gateway.** Cleanup on every exit path, including a cancelled handler task, now
+  under test; subscriber recovery after the connection drops, also under test.
+- **Every `0001_initial`.** Re-read against the recorded lock class: every statement is
+  a `CREATE TABLE`, a `CREATE INDEX` or an `ADD CONSTRAINT` on a relation the same
+  migration creates. The deploy order across apps is asserted from the declared
+  dependencies, and the replay in both directions is unchanged.
+
+### Not examined
+
+- The VPS under load. Every rate here was measured on the developer machine, which has
+  more than one core; the shape transfers and the absolute numbers do not.
+- The WebSocket surface under load. The gateway's per-frame costs were read and its
+  fan-out measured, but no socket-count or frame-rate load run exists.
+- LiveKit and coturn media paths, which carry no request of this process.
+- `VACUUM` behaviour and index bloat over time, which need a deployment with a history.

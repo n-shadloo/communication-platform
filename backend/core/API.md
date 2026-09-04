@@ -42,7 +42,7 @@ The vocabulary is fixed. A client branches on `code`, never on `detail`.
 | 413 | `quota_exceeded` | The attachment quota is exhausted. |
 | 429 | `throttled` | Rate limit reached, or a login name in its cool-off. `Retry-After` carries the seconds to wait. |
 | 500 | `server_error` | Unhandled failure. `detail` is `"Internal error."`. |
-| 503 | `unavailable` | The rate-limit store is unreachable, or the request exceeded its deadline. |
+| 503 | `unavailable` | The server is saturated or a store it needs is gone: the rate-limit store is unreachable, the request exceeded its deadline, or the database connection pool had nothing free. Retry with backoff; the request itself is not at fault. |
 | 503 | `voice_unconfigured` | LiveKit is not configured. |
 
 One surface serves this API. Every route of every app answers through FastAPI and
@@ -67,7 +67,7 @@ anything it does:
 | `401` | `unauthenticated`, `invalid_token`, `token_revoked` | the authentication requirement the route declares, before the handler runs |
 | `403` | `scope_forbidden` | the same requirement, on a register-scope token |
 | `500` | `server_error` | the unhandled-failure handler, on any route |
-| `503` | `unavailable` | the request deadline of `api/middleware.py`, on any route |
+| `503` | `unavailable` | the request deadline of `api/middleware.py`, and an exhausted database connection pool, on any route |
 
 A route with no authentication requirement — `GET /api/v1/health`, and the three
 `/auth` routes a client reaches before it holds a token — answers neither `401

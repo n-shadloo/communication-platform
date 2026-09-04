@@ -53,7 +53,57 @@ is incomplete, not merely terse.
 | Multi-row writes ([0017](decisions/0017-one-request-is-one-transaction-on-the-multi-row-writes.md)) | One request is one transaction on the two routes that write more than one row. The send locks every live target in one `ORDER BY id` statement, advances each counter under that lock and commits the batch as one update and one insert. The claim wraps the target read, the per-device `SKIP LOCKED` take and one delete by primary key | A per-item transaction lets one request commit half its effect, and the client cannot tell which half: on the send that half is a mailbox counter run ahead of its rows, which a client reads as message loss | 0 to 2 | Contention on one hot mailbox raises p95 send latency, or the lock wait shows in `pg_stat_activity` with `wait_event_type = 'Lock'` | A send holds a row lock on every recipient until it commits, so two sends to overlapping recipient sets serialise across the whole batch; a concurrent claim skips deeper into the prekey pool | `SELECT ... ORDER BY id FOR UPDATE` is the standard deadlock-avoidance form, and PostgreSQL's `LockRows` node sits above the `Sort` node that makes it work (current). Measured: a send costs 4 queries of its own at 1, 6 and 20 recipients alike, the fourth being the mailbox-ceiling aggregate phase 4 added (current) |
 | Local trust boundary ([0018](decisions/0018-redis-is-authenticated-and-never-deserialized.md)) | Redis requires a password in production, refused otherwise by `core.E004` at `check --deploy`, and this process reads Redis only as strings: the rate counters, the login lockout and the presence sets go through the redis client, and Django's cache framework — which unpickles every value it reads — stays on its process-local default that nothing uses | The VPS is shared with two other projects, loopback is reachable by every local process, and a writer of an unauthenticated Redis could flush the counters, forge frames on the bus and plant a pickle under a key this process reads | 0 to 2 | Redis moves to a host of its own, or a second consumer of the instance needs an ACL user rather than one password | One more secret in the environment file, filled at deploy time. A Redis restart still clears every volatile key | Django 6.0.7's `RedisSerializer.loads` falls back to `pickle.loads` and its Redis cache backend calls it on every read (current). The audit planted a payload under the lockout key and observed it run in the test process (measured, 2026-09-04) |
 
-## 2. Assumption ledger
+## 2. Capacity model
+
+For band 0 and the one band of headroom above it. Every number here is measured;
+the measurements and their conditions are in
+[`GROUND-TRUTH.md`](GROUND-TRUTH.md) §4, §4.1 and §4.2, and none of them was taken
+on the VPS, which does not serve yet.
+
+**What one worker holds.** The load curve (§4.1) has a knee between 8 and 32
+concurrent HTTP requests. Below it the process is latency-bound and throughput
+rises with concurrency; above it throughput falls and p95 grows faster than
+concurrency, which is one event loop saturating. At the knee the heaviest
+measured route — a hundred-envelope drain, two queries and a 137 kB body — served
+577 requests a second at a p95 of 72 ms. That was measured on the developer
+machine, which has more than one core; on one vCPU the ORM threads and the
+generator share the core with the loop, so read the shape rather than the rate,
+and treat the VPS knee as lower until a VPS measurement replaces this.
+
+**Against the band, that is not close.** Band 0 is fewer than 50 accounts and at
+most 500 devices, and a device that is connected takes its envelopes over its
+WebSocket rather than by polling. The HTTP surface carries sends, acks, key
+claims and the occasional list. One send of 256 envelopes at the largest bucket
+costs about 131 ms of event-loop CPU and one pipelined Redis round trip; nothing
+else on the surface costs more than a few milliseconds.
+
+**The connection budget.** Sixteen per worker — the psycopg pool's `max_size` —
+plus one for the maintenance timer while it runs. At the default one worker that
+is 17 against PostgreSQL's own default `max_connections` of 100. The pool is not
+the binding constraint at the measured service times: 60 concurrent drains
+through a pool of one, with a one-second acquisition timeout, all returned `200`.
+Where it does run out, the caller now gets `503 unavailable` rather than a `500`,
+because a pool with nothing free is saturation and not a defect.
+
+**One knob bounds two things.** `--limit-concurrency 512` counts connections, and
+a live WebSocket is a connection, so the number is sized for the device ceiling
+of the band rather than for HTTP concurrency. uvicorn offers no second knob.
+Lowering it to the HTTP knee would refuse sockets the band expects to hold, so it
+stays at 512 and the knee is recorded here instead.
+
+**The flip trigger for a second worker is a second vCPU.** On one core a second
+worker splits the core rather than adding one, and it doubles the connection
+budget and the subscription count for nothing. So the trigger below is written
+against the host, not against the process:
+
+| Move | Trigger |
+|---|---|
+| A second vCPU | Sustained p95 above 1 s on any route class at real traffic, with the process CPU-bound rather than waiting — the same threshold A2 uses for send latency |
+| `WEB_CONCURRENCY` to 2 | The VPS has more than one vCPU **and** the resident set of one worker leaves room for a second under A3's 700 MB ceiling. Never before both |
+| An HTTP concurrency bound of its own, below `--limit-concurrency` | Sustained concurrent HTTP requests above the measured knee, which nothing observes today. Adding one now would shed traffic the process is currently serving |
+| A denormalised mailbox-bytes counter | AR-7's trigger in [`../../ACCEPTED_RISKS.md`](../../ACCEPTED_RISKS.md) |
+
+## 3. Assumption ledger
 
 Never delete or soften a row here to make the design look decided.
 
@@ -68,7 +118,7 @@ Never delete or soften a row here to make the design look decided.
 | A7 | `check --deploy` in CI can run against a stub environment that is representative | A generated 50-character secret and a stub host list | The first deployment defect that a green `check --deploy` did not catch |
 | A8 | One mailbox's ceiling holds a week of a member's traffic, so a device that was merely offline is never refused | `MAILBOX_MAX_BYTES` of 32 MiB of undelivered bytes | The first `full_devices` a client reports for a device that was offline and not under attack, or the queue table above 2 GB |
 
-## 3. Deferrals
+## 4. Deferrals
 
 Never mark a row resolved without the trigger it names.
 
@@ -85,7 +135,7 @@ Never mark a row resolved without the trigger it names.
 | A `verified` date check in CI over `GROUND-TRUTH.md` | The first entry passes the 90-day window |
 | Any second application host, read replica, worker fleet or cache tier | Band 1 is reached and measured, not assumed |
 
-## 4. Decision log
+## 5. Decision log
 
 | ADR | Title | Status | Phase | Landed | Supersedes / Superseded by |
 |---|---|---|---|---|---|
