@@ -3,9 +3,9 @@
 - Status: Accepted
 - Phase: 2
 - Date: 2026-09-03
-- Landing: 2026-09-04, in the first run of phase 2. FastAPI serves `core`, `accounts`
-  and `vault`; REST Framework still serves `devices`, `messaging`, `attachments`
-  and `voicerooms`, and their move ends this landing.
+- Landing: 2026-09-04, in the first and second runs of phase 2. FastAPI serves
+  `core`, `accounts`, `vault`, `devices` and `messaging`; REST Framework still serves
+  `attachments` and `voicerooms`, and their move ends this landing.
 
 ## Context
 
