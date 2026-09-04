@@ -27,6 +27,8 @@ TRANSACTION_STATEMENTS = ("BEGIN", "COMMIT", "SAVEPOINT", "RELEASE", "ROLLBACK")
 AUTH_QUERY = 1  # the device row, joined to its owner
 
 ROOMS_URL = "/api/v1/rooms"
+# Over 32 bytes, so signing the grant raises no key-length warning.
+SECRET = "lk-test-secret-well-over-thirty-two-bytes-long"
 
 
 def counted(http, method, url, expected, **kwargs):
@@ -93,9 +95,9 @@ def test_minting_a_join_token_is_one_existence_check(
 ):
     """The grant is signed from the room id and the calling device, both already in
     hand, so the only query is the one that proves the room is real."""
-    settings.LIVEKIT_URL = "wss://livekit.invalid"
-    settings.LIVEKIT_API_KEY = "key"
-    settings.LIVEKIT_API_SECRET = "secret"
+    settings.LIVEKIT_URL = "wss://voice.test"
+    settings.LIVEKIT_API_KEY = "lk-test-key"
+    settings.LIVEKIT_API_SECRET = SECRET
 
     response = counted(
         http,

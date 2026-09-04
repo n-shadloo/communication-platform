@@ -8,11 +8,14 @@ to be able to answer before the response starts.
 """
 
 import json
+from unittest import mock
 
 import anyio
 import pytest
 from django.conf import settings
+from django.db import OperationalError
 from fastapi.routing import iter_route_contexts
+from psycopg_pool import PoolTimeout
 
 from api.app import route_limits
 from api.middleware import (
@@ -27,6 +30,7 @@ from api.middleware import (
 from config.asgi import api_application
 from core.buckets import ATTACHMENT_BUCKETS
 from core.tests.test_route_table import DOCUMENTATION
+from devices.models import Device
 
 CAP = Limits(body_bytes=16, deadline_seconds=0.05)
 
@@ -300,3 +304,42 @@ class TestTheRouteLimitTable:
 
         assert fallback.body_bytes == settings.BODY_CAP_JSON_BYTES
         assert fallback.deadline_seconds == settings.REQUEST_DEADLINE_SECONDS
+
+
+def test_an_exhausted_connection_pool_is_reported_as_unavailable(
+    http, active_user, device, bearer, monkeypatch
+):
+    """A pool with no free connection is saturation, not a defect. Reported as a
+    `500` the client stops; reported as a `503` it retries, which is the same
+    answer the rate limiter gives when Redis is gone.
+
+    The pool is not the binding constraint at the measured service times — sixty
+    concurrent drains through a pool of one all returned `200` — but a burst of
+    maximum-size sends holds sixteen connections for as long as their inserts take,
+    and the pool's ten-second timeout fires inside the fifteen-second deadline.
+    """
+    exhausted = OperationalError("connection pool exhausted")
+    exhausted.__cause__ = PoolTimeout("couldn't get a connection after 10.00 sec")
+
+    with mock.patch.object(Device.objects, "select_related", side_effect=exhausted):
+        response = http.get("/api/v1/me/envelopes", headers=bearer(active_user, device))
+
+    assert response.status_code == 503
+    assert response.json()["code"] == "unavailable"
+
+
+def test_any_other_operational_failure_stays_a_server_error(
+    http, active_user, device, bearer
+):
+    """Django wraps every psycopg `OperationalError` in one class. A dropped
+    connection or a deadlock is not saturation, and telling a client to retry
+    would be telling it the wrong thing."""
+    with mock.patch.object(
+        Device.objects,
+        "select_related",
+        side_effect=OperationalError("server closed the connection unexpectedly"),
+    ):
+        response = http.get("/api/v1/me/envelopes", headers=bearer(active_user, device))
+
+    assert response.status_code == 500
+    assert response.json()["code"] == "server_error"

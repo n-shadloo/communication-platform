@@ -6,8 +6,10 @@ messages that failed. No error body ever echoes request input, and a `500` body
 carries no traceback and no detail beyond a fixed string.
 """
 
+from django.db import OperationalError
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from psycopg_pool import PoolTimeout
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from core.fields import BadBucket
@@ -103,6 +105,20 @@ def install(app):
         # `Allow` on a 405 is the only thing a client can recover from, and the
         # default handler is the one that would have carried it.
         return envelope(exc.status_code, code, detail, getattr(exc, "headers", None))
+
+    @app.exception_handler(OperationalError)
+    async def _operational(request, exc):
+        """A connection pool with nothing free is saturation, not a defect.
+
+        Reported as a `500` the client stops; reported as a `503` it retries,
+        which is the same answer the rate limiter gives when Redis is gone. Only
+        the pool timeout is read this way — Django wraps every psycopg
+        `OperationalError` in this class, and a deadlock or a dropped connection
+        stays what it was.
+        """
+        if isinstance(exc.__cause__, PoolTimeout):
+            return envelope(503, "unavailable", "The service is temporarily unavailable.")
+        return envelope(500, "server_error", "Internal error.")
 
     @app.exception_handler(Exception)
     async def _unhandled(request, exc):
