@@ -274,6 +274,58 @@ index lands with its plan.
 
 ---
 
+## AR-9 — Nothing observes the system, so a failure is noticed by a person
+
+**What is exposed.** The system emits no request-scoped telemetry
+([ADR-0019](docs/architecture/decisions/0019-the-system-emits-no-request-scoped-telemetry.md)):
+no access log at any layer, no tracing, no metrics endpoint, no error-reporting
+service, and no log line that names a user, a device, a room, an attachment, a token
+or a path. There is therefore no p95 by route, no error rate, no alert, and no way to
+answer "which request did that" after the fact.
+
+**Why this is carried.** The request path of `/users/{id}/keys/claim`,
+`/users/{id}/devices`, `/users/{id}/devicelog`, `/users/{id}/identity` and
+`/users/{id}/profile` carries a peer's user id; the admin path is operator-chosen; and
+an attachment is addressed by a bearer capability. An address, a peer id and a
+timestamp on one line is the conversation graph that the schema — no sender column, no
+membership table, no recipient list — exists to exclude, and a log is worse than the
+rows it describes, because it is durable, it is copied into backups and it outlives
+what it names. The threat model accepts an attacker with live root on the VPS, so a
+log of paths hands that attacker the one thing the design protects.
+
+**What reduces it today.**
+
+- A crash reaches the journal with a traceback that names code and no data, and
+  `ops/audit/log_silence.py` proves that on every run by driving every route and the
+  `/ws` gateway at DEBUG with the scrubber bypassed and finding no identifier.
+- `manage.py check --deploy` reports posture, and `GET /api/v1/health` reports
+  liveness with no database or Redis connection of its own.
+- The suite is the substitute for production observation: 1293 tests, query counts
+  pinned for every route and every gateway unit, and a load curve and query plans in
+  [`docs/architecture/GROUND-TRUTH.md`](docs/architecture/GROUND-TRUTH.md) §4.1 and
+  §4.2 that say what "normal" is.
+- `error_log` can be raised temporarily to diagnose an upstream failure. It puts
+  request paths on disk for as long as it lasts, so it is a deliberate act with a
+  revert, not a default.
+- The panel writes an audit row for every administrative act, so operator action —
+  the one class of event that names no user's traffic — *is* reconstructable.
+
+**If it were exploited.** This is not an attacker-facing risk; it is an operational
+one. A partial failure that answers some requests and not others can run unnoticed
+until a user reports it, and a `500` that reproduces nowhere is diagnosed by reading
+code rather than by reading a trace. The band bounds the damage: fewer than 50
+accounts, one operator, and a durable mailbox that holds an undelivered envelope for
+`ENVELOPE_TTL_DAYS` rather than dropping it, so most failures are delay rather than
+loss.
+
+**Trigger that ends the acceptance.** A production incident that a person cannot
+diagnose from the journal, `check --deploy` and the health route inside one working
+day; or a second application host, where correlation across hosts is the thing
+counters cannot replace. Either one buys a counter that names a class of event and
+never an instance of one — never a request log.
+
+---
+
 ## Appendix A — The security audit
 
 The security audit of phase 4 ran on 2026-09-04 over the tree at the merge of phase 3
@@ -444,3 +496,89 @@ accepted rather than closed: AR-7 and AR-8 above.
   fan-out measured, but no socket-count or frame-rate load run exists.
 - LiveKit and coturn media paths, which carry no request of this process.
 - `VACUUM` behaviour and index bloat over time, which need a deployment with a history.
+
+## Appendix C — The contract, seam, architecture and panel reviews
+
+These four ran on 2026-09-04 over the tree at `9073f78`, after the audits of Appendix
+B closed. Method: `django-api-contract` classified every observable difference between
+the pre-rebuild `API.md` files at the phase-1 merge base (`aa927b4`) and the current
+artefact; `fastapi-alongside-django` re-read the seam facts against the tree and ran
+its review entry point; `backend-system-design` checked every position, assumption and
+deferral for its fields; `django-unfold-expert` ran its three scripts, confirmed every
+lead against the installed package, and rendered the panel signed in at 1440×900 and
+375×812. Every observable change is in
+[`API_CHANGES.md`](API_CHANGES.md); the design entries are in
+[`docs/architecture/DESIGN-RECORD.md`](docs/architecture/DESIGN-RECORD.md) §5 and §6,
+and the panel entry in [`docs/admin/PANEL-RECORD.md`](docs/admin/PANEL-RECORD.md) §2.
+
+### What the reviews closed
+
+| Finding | Review | Closed by |
+|---|---|---|
+| nginx carried no logging directive, so both server blocks inherited the packaged `access_log` — `combined`, which writes `$remote_addr` and `$request`. That URI carries a peer's user id on five routes, the operator-chosen admin path, and the bearer capability the attachment route is addressed by. uvicorn, coturn and LiveKit each had a deliberate posture; the layer that sees every request one hop earlier had none | Seam | `36099d0` — `access_log off` and `error_log … crit` in both blocks, counted against the server blocks rather than the file |
+| A socket's bind wrote the device row unconditionally, and `send` holds `SELECT … FOR UPDATE` on that row to commit — on the device most likely to be reconnecting, because it is the one being delivered to. Measured at 1.007 s against a 1.0 s hold. A websocket scope enters no `ThreadSensitiveContext`, so that wait was every socket's in the worker, not one socket's | Seam | `fe954f6` — the write is skipped on the day the date already says today: 0.0005 s under the same held lock |
+| Every id the document returns was a bare `string` while the same id was `format: uuid` where a client sends it, and three `_date` fields declared no `format` at all, so one value reached a generated client as two types depending on its direction | Contract | `6925abd` — the response models carry `uuid.UUID` and `datetime.date`, which moves no response byte |
+| Nine read routes carried no retry paragraph, because ADR-0007 requires one of mutating routes and the gate read the same set — including `GET /api/v1/me/envelopes`, whose retry semantics are the reason a lost drain response is safe | Contract | `59c1a41` — every route, and the read half of the three sections that document a `GET` beside a `PUT` |
+| The `405` and `500` envelopes were asserted nowhere. The `500` could not be: every suite drives a transport that re-raises, so a body carrying the exception text would have passed | Contract | `c0b0a15` — `AsgiClient` takes the transport's re-raise flag, on by default |
+| The panel's write path had never been driven through the host check, deadline, body cap and security headers that stand in front of it; the panel suite uses Django's own client and would stay green if any of them refused a login | Seam | `5717a9f` — proven able to fail: with `BODY_CAP_JSON_BYTES=40`, three of the four answer `413` |
+| The voice-room breadcrumb read `Voicerooms` on every page of that app. The panel record deferred the vocabulary pass because a model `verbose_name` needs a migration — which was never true of an app's | Panel | `f51881d` — declared on all four apps, gated on the absence of a derived name |
+| The system's most consequential decision — that it emits no request-scoped telemetry — existed only as an invariant and a set of configuration deviations, with no forcing function, no cost and no flip trigger a reader of the design record could find | Architecture | [ADR-0019](docs/architecture/decisions/0019-the-system-emits-no-request-scoped-telemetry.md), and AR-9 above for the cost |
+
+Every code fix landed with a test that failed on the code before it. One finding was
+accepted rather than closed: AR-9. One disagreement with an ADR was recorded rather
+than acted on — the unmeasurable half of ADR-0002's flip trigger, in the design record
+§5, with the trigger that would settle it.
+
+### Examined and clean
+
+- **The route table**, pre-rebuild against current. 35 operations to 32; the three
+  that left are the MLS key-package routes, each already recorded. No route was added,
+  moved or renamed. The `API.md` sections and `openapi.json` reconcile exactly, in both
+  directions.
+- **Every success body and every request body** the two sets of references both
+  describe, diffed key for key: one addition (`full_devices` in the `202` of
+  `POST /api/v1/envelopes`) and one removal (`refresh` from the logout body), both
+  already recorded. `HEAD` and `OPTIONS` moved from served to `405` and were the one
+  observable change nothing had written down.
+- **The field-naming convention.** Every property name in the document is snake_case,
+  and the `_id` suffix policy holds; the formats were the half that did not, and are
+  fixed above.
+- **Lists.** All five are keyset-paged or bounded: the device lists by
+  `MAX_DEVICES_PER_USER`, the device log and the drain by a clamped `limit`, and
+  `GET /api/v1/users` by the band — an account reaches that list only when the
+  operator activates it, so no client can grow it.
+- **The error envelope**, on every path a request can take: `404` for an unclaimed
+  path inside and outside the version prefix, `405` with `Allow`, `400` for a body
+  that is not JSON and for one that is not an object, `404` for a trailing-slash
+  mismatch, `413`, `429`, `503` and `500` — each with the three security headers,
+  including the three the middleware answers above the application.
+- **The seam facts** in `GROUND-TRUTH.md` §6, each re-read against the tree: one
+  database, Django the only DDL owner and the only writer, one credential module
+  behind both the HTTP surface and the socket, no broker, one Redis client for each
+  running loop, and one process.
+- **The panel**, rendered signed in. Four changelists, the audit log and the dashboard
+  at 1440×900, and the account list at 375×812 where the sidebar collapses and the
+  changelist scrolls inside its own container. Two script leads ruled out by reading
+  the installed package: `RevokedFilter` on Django's `SimpleListFilter` base renders
+  through unfold's own `admin/filter.html`, which wins by application order; and the
+  raw byte count in the size column is `size_label`'s documented fallback for a length
+  that is not one of the buckets, which only a hand-seeded row can be.
+- **The design record**, mechanically: 19 positions with all seven columns filled, 8
+  assumptions and 10 deferrals each with a trigger, and every `verified` date inside
+  the 90-day window.
+
+### Not examined
+
+- **The panel under a right-to-left language**, because no catalog exists and the
+  deferral in `PANEL-RECORD.md` §9 owns it. The RTL audit's one finding — `ml-auto` in
+  the dashboard override — is ledgered there with the reason the obvious swap is
+  wrong.
+- **The keyboard and screen-reader path through the panel.** The skill records that 30
+  controls reach no keyboard in the shipped release; nothing here measured that, and no
+  operator has needed it.
+- **The pre-rebuild sections that neither reference expresses as a JSON block**, which
+  the body diff could not compare — the multipart upload body and the two `304`
+  paths. Both were read by hand against their current sections and matched, but that is
+  a reading and not a diff.
+- **Anything on the VPS.** No review here ran against a serving host, so every edge
+  row remains "configured" rather than "observed", `access_log off` included.
