@@ -144,6 +144,33 @@ def test_the_site_is_an_unfold_site_and_nothing_else():
     assert type(django_admin.site).__name__ == "UnfoldAdminSite"
 
 
+def test_every_registered_project_app_names_itself_in_operator_words():
+    """The breadcrumb of every page reads the app's `verbose_name`, and Django
+    derives one from the label when the app declares none — `voicerooms` became
+    `Voicerooms`, a word that is in no language, on every voice-room page.
+
+    Declared rather than derived, on every project app the panel registers a model
+    from, so the next app cannot ship a run-together label by omission. This is the
+    app half of the vocabulary pass; the model half needs a migration and stays
+    deferred in `docs/admin/PANEL-RECORD.md`.
+    """
+    project_apps = {
+        model._meta.app_config
+        for model in django_admin.site._registry
+        if model._meta.label in REGISTERED and model._meta.app_label != "admin"
+    }
+    assert project_apps, "no project app is registered"
+
+    derived = {
+        config.label: config.verbose_name
+        for config in project_apps
+        if config.verbose_name == config.label.title()
+        and "verbose_name" not in vars(type(config))
+    }
+
+    assert derived == {}, derived
+
+
 def test_exactly_the_five_decided_models_are_registered():
     registered = {model._meta.label for model in django_admin.site._registry}
 
