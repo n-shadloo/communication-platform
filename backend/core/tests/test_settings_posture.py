@@ -195,6 +195,29 @@ class BasePostureTests(SimpleTestCase):
         ):
             self.assertIn(flag, unit)
 
+    def test_the_units_write_only_what_they_must_and_drop_what_they_never_use(self):
+        """`ReadWritePaths` is the whole of what a compromised process can change
+        on a `ProtectSystem=strict` host. The serving process never writes the
+        collected static tree — `collectstatic` is the operator's command and
+        nginx serves the result — so a writable `static_root` was a way for a
+        compromised process to replace the panel's own JavaScript. The rest are the
+        directives a Python service never needs and a hardened unit drops."""
+        units = settings.BASE_DIR / "ops" / "systemd"
+        serving = (units / "chat.service").read_text()
+        maintenance = (units / "chat-maintenance.service").read_text()
+
+        self.assertIn("ReadWritePaths=/srv/chat/backend/media_root\n", serving)
+        self.assertNotIn("static_root", serving)
+        for unit in (serving, maintenance):
+            for directive in (
+                "RestrictRealtime=true",
+                "RestrictSUIDSGID=true",
+                "ProtectClock=true",
+                "ProtectHostname=true",
+                "SystemCallArchitectures=native",
+            ):
+                self.assertIn(directive, unit)
+
     def test_the_example_environment_lists_every_variable_the_code_reads(self):
         """An operator fills in `.env.example` and expects a working deployment. A
         variable the code reads and the example omits is a default nobody chose."""

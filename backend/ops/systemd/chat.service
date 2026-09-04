@@ -63,9 +63,17 @@ ProtectKernelModules=true
 ProtectControlGroups=true
 RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
 RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
 LockPersonality=true
 MemoryDenyWriteExecute=true
-ReadWritePaths=/srv/chat/backend/media_root /srv/chat/backend/static_root
+ProtectClock=true
+ProtectHostname=true
+SystemCallArchitectures=native
+# The attachment bytes, and nothing else. The collected static tree is written by
+# the operator's `collectstatic` and served by nginx; a process that could write
+# it could replace the panel's own JavaScript.
+ReadWritePaths=/srv/chat/backend/media_root
 
 [Install]
 WantedBy=multi-user.target
