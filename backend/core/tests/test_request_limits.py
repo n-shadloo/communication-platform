@@ -27,10 +27,12 @@ from api.middleware import (
     ThreadSensitive,
     TrustedHost,
 )
-from config.asgi import api_application
+from config.asgi import api_application, application
+from conftest import AsgiClient
 from core.buckets import ATTACHMENT_BUCKETS
 from core.tests.test_route_table import DOCUMENTATION
 from devices.models import Device
+from messaging import services
 
 CAP = Limits(body_bytes=16, deadline_seconds=0.05)
 
@@ -343,3 +345,53 @@ def test_any_other_operational_failure_stays_a_server_error(
 
     assert response.status_code == 500
     assert response.json()["code"] == "server_error"
+
+
+def test_an_unhandled_failure_renders_the_envelope_and_leaks_nothing(
+    active_user, device, bearer, monkeypatch
+):
+    """The `500` of the vocabulary, read off the wire rather than off the handler.
+
+    Every other suite drives the surface through a transport that re-raises, so
+    the envelope this handler renders had never been observed: a body carrying the
+    exception text would have passed every one of them. The client contract is a
+    fixed string, and an exception message is the one thing on this path that
+    could carry an identifier into a response.
+    """
+    secret = "device 8a1f-… had 41 undelivered envelopes"
+
+    def explode(*_args, **_kwargs):
+        raise RuntimeError(secret)
+
+    monkeypatch.setattr(services, "drain", explode)
+    client = AsgiClient(application, api_application, reraise=False)
+
+    response = client.get("/api/v1/me/envelopes", headers=bearer(active_user, device))
+
+    assert response.status_code == 500
+    assert response.json() == {"code": "server_error", "detail": "Internal error."}
+    assert secret not in response.text
+    assert response.headers["content-type"].startswith("application/json")
+    for header, value in SECURITY_HEADERS:
+        assert response.headers[header.decode()] == value.decode()
+
+
+def test_a_wrong_method_renders_the_envelope_with_the_methods_of_one_route(http):
+    """The `405` of the vocabulary. Starlette's own handler answers a bare body,
+    so the envelope here is `errors.install` registering on the base class the
+    router raises rather than on FastAPI's subclass.
+
+    `Allow` names the methods of the one route object, which on a path two route
+    objects share is one of them and not both — `API_CHANGES.md` tells the client
+    not to read it as the method set of the path, and this is that behaviour.
+    """
+    response = http.delete("/api/v1/health")
+
+    assert response.status_code == 405
+    assert response.json() == {
+        "code": "method_not_allowed",
+        "detail": "That method is not allowed.",
+    }
+    assert response.headers["allow"] == "GET"
+    for header, value in SECURITY_HEADERS:
+        assert response.headers[header.decode()] == value.decode()

@@ -36,11 +36,17 @@ class AsgiClient:
     Each call runs with the FastAPI lifespan entered. `ASGITransport` never
     enters it, and `async_to_sync` builds a fresh event loop for each call, so
     nothing the lifespan holds may outlive one call.
+
+    `reraise` is the transport's own default and stays on: an unhandled failure
+    reaching the test is what keeps a `500` from being mistaken for a passing
+    request. Turn it off only to read the `500` body itself, which is the one
+    thing the default hides.
     """
 
-    def __init__(self, transport_app, lifespan_app):
+    def __init__(self, transport_app, lifespan_app, reraise=True):
         self._client = httpx.AsyncClient(
-            transport=ASGITransport(app=transport_app), base_url=BASE_URL
+            transport=ASGITransport(app=transport_app, raise_app_exceptions=reraise),
+            base_url=BASE_URL,
         )
         self._lifespan_app = lifespan_app
 
