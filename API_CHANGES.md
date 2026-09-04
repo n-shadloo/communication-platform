@@ -344,16 +344,31 @@ ceiling the security audit added put a `full_devices` list into the `202` body o
 `POST /api/v1/envelopes`, recorded under **What the security audit bounded**. The
 sentence now says which change it is scoped to.
 
+### The no-echo claim in `core/API.md` was wider than the behaviour
+
+`backend/core/API.md` said "No error body ever echoes request input." Run 13's
+malformed-input sweep found one fragment that does cross: a type message for a
+malformed identifier names the offending character and its offset — "Input should be a
+valid UUID, invalid character: found `z` at 35" — which `backend/messaging/API.md` had
+been publishing as an example all along, so the two documents disagreed. The behaviour did not change and needs nothing from a client.
+`core/API.md` now states the property that actually holds: no error body echoes a
+value — no blob, no password, no token, no username, no identifier — and the one
+fragment that crosses is a character of a malformed identifier, never of a payload.
+
 ## What the test suite found at the column boundaries
 
-Run 12 drove every route in `core`, `api`, `accounts`, `devices`, `vault` and the
-migrations with malformed input, and three routes answered `500` to a body the schema
-existed to filter. All three are fixed. A `500` on input is a defect on this surface,
-never a documented answer, so a client that branched on one was branching on a bug.
+Runs 12 and 13 drove every route with malformed input. Run 12 covered `core`, `api`,
+`accounts`, `devices`, `vault` and the migrations; run 13 covered `messaging`,
+`attachments`, `voicerooms`, `realtime` and, through the contract suite, every route
+of the document at once. Five routes answered `500` to input the schema existed to
+filter, and all five are fixed. A `500` on input is a defect on this surface, never a
+documented answer, so a client that branched on one was branching on a bug.
 
 | Item | Old behaviour | New behaviour | Client action |
 |---|---|---|---|
 | `PUT /api/v1/me/profile` and `PUT /api/v1/me/keybackup` with `version` above 2147483647 | `500 {"code": "server_error"}`. `version` lands in a 32-bit column and the schema bounded it below but not above, so the integer reached PostgreSQL as a `DataError` | `400 {"code": "invalid_request", "detail": {"version": [...]}}`. `accounts.schemas.BlobIn` now carries the ceiling, which both routes inherit. `version` = 2147483647 is still accepted and still stores | None, unless the client generated versions without a bound. The ceiling is the column's, not a policy: a client that increments a version per write will not reach it |
+| `PUT /api/v1/me/devices/{device_id}/prekeys` with `cross_sig` and `bundle_version` both sent as `null` | `500 {"code": "server_error"}`. Both keys present satisfies the pairing guard, and `null` reached `Device.bundle_version`, which is not nullable | `400 {"code": "invalid_request", "detail": {"bundle_version": ["bundle_version must be a number when it is sent"]}}`. A sent `null` is half a pair in substance: a `cross_sig` stored against no version is one peers must reject | None. Clearing a signature against a version that is a number — `{"cross_sig": null, "bundle_version": 3}` — is unchanged and still `200` |
+| `GET /api/v1/attachments/{attachment_id}` with a NUL byte in the id | `500 {"code": "server_error"}`. The same cause as the login defect below: PostgreSQL text carries no NUL, so psycopg refused the lookup rather than returning no row | `404 {"code": "not_found", "detail": "No such attachment."}`, the same answer a capability nobody holds gets. A capability id is base64url of 32 random bytes, so an id carrying the byte is an id nobody has | None. It was carried as AR-10 through run 12, because `attachments/` was outside that run's scope |
 | `POST /api/v1/auth/login` with a NUL byte in `username` | `500 {"code": "server_error"}` on **anonymous** input. PostgreSQL text carries no NUL, so psycopg refused the lookup rather than returning no row | `401 {"code": "invalid_credentials"}`, the same answer every other unregistrable name gets | None. Deliberately not a `400`: `LoginIn` treats a badly shaped name as wrong credentials rather than a malformed request, and answering otherwise would tell an anonymous caller which names the column could have held |
 
 `POST /api/v1/auth/register` was already correct — a control character in a username

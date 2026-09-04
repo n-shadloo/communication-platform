@@ -13,8 +13,14 @@ Every error this API returns is
 ```
 
 `detail` is a string, except for `invalid_request`, where it is an object mapping a
-field path to the list of messages that failed. No error body ever echoes request
-input, and a `500` body carries no traceback.
+field path to the list of messages that failed. A `500` body carries no traceback.
+
+No error body echoes a value: no blob, no password, no token, no username, no
+identifier. The one fragment that crosses is the offending character a type message
+names, as in "Input should be a valid UUID, invalid character: found `z` at 35" —
+a character of a malformed identifier, never of a payload. A blob that fails is
+`bad_bucket` with the fixed `"Invalid payload."`; a blob that is merely too long is
+refused by a length message that names the limit and not the string.
 
 The vocabulary is fixed. A client branches on `code`, never on `detail`.
 

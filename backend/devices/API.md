@@ -571,7 +571,9 @@ applied either — no prekey rotation, no signature update.
 > canonical device bundle, so replacing it invalidates the stored cross-signature.
 > Send a fresh `cross_sig` and an incremented `bundle_version` **in the same call**,
 > or peers fetching your bundle will correctly reject this device. Sending one without
-> the other is a `400`; beyond that the server stores whatever it is given and never
+> the other is a `400`, and so is sending `bundle_version` as `null` — the version is a
+> number or it is not sent, because a `cross_sig` stored against no version is one peers
+> must reject. Beyond that the server stores whatever it is given and never
 > checks that the signature matches the bundle — only peers can, so there is no server
 > error to save a client that signs the wrong bytes.
 
