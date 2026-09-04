@@ -26,6 +26,31 @@ Put the same credentials in the env file (`.env` in development,
 `/srv/chat/backend/.env.production` on the VPS) as `POSTGRES_DB`, `POSTGRES_USER`
 and `POSTGRES_PASSWORD`.
 
+## Recreate the database before the first migrate of this version
+
+The migration history was regenerated: each app now holds one `0001_initial` and
+every earlier file is gone. A database that recorded the old history cannot be
+migrated onto the new one, because Django matches a migration by `(app, name)`
+and the names it recorded no longer exist.
+
+**Drop and recreate `chat` before the first `migrate` of this version.** No user
+depends on stored data — there is no production deployment yet, and
+[`docs/architecture/GROUND-TRUTH.md`](../../../docs/architecture/GROUND-TRUTH.md)
+records the zero-account precondition that makes this safe. It is available
+exactly once, before the first real account exists.
+
+```sql
+-- as a superuser, with the application stopped
+DROP DATABASE IF EXISTS chat;
+CREATE DATABASE chat OWNER chat;
+```
+
+Then run `python manage.py migrate` once. A developer machine takes the same
+step for its own database.
+
+From the next phase on the history is append-only and every change ships as
+expand and contract. This is the last time the history is rewritten.
+
 ## Bind to localhost only
 
 Nothing outside the VPS ever talks to the database. In `postgresql.conf`:
