@@ -70,15 +70,15 @@ MAX_CLAIM_DEVICE_IDS = 100
 MAX_LOG_RECORDS = 50
 DEVICELOG_PAGE_CAP = 200
 
-# Registration accepts neither, because no valid value exists for either: the canonical
-# device bundle covers `device_id`, and registration is what assigns it. Anything a
-# client could put here would be a signature over bytes describing a different device,
-# and storing one is worse than storing null — peers read null as "never cross-signed,
-# withhold messages", but a cross_sig that later changes to the real one looks like a
-# cross-signature change, which CLIENT_CONTRACT.md §D/§E requires them to treat as a
-# safety-number event and block the conversation over. So the impossible state is made
-# unrepresentable rather than merely optional.
-PREMATURE_BUNDLE_FIELDS = ("cross_sig", "bundle_version")
+# Registration accepts neither `cross_sig` nor `bundle_version`, because no valid
+# value exists for either: the canonical device bundle covers `device_id`, and
+# registration is what assigns it. Anything a client could put here would be a
+# signature over bytes describing a different device, and storing one is worse than
+# storing null — peers read null as "never cross-signed, withhold messages", but a
+# cross_sig that later changes to the real one looks like a cross-signature change,
+# which CLIENT_CONTRACT.md §D/§E requires them to treat as a safety-number event and
+# block the conversation over. So the impossible state is made unrepresentable rather
+# than merely optional.
 PREMATURE_BUNDLE_DETAIL = (
     "Not accepted at registration: the canonical device bundle covers device_id, which "
     "this request assigns, so no signature computed before the response can be valid. "
