@@ -13,9 +13,9 @@ every published frame to every worker, which then drops what it holds no socket
 for. The common case makes that expensive: a live push to a device that is
 offline is a whole envelope blob — up to a base64 bucket — carried across the
 loopback socket only to be discarded. Per-topic instead: Redis drops the publish
-server-side when nobody holds the topic, and the process pays one round trip on
-each bind, room join and room leave, which is connection-lifecycle rate rather
-than frame rate.
+server-side when nobody holds the topic, and the process pays one subscribe or
+unsubscribe round trip on each bind, room join and room leave, which is
+connection-lifecycle rate rather than frame rate.
 
 **Every publish is best-effort and silent.** The durable mailbox is the source of
 truth for an envelope, and presence, signals and room traffic are volatile by
@@ -106,7 +106,9 @@ async def publish_many(frames):
     `transaction=False`, because MULTI/EXEC buys nothing here — a publish takes
     effect the moment Redis reads it, and there is no state for the batch to be
     atomic over. Best-effort and silent like `publish`, with the same reason: the
-    error would name a topic, and a topic names a device.
+    error would name a topic, and a topic names a device. A failure part-way
+    therefore leaves the earlier pipelines delivered and the rest dropped, which is
+    what best-effort already meant one publish at a time.
     """
     try:
         client = get_client()
@@ -116,14 +118,14 @@ async def publish_many(frames):
             pending.append((topic, body))
             held += len(body)
             if held >= PIPELINE_BYTES:
-                await _drain(client, pending)
+                await _flush(client, pending)
                 pending, held = [], 0
-        await _drain(client, pending)
+        await _flush(client, pending)
     except Exception:
         return
 
 
-async def _drain(client, pending):
+async def _flush(client, pending):
     """Send one pipeline's worth. A no-op on an empty list, so a fan-out that
     reached nothing costs no round trip at all."""
     if not pending:
