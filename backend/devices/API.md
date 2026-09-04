@@ -4,12 +4,26 @@ The device registry and public-key distribution: publishing the account's
 cross-signing identity, registering a device with its signed key bundle, listing and
 labelling devices, replenishing classical and ML-KEM one-time prekeys, maintaining
 the client-signed device-list log, reading peers' device lists,
-and claiming key material to start sessions. All paths are under `/api/v1`; requests
-and responses are JSON with base64-encoded binary values;
-`Authorization: Bearer <access token>` is required everywhere (`full` scope except
-where noted). Validation failures on this app return the DRF field-error object
-directly, e.g. `400 {"ik_pub": ["invalid base64"]}`, with no `code` key; the
-project-wide `401` bodies listed in `accounts/API.md` apply here too.
+and claiming key material to start sessions. Every route here is served by FastAPI.
+
+All paths are under `/api/v1`. Requests and responses are JSON; binary values are
+base64 strings. Unless an endpoint says otherwise, it requires
+`Authorization: Bearer <access token>` with `full` scope. Errors use the envelope and
+the vocabulary that [`core/API.md`](../core/API.md) fixes; three responses can appear
+on any authenticated endpoint and are not repeated per section:
+
+- `401 {"code": "unauthenticated", …}` with `WWW-Authenticate: Bearer` when the
+  `Authorization` header is absent or malformed;
+- `401 {"code": "invalid_token", …}` when the token fails signature, expiry, type or
+  claim checks;
+- `401 {"code": "token_revoked", …}` when the device is revoked or deleted, a
+  generation is stale, or the account has been deactivated.
+
+Every request body rejects a field the endpoint does not declare, and every field is
+read strictly: a value of the wrong JSON type is refused rather than converted, so
+`"1"` and `true` are not accepted where an integer is declared. A `{user_id}` or
+`{device_id}` in a path that is not a UUID is
+`400 {"code": "invalid_request", "detail": {"user_id": [...]}}`, not a `404`.
 
 **Nothing in this app is verified server-side.** Cross-signatures, prekey signatures,
 identity self-signatures, and device-log hash chains are stored and relayed as opaque
@@ -67,13 +81,13 @@ Empty body.
 ### Invalid request — `400 Bad Request`
 
 ```json
-{ "master_sig": ["bad signature length"] }
+{ "code": "invalid_request", "detail": { "master_sig": ["bad signature length"] } }
 ```
 
 ### Stale version — `409 Conflict`
 
 ```json
-{ "code": "stale_version" }
+{ "code": "stale_version", "detail": "Version must increase." }
 ```
 
 Sent when `version` ≤ the stored version; the stored identity is unchanged.
@@ -87,7 +101,7 @@ Sent when `version` ≤ the stored version; the stored identity is unchanged.
 ### Rate limited — `429 Too Many Requests`
 
 ```json
-{ "detail": "Request was throttled." }
+{ "code": "throttled", "detail": "Request was throttled." }
 ```
 
 Scope `accounts`, default 120/min.
@@ -138,13 +152,13 @@ self-contained so no such indirection exists.
 ### No published identity, unknown or deactivated user — `404 Not Found`
 
 ```json
-{ "code": "not_found" }
+{ "code": "not_found", "detail": "No published identity." }
 ```
 
 ### Rate limited — `429 Too Many Requests`
 
 ```json
-{ "detail": "Request was throttled." }
+{ "code": "throttled", "detail": "Request was throttled." }
 ```
 
 Scope `accounts`, default 120/min.
@@ -341,8 +355,11 @@ Empty body, when `If-None-Match` matches the current `ETag`.
 ### Invalid request — `400 Bad Request` (POST)
 
 ```json
-{ "otpks": { "0": { "pub": ["invalid base64"] } } }
+{ "code": "invalid_request", "detail": { "otpks.0.pub": ["invalid base64"] } }
 ```
+
+`detail` maps a dotted field path to its messages; a list item carries its index in
+that path.
 
 ### Off-bucket label — `400 Bad Request` (POST)
 
@@ -353,8 +370,15 @@ Empty body, when `If-None-Match` matches the current `ETag`.
 ### Cross-signature sent at registration — `400 Bad Request` (POST)
 
 ```json
-{ "cross_sig": "Not accepted at registration: the canonical device bundle covers device_id, which this request assigns, so no signature computed before the response can be valid. Send cross_sig and bundle_version to PUT /me/devices/{device_id}/prekeys once you have the device_id." }
+{
+  "code": "invalid_request",
+  "detail": {
+    "cross_sig": ["Not accepted at registration: the canonical device bundle covers device_id, which this request assigns, so no signature computed before the response can be valid. Send cross_sig and bundle_version to PUT /me/devices/{device_id}/prekeys once you have the device_id."]
+  }
+}
 ```
+
+Both fields are named when both are sent.
 
 ### No published identity (second device onward) — `400 Bad Request` (POST)
 
@@ -377,7 +401,7 @@ Empty body, when `If-None-Match` matches the current `ETag`.
 ### Rate limited — `429 Too Many Requests`
 
 ```json
-{ "detail": "Request was throttled." }
+{ "code": "throttled", "detail": "Request was throttled." }
 ```
 
 Scope `accounts`, default 120/min.
@@ -434,7 +458,7 @@ Empty body.
 ### Invalid request — `400 Bad Request` (PUT)
 
 ```json
-{ "label_blob": ["This field is required."] }
+{ "code": "invalid_request", "detail": { "label_blob": ["Field required"] } }
 ```
 
 An off-bucket label is `400 {"code": "bad_bucket", "detail": "Invalid payload."}`.
@@ -456,7 +480,7 @@ Another account's device id is a `404`, not a `403`, so existence is not confirm
 ### Rate limited — `429 Too Many Requests`
 
 ```json
-{ "detail": "Request was throttled." }
+{ "code": "throttled", "detail": "Request was throttled." }
 ```
 
 Scope `accounts`, default 120/min.
@@ -536,7 +560,7 @@ keys must decode to exactly 1184 bytes; `cross_sig` and `pq_spk.sig` to exactly 
 ### Invalid request — `400 Bad Request`
 
 ```json
-{ "otpks": "duplicate key_id" }
+{ "code": "invalid_request", "detail": { "otpks": ["duplicate key_id"] } }
 ```
 
 ### Not this device — `403 Forbidden`
@@ -554,7 +578,7 @@ keys must decode to exactly 1184 bytes; `cross_sig` and `pq_spk.sig` to exactly 
 ### Rate limited — `429 Too Many Requests`
 
 ```json
-{ "detail": "Request was throttled." }
+{ "code": "throttled", "detail": "Request was throttled." }
 ```
 
 Scope `accounts`, default 120/min.
@@ -606,7 +630,7 @@ None.
 ### Rate limited — `429 Too Many Requests`
 
 ```json
-{ "detail": "Request was throttled." }
+{ "code": "throttled", "detail": "Request was throttled." }
 ```
 
 Scope `accounts`, default 120/min.
@@ -690,7 +714,7 @@ Empty body.
 ### Rate limited — `429 Too Many Requests`
 
 ```json
-{ "detail": "Request was throttled." }
+{ "code": "throttled", "detail": "Request was throttled." }
 ```
 
 Scope `accounts`, default 120/min.
@@ -781,7 +805,7 @@ yields `{"bundles": []}` with `200`.
 ### Invalid request — `400 Bad Request`
 
 ```json
-{ "device_ids": { "0": ["Must be a valid UUID."] } }
+{ "code": "invalid_request", "detail": { "device_ids.0": ["Input should be a valid UUID, invalid character: found `n` at 1"] } }
 ```
 
 ### Register-scope token — `403 Forbidden`
@@ -793,7 +817,7 @@ yields `{"bundles": []}` with `200`.
 ### Rate limited — `429 Too Many Requests`
 
 ```json
-{ "detail": "Request was throttled." }
+{ "code": "throttled", "detail": "Request was throttled." }
 ```
 
 Scope `claim`, default 120/min.
@@ -860,7 +884,7 @@ at 0.
 ### Rate limited — `429 Too Many Requests`
 
 ```json
-{ "detail": "Request was throttled." }
+{ "code": "throttled", "detail": "Request was throttled." }
 ```
 
 Scope `accounts`, default 120/min.
@@ -926,7 +950,7 @@ deactivated user.
 ### Rate limited — `429 Too Many Requests`
 
 ```json
-{ "detail": "Request was throttled." }
+{ "code": "throttled", "detail": "Request was throttled." }
 ```
 
 Scope `accounts`, default 120/min.

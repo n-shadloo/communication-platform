@@ -2,12 +2,25 @@
 
 The durable message queue: fan-out send, per-device drain, and acknowledgement. Every
 payload is an opaque, padded, client-encrypted blob in an exact envelope bucket
-(1024, 4096, 16384, 65536, or 262144 bytes), base64-encoded on the wire. All paths
-are under `/api/v1`; `Authorization: Bearer` with `full` scope is required, and drain
-and ack additionally require the token to be bound to a device. Serializer validation
-failures return the DRF field-error object directly (no `code` key); the project-wide
-`401` bodies listed in `accounts/API.md` apply here too. All three endpoints share
-the `envelopes` throttle scope (default 600/min).
+(1024, 4096, 16384, 65536, or 262144 bytes), base64-encoded on the wire. Every route
+here is served by FastAPI.
+
+All paths are under `/api/v1`, and every one requires `Authorization: Bearer <access
+token>` with `full` scope. A full-scope token always names a device, which is the
+mailbox drain and ack read. Errors use the envelope and the vocabulary that
+[`core/API.md`](../core/API.md) fixes; three responses can appear on any of these
+endpoints and are not repeated per section:
+
+- `401 {"code": "unauthenticated", …}` with `WWW-Authenticate: Bearer` when the
+  `Authorization` header is absent or malformed;
+- `401 {"code": "invalid_token", …}` when the token fails signature, expiry, type or
+  claim checks;
+- `401 {"code": "token_revoked", …}` when the device is revoked or deleted, a
+  generation is stale, or the account has been deactivated.
+
+Every request body rejects a field the endpoint does not declare, and every field is
+read strictly: a value of the wrong JSON type is refused rather than converted. All
+three endpoints share the `envelopes` throttle scope (default 600/min).
 
 The server never stores who sent an envelope. The sender's identity is used only for
 authentication and throttling; each accepted item becomes an independent row keyed
@@ -28,6 +41,11 @@ Targets that are revoked, unknown, or belong to a deactivated account are skippe
 reported in `stale_devices`; the sender should drop those devices from its session
 state and refresh the peer's device list. The whole batch validates before anything
 is written: one off-bucket blob rejects the entire request.
+
+**One call is one transaction.** Every accepted item of a batch is committed together
+with the counter advance behind its sequence number, so a retry after an unclear
+outcome finds either the whole batch queued or none of it — never a partial batch,
+and never a mailbox whose counter ran ahead of its rows.
 
 **Headers**
 
@@ -71,8 +89,11 @@ is written: one off-bucket blob rejects the entire request.
 ### Invalid request — `400 Bad Request`
 
 ```json
-{ "messages": { "0": { "device_id": ["Must be a valid UUID."] } } }
+{ "code": "invalid_request", "detail": { "messages.0.device_id": ["Input should be a valid UUID, invalid character: found `n` at 1"] } }
 ```
+
+`detail` maps a dotted field path to its messages; a list item carries its index in
+that path.
 
 ### Off-bucket blob — `400 Bad Request`
 
@@ -91,7 +112,7 @@ The rejected payload is never echoed.
 ### Rate limited — `429 Too Many Requests`
 
 ```json
-{ "detail": "Request was throttled." }
+{ "code": "throttled", "detail": "Request was throttled." }
 ```
 
 ## Drain my mailbox
@@ -152,22 +173,19 @@ None.
 }
 ```
 
-### No device binding — `403 Forbidden`
-
-```json
-{ "code": "device_scope_required", "detail": "This endpoint requires a device-scoped token." }
-```
-
 ### Register-scope token — `403 Forbidden`
 
 ```json
 { "code": "scope_forbidden", "detail": "This token cannot access this endpoint." }
 ```
 
+A register-scope token names no device, so it is refused here on scope; there is no
+separate device-binding refusal, because a full-scope token always carries one.
+
 ### Rate limited — `429 Too Many Requests`
 
 ```json
-{ "detail": "Request was throttled." }
+{ "code": "throttled", "detail": "Request was throttled." }
 ```
 
 ## Acknowledge envelopes
@@ -218,17 +236,11 @@ A missing `ids` key acks nothing and returns `{"deleted": 0}`.
 ### Malformed body — `400 Bad Request`
 
 ```json
-{ "code": "bad_request", "detail": "Malformed request." }
+{ "code": "invalid_request", "detail": { "ids.0": ["Input should be a valid UUID, invalid length: expected length 32 for simple format, found 3"] } }
 ```
 
 Non-object bodies, a non-list `ids`, more than 200 entries, and non-UUID values all
-land here.
-
-### No device binding — `403 Forbidden`
-
-```json
-{ "code": "device_scope_required", "detail": "This endpoint requires a device-scoped token." }
-```
+land here; the field path names which one.
 
 ### Register-scope token — `403 Forbidden`
 
@@ -239,5 +251,5 @@ land here.
 ### Rate limited — `429 Too Many Requests`
 
 ```json
-{ "detail": "Request was throttled." }
+{ "code": "throttled", "detail": "Request was throttled." }
 ```

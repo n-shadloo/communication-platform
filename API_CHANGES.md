@@ -6,7 +6,92 @@ field, the old behaviour, the new behaviour, and the client action. The current
 contract is `backend/CLIENT_CONTRACT.md` and the per-app `backend/*/API.md`
 references; this file records only what moved.
 
-## Phase 2 — platform
+## Phase 2 — devices and messaging
+
+The second run of the move to FastAPI
+([ADR-0002](docs/architecture/decisions/0002-fastapi-as-the-only-http-api-surface.md)).
+This run moves `PUT /api/v1/me/identity`, `GET /api/v1/users/{user_id}/identity`,
+`POST` and `GET /api/v1/me/devices`, `PUT` and `DELETE
+/api/v1/me/devices/{device_id}`, `PUT /api/v1/me/devices/{device_id}/prekeys`,
+`GET /api/v1/me/devices/{device_id}/prekeys/count`, `POST /api/v1/me/devicelog`,
+`GET /api/v1/users/{user_id}/devicelog`, `GET /api/v1/users/{user_id}/devices`,
+`POST /api/v1/users/{user_id}/keys/claim`, `POST /api/v1/envelopes`,
+`GET /api/v1/me/envelopes` and `POST /api/v1/me/envelopes/ack`. Only `attachments`
+and `voicerooms` still answer from REST Framework.
+
+No path, method, success body, header, or limit changed. What changed is the error
+shape on these routes, three refusals that are now reported differently, and the
+transaction a send runs in.
+
+### The error envelope reaches `devices` and `messaging`
+
+Every error these routes return is now `{"code": ..., "detail": ...}`, with `detail`
+a string except for `invalid_request`, where it maps a field path to the list of
+messages that failed. No error body echoes request input. The full vocabulary is the
+table in `backend/core/API.md`; branch on `code`, never on `detail`.
+
+| Item | Old behaviour | New behaviour | Client action |
+|---|---|---|---|
+| Validation failure on any of these routes | The bare Django REST Framework field-error object, with no `code` key: `{"ik_pub": ["invalid base64"]}`, and a nested item as `{"otpks": {"0": {"pub": [...]}}}` | `400 {"code": "invalid_request", "detail": {"ik_pub": ["invalid base64"]}}`, and a nested item as a dotted path: `{"otpks.0.pub": ["invalid base64"]}` | Parse the envelope, and read the field path as a dotted string rather than walking a nested object |
+| Validation messages | REST Framework's text, for example `"This field is required."` | Pydantic's text, for example `"Field required"`. The length and base64 guards keep their own wording — `"invalid base64"`, `"bad key length"`, `"bad signature length"`, `"duplicate key_id"` | Show `detail` values; never match on their text |
+| Stale identity version | `409 {"code": "stale_version"}` | `409 {"code": "stale_version", "detail": "Version must increase."}` | Compare `code`, not the whole body |
+| No published identity for a peer | `404 {"code": "not_found"}` | `404 {"code": "not_found", "detail": "No published identity."}` | Compare `code`, not the whole body |
+| Rate limited | `429 {"detail": "Request was throttled."}` | `429 {"code": "throttled", "detail": "Request was throttled."}` with a `Retry-After` header in seconds | Read `Retry-After` and back off; branch on `code` |
+| Wrong method on one of these routes | `405 {"detail": "Method \"DELETE\" not allowed."}`, with `Allow` naming every method the route serves | `405 {"code": "method_not_allowed", "detail": "That method is not allowed."}`. `Allow` now names the methods of one route object, so on a path two methods share — `/api/v1/me/devices` — it names one of them and not both | Branch on `code`. Do not read `Allow` as the complete method set of a path |
+| Unhandled failure | Django's `500` page | `500 {"code": "server_error", "detail": "Internal error."}`, with no traceback and no detail | None |
+
+One refusal is new: the rate counters for these routes now live in Redis rather than
+in the Django cache layer, so a request that arrives while that store is unreachable
+answers `503 {"code": "unavailable", ...}` instead of failing as an unhandled error.
+Treat `503` as an outage and `429` as backoff. The other pure-ASGI limits — the
+request deadline and its own `503`, the body cap and its `413 payload_too_large`, the
+`400 invalid_request` on an unlisted `Host`, and the three security headers on every
+response — already applied to these routes through the transition mount and are
+unchanged.
+
+### Three refusals changed code
+
+| Item | Old behaviour | New behaviour | Client action |
+|---|---|---|---|
+| A malformed `{user_id}` or `{device_id}` in a path | `404`, from the URL resolver | `400 {"code": "invalid_request", "detail": {"user_id": [...]}}` | Treat a malformed id as a client bug, not a missing resource |
+| A malformed ack body — a non-object, a non-list `ids`, more than 200 entries, or a non-UUID id | `400 {"code": "bad_request", "detail": "Malformed request."}` | `400 {"code": "invalid_request", "detail": {"ids.0": [...]}}`. The code `bad_request` is retired | Replace the `bad_request` branch with `invalid_request` |
+| `403 {"code": "device_scope_required"}` on drain and ack | Documented, and unreachable in practice: the scope check already refused every token that names no device | Gone from these two routes. A register-scope token is `403 scope_forbidden`, which is what it always answered. The code stays in the vocabulary for `voicerooms` | Drop the `device_scope_required` branch from the mailbox routes |
+
+### A send is one transaction
+
+| Item | Old behaviour | New behaviour | Client action |
+|---|---|---|---|
+| `POST /api/v1/envelopes` with several accepted items | One transaction per accepted item. A failure part-way through left the earlier items queued, and a mailbox counter could end up ahead of its rows | One transaction for the whole call. Either every accepted item is queued or none is, and the counter advance commits with the rows it numbered | A retry after an unclear outcome can no longer find half a batch queued. Retrying a batch that did succeed still duplicates it, so keep de-duplicating on the receiving side |
+| `stale_devices` | One entry per item that named an unreachable device, in the order the batch named them | Unchanged | None |
+
+### An explicitly null request field
+
+| Item | Old behaviour | New behaviour | Client action |
+|---|---|---|---|
+| `{"device_ids": null}` on claim | `400`; the field rejected an explicit null | Accepted, and it means the same as omitting the field: every live device of that user. An explicit `[]` still claims nothing | Omit a field you do not want to send, rather than sending null. `{"ids": null}` on ack is still a `400` |
+
+### Unchanged
+
+Every path and method; every success body, status and header of the moved routes,
+including the `201` for registration and for the device-log append, the `202` for a
+send, the `204` for a revoke and the `200` everywhere else; both device-list `ETag`s,
+their `304` with an empty body, and what the tag covers; `log_head_seq`, `has_more`,
+`head_seq`, `pruned_through` and `etag` in the bodies that carry them; the lenient
+clamping of `after` and `limit` on the device log and of `limit` on the drain, which
+still never error; every limit — 200 classical and 100 PQ prekeys per pool and per
+payload, 100 claim ids, 50 device-log records, a 200-record log page, a 100-envelope
+drain, a 200-id ack and a 256-item send batch — with the same public-key, signature
+and base64 bounds; the registration refusal of `cross_sig` and `bundle_version`, and
+the message that names the endpoint which accepts them; the first-device identity
+exemption and `400 identity_required` past it; the device cap and its `409
+device_limit`; `409 prekey_limit`, and the rule that a refused replenishment rotates
+nothing; verbatim `cross_sig` with its nulls, and the omission of every PQ field from
+a classical-only bundle; single consumption of a one-time prekey under concurrent
+claims; the revocation cascade and the socket close behind it; `400 bad_bucket` with
+no echo of the payload; and the throttle scope names, their environment variables and
+their defaults.
+
+## Phase 2 — the platform move
 
 The HTTP surface is moving from Django REST Framework to FastAPI, one app at a time
 ([ADR-0002](docs/architecture/decisions/0002-fastapi-as-the-only-http-api-surface.md)),
@@ -16,7 +101,8 @@ run moves `GET /api/v1/health`, the four `/api/v1/auth/*` routes, `GET /api/v1/u
 `GET /api/v1/users/{user_id}/profile`, `GET` and `PUT /api/v1/me/profile`, and `GET`
 and `PUT /api/v1/me/keybackup`. The routes of `devices`, `messaging`, `attachments`
 and `voicerooms` still answer from REST Framework and are unchanged apart from the
-`401` bodies below, which both stacks now share.
+`401` bodies below, which both stacks now share. `devices` and `messaging` moved in
+the next run; the section above records what changed with them.
 
 No path, method, or success body changed. What changed is the error shape, the status
 of two outcomes, the logout call, and the rules around refresh tokens.
