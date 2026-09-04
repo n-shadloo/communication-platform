@@ -395,3 +395,71 @@ def test_a_wrong_method_renders_the_envelope_with_the_methods_of_one_route(http)
     assert response.headers["allow"] == "GET"
     for header, value in SECURITY_HEADERS:
         assert response.headers[header.decode()] == value.decode()
+
+
+class TestEveryMiddlewareRefusalIsAWholeResponse:
+    """`_send_envelope` is what answers before a route is reached: the unknown
+    host, the oversized body and the missed deadline. Each of those responses is
+    written by the middleware and by nothing else — `SecurityHeaders` sits *below*
+    `TrustedHost` and `RequestDeadline`, so it never sees them — which is why each
+    one carries the headers itself.
+    """
+
+    async def refusals(self):
+        oversized = one_body(b"x" * (CAP.body_bytes + 1))
+        return {
+            "unknown host": await drive(
+                TrustedHost(reader(), ["testserver"]),
+                http_scope(host=b"evil.example"),
+                one_body(b""),
+            ),
+            "oversized body": await drive(
+                BodyCap(reader(), limits_for), http_scope(), oversized
+            ),
+            "missed deadline": await drive(
+                RequestDeadline(reader(delay=CAP.deadline_seconds * 10), limits_for),
+                http_scope(),
+                one_body(b""),
+            ),
+        }
+
+    async def test_each_refusal_carries_the_security_headers_of_this_surface(self):
+        for label, (_status, headers, _body) in (await self.refusals()).items():
+            for name, value in SECURITY_HEADERS:
+                assert headers.get(name) == value, (label, name)
+
+    async def test_each_refusal_is_json_with_a_content_length(self):
+        """A body with no `Content-Length` on a connection the client is still
+        writing to is a hang, not a refusal."""
+        for label, (_status, headers, body) in (await self.refusals()).items():
+            assert headers[b"content-type"] == b"application/json", label
+            assert int(headers[b"content-length"]) == len(body), label
+
+    async def test_each_refusal_renders_the_error_envelope_and_nothing_else(self):
+        for label, (_status, _headers, body) in (await self.refusals()).items():
+            assert set(json.loads(body)) == {"code", "detail"}, label
+
+    async def test_the_body_cap_lets_a_websocket_scope_through_untouched(self):
+        """A socket has no request body to count, and both bounded middlewares
+        pass a non-HTTP scope on: what bounds the socket is the gateway's own
+        frame cap and send-queue bound."""
+        seen = []
+
+        async def app(scope, receive, send):
+            seen.append(scope["type"])
+
+        await BodyCap(app, limits_for)({"type": "websocket"}, None, None)
+        await TrustedHost(app, ["testserver"])({"type": "websocket"}, None, None)
+        await SecurityHeaders(app)({"type": "websocket"}, None, None)
+
+        assert seen == ["websocket"] * 3
+
+
+def test_the_liveness_probe_takes_the_smallest_body_cap_of_the_surface(http):
+    """A probe no caller has to authenticate for is the cheapest thing to point a
+    flood at, so it takes the smallest class rather than the batch one — sixteen
+    kilobytes against seventy megabytes."""
+    per_route, fallback = route_limits()
+
+    assert per_route["/api/v1/health"] == fallback
+    assert per_route["/api/v1/health"].body_bytes == settings.BODY_CAP_JSON_BYTES

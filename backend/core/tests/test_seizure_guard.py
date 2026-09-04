@@ -11,10 +11,15 @@ driven outside this file (test_success_criteria.py, and break-the-guard proofs t
 register a canary model and assert the function flags it).
 """
 
+from unittest import mock
+
 from django.apps import apps
+from django.db import models
 from django.db.models import BinaryField
 from django.test import SimpleTestCase
+from django.test.utils import isolate_apps
 
+from accounts.models import User
 from core.fields import OpaqueBlobField
 
 # Column names that would mean plaintext content, key material, or a stored graph.
@@ -262,3 +267,208 @@ class SeizureGuardTests(SimpleTestCase):
             },
             blob_names,
         )
+
+
+# State the threat model keeps in Redis and nowhere else (invariant 7). A column
+# with one of these names is a login record, a presence record or a rate counter
+# at rest — each of them a thing a seizure of the disk would yield.
+VOLATILE_ONLY_NAMES = frozenset(
+    {
+        "failed_attempts",
+        "failure_count",
+        "login_attempts",
+        "attempt_count",
+        "lockout",
+        "locked_until",
+        "cooloff_until",
+        "rate_limit",
+        "throttle",
+        "presence",
+        "last_seen",
+        "online",
+        "signal",
+        "ice_candidate",
+    }
+)
+
+
+def volatile_state_offenders():
+    """No model may persist the state that lives in Redis by rule."""
+    return [
+        f"{_label(model)}.{field.name}"
+        for model in apps.get_models()
+        if model._meta.app_label in APP_LABELS
+        for field in _concrete_fields(model)
+        if field.name in VOLATILE_ONLY_NAMES
+    ]
+
+
+class VolatileStateGuardTests(SimpleTestCase):
+    def test_no_table_holds_lockout_presence_or_rate_state(self):
+        """The lockout counts in Redis, the room presence sets live in Redis, and
+        the rate counters live in Redis — because a table of any of them is a
+        record of who was where and when, kept past the moment it mattered."""
+        self.assertEqual(
+            volatile_state_offenders(),
+            [],
+            "state that must stay volatile reached the schema",
+        )
+
+
+class GuardCanaryTests(SimpleTestCase):
+    """Break-the-guard proofs.
+
+    Every audit above returns `[]` today, which is exactly what a broken
+    introspection would return too: a typo in `_concrete_fields`, a rename in
+    Django's `_meta` API, or a registry that came back empty would leave this file
+    green while proving nothing. These register a model that violates one rule and
+    assert the audit names it.
+
+    The canaries are declared in an isolated app registry, so nothing is added to
+    the real one, and the audits are pointed at that registry for the length of the
+    check. `related_name="+"` on the foreign keys keeps the real `User` class from
+    growing a reverse accessor to a model that exists for three lines.
+    """
+
+    def audited(self, audit, *models):
+        stub = type("Registry", (), {"get_models": staticmethod(lambda: list(models))})
+        with mock.patch(f"{__name__}.apps", stub):
+            return audit()
+
+    def test_a_plaintext_column_is_named(self):
+        with isolate_apps("core"):
+
+            class Canary(models.Model):
+                plaintext = models.TextField()
+
+                class Meta:
+                    app_label = "core"
+
+            self.assertEqual(
+                self.audited(forbidden_column_offenders, Canary),
+                ["core.Canary.plaintext"],
+            )
+
+    def test_a_sender_hidden_behind_its_column_name_is_named(self):
+        """The audit checks `attname` as well as `name`, so a foreign key spelled
+        `sender` cannot pass as `sender_id`."""
+        with isolate_apps("core"):
+
+            class Canary(models.Model):
+                sender = models.ForeignKey(
+                    User, on_delete=models.CASCADE, related_name="+"
+                )
+
+                class Meta:
+                    app_label = "core"
+
+            self.assertEqual(
+                self.audited(forbidden_column_offenders, Canary), ["core.Canary.sender"]
+            )
+
+    def test_a_password_column_outside_the_user_model_is_named(self):
+        with isolate_apps("core"):
+
+            class Canary(models.Model):
+                password = models.CharField(max_length=128)
+
+                class Meta:
+                    app_label = "core"
+
+            self.assertEqual(
+                self.audited(forbidden_column_offenders, Canary), ["core.Canary.password"]
+            )
+
+    def test_a_ciphertext_column_that_is_not_an_opaque_blob_is_named(self):
+        with isolate_apps("core"):
+
+            class Canary(models.Model):
+                message_blob = models.BinaryField()
+
+                class Meta:
+                    app_label = "core"
+
+            self.assertEqual(
+                self.audited(unbucketed_blob_offenders, Canary),
+                ["core.Canary.message_blob: BinaryField"],
+            )
+
+    def test_an_opaque_blob_that_lost_its_buckets_is_named(self):
+        """The shape a refactor produces: the right field class, and nothing left
+        deciding what length the payload may be."""
+        with isolate_apps("core"):
+
+            class Canary(models.Model):
+                blob = OpaqueBlobField(bucket_set=[])
+
+                class Meta:
+                    app_label = "core"
+
+            self.assertEqual(
+                self.audited(unbucketed_blob_offenders, Canary),
+                ["core.Canary.blob: empty bucket_set"],
+            )
+
+    def test_an_unclassified_byte_store_is_named_even_when_it_is_not_called_a_blob(self):
+        """The exact shape a future plaintext column would take while dodging every
+        name check."""
+        with isolate_apps("core"):
+
+            class Canary(models.Model):
+                payload = models.BinaryField()
+
+                class Meta:
+                    app_label = "core"
+
+            self.assertEqual(
+                self.audited(raw_binary_offenders, Canary), ["core.Canary.payload"]
+            )
+
+    def test_a_declared_public_key_is_not_mistaken_for_one(self):
+        """The other half of the canary: the audit has to stay quiet about the
+        fields it is meant to allow, or a green run means nothing either."""
+        with isolate_apps("core"):
+
+            class Canary(models.Model):
+                ik_pub = models.BinaryField()
+                spk_sig = models.BinaryField()
+                pub = models.BinaryField()
+
+                class Meta:
+                    app_label = "core"
+
+            self.assertEqual(self.audited(raw_binary_offenders, Canary), [])
+            self.assertEqual(self.audited(unbucketed_blob_offenders, Canary), [])
+
+    def test_a_table_that_references_two_users_is_named(self):
+        """The sender-recipient pair at rest, in the one shape that carries no
+        forbidden column name at all."""
+        with isolate_apps("core"):
+
+            class Canary(models.Model):
+                owner = models.ForeignKey(
+                    User, on_delete=models.CASCADE, related_name="+"
+                )
+                peer = models.ForeignKey(User, on_delete=models.CASCADE, related_name="+")
+
+                class Meta:
+                    app_label = "core"
+
+            self.assertEqual(
+                self.audited(dual_user_fk_offenders, Canary),
+                ["core.Canary: ['owner', 'peer']"],
+            )
+
+    def test_a_volatile_state_column_is_named(self):
+        with isolate_apps("core"):
+
+            class Canary(models.Model):
+                failed_attempts = models.IntegerField()
+
+                class Meta:
+                    app_label = "core"
+
+            self.assertEqual(
+                self.audited(volatile_state_offenders, Canary),
+                ["core.Canary.failed_attempts"],
+            )

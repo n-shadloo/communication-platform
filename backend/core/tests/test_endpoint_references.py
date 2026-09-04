@@ -176,3 +176,89 @@ def test_core_publishes_every_bucket_set_that_exists(name):
     published = [int(value.replace(",", "")) for value in re.findall(r"\d[\d,]*", row)]
 
     assert published == BUCKET_SETS[name], name
+
+
+# `core/API.md` opens with the vocabulary table: one row per error code, with the
+# status that carries it. `| 400 | `invalid_request` | … |`
+VOCABULARY_ROW = re.compile(r"^\|\s*(\d{3})\s*\|\s*`([a-z_]+)`\s*\|", re.M)
+# The two codes the table publishes that no *operation* declares, for two
+# different reasons. `device_scope_required` is reserved: `core/API.md` records
+# that it belongs to a route whose requirement does not supply a device-bound
+# token, and every route now takes one that does. `method_not_allowed` is answered
+# before the surface has chosen a route at all, so it belongs to no operation and
+# `api/schema.py` therefore does not carry it.
+RESERVED = "device_scope_required"
+PRE_ROUTE = "method_not_allowed"
+# How `api/schema.py` writes a code into a response description: "`code`, `code`".
+DESCRIBED_CODE = re.compile(r"`([a-z_]+)`")
+
+
+def published_vocabulary():
+    table = (settings.BASE_DIR / "core" / "API.md").read_text(encoding="utf-8")
+    return {code: int(status) for status, code in VOCABULARY_ROW.findall(table)}
+
+
+def test_the_published_vocabulary_is_the_one_the_code_carries():
+    """A client branches on `code`, so the table is the contract and not a
+    summary of it. A code the surface can answer and the table omits is one a
+    client meets for the first time in production; a code the table carries and
+    the surface cannot answer is one a client writes a branch for and never
+    reaches."""
+    from api.schema import VOCABULARY
+
+    assert set(published_vocabulary()) == set(VOCABULARY) | {RESERVED, PRE_ROUTE}
+
+
+@pytest.mark.parametrize(
+    "code", sorted(set(published_vocabulary()) - {RESERVED, PRE_ROUTE})
+)
+def test_every_published_code_carries_the_status_the_code_assigns_it(code):
+    """The status is half the contract: a client that retries on `503` and gives
+    up on `500` needs the row to say which one a code arrives with.
+
+    The two codes above are excluded from the list rather than skipped inside the
+    test: neither is in `VOCABULARY` at all, so there is nothing to compare them
+    against, and the test above is what holds them to the table."""
+    from api.schema import VOCABULARY
+
+    assert published_vocabulary()[code] == VOCABULARY[code]
+
+
+def test_the_pre_route_refusal_is_the_one_the_router_answers():
+    """`method_not_allowed` belongs to no operation because it is answered before
+    one is chosen, so the only place it can be pinned is the handler that renders
+    it — and `Allow` is the one thing a client can recover from."""
+    from api.errors import _ROUTING_REFUSALS
+
+    assert _ROUTING_REFUSALS[405][0] == PRE_ROUTE
+    assert published_vocabulary()[PRE_ROUTE] == 405
+
+
+def test_the_reserved_code_is_raised_by_nothing_that_ships():
+    """`core/API.md` says `device_scope_required` belongs to a route that needs a
+    device-bound token where the requirement does not supply one, and that no
+    route returns it today. A raise site would make that sentence false — and the
+    document would publish a status for it nowhere."""
+    raising = [
+        str(path.relative_to(settings.BASE_DIR))
+        for path in settings.BASE_DIR.rglob("*.py")
+        if path.relative_to(settings.BASE_DIR).parts[0] not in {".venv", "vendor"}
+        and "tests" not in path.relative_to(settings.BASE_DIR).parts
+        and f'"{RESERVED}"' in path.read_text()
+    ]
+
+    assert raising == []
+
+
+def test_every_code_the_document_describes_is_in_the_published_table():
+    """`api/schema.py` writes the codes of a route into the description of each
+    status it declares, so the document already names them — and a code that
+    reached the document without reaching the table is one nobody documented."""
+    described = set()
+    for operation in OPERATIONS.values():
+        for status, response in operation["responses"].items():
+            if int(status) >= 400:
+                described |= set(DESCRIBED_CODE.findall(response["description"]))
+
+    assert described - set(published_vocabulary()) == set()
+    assert len(described) > 5

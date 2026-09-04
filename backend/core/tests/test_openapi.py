@@ -10,9 +10,13 @@ itself implies. `api/schema.py` is the mechanism it holds to.
 
 import json
 import warnings
+from io import StringIO
 
 import pytest
 from django.conf import settings
+from django.core.management import call_command
+from django.core.management.base import CommandError
+from django.test import override_settings
 from fastapi.routing import iter_route_contexts
 
 from api.auth import require_full_device, require_register_or_full
@@ -312,3 +316,93 @@ def test_every_date_field_declares_the_date_format(field):
     """Every `_date` on this surface is a `DateField`, so it is a calendar day and
     never a timestamp. Declared as a bare string a client reads it as free text."""
     assert FORMATS[field] == {"date"}, field
+
+
+def test_the_generator_is_a_pure_function_of_the_tree():
+    """Two calls, one document. The drift gate compares bytes, so a generator
+    that varied between calls would fail the check on a tree nobody changed."""
+    assert rendered() == rendered()
+
+
+class TestTheDriftCommand:
+    """`manage.py openapi`, driven with `BASE_DIR` pointed at a directory of the
+    test's own.
+
+    The command writes `settings.BASE_DIR / "openapi.json"`, which in this
+    repository is the committed artefact every client generates from — so a test
+    that let it write there would rewrite the contract as a side effect of running
+    the suite, and `test_the_committed_artefact_is_the_generated_document` above
+    would then pass whatever the routes did.
+    """
+
+    def test_the_command_writes_the_document_and_says_so(self, tmp_path):
+        out = StringIO()
+
+        with override_settings(BASE_DIR=tmp_path):
+            call_command("openapi", stdout=out)
+
+        assert (tmp_path / ARTEFACT).read_text(encoding="utf-8") == rendered()
+        assert f"wrote {ARTEFACT}" in out.getvalue()
+
+    def test_the_check_passes_on_the_document_the_command_just_wrote(self, tmp_path):
+        out = StringIO()
+
+        with override_settings(BASE_DIR=tmp_path):
+            call_command("openapi", stdout=out)
+            call_command("openapi", "--check", stdout=out)
+
+        assert f"{ARTEFACT} matches the generated document" in out.getvalue()
+
+    def test_the_check_fails_when_the_artefact_has_drifted(self, tmp_path):
+        (tmp_path / ARTEFACT).write_text('{"openapi": "3.1.0"}\n', encoding="utf-8")
+
+        with override_settings(BASE_DIR=tmp_path):
+            with pytest.raises(CommandError) as raised:
+                call_command("openapi", "--check")
+
+        assert "manage.py openapi" in str(raised.value)
+
+    def test_the_check_fails_when_the_artefact_is_missing_entirely(self, tmp_path):
+        """A deleted file is drift too. Reading a missing path would be an
+        `OSError` with a traceback rather than the sentence that says what to run.
+        """
+        with override_settings(BASE_DIR=tmp_path):
+            with pytest.raises(CommandError) as raised:
+                call_command("openapi", "--check")
+
+        assert ARTEFACT in str(raised.value)
+        assert not (tmp_path / ARTEFACT).exists()
+
+    def test_a_failed_check_never_prints_the_document_it_compared(self, tmp_path):
+        """A schema dumped into a CI log is a route map in a place nobody
+        controls. The reader regenerates and reads the diff in their own tree."""
+        (tmp_path / ARTEFACT).write_text("{}\n", encoding="utf-8")
+
+        with override_settings(BASE_DIR=tmp_path):
+            with pytest.raises(CommandError) as raised:
+                call_command("openapi", "--check")
+
+        message = str(raised.value)
+        for path in sorted(DOCUMENT["paths"])[:5]:
+            assert path not in message
+
+    def test_the_check_writes_nothing_at_all(self, tmp_path):
+        """`--check` is what CI runs, and a check that repaired the drift it found
+        would report success on a tree that was wrong."""
+        stale = '{"openapi": "3.1.0"}\n'
+        (tmp_path / ARTEFACT).write_text(stale, encoding="utf-8")
+
+        with override_settings(BASE_DIR=tmp_path):
+            with pytest.raises(CommandError):
+                call_command("openapi", "--check")
+
+        assert (tmp_path / ARTEFACT).read_text(encoding="utf-8") == stale
+
+    def test_writing_twice_produces_one_file(self, tmp_path):
+        """The stable key order, at the level the gate reads it: bytes on disk."""
+        with override_settings(BASE_DIR=tmp_path):
+            call_command("openapi", stdout=StringIO())
+            first = (tmp_path / ARTEFACT).read_bytes()
+            call_command("openapi", stdout=StringIO())
+
+        assert (tmp_path / ARTEFACT).read_bytes() == first

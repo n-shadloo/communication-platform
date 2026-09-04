@@ -102,3 +102,97 @@ def test_the_panel_is_reached_under_the_json_body_cap(http, operator):
 
     answer = login(http, "owner", PASSWORD)
     assert answer.status_code == 302
+
+
+def test_a_form_body_above_the_cap_never_reaches_the_panel(http, operator):
+    """The panel takes the fallback limit class, and Django reads its own request
+    body — so unlike the routes that declare none, this is a path where the cap
+    actually binds. The refusal is this API's envelope, from the middleware in
+    front, and the sign-in it carried is never attempted."""
+    oversized = {"username": "owner", "password": "x" * settings.BODY_CAP_JSON_BYTES}
+
+    answer = http.post(LOGIN_URL, data=oversized)
+
+    assert answer.status_code == 413
+    assert answer.json() == {
+        "code": "payload_too_large",
+        "detail": "Request body is too large.",
+    }
+    assert "sessionid" not in "".join(answer.headers.get_list("set-cookie"))
+
+
+def test_an_unknown_host_is_refused_before_the_panel_is_reached(http):
+    """`TrustedHost` runs outermost, so the operator's chosen admin path is not
+    even a thing a wrong-Host request can probe for."""
+    answer = http.get(LOGIN_URL, headers={"Host": "evil.example"})
+
+    assert answer.status_code == 400
+    assert answer.json() == {
+        "code": "invalid_request",
+        "detail": {"host": ["Unknown host."]},
+    }
+
+
+def test_a_post_without_the_csrf_token_is_refused_by_django(http, operator):
+    """The panel is the one session-authenticated surface in this process, so it
+    is the one surface CSRF applies to. The refusal is Django's own page, not this
+    API's envelope: everything under `ADMIN_PATH` belongs to Django."""
+    answer = http.post(LOGIN_URL, data={"username": "owner", "password": PASSWORD})
+
+    assert answer.status_code == 403
+    assert "sessionid" not in "".join(answer.headers.get_list("set-cookie"))
+    assert not answer.headers["content-type"].startswith("application/json")
+
+
+@pytest.mark.parametrize(
+    "username",
+    [
+        "owner\x00truncated",
+        "owner\r\nX-Injected: yes",
+        "  ",
+        "ownér",
+        "o" * 4000,
+        "' OR 1=1 --",
+    ],
+)
+def test_a_malformed_username_is_a_refused_sign_in_and_never_a_failure(
+    http, operator, username
+):
+    """Every one of these reaches `AdminLoginForm.clean`, which hashes the name
+    before it reads Redis. A control character, an encoding the digest has to
+    handle, or a name far longer than the column must come back as the same
+    refusal any wrong name does."""
+    answer = login(http, username, "not-the-password")
+
+    assert answer.status_code == 200
+    assert "sessionid" not in "".join(answer.headers.get_list("set-cookie"))
+
+
+def test_the_login_page_hands_out_no_session_before_a_sign_in(http):
+    """A `sessionid` on the way *in* would be a fixation target: the panel sets
+    one only when a sign-in succeeds."""
+    cookies = "".join(http.get(LOGIN_URL).headers.get_list("set-cookie"))
+
+    assert "csrftoken" in cookies
+    assert "sessionid" not in cookies
+
+
+def test_an_unclaimed_path_under_the_prefix_is_indistinguishable_from_a_real_page(http):
+    """`api.app.django_paths` hands the whole prefix to Django, so what answers a
+    path there is Django and never this API's `not_found` envelope.
+
+    An anonymous prober gets the same redirect for a page that exists and one that
+    does not, so the operator's chosen admin path cannot be mapped from outside.
+    Outside the prefix the answer is the envelope instead, which is what makes the
+    prefix itself the only thing to find.
+    """
+    missing = http.get(f"/{ADMIN_PATH}no-such-page/")
+    real = http.get(f"/{ADMIN_PATH}accounts/user/")
+
+    assert (missing.status_code, real.status_code) == (302, 302)
+    assert "login" in missing.headers["location"]
+    assert "login" in real.headers["location"]
+    assert not missing.headers["content-type"].startswith("application/json")
+
+    outside = http.get("/api/v1/no-such-page")
+    assert outside.json()["code"] == "not_found"

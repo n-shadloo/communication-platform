@@ -12,14 +12,16 @@ schema.
 """
 
 import copy
+import re
 from io import StringIO
 
 import pytest
 from django.apps import apps
 from django.conf import settings
 from django.core.management import call_command
-from django.db import connections
+from django.db import connections, transaction
 from django.db.migrations.loader import MigrationLoader
+from django.db.migrations.recorder import MigrationRecorder
 from django.db.utils import load_backend
 
 INITIAL = "0001_initial"
@@ -345,3 +347,326 @@ def test_the_generated_sql_is_only_the_statements_the_classification_covers(app,
         assert statement.startswith(ALLOWED_STATEMENTS), statement
         if statement.startswith("ALTER TABLE"):
             assert "ADD CONSTRAINT" in statement, statement
+
+
+@pytest.mark.django_db(transaction=True)
+def test_no_model_change_is_waiting_for_a_migration():
+    """The gate that keeps the history above complete.
+
+    A field added, renamed or altered with no migration written for it passes
+    every test in this file — the recorded history still applies, still unapplies,
+    and still carries the locks it was classified with — and then fails on the
+    deployment host, after the code that needs the column is already serving.
+    `makemigrations --check` is the question "does the disk match the models",
+    and `--dry-run` is what keeps it from answering by writing the file.
+    """
+    out = StringIO()
+
+    try:
+        call_command("makemigrations", "--check", "--dry-run", stdout=out, verbosity=1)
+    except SystemExit as exit_code:
+        raise AssertionError(
+            f"a model changed with no migration written for it:\n{out.getvalue()}"
+        ) from exit_code
+
+
+def test_the_apps_that_own_no_table_own_no_migrations_either():
+    """`core` and `realtime` are plumbing: one holds the bucket sets, the opaque
+    blob field and the panel's base classes, the other holds the socket gateway
+    and its Redis bus. Neither declares a model, so a migrations directory under
+    either is a table somebody added without deciding to."""
+    tableless = sorted(
+        config.label
+        for config in apps.get_app_configs()
+        if not config.name.startswith("django.")
+        and not config.name.startswith("unfold")
+        and not any(config.get_models())
+    )
+
+    assert tableless == ["core", "realtime"]
+    for label in tableless:
+        assert not (settings.BASE_DIR / label / "migrations").exists(), label
+
+
+def test_the_recorded_history_covers_every_app_that_owns_a_table():
+    """The other direction of `HISTORY`: an app that grew a model and a migration
+    directory, and was never added to the record, would be replayed by nothing
+    here."""
+    assert sorted(HISTORY) == PROJECT_APPS
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.parametrize("app", teardown_order())
+def test_every_app_returns_to_head_after_unapplying_to_zero(empty_database, app):
+    """The other half of reversibility: down is only useful if up follows it.
+
+    A rollback on the deployment host unapplies an app and the next deploy applies
+    it again, so a `0001_initial` whose reverse leaves a sequence, a constraint or
+    an enum behind fails on the way back up rather than on the way down. Read from
+    `django_migrations` as well as from the catalogue, because a table that exists
+    while its row does not is a schema `migrate` will try to create twice.
+    """
+    call_command("migrate", database=empty_database, verbosity=0)
+    call_command("migrate", app, "zero", database=empty_database, verbosity=0)
+
+    call_command("migrate", app, database=empty_database, verbosity=0)
+
+    applied = MigrationRecorder(connections[empty_database]).applied_migrations()
+    assert tables_of(app) <= tables_in(empty_database)
+    assert {name for recorded, name in applied if recorded == app} == set(HISTORY[app])
+
+
+@pytest.mark.django_db(transaction=True)
+def test_the_whole_history_returns_to_head_after_a_full_unapply(empty_database):
+    """Every app to zero and the whole history applied again on top of the
+    emptied database. This is the rollback a deploy of this version can perform,
+    end to end, and the state it leaves is the one the next deploy migrates."""
+    call_command("migrate", database=empty_database, verbosity=0)
+    for app in teardown_order():
+        call_command("migrate", app, "zero", database=empty_database, verbosity=0)
+
+    call_command("migrate", database=empty_database, verbosity=0)
+
+    applied = MigrationRecorder(connections[empty_database]).applied_migrations()
+    assert project_tables() <= tables_in(empty_database)
+    assert {node for node in applied if node[0] in PROJECT_APPS} == set(migration_nodes())
+
+
+# --- The locks each migration actually takes ---------------------------------------
+# `LOCK_CLASSES` above says what an operation is meant to take. This section runs the
+# statements and reads `pg_locks`, because the operation name is a claim and the lock
+# is what the deployment lives with.
+#
+# The eight modes, in the order the PostgreSQL documentation lists them, weakest
+# first. Everything from SHARE upwards conflicts with ROW EXCLUSIVE, which is what
+# every INSERT, UPDATE and DELETE holds: a migration that takes one of those on a
+# populated table stops writes to it for the duration.
+LOCK_STRENGTH = [
+    "AccessShareLock",
+    "RowShareLock",
+    "RowExclusiveLock",
+    "ShareUpdateExclusiveLock",
+    "ShareLock",
+    "ShareRowExclusiveLock",
+    "ExclusiveLock",
+    "AccessExclusiveLock",
+]
+
+# The tables that already exist when each migration runs, and the strongest lock it
+# takes on each. A table this migration creates is absent from the map however hard
+# it is locked: no other session can name a relation that does not exist yet.
+#
+# Every entry is SHARE ROW EXCLUSIVE and every one comes from the same statement
+# shape — `ALTER TABLE ... ADD CONSTRAINT ... FOREIGN KEY ... REFERENCES <other
+# table>`, which locks the referenced side. It blocks writes to that table, not
+# reads. ADR-0009 is what makes it free here: the deployment creates the database
+# and migrates once, so nothing is populated and nothing is being written. On a
+# database with rows in it, each of these would be a write outage on the named
+# table for as long as the migration runs.
+#
+# `voicerooms` holds no foreign key at all — a room is a capability id and an
+# encrypted name — so it locks nothing that exists.
+BLOCKING_LOCKS = {
+    ("accounts", INITIAL): {
+        "auth_group": "ShareRowExclusiveLock",
+        "auth_permission": "ShareRowExclusiveLock",
+    },
+    ("attachments", INITIAL): {"accounts_user": "ShareRowExclusiveLock"},
+    ("devices", INITIAL): {"accounts_user": "ShareRowExclusiveLock"},
+    ("messaging", INITIAL): {"devices_device": "ShareRowExclusiveLock"},
+    ("vault", INITIAL): {"accounts_user": "ShareRowExclusiveLock"},
+    ("voicerooms", INITIAL): {},
+}
+
+RELATIONS_IN_SCHEMA = """
+SELECT c.relname
+FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+WHERE n.nspname = current_schema()
+"""
+
+# Relation locks this backend holds right now, catalogue relations excluded: the
+# `pg_class` and `pg_namespace` reads of the query itself take locks of their own.
+LOCKS_HELD = """
+SELECT l.mode, c.relname, c.relkind
+FROM pg_locks l
+JOIN pg_class c ON c.oid = l.relation
+JOIN pg_namespace n ON n.oid = c.relnamespace
+WHERE l.pid = pg_backend_pid()
+  AND l.locktype = 'relation'
+  AND n.nspname = current_schema()
+"""
+
+
+def tables_of(app):
+    return {
+        model._meta.db_table
+        for model in apps.get_models()
+        if model._meta.app_label == app
+    }
+
+
+def atomic_nodes():
+    return [node for node in migration_nodes() if loaded(*node).atomic]
+
+
+def non_atomic_nodes():
+    return [node for node in migration_nodes() if not loaded(*node).atomic]
+
+
+def apply_the_state_before(node, alias):
+    """Everything this migration depends on, and nothing of the migration itself.
+
+    The graph is what names the parents rather than the file, because a swappable
+    dependency is written as `__first__` in the source and resolved to a node only
+    once the graph is built.
+    """
+    graph = MigrationLoader(None, ignore_no_migrations=True).graph
+    for parent_app, parent_name in sorted(graph.node_map[node].parents):
+        call_command("migrate", parent_app, parent_name, database=alias, verbosity=0)
+
+
+def run_and_read_the_locks(alias, statements):
+    """Run the statements in one transaction and read what it holds, then roll back.
+
+    One transaction, because a lock is released at commit and this has to read it
+    while it is held. The rollback is what keeps the probe from being a migration:
+    nothing it created survives the call.
+    """
+    with connections[alias].cursor() as cursor:
+        cursor.execute(RELATIONS_IN_SCHEMA)
+        before = {row[0] for row in cursor.fetchall()}
+    with transaction.atomic(using=alias):
+        with connections[alias].cursor() as cursor:
+            for statement in statements:
+                cursor.execute(statement)
+            cursor.execute(LOCKS_HELD)
+            locks = cursor.fetchall()
+            cursor.execute(RELATIONS_IN_SCHEMA)
+            created = {row[0] for row in cursor.fetchall()} - before
+        transaction.set_rollback(True, using=alias)
+    return locks, created
+
+
+def strongest(modes):
+    return max(modes, key=LOCK_STRENGTH.index)
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.parametrize(("app", "name"), atomic_nodes())
+def test_each_migration_takes_only_the_locks_recorded_against_it(
+    empty_database, app, name
+):
+    """The lock review, measured rather than argued.
+
+    The migration's own SQL is run against a database migrated to exactly the state
+    that precedes it, and `pg_locks` is read while the transaction still holds
+    everything it took. Two things are asserted: no relation that already existed
+    is locked harder than `BLOCKING_LOCKS` records, and nothing outside the set of
+    relations this migration created is held at ACCESS EXCLUSIVE.
+
+    What this catches in a migration somebody adds later: an `ALTER TABLE` that
+    rewrites a populated table or sets a column NOT NULL without a validated
+    constraint first, both of which take ACCESS EXCLUSIVE on a relation that
+    already exists; a plain `CREATE INDEX` on one, which takes SHARE; and a new
+    foreign key to a table that is not this migration's, which takes SHARE ROW
+    EXCLUSIVE and would appear in the map the author has to write down.
+
+    What it does not catch: how long any of them is held. A lock class is not a
+    duration, and an ACCESS EXCLUSIVE on a table this migration created is free
+    only because no other session can name that relation yet — the same statement
+    against a populated table would be an outage. It also measures nothing about
+    migrations that cannot run inside a transaction; the one this project has is
+    held by the test below.
+    """
+    apply_the_state_before((app, name), empty_database)
+    out = StringIO()
+    call_command("sqlmigrate", app, name, database=empty_database, stdout=out)
+
+    locks, created = run_and_read_the_locks(empty_database, statements_of(out.getvalue()))
+
+    pre_existing = {
+        relname: strongest([mode for mode, name_, _kind in locks if name_ == relname])
+        for _mode, relname, kind in locks
+        if kind == "r" and relname not in created
+    }
+    exclusive = {
+        relname
+        for mode, relname, _kind in locks
+        if mode in ("AccessExclusiveLock", "ExclusiveLock")
+    }
+
+    assert created, "the migration created no relation at all"
+    assert pre_existing == BLOCKING_LOCKS[(app, name)]
+    assert exclusive <= created, sorted(exclusive - created)
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.parametrize(("app", "name"), non_atomic_nodes())
+def test_the_index_built_outside_a_transaction_is_built_concurrently(
+    empty_database, app, name
+):
+    """The one migration the lock probe above cannot measure.
+
+    `CREATE INDEX CONCURRENTLY` is refused inside a transaction block, so the
+    statements cannot be run and rolled back with the lock still held. What is
+    asserted instead is the statement itself: the concurrent form takes SHARE
+    UPDATE EXCLUSIVE and blocks no write, where the plain form takes SHARE and
+    stops every send for the length of the build. This is the largest table in the
+    schema and the one every send writes to.
+
+    The claim about which lock each form takes is PostgreSQL's documentation, not
+    a measurement — an unmeasured claim, recorded as one.
+    """
+    apply_the_state_before((app, name), empty_database)
+    out = StringIO()
+    call_command("sqlmigrate", app, name, database=empty_database, stdout=out)
+    statements = statements_of(out.getvalue())
+
+    assert statements
+    assert "BEGIN;" not in out.getvalue()
+    for statement in statements:
+        assert statement.startswith("CREATE INDEX CONCURRENTLY"), statement
+
+
+# The relation a statement acts on: the table of an `ALTER TABLE`, and the table an
+# index is built on rather than the index's own name.
+TARGET = re.compile(
+    r"^(?:ALTER TABLE"
+    r'|CREATE (?:UNIQUE )?INDEX(?: CONCURRENTLY)? "[^"]+" ON)'
+    r'\s+"([^"]+)"'
+)
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.parametrize(("app", "name"), migration_nodes())
+def test_no_statement_alters_or_indexes_a_table_the_migration_did_not_create(app, name):
+    """The rule the statement prefixes do not carry, and the one that holds for the
+    migrations no transaction can wrap.
+
+    `ALTER TABLE ... ADD CONSTRAINT` is admitted by the classification, and on a
+    table the same migration creates it costs nothing. On a table that was already
+    there it is a validating scan under a lock that blocks writes, and the prefix
+    check would pass it. The same goes for a plain `CREATE INDEX`: on a new table
+    it is free, on a populated one it takes SHARE for the whole build. The one
+    statement allowed to name a table it did not create is the concurrent index
+    build, which blocks nothing.
+    """
+    out = StringIO()
+    call_command("sqlmigrate", app, name, stdout=out)
+    statements = statements_of(out.getvalue())
+    created = {
+        statement.split('"')[1]
+        for statement in statements
+        if statement.startswith("CREATE TABLE")
+    }
+
+    foreign = {
+        target.group(1)
+        for statement in statements
+        if not statement.startswith("CREATE INDEX CONCURRENTLY")
+        for target in [TARGET.match(statement)]
+        if target is not None and target.group(1) not in created
+    }
+
+    assert statements
+    assert foreign == set()

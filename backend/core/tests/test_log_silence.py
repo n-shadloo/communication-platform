@@ -18,7 +18,7 @@ from starlette.routing import compile_path
 from api.redis import close_client
 from config.asgi import api_application
 from core.tests.test_route_table import EXPECTED
-from ops.audit.log_silence import run_audit
+from ops.audit.log_silence import CANARY_CLOSE, CANARY_OPEN, run_audit
 from realtime.bus import stop_subscriber
 
 pytestmark = pytest.mark.django_db(transaction=True)
@@ -116,3 +116,49 @@ async def test_the_pass_drives_every_route_of_the_table():
     driven = {route_of(method, path) for method, path in requested}
 
     assert driven - {None} == set(EXPECTED)
+
+
+@pytest.mark.parametrize(
+    "label",
+    [
+        "envelope blob",
+        "key backup blob",
+        "profile blob",
+        "access token",
+        "refresh token",
+        "attachment id",
+        "livekit join token",
+        "queued envelope id",
+    ],
+)
+async def test_the_audit_catches_a_leak_of_every_kind_of_secret_it_collected(label):
+    """The scan has to recognise each shape, not just an identifier.
+
+    The existing probe leaks a device id, which is a UUID; a ciphertext blob, a
+    bearer token and a base64 capability id are matched by different patterns and
+    would each be a different way for the pass to clear a leak it never looked
+    for. Every label here is one the audit records, so a step that stops
+    generating its secret fails the anti-vacuity test above rather than quietly
+    narrowing this one.
+    """
+
+    def leak(secrets):
+        logging.getLogger("django.request").error("stray value %s", secrets[label])
+
+    leaks, _secrets, _lines, _requested = await run_audit(probe=leak)
+
+    assert any(label in leak_line for leak_line in leaks), (
+        f"a deliberately logged {label} was not detected"
+    )
+
+
+async def test_the_capture_window_was_open_for_the_whole_pass():
+    """The audit's own guard, asserted from outside it: the canary is written on
+    both sides of the scripted traffic, so a capture that was never installed — or
+    that a `dictConfig` re-application tore down halfway — cannot come back as an
+    empty leak list."""
+    _leaks, _secrets, lines, _requested = await run_audit()
+
+    assert any(CANARY_OPEN in line for line in lines)
+    assert any(CANARY_CLOSE in line for line in lines)
+    assert len(lines) >= 2

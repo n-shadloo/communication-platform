@@ -12,6 +12,7 @@ surface, so they cannot silently rot when the per-app suites are refactored:
 """
 
 import base64
+import re
 
 import pytest
 
@@ -150,3 +151,109 @@ def test_fanout_writes_independent_copies_and_never_a_sender(
             for value in (row.id, row.recipient_device_id, row.seq, row.queued_hour)
         }
         assert stored & sender_traces == set(), "a stored value identifies the sender"
+
+
+# 5. every stored ciphertext has an exact bucket length, and an off-bucket payload
+#    is refused without the payload being echoed back.
+def test_an_off_bucket_payload_is_refused_and_never_echoed(
+    http, active_user, device, bearer
+):
+    """The padding rule, through the surface rather than through the decoder.
+
+    Length is the one thing a blind relay can still see, so every stored blob is
+    padded to an exact bucket and anything else is `400 bad_bucket` — with
+    `"Invalid payload."` and nothing of the request, because an error body that
+    echoed the blob would put ciphertext in a client's log and in this server's.
+    `core/tests/test_fields.py` proves the decoder's own totality.
+    """
+    smallest = min(BACKUP_BUCKETS)
+    off_bucket = _b64(smallest + 1, 0x4B)
+
+    refused = http.put(
+        KEYBACKUP_URL,
+        json={"blob": off_bucket, "version": 1},
+        headers=bearer(active_user, device),
+    )
+
+    assert refused.status_code == 400
+    assert refused.json() == {"code": "bad_bucket", "detail": "Invalid payload."}
+    assert off_bucket not in refused.text
+    from vault.models import KeyBackup
+
+    assert KeyBackup.objects.count() == 0
+
+
+def test_a_payload_at_an_exact_bucket_length_is_stored_whole(
+    http, active_user, device, bearer
+):
+    """The other side of the same rule: the boundary is exact, not a maximum, so
+    the bucket length itself must be accepted and stored byte for byte."""
+    smallest = min(BACKUP_BUCKETS)
+    padded = _b64(smallest, 0x4B)
+
+    stored = http.put(
+        KEYBACKUP_URL,
+        json={"blob": padded, "version": 1},
+        headers=bearer(active_user, device),
+    )
+
+    assert stored.status_code == 200
+    from vault.models import KeyBackup
+
+    assert len(bytes(KeyBackup.objects.get().blob)) == smallest
+
+
+# 6. the suites that carry these invariants are still there, and still run.
+INVARIANT_SUITES = (
+    "core/tests/test_seizure_guard.py",
+    "core/tests/test_manifest.py",
+    "core/tests/test_log_silence.py",
+    "core/tests/test_settings_posture.py",
+    "core/tests/test_success_criteria.py",
+    "accounts/tests/test_log_silence.py",
+    "api/tests/test_log_silence.py",
+    "devices/tests/test_log_silence.py",
+    "messaging/tests/test_log_silence.py",
+    "realtime/tests/test_log_silence.py",
+    "vault/tests/test_log_silence.py",
+)
+# The marker syntaxes, not the bare word: this file names them all in the line
+# below, and a pattern that matched prose would fail on its own source.
+QUARANTINE = re.compile(
+    r"pytest\.mark\.(?:skip|xfail)|pytest\.skip\(|unittest\.skip"
+    r"|self\.skipTest\(|@skip(?:Unless|If)\b"
+)
+
+
+@pytest.mark.parametrize("name", INVARIANT_SUITES)
+def test_no_invariant_suite_is_quarantined(name):
+    """The suites above are the executable form of the invariants, and the one way
+    to make them stop failing without fixing anything is to stop running them. A
+    skip, a conditional skip or an expected failure in any of them is that.
+
+    Named as files rather than discovered, so deleting one fails here instead of
+    reducing the set this test walks.
+    """
+    from django.conf import settings
+
+    path = settings.BASE_DIR / name
+
+    assert path.exists(), name
+    body = path.read_text()
+    assert QUARANTINE.search(body) is None, name
+    assert body.count("def test_") > 0, name
+
+
+def test_the_offline_rehearsal_is_present_and_runnable():
+    """The eighth invariant's proof is a shell script rather than a test, so the
+    suite cannot run it — what it can do is fail when it goes missing or stops
+    being executable, which is how it would silently leave the gate."""
+    import os
+
+    from django.conf import settings
+
+    script = settings.BASE_DIR / "ops" / "audit" / "offline_rehearsal.sh"
+
+    assert script.exists()
+    assert os.access(script, os.X_OK)
+    assert "--require-hashes" in script.read_text()
