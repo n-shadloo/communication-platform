@@ -953,6 +953,12 @@ actually compare (clients gossip heads inside ordinary E2EE messages).
 Appending changes the account's device-list `ETag`, so polling peers re-fetch and see
 the new head.
 
+The log holds at most `MAX_DEVICELOG_RECORDS` records (default 10 000) and is never
+pruned. An append that would pass the ceiling is refused whole with
+`409 devicelog_limit` and stores nothing. A client appends one record for each
+device-set change, so a log that reaches the ceiling is a client defect, not a
+condition to handle by trimming: nothing on the server removes a record.
+
 **Retry semantics.** Not idempotent: the server assigns `seq` and never inspects a
 record, so a retry after a lost response appends the same blobs again under fresh
 sequence numbers. The log is a hash chain the client builds, so the duplicate records
@@ -1001,6 +1007,14 @@ nginx admits; the list caps of the schema refuse a larger body long before it.
 ```json
 { "code": "bad_bucket", "detail": "Invalid payload." }
 ```
+
+### Log full — `409 Conflict`
+
+```json
+{ "code": "devicelog_limit", "detail": "The device-list log of this account is full." }
+```
+
+Nothing of the batch is stored.
 
 ### Register-scope token — `403 Forbidden`
 

@@ -37,6 +37,7 @@ The vocabulary is fixed. A client branches on `code`, never on `detail`.
 | 409 | `stale_version` | A version did not increase. |
 | 409 | `device_limit` | The account holds `MAX_DEVICES_PER_USER` live devices. |
 | 409 | `prekey_limit` | A prekey pool cap is reached. |
+| 409 | `devicelog_limit` | The account's device-list log holds `MAX_DEVICELOG_RECORDS` records. |
 | 413 | `payload_too_large` | The body exceeds the route cap. |
 | 413 | `quota_exceeded` | The attachment quota is exhausted. |
 | 429 | `throttled` | Rate limit reached, or a login name in its cool-off. `Retry-After` carries the seconds to wait. |

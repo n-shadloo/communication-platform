@@ -43,6 +43,7 @@ VOCABULARY = {
     "stale_version": 409,
     "device_limit": 409,
     "prekey_limit": 409,
+    "devicelog_limit": 409,
     "payload_too_large": 413,
     "quota_exceeded": 413,
     "throttled": 429,

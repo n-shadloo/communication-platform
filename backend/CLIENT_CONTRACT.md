@@ -205,7 +205,9 @@ group key; a group exists only in its members' clients.
 ## J. Device-list log maintenance
 
 - Append a signed record on every device-set change (add, remove, revoke) and on
-  identity rotation.
+  identity rotation, and on nothing else: the log holds at most
+  `MAX_DEVICELOG_RECORDS` records (default 10 000), is never pruned, and refuses an
+  append past the ceiling with `409 devicelog_limit`.
 - Piggyback the latest known heads of contacts on ordinary E2EE messages; on receipt,
   compare against the local view and raise the fork alarm on mismatch.
 

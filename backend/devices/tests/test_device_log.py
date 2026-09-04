@@ -227,3 +227,33 @@ def test_the_unique_constraint_would_catch_a_duplicate_seq(active_user):
 
     with pytest.raises(Exception):
         DeviceLogRecord.objects.create(user=active_user, seq=0, blob=b"b" * 256)
+
+
+def test_the_log_has_a_ceiling(http, active_user, device, bearer, peer, peer_device):
+    """The log is append-only and never pruned, so without a ceiling one account
+    grows it at the batch cap times the rate limit forever. Past the ceiling an
+    append is refused whole and stores nothing; a batch that lands exactly on it
+    is accepted."""
+    from django.test import override_settings
+
+    mine = bearer(active_user, device)
+
+    with override_settings(MAX_DEVICELOG_RECORDS=3):
+        first = http.post(
+            LOG_URL, json={"records": [{"blob": log_blob(b"A")}] * 2}, headers=mine
+        )
+        refused = http.post(
+            LOG_URL, json={"records": [{"blob": log_blob(b"B")}] * 2}, headers=mine
+        )
+        last = http.post(
+            LOG_URL, json={"records": [{"blob": log_blob(b"C")}]}, headers=mine
+        )
+
+    assert first.status_code == 201
+    assert refused.status_code == 409
+    assert refused.json()["code"] == "devicelog_limit"
+    assert last.status_code == 201
+    assert last.json() == {"first_seq": 2, "last_seq": 2}
+    page = http.get(peer_log_url(active_user.id), headers=bearer(peer, peer_device))
+    assert page.json()["head_seq"] == 2
+    assert DeviceLogRecord.objects.filter(user=active_user).count() == 3

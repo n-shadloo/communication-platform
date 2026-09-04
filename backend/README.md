@@ -208,6 +208,7 @@ Every environment variable the code reads, with its default:
 | `ENVELOPE_TTL_DAYS` | `7` | Undelivered-envelope retention, days (delivered rows are deleted on ack; pruning records the per-device `pruned_through` watermark) |
 | `MAILBOX_MAX_BYTES` | `33554432` | Ceiling on the undelivered bytes of one mailbox (32 MiB); a send that would pass it is refused for that device and reported in `full_devices` |
 | `MAX_DEVICES_PER_USER` | `10` | Live-device cap per account |
+| `MAX_DEVICELOG_RECORDS` | `10000` | Ceiling on one account's device-list log; an append past it is `409 devicelog_limit` |
 | `WEB_CONCURRENCY` | `1` | uvicorn worker processes; each opens its own Redis subscription for the gateway bus |
 | `ALLOWED_WS_ORIGINS` | empty (dev: `http://localhost`) | WebSocket Origin allowlist; empty is a deploy-blocking error in prod |
 | `WS_MAX_FRAME` | `524288` | Maximum WebSocket frame, bytes |

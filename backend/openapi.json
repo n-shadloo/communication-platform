@@ -2172,6 +2172,16 @@
             },
             "description": "`scope_forbidden`"
           },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`devicelog_limit`"
+          },
           "413": {
             "content": {
               "application/json": {

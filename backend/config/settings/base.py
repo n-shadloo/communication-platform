@@ -168,6 +168,11 @@ ENVELOPE_TTL_DAYS = env_int("ENVELOPE_TTL_DAYS", default=7)
 # `full_devices`, and the sender retries once the device has drained.
 MAILBOX_MAX_BYTES = env_int("MAILBOX_MAX_BYTES", default=32 * 1024 * 1024)
 MAX_DEVICES_PER_USER = env_int("MAX_DEVICES_PER_USER", default=10)
+# The ceiling on one account's device-list log. The log is append-only and never
+# pruned, and a client appends one record for each device-set change, so ten
+# thousand is a lifetime of changes; without a ceiling one account grows the
+# table at the batch cap times the rate limit for as long as it likes.
+MAX_DEVICELOG_RECORDS = env_int("MAX_DEVICELOG_RECORDS", default=10000)
 
 # Realtime gateway bounds.
 ALLOWED_WS_ORIGINS = env_list("ALLOWED_WS_ORIGINS", default=[])

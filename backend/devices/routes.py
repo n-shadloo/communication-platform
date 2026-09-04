@@ -219,6 +219,7 @@ async def peer_identity(user_id: uuid.UUID):
         *FULL_DEVICE,
         "invalid_request",
         "bad_bucket",
+        "devicelog_limit",
         "payload_too_large",
         "throttled",
     ),
