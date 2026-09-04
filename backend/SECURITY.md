@@ -71,7 +71,7 @@ holds *infrastructure* secrets:
 | Attachment content keys | content | inside E2E messages | never | that attachment only |
 | Recovery secret | content | user-held only | never | can unwrap the key backup → cross-signing private keys |
 | TLS private key | infrastructure | server (nginx) | yes (by definition) | impersonate transport (mitigated by client SPKI pinning); no message content |
-| JWT signing key | infrastructure | server env | yes | mint tokens → account access; cannot decrypt any message |
+| JWT signing key | infrastructure | server env, at least 32 generated characters (`check --deploy` refuses less) | yes | mint tokens → account access; cannot decrypt any message |
 | Django `SECRET_KEY`, Argon2 params | infrastructure | server env | yes | session/signing integrity; no message content |
 | Password hashes (Argon2id) | auth (not a key) | DB | yes (hash only) | offline guessing per account; no message content |
 

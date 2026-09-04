@@ -28,8 +28,10 @@ def redis_requires_a_password(app_configs, **kwargs):
     # Redis listens on loopback of a host shared with other projects, and loopback
     # is reachable by every local process. Without `requirepass` any of them can
     # flush the rate counters and the lockout, publish frames on the fan-out bus
-    # and read the presence sets. ADR-0018.
-    if urlsplit(settings.REDIS_URL).password:
+    # and read the presence sets. ADR-0018. A development machine runs Redis
+    # without a password by design, and `DEBUG` is what names one; the settings
+    # a deployment runs set it off, and `security.W018` says so when they do not.
+    if settings.DEBUG or urlsplit(settings.REDIS_URL).password:
         return []
     return [
         Error(
@@ -37,6 +39,31 @@ def redis_requires_a_password(app_configs, **kwargs):
             "configuration and carry it as redis://:<password>@127.0.0.1:6379/0.",
             id="core.E004",
         )
+    ]
+
+
+@register(Tags.security, deploy=True)
+def infrastructure_secrets_are_strong(app_configs, **kwargs):
+    from django.conf import settings
+
+    # Django checks the strength of SECRET_KEY itself (security.W009). These two
+    # are the other secrets this process signs with: the signing key mints a
+    # token for any account, and the LiveKit secret a join token for any room.
+    # HS256 wants a key of at least 256 bits, and nothing else refused a short
+    # value, the development fallback, or a key shared with SECRET_KEY.
+    weak = []
+    key = settings.JWT_SIGNING_KEY
+    if len(key) < 32 or key == "dev-insecure-jwt-key" or key == settings.SECRET_KEY:
+        weak.append("JWT_SIGNING_KEY")
+    if settings.LIVEKIT_URL and len(settings.LIVEKIT_API_SECRET) < 32:
+        weak.append("LIVEKIT_API_SECRET")
+    return [
+        Error(
+            f"{name} is weak: it must be at least 32 characters, generated, and "
+            "shared with nothing else.",
+            id="core.E005",
+        )
+        for name in weak
     ]
 
 

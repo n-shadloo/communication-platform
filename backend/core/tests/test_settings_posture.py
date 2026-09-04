@@ -274,6 +274,43 @@ class BasePostureTests(SimpleTestCase):
         self.assertIn("core.E004", failing)
         self.assertNotIn("core.E004", passing)
 
+    def test_the_deploy_checks_refuse_a_weak_infrastructure_secret(self):
+        """The signing key mints a token for any account, and the LiveKit secret
+        mints a join token for any room. Django checks its own SECRET_KEY's
+        strength and nothing checked these two, so a short value or the
+        development fallback reached production in silence."""
+        strong = "s" * 32
+        cases = {
+            "short signing key": {"JWT_SIGNING_KEY": "s" * 31},
+            "the development fallback": {"JWT_SIGNING_KEY": "dev-insecure-jwt-key"},
+            "the signing key reused as SECRET_KEY": {
+                "JWT_SIGNING_KEY": strong,
+                "SECRET_KEY": strong,
+            },
+            "short LiveKit secret with voice configured": {
+                "LIVEKIT_URL": "wss://chat.example",
+                "LIVEKIT_API_KEY": "key",
+                "LIVEKIT_API_SECRET": "s" * 31,
+            },
+        }
+        for label, overrides in cases.items():
+            with self.subTest(label), override_settings(**overrides):
+                self.assertIn("core.E005", deploy_check_ids(), label)
+
+        with override_settings(
+            JWT_SIGNING_KEY=strong,
+            SECRET_KEY="k" * 50,
+            LIVEKIT_URL="wss://chat.example",
+            LIVEKIT_API_KEY="key",
+            LIVEKIT_API_SECRET="l" * 32,
+        ):
+            self.assertNotIn("core.E005", deploy_check_ids())
+        # Voice off: the LiveKit secret is not read at all, so an empty one passes.
+        with override_settings(
+            JWT_SIGNING_KEY=strong, LIVEKIT_URL="", LIVEKIT_API_SECRET=""
+        ):
+            self.assertNotIn("core.E005", deploy_check_ids())
+
 
 class ProdPostureTests(SimpleTestCase):
     """`config.settings.prod` is what `check --deploy` runs against."""

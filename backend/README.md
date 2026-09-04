@@ -184,7 +184,7 @@ Every environment variable the code reads, with its default:
 | `DB_POOL_MAX_SIZE` | `16` | psycopg connection pool, maximum size; the ceiling on what one process takes from `max_connections` |
 | `DB_POOL_TIMEOUT` | `10` | Seconds to wait for a pooled connection |
 | `REDIS_URL` | `redis://127.0.0.1:6379/0` | Redis URL for the rate counters, the login lockout, the gateway bus, and room presence. Production carries the `requirepass` value as `redis://:<password>@127.0.0.1:6379/0`; `check --deploy` refuses a URL without one (`core.E004`) |
-| `JWT_SIGNING_KEY` | — (required) | HS256 signing key for all JWTs |
+| `JWT_SIGNING_KEY` | — (required) | HS256 signing key for all JWTs; at least 32 characters and never equal to `DJANGO_SECRET_KEY`, or `check --deploy` refuses it (`core.E005`) |
 | `ACCESS_MIN` | `15` | Access-token lifetime, minutes |
 | `REFRESH_DAYS` | `14` | Refresh-token lifetime, days |
 | `REGISTER_SCOPE_ACCESS_MIN` | `10` | Register-scope token lifetime, minutes |
@@ -215,7 +215,7 @@ Every environment variable the code reads, with its default:
 | `SIGNAL_MAX` | `16384` | Maximum volatile-signal blob, characters |
 | `LIVEKIT_URL` | empty | Client-facing LiveKit URL; voice is 503 when unset |
 | `LIVEKIT_API_KEY` | empty | LiveKit API key |
-| `LIVEKIT_API_SECRET` | empty | LiveKit API secret (infrastructure secret, not a media key) |
+| `LIVEKIT_API_SECRET` | empty | LiveKit API secret (infrastructure secret, not a media key); at least 32 characters when voice is configured, or `check --deploy` refuses it (`core.E005`) |
 | `LIVEKIT_TOKEN_TTL_SECONDS` | `300` | LiveKit join-token lifetime, seconds |
 
 `.env.example` lists all of these plus `DJANGO_SETTINGS_MODULE` and the two coturn
