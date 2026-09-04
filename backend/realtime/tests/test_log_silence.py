@@ -13,9 +13,21 @@ from contextlib import contextmanager
 
 import pytest
 
-from realtime import bus
+from realtime import bus, gateway
 
-from .conftest import bearer, connect_ok, envelope_blob, expect_close, mint_access, ws
+from .conftest import (
+    bearer,
+    connect_ok,
+    envelope_blob,
+    expect_close,
+    mint_access,
+    probe,
+    ws,
+)
+
+# A string no client should ever send: a NUL, two more control characters, and
+# enough shape to be recognisable if any layer echoes it back.
+CONTROL_BLOB = "ciphertext\x00\x01\x1f-with-control-characters"
 
 pytestmark = pytest.mark.django_db(transaction=True)
 
@@ -117,3 +129,94 @@ async def test_every_socket_scenario_emits_no_identifier_or_payload(
     for line in lines:
         for label, secret in forbidden.items():
             assert secret not in line, f"{label} leaked into a log line: {line[:80]}"
+
+
+async def test_the_whole_malformed_frame_class_emits_no_identifier_or_payload(
+    active_user, device, peer, peer_device
+):
+    """Every shape a client can get wrong, in one capture window.
+
+    The frames that are dropped go down one socket, because the point of dropping
+    them is that the socket survives; each frame that closes needs a socket of its
+    own. A traceback is the usual way a value reaches a log line, so the frames
+    carrying control characters and a NUL are here as much for the close paths as
+    for the parse.
+    """
+    access = await mint_access(active_user, device)
+    room_id = str(uuid.uuid4())
+
+    with raw_root_capture() as lines:
+        logging.getLogger("test.canary").debug("canary")
+
+        comm = await connect_ok(bearer(access))
+        for frame in (
+            {"type": "ack", "ids": "not-a-list"},
+            {"type": "ack", "ids": []},
+            {"type": "ack", "ids": [str(uuid.uuid4()) for _ in range(201)]},
+            {"type": "ack", "ids": [CONTROL_BLOB]},
+            {"type": "signal", "to_device": str(peer_device.id), "blob": 7},
+            {"type": "signal", "to_device": CONTROL_BLOB, "blob": "x"},
+            {"type": "subscribe_presence", "device_ids": [CONTROL_BLOB]},
+            {"type": "subscribe_presence", "device_ids": "not-a-list"},
+            {"type": "room_subscribe", "room_id": room_id},
+            {"type": "room_subscribe", "room_id": CONTROL_BLOB},
+            {"type": "room_leave", "room_id": room_id},
+            {"type": "room_signal", "room_id": room_id, "blob": CONTROL_BLOB},
+            {"type": CONTROL_BLOB},
+        ):
+            await comm.send_json_to(frame)
+        await probe(comm, device.id)  # every one of them dropped, the socket alive
+        await comm.disconnect()
+
+        for text, binary in (
+            ("{definitely not json", None),
+            ('"a scalar"', None),
+            ("[1, 2, 3]", None),
+            (None, CONTROL_BLOB.encode()),
+        ):
+            closing = await connect_ok(bearer(access))
+            await closing.send_to(text_data=text, bytes_data=binary)
+            await expect_close(closing, 4008)
+
+    assert any("canary" in line for line in lines), "log capture was not live"
+    forbidden = {
+        "device id": str(device.id),
+        "peer device id": str(peer_device.id),
+        "room id": room_id,
+        "control payload": CONTROL_BLOB,
+        "access token": access,
+        "user id": str(active_user.id),
+    }
+    for line in lines:
+        for label, secret in forbidden.items():
+            assert secret not in line, f"{label} leaked into a log line: {line[:80]}"
+
+
+async def test_a_slow_consumer_close_names_neither_the_device_nor_its_backlog(
+    active_user, device, monkeypatch
+):
+    """The one close the client did not ask for by sending a bad frame. Whatever the
+    server says about it would name the socket it dropped, and the frames it was
+    holding for that socket are envelopes."""
+    monkeypatch.setattr(gateway, "SEND_QUEUE_MAX", 2)
+    blob = envelope_blob(b"q")
+
+    with raw_root_capture() as lines:
+        logging.getLogger("test.canary").debug("canary")
+        # The wire holds one frame, so a peer that never reads blocks the send loop
+        # after the first and everything behind it piles up in the send queue.
+        comm = await connect_ok(
+            bearer(await mint_access(active_user, device)), outbound_max=1
+        )
+        for index in range(10):
+            await bus.push_envelopes([(device.id, str(uuid.uuid4()), index + 1, blob)])
+        while True:
+            out = await comm.receive_output(timeout=2)
+            if out["type"] == "websocket.close":
+                assert out["code"] == 4008
+                break
+
+    assert any("canary" in line for line in lines), "log capture was not live"
+    for line in lines:
+        assert str(device.id) not in line, f"the device id leaked: {line[:80]}"
+        assert blob not in line, f"an envelope blob leaked: {line[:80]}"

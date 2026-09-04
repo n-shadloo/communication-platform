@@ -19,6 +19,7 @@ either implementation is caught here rather than on the VPS.
 """
 
 import asyncio
+import json
 import socket
 import threading
 
@@ -143,3 +144,45 @@ async def test_a_shutdown_closes_a_live_socket_with_1012(
 
     assert closed.value.rcvd is not None, "the socket dropped without a close frame"
     assert closed.value.rcvd.code == 1012
+
+
+async def test_the_bare_handshake_and_its_auth_frame_work_through_a_real_server(
+    server, active_user, device
+):
+    """The browser path end to end. Every other test of it drives the ASGI
+    application directly, where the accept is a message rather than an HTTP 101 —
+    so this is the one place that shows a socket with no `Authorization` header
+    surviving a real upgrade and then authenticating in band."""
+    access = await mint_access(active_user, device)
+
+    async with websockets.connect(server.url) as client:
+        await client.send(json.dumps({"type": "auth", "access": access}))
+        await client.send(
+            json.dumps({"type": "signal", "to_device": str(device.id), "blob": "probe"})
+        )
+
+        async with asyncio.timeout(STARTUP_TIMEOUT_SECONDS):
+            frame = json.loads(await client.recv())
+
+    assert frame == {"type": "signal", "blob": "probe"}
+
+
+async def test_a_protocol_violation_after_the_accept_arrives_as_a_close_frame(
+    server, active_user, device
+):
+    """The other half of what this file exists to draw. A refusal decided before
+    the accept is an HTTP failure with no code on it; once a socket is accepted
+    the documented code is a real close frame, and a client can read it."""
+    access = await mint_access(active_user, device)
+
+    async with websockets.connect(
+        server.url, additional_headers={"authorization": f"Bearer {access}"}
+    ) as client:
+        await client.send(b"\x00\x01")  # binary: this protocol is JSON text only
+
+        with pytest.raises(ConnectionClosed) as closed:
+            async with asyncio.timeout(STARTUP_TIMEOUT_SECONDS):
+                await client.recv()
+
+    assert closed.value.rcvd is not None, "the socket dropped without a close frame"
+    assert closed.value.rcvd.code == 4008

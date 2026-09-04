@@ -1,12 +1,14 @@
 """The socket authenticates with REST's strength: full scope, live device, matching
 token_generation, active user. A failed handshake joins no group."""
 
+import asyncio
+
 import pytest
 from django.utils import timezone
 
 from api.auth import issue_register_scope
 from api.orm import run_unit
-from realtime.bus import get_subscriber
+from realtime.bus import device_topic, get_subscriber
 
 from .conftest import bearer, connect_ok, expect_close, mint_access, probe, ws
 
@@ -166,6 +168,90 @@ async def test_missing_token_closes_4001_at_the_deadline(db, monkeypatch):
     monkeypatch.setattr("realtime.gateway.AUTH_DEADLINE_SECONDS", 0.05)
     comm = await connect_ok([])
     await expect_close(comm, 4001)
+
+
+async def test_the_deadline_leaves_a_socket_that_authenticated_in_time_alone(
+    active_user, device, monkeypatch
+):
+    """The deadline bounds an unauthenticated socket and nothing else. A timer that
+    fired regardless would close every browser connection half a second into its
+    session, and the header path would never see it because it never arms one."""
+    monkeypatch.setattr("realtime.gateway.AUTH_DEADLINE_SECONDS", 0.5)
+    comm = await connect_ok([])
+
+    await comm.send_json_to(
+        {"type": "auth", "access": await mint_access(active_user, device)}
+    )
+    await probe(comm, device.id)  # barrier: the bind is complete
+    await asyncio.sleep(0.6)  # past the deadline the socket armed at accept
+
+    await probe(comm, device.id)
+    await comm.disconnect()
+
+
+async def test_a_header_that_is_not_a_bearer_token_leaves_the_socket_on_the_bare_path(
+    db, monkeypatch
+):
+    """`Authorization` is parsed, not trusted: a header this gateway cannot read is
+    no token at all, which is the state a browser connects in. Refusing the
+    handshake instead would turn a proxy that rewrites the header into a client
+    that can never connect, and treating it as authentication would open a socket
+    on nothing."""
+    monkeypatch.setattr("realtime.gateway.AUTH_DEADLINE_SECONDS", 0.05)
+
+    for header in (b"Basic Zm9vOmJhcg==", b"Bearer", b"Bearer a b", b"   "):
+        comm = await connect_ok([(b"authorization", header)])
+        await expect_close(comm, 4001)  # accepted, then unauthenticated at the deadline
+
+
+async def test_an_auth_frame_whose_access_is_not_a_string_closes_4001(db):
+    """A JSON object where the token belongs reaches the verifier as something it
+    cannot decode. It is refused the way a garbage token is, rather than raising
+    inside the decoder with the value in the traceback."""
+    comm = await connect_ok([])
+
+    await comm.send_json_to({"type": "auth", "access": {"forged": True}})
+
+    await expect_close(comm, 4001)
+    assert no_topic_is_held()
+
+
+async def test_an_auth_frame_with_no_access_field_closes_4001(db):
+    comm = await connect_ok([])
+
+    await comm.send_json_to({"type": "auth"})
+
+    await expect_close(comm, 4001)
+    assert no_topic_is_held()
+
+
+async def test_a_second_auth_frame_on_a_bound_socket_is_ignored(active_user, device):
+    """Once bound, `auth` is just another type the handler does not know, so it is
+    dropped like any unknown frame. Re-binding would let one socket change the
+    device it delivers for, mid-session, without the topic it holds changing."""
+    comm = await connect_ok(bearer(await mint_access(active_user, device)))
+
+    await comm.send_json_to(
+        {"type": "auth", "access": await mint_access(active_user, device)}
+    )
+
+    await probe(comm, device.id)
+    await comm.disconnect()
+
+
+async def test_a_bind_takes_the_device_topic_and_a_disconnect_gives_it_back(
+    active_user, device
+):
+    """The subscription is the socket's half of delivery, and it is per topic
+    rather than a pattern: a topic left held after the socket is gone keeps this
+    worker receiving a departed device's envelopes for the life of the process."""
+    comm = await connect_ok(bearer(await mint_access(active_user, device)))
+    await probe(comm, device.id)
+
+    assert get_subscriber()._sinks.keys() == {device_topic(device.id)}
+
+    await comm.disconnect()
+    assert no_topic_is_held()
 
 
 # ---- origin allowlist -------------------------------------------------------

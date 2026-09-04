@@ -127,3 +127,56 @@ async def test_a_fan_out_larger_than_the_pipeline_budget_is_split(
         "publishes": 0,
         "executes": -(-len(frames) // per_batch),
     }
+
+
+async def test_a_payload_the_encoder_refuses_drops_the_whole_batch(round_trips):
+    """The encoding is inside the same best-effort bracket as the round trip, so a
+    payload no caller should have built cannot take down the send that built it.
+    Nothing is written either, which is what makes the batch all-or-nothing here
+    rather than half-published."""
+    frames = [(bus.device_topic("encoder-refusal"), {"blob": object()})]
+
+    assert await bus.publish_many(frames) is None
+
+    assert round_trips == {"publishes": 0, "executes": 0}
+
+
+async def test_a_batch_that_lands_exactly_on_the_budget_costs_one_round_trip(
+    round_trips, monkeypatch
+):
+    """The budget is a threshold the loop crosses, and the flush that follows the
+    loop must cost nothing when the loop already emptied the buffer. Otherwise
+    every fan-out that divides evenly into the budget pays a round trip for a
+    pipeline with no commands in it."""
+    payload = {"blob": "x" * 100}
+    each = len(json.dumps(payload))
+    frames = [(bus.device_topic(f"exact-{index}"), payload) for index in range(4)]
+    monkeypatch.setattr(bus, "PIPELINE_BYTES", each * len(frames))
+
+    await bus.publish_many(frames)
+
+    assert round_trips == {"publishes": 0, "executes": 1}
+
+
+async def test_a_push_gives_each_recipient_its_own_envelope_frame():
+    """One accepted send fans out to one copy per recipient device, and each copy
+    carries that device's own row id and sequence. A frame that carried the
+    sender's, or one recipient's id on another's topic, would be a message the
+    client cannot ack."""
+    subscriber = bus.get_subscriber()
+    first, second = [], []
+    await subscriber.subscribe(bus.device_topic("push-first"), first.append)
+    await subscriber.subscribe(bus.device_topic("push-second"), second.append)
+
+    await bus.push_envelopes(
+        [
+            ("push-first", "id-one", 1, "blob-one"),
+            ("push-second", "id-two", 7, "blob-two"),
+        ]
+    )
+
+    async with asyncio.timeout(5):
+        while not (first and second):
+            await asyncio.sleep(0.01)
+    assert first == [{"type": "envelope", "id": "id-one", "seq": 1, "blob": "blob-one"}]
+    assert second == [{"type": "envelope", "id": "id-two", "seq": 7, "blob": "blob-two"}]

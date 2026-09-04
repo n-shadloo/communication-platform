@@ -11,7 +11,15 @@ import pytest
 from api.orm import run_unit
 from realtime import bus
 
-from .conftest import bearer, connect_ok, expect_close, http_request, mint_access, ws
+from .conftest import (
+    bearer,
+    connect_ok,
+    expect_close,
+    http_request,
+    mint_access,
+    probe,
+    ws,
+)
 
 pytestmark = pytest.mark.django_db(transaction=True)
 
@@ -88,3 +96,36 @@ class _SwallowMessages:
 
     def add(self, level, message, extra_tags=""):
         pass
+
+
+async def test_the_logout_route_closes_every_socket_of_the_device(active_user, device):
+    """Signing out on the phone has to take the phone's socket with it. The route
+    bumps `token_generation` and publishes the close, and both sockets the device
+    holds are on one topic, so both hear it."""
+    access = await mint_access(active_user, device)
+    first = await connect_ok(bearer(access))
+    second = await connect_ok(bearer(access))
+
+    resp = await http_request("POST", "/api/v1/auth/logout", access)
+    assert resp.status_code == 204
+
+    await expect_close(first, 4003)
+    await expect_close(second, 4003)
+
+    retry = ws(bearer(access))
+    connected, code = await retry.connect(timeout=2)
+    assert (connected, code) == (False, 4001)
+
+
+async def test_a_close_event_for_another_device_leaves_this_socket_alone(
+    active_user, device, peer, peer_device
+):
+    """The close rides the revoked device's own topic, so it reaches that device's
+    sockets and nothing else. A close that fanned out wider would sign out every
+    client of the account each time one of them lost a device."""
+    comm = await connect_ok(bearer(await mint_access(active_user, device)))
+
+    await bus.publish(bus.device_topic(peer_device.id), {"type": bus.CLOSE})
+
+    await probe(comm, device.id)
+    await comm.disconnect()

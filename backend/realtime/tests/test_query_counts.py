@@ -8,11 +8,13 @@ autocommit flag disagrees with its settings, which inside pytest-django's atomic
 block is every connection, and the reopen then fails with "Cannot open a new
 connection in an atomic block"."""
 
+import uuid
+
 import pytest
 from django.db import connection
 from django.test.utils import CaptureQueriesContext
 
-from api.auth import issue_full
+from api.auth import issue_full, issue_register_scope
 from core.buckets import ENVELOPE_BUCKETS
 from messaging.models import QueuedEnvelope
 from realtime.auth import (
@@ -98,3 +100,42 @@ def test_a_bind_costs_the_token_check_and_the_activity_stamp(active_user, device
     queries = _count(_authenticate_access, access) + _count(_touch_active, device.id)
 
     assert len(queries) == 2
+
+
+def test_a_token_that_fails_verification_costs_no_query_at_all(db):
+    """Signature and expiry are settled in memory, before anything is looked up. A
+    flood of garbage tokens against `/ws` is otherwise a flood of device lookups on
+    the one thread every socket of the worker shares."""
+    assert _count(_authenticate_access, "not-a-jwt") == []
+
+
+def test_a_register_scope_token_never_reaches_the_device_row(active_user):
+    """Scope is checked before the lookup, so the endpoint a register token does
+    not open costs it nothing to be refused from — and the refusal cannot be timed
+    against a device row that may or may not exist."""
+    token = issue_register_scope(active_user)
+
+    assert _count(_authenticate_access, token) == []
+
+
+def test_room_existence_for_a_room_that_is_not_there_is_still_one_query(db):
+    """The miss is the common case on this path: a client that reconnects into a
+    room the operator has since deleted. It costs the same single `EXISTS` the hit
+    does, and nothing follows it."""
+    queries = _count(_room_exists, str(uuid.uuid4()))
+
+    assert len(queries) == 1
+    assert queries[0].startswith("SELECT")
+
+
+def test_an_ack_naming_rows_that_are_not_there_is_still_one_statement(device):
+    """Ids outside this device's mailbox match nothing, which is the documented
+    answer for a duplicate ack and for an id from another device. It must not
+    become a lookup for each id."""
+    queries = _count(_delete_envelopes, device.id, [uuid.uuid4() for _ in range(50)])
+
+    deletes = [q for q in queries if q.startswith("DELETE")]
+    assert len(deletes) == 1
+    assert all(
+        q.startswith(TXN_BOOKKEEPING) for q in queries if not q.startswith("DELETE")
+    )

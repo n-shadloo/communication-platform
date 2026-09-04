@@ -13,6 +13,7 @@ reconnecting.
 
 import threading
 import time
+import uuid
 
 import pytest
 from django.db import connections, transaction
@@ -96,3 +97,39 @@ def test_the_first_bind_of_the_day_still_records_it(device):
     _touch_active(device.id)
     device.refresh_from_db()
     assert device.last_active_date == timezone.now().date()
+
+
+def test_two_binds_of_one_device_race_without_deadlocking(device):
+    """Two sockets of one device reconnecting at once — a phone waking while a
+    laptop resumes — run this unit on two connections against one row. Both are
+    conditional updates of that row, so the second waits out the first's row lock
+    and neither is chosen as a deadlock victim."""
+    failures = []
+
+    def bind():
+        try:
+            _touch_active(device.id)
+        except Exception as failure:  # the race is the point: record, never raise
+            failures.append(failure)
+        finally:
+            connections.close_all()
+
+    threads = [threading.Thread(target=bind) for _ in range(2)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(HOLD_SECONDS * 2)
+
+    assert failures == []
+    device.refresh_from_db()
+    assert device.last_active_date == timezone.now().date()
+
+
+def test_a_bind_for_a_device_that_is_gone_writes_nothing(device):
+    """The row can be deleted between the token check and the stamp — a revoke
+    that lands mid-bind. The filter then matches nothing, which is a write of zero
+    rows rather than an error the socket has to survive."""
+    _touch_active(uuid.uuid4())
+
+    device.refresh_from_db()
+    assert device.last_active_date is None
