@@ -344,6 +344,23 @@ ceiling the security audit added put a `full_devices` list into the `202` body o
 `POST /api/v1/envelopes`, recorded under **What the security audit bounded**. The
 sentence now says which change it is scoped to.
 
+## What the test suite found at the column boundaries
+
+Run 12 drove every route in `core`, `api`, `accounts`, `devices`, `vault` and the
+migrations with malformed input, and three routes answered `500` to a body the schema
+existed to filter. All three are fixed. A `500` on input is a defect on this surface,
+never a documented answer, so a client that branched on one was branching on a bug.
+
+| Item | Old behaviour | New behaviour | Client action |
+|---|---|---|---|
+| `PUT /api/v1/me/profile` and `PUT /api/v1/me/keybackup` with `version` above 2147483647 | `500 {"code": "server_error"}`. `version` lands in a 32-bit column and the schema bounded it below but not above, so the integer reached PostgreSQL as a `DataError` | `400 {"code": "invalid_request", "detail": {"version": [...]}}`. `accounts.schemas.BlobIn` now carries the ceiling, which both routes inherit. `version` = 2147483647 is still accepted and still stores | None, unless the client generated versions without a bound. The ceiling is the column's, not a policy: a client that increments a version per write will not reach it |
+| `POST /api/v1/auth/login` with a NUL byte in `username` | `500 {"code": "server_error"}` on **anonymous** input. PostgreSQL text carries no NUL, so psycopg refused the lookup rather than returning no row | `401 {"code": "invalid_credentials"}`, the same answer every other unregistrable name gets | None. Deliberately not a `400`: `LoginIn` treats a badly shaped name as wrong credentials rather than a malformed request, and answering otherwise would tell an anonymous caller which names the column could have held |
+
+`POST /api/v1/auth/register` was already correct — a control character in a username
+has always been `400 invalid_request` there — so the two surfaces now agree: a name
+that could never be registered is wrong credentials at login, and a malformed name is
+a refusal at registration.
+
 ## What the client can build against now
 
 **The surface is frozen at `v1` from this merge.** It is published two ways and they

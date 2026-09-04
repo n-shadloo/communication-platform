@@ -77,9 +77,22 @@ def login(username, password, device_id):
         raise ApiError(503, "unavailable", "The service is temporarily unavailable.")
     if wait:
         raise ApiError(429, "throttled", NAME_LOCKED, {"Retry-After": str(wait)})
-    user = (
-        User.objects.filter(username=username).only("id", "password", "is_active").first()
-    )
+    if "\x00" in username:
+        # PostgreSQL text carries no NUL, so psycopg refuses the lookup outright
+        # rather than returning no row, and the route answers an unauthenticated
+        # 500 without this. `RegisterIn` refuses the byte, so no stored name can
+        # hold one: a name carrying it is a name nobody has, which is the branch
+        # below. Deliberately not a `400` — `LoginIn` documents that a badly
+        # shaped name is wrong credentials rather than a malformed request, and
+        # answering otherwise here would tell an anonymous caller which names the
+        # column could have held.
+        user = None
+    else:
+        user = (
+            User.objects.filter(username=username)
+            .only("id", "password", "is_active")
+            .first()
+        )
     if user is None:
         check_password(password, DUMMY_HASH)  # equalize timing
         lockout.note_failure(username, lockout.API)
