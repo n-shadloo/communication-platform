@@ -36,8 +36,9 @@ from voicerooms.routes import router as voicerooms_router
 API_PREFIX = "/api/v1"
 
 
-def build_limits():
-    """The body cap and the deadline of each route class.
+def route_limits():
+    """The body cap and the deadline of each route class, and the class each route
+    takes.
 
     Four classes, and every route names one. The JSON class covers a body of a
     few fields; the backup class the one blob an account keeps whole; the batch
@@ -91,8 +92,15 @@ def build_limits():
         f"{API_PREFIX}/rooms/{{room_id}}/token": json_class,
     }
 
+    return per_route, json_class
+
+
+def build_limits():
+    """The lookup the middleware stack holds: a path to the limits it carries."""
+    per_route, fallback = route_limits()
+
     def limits_for(path):
-        return per_route.get(path, json_class)
+        return per_route.get(path, fallback)
 
     return limits_for
 

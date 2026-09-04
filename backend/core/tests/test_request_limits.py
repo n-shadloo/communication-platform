@@ -11,7 +11,10 @@ import json
 
 import anyio
 import pytest
+from django.conf import settings
+from fastapi.routing import iter_route_contexts
 
+from api.app import route_limits
 from api.middleware import (
     SECURITY_HEADERS,
     BodyCap,
@@ -21,6 +24,8 @@ from api.middleware import (
     ThreadSensitive,
     TrustedHost,
 )
+from config.asgi import api_application
+from core.buckets import ATTACHMENT_BUCKETS
 
 CAP = Limits(body_bytes=16, deadline_seconds=0.05)
 
@@ -235,3 +240,33 @@ class TestThroughTheWholeStack:
 
         assert response.status_code == 400
         assert response.json()["code"] == "invalid_request"
+
+
+class TestTheRouteLimitTable:
+    """Which cap and which deadline each route takes. Both are contract: a body
+    between two caps is a `413` that used to reach the route, and a deadline is the
+    point a slow request becomes a `503`."""
+
+    def test_every_route_the_api_serves_names_a_class(self):
+        """A route missing from the table takes the fallback in silence, and the
+        fallback is 16 KiB — small enough to refuse a legal prekey batch."""
+        per_route, _fallback = route_limits()
+        served = {context.path for context in iter_route_contexts(api_application.routes)}
+
+        assert served == set(per_route)
+
+    def test_the_upload_route_takes_the_largest_bucket_plus_the_wrapper(self):
+        per_route, _fallback = route_limits()
+        limits = per_route["/api/v1/attachments"]
+
+        assert limits.body_bytes == (
+            max(ATTACHMENT_BUCKETS) + settings.MULTIPART_OVERHEAD_BYTES
+        )
+        assert limits.deadline_seconds == settings.UPLOAD_DEADLINE_SECONDS
+
+    def test_a_path_no_route_claims_takes_the_smallest_class(self):
+        """Only the admin, and the static files in development, reach it."""
+        _per_route, fallback = route_limits()
+
+        assert fallback.body_bytes == settings.BODY_CAP_JSON_BYTES
+        assert fallback.deadline_seconds == settings.REQUEST_DEADLINE_SECONDS

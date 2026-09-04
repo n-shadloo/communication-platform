@@ -14,7 +14,9 @@ Two properties make this stricter than per-app spot checks:
   root-only swap, which is what assertLogs does, never sees them).
 
 One httpx client over the composed ASGI application drives every HTTP route, and a
-Channels communicator drives the socket. The httpx client logs the URL of every
+Channels communicator drives the socket. The client records what it asked for, so
+`core/tests/test_log_silence.py` can hold the pass to the whole route table rather
+than to whatever it happened to call. The httpx client logs the URL of every
 request it makes, which is a request path in a log line — the suite's
 `conftest.py` disables that logger, because the client is this harness and not the
 server.
@@ -111,7 +113,7 @@ async def _scripted_device_traffic(client, s):
     """The device registry and the mailbox: register, cross-sign, publish an
     identity, append and read the device log, then send, drain and ack an
     envelope. Every one of these carries key material or ciphertext."""
-    from core.buckets import DEVICELOG_BUCKETS, ENVELOPE_BUCKETS
+    from core.buckets import DEVICELOG_BUCKETS, ENVELOPE_BUCKETS, LABEL_BUCKETS
 
     # No cross_sig here: the bundle it signs covers the device_id this call assigns,
     # so registration refuses the field. It goes to the prekeys endpoint below, which
@@ -160,6 +162,46 @@ async def _scripted_device_traffic(client, s):
         headers=auth,
     )
     assert r.status_code == 200, f"identity publish: {r.status_code}"
+    r = await client.get(f"/api/v1/users/{s['user id']}/identity", headers=auth)
+    assert r.status_code == 200, f"identity read: {r.status_code}"
+
+    # A second device, so the revocation below ends something other than the
+    # device this pass is authenticated as. Its own key material joins the set.
+    s["second device identity key"] = _b64_filled(64, 0x32)
+    r = await client.post(
+        "/api/v1/me/devices",
+        json={
+            "ik_pub": s["second device identity key"],
+            "spk_id": 2,
+            "spk_pub": _b64_filled(32, 0x33),
+            "spk_sig": _b64_filled(32, 0x34),
+            "registration_id": 4343,
+            "otpks": [{"key_id": 2, "pub": _b64_filled(32, 0x35)}],
+        },
+        headers=auth,
+    )
+    assert r.status_code == 201, f"second device register: {r.status_code}"
+    s["second device id"] = r.json()["device_id"]
+    s["second device access token"] = r.json()["access"]
+
+    # Rename, list, count, then revoke the second device. The label is client
+    # ciphertext and the revocation is the one write that reaches a live socket.
+    s["device label blob"] = _b64_filled(min(LABEL_BUCKETS), 0x1B)
+    r = await client.put(
+        f"/api/v1/me/devices/{s['device id']}",
+        json={"label_blob": s["device label blob"]},
+        headers=auth,
+    )
+    assert r.status_code == 200, f"relabel: {r.status_code}"
+    r = await client.get("/api/v1/me/devices", headers=auth)
+    assert r.status_code == 200, f"own device list: {r.status_code}"
+    r = await client.get(
+        f"/api/v1/me/devices/{s['device id']}/prekeys/count", headers=auth
+    )
+    assert r.status_code == 200, f"prekey count: {r.status_code}"
+    r = await client.delete(f"/api/v1/me/devices/{s['second device id']}", headers=auth)
+    assert r.status_code == 204, f"revoke: {r.status_code}"
+
     s["device log blob"] = _b64_filled(min(DEVICELOG_BUCKETS), 0xD1)
     r = await client.post(
         "/api/v1/me/devicelog",
@@ -224,6 +266,15 @@ async def _scripted_blob_traffic(client, s):
     )
     assert r.status_code == 201, f"room create: {r.status_code}"
     s["room id"] = r.json()["room_id"]
+    r = await client.get(f"/api/v1/rooms/{s['room id']}", headers=auth)
+    assert r.status_code == 200, f"room read: {r.status_code}"
+    s["room rename blob"] = _b64_filled(min(NAME_BUCKETS), 0xB7)
+    r = await client.put(
+        f"/api/v1/rooms/{s['room id']}",
+        json={"name_blob": s["room rename blob"]},
+        headers=auth,
+    )
+    assert r.status_code == 200, f"room rename: {r.status_code}"
     r = await client.post(f"/api/v1/rooms/{s['room id']}/token", headers=auth)
     assert r.status_code == 200, f"room token: {r.status_code}"
     s["livekit join token"] = r.json()["token"]
@@ -238,6 +289,8 @@ async def _scripted_account_state_traffic(client, s):
 
     auth = {"Authorization": f"Bearer {s['access token']}"}
 
+    r = await client.get("/api/v1/health")
+    assert r.status_code == 200, f"health: {r.status_code}"
     r = await client.get("/api/v1/users", headers=auth)
     assert r.status_code == 200, f"directory: {r.status_code}"
 
@@ -250,6 +303,8 @@ async def _scripted_account_state_traffic(client, s):
     assert r.status_code == 200, f"profile write: {r.status_code}"
     r = await client.get(f"/api/v1/users/{s['user id']}/profile", headers=auth)
     assert r.status_code == 200, f"peer profile read: {r.status_code}"
+    r = await client.get("/api/v1/me/profile", headers=auth)
+    assert r.status_code == 200, f"own profile read: {r.status_code}"
 
     s["key backup blob"] = _b64_filled(min(BACKUP_BUCKETS), 0xB4)
     r = await client.put(
@@ -312,7 +367,10 @@ def scan(lines, secrets):
 
 
 async def run_audit(probe=None):
-    """Run the scripted sequence under full capture. Returns (leaks, secrets, lines).
+    """Run the scripted sequence under full capture.
+
+    Returns (leaks, secrets, lines, requested), where `requested` is every
+    (method, path) the pass asked for, in order.
 
     `probe(secrets)` is a test hook, called inside the capture window after the
     scripted traffic, so the suite can prove the audit still catches a deliberate
@@ -328,11 +386,18 @@ async def run_audit(probe=None):
 
     transport = ASGITransport(app=config.asgi.application)
     lifespan = config.asgi.api_application.router.lifespan_context
+    requested = []
+
+    async def record(request):
+        requested.append((request.method, request.url.path))
+
     with capture_all_logging() as lines:
         logging.getLogger("ops.audit.canary").debug(CANARY_OPEN)
         async with lifespan(config.asgi.api_application):
             async with AsyncClient(
-                transport=transport, base_url="http://testserver"
+                transport=transport,
+                base_url="http://testserver",
+                event_hooks={"request": [record]},
             ) as client:
                 secrets = await _scripted_account_traffic(client)
                 await _scripted_device_traffic(client, secrets)
@@ -349,4 +414,4 @@ async def run_audit(probe=None):
         raise RuntimeError(
             "log capture stopped before the run ended; this audit proved nothing"
         )
-    return scan(lines, secrets), secrets, lines
+    return scan(lines, secrets), secrets, lines, requested

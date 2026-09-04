@@ -73,7 +73,7 @@ runtime path.
 | Migration files | 16 — accounts 1, attachments 1, devices 10, messaging 1, vault 2, voicerooms 1 | `ls -1 */migrations/0*.py \| wc -l` | 2026-09-04 |
 | Tracked Python files | 178 | `git ls-files '*.py' \| wc -l` | 2026-09-04 |
 | Test files | 66 | `git ls-files '*/test_*.py' \| wc -l` | 2026-09-04 |
-| Tests collected | 716, plus 44 subtests | `pytest -q` | 2026-09-04 |
+| Tests collected | 720, plus 44 subtests | `pytest -q` | 2026-09-04 |
 | URL routes declared | 1 `path()` entry across the `urls.py` files — the admin — plus `staticfiles_urlpatterns()` under `DEBUG`, and 32 FastAPI method-and-path pairs over 27 distinct paths | `grep -rhn "path(" --include='urls.py' . \| wc -l`, and `core/tests/test_route_table.py` for the FastAPI table | 2026-09-04 |
 | Project apps | `api/` is a Python package and not an installed app: it holds no model and appears in no `INSTALLED_APPS` | `INSTALLED_APPS` | 2026-09-04 |
 | Production hardware | 1 vCPU, 1 GB RAM, single VPS | operator statement; no host metric exists yet | 2026-09-03 |
@@ -88,8 +88,8 @@ table whose size follows traffic, and nothing has measured it.
 
 | Operation | The duration | The conditions of the run | verified |
 |---|---|---|---|
-| Full test suite | 36.1 s, 716 passed | Developer machine, `pytest -q`, native PostgreSQL 16 and Redis 7 on loopback, random order (`pytest-randomly` seed reported per run) | 2026-09-04 |
-| Full test suite, second order | 42.2 s, 716 passed | Same machine, a different `pytest-randomly` order in the same session. The spread between the two orders is the cost of the `transaction=True` tests, whose table truncation lands in a different place each run | 2026-09-04 |
+| Full test suite | 37.4 s, 720 passed | Developer machine, `pytest -q`, native PostgreSQL 16 and Redis 7 on loopback, random order (`pytest-randomly` seed reported per run) | 2026-09-04 |
+| Full test suite, second order | 36.8 s, 720 passed | Same machine, a different `pytest-randomly` order in the same session. The spread between the two orders is the cost of the `transaction=True` tests, whose table truncation lands in a different place each run | 2026-09-04 |
 | `AddField` for `Device.refresh_generation` | 5.1 ms over a 200 000-row probe table, with no rewrite | `psql`, inside a rolled-back transaction: the `relfilenode` was unchanged, and `pg_locks` showed ACCESS EXCLUSIVE on the table alone | 2026-09-04 |
 | Test-database teardown | warns on roughly one run in three: `database "test_chatapp" is being accessed by other users`, one session | Developer machine, `pytest -q` repeated. It is a teardown warning and never a failure; the suite is green either way, and CI is unaffected because each run builds a fresh database. Reproduced with `DB_POOL_MIN_SIZE=0`, so it is not the pool's idle connection but a connection a worker thread still holds when `destroy_test_db` runs | 2026-09-04 |
 | Send fan-out | 3 queries of its own, at 1, 6 and 20 recipients alike, and 3 for ten envelopes to one mailbox: one locked liveness read, one bulk counter update, one bulk insert. A batch that reaches only stale devices costs the liveness read alone. The authentication dependency adds one query to every route | `CaptureQueriesContext` over the composed application, transaction statements excluded, in `messaging/tests/test_query_counts.py` | 2026-09-04 |
