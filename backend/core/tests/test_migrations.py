@@ -33,7 +33,7 @@ HISTORY = {
     "accounts": [INITIAL],
     "attachments": [INITIAL],
     "devices": [INITIAL],
-    "messaging": [INITIAL],
+    "messaging": [INITIAL, "0002_index_the_retention_filter"],
     "vault": [INITIAL],
     "voicerooms": [INITIAL],
 }

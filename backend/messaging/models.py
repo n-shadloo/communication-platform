@@ -36,3 +36,11 @@ class QueuedEnvelope(models.Model):
                 fields=["recipient_device", "seq"], name="uq_queue_device_seq"
             ),
         ]
+        # The retention sweep is the one query that filters this table on nothing but
+        # `queued_hour`, and it runs hourly against the largest table in the schema.
+        # Without the index it is a sequential scan on every pass — including the
+        # common pass where nothing has expired: 28 736 buffers and 26.5 ms against a
+        # seeded 245 MB copy, where the index costs 2 buffers and 0.012 ms. It is the
+        # one index here whose plan is recorded rather than argued
+        # (`docs/architecture/GROUND-TRUTH.md`).
+        indexes = [models.Index(fields=["queued_hour"], name="ix_queue_queued_hour")]

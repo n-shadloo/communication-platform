@@ -4,6 +4,7 @@ from io import StringIO
 
 import pytest
 from django.core.management import call_command
+from django.db import connection
 from django.utils import timezone
 
 from attachments.models import Attachment
@@ -203,3 +204,23 @@ def test_pruning_a_device_out_of_existence_takes_its_queue(active_user, settings
     doomed.delete()
 
     assert QueuedEnvelope.objects.count() == 0
+
+
+@pytest.mark.django_db
+def test_the_retention_filter_column_carries_an_index():
+    """The sweep runs hourly and filters the largest table on `queued_hour` alone.
+
+    Without an index that filter is a sequential scan of the whole table on every
+    pass, including the common pass where nothing has expired at all. Measured on
+    a seeded copy (200 000 envelopes, 245 MB): 28 736 buffers and 26.5 ms with
+    nothing to delete, against 2 buffers and 0.012 ms once the index exists. The
+    plans are recorded in `docs/architecture/GROUND-TRUTH.md`.
+    """
+    with connection.cursor() as cursor:
+        cursor.execute(
+            "SELECT indexdef FROM pg_indexes WHERE tablename = %s",
+            [QueuedEnvelope._meta.db_table],
+        )
+        definitions = [row[0] for row in cursor.fetchall()]
+
+    assert any("(queued_hour" in definition for definition in definitions), definitions
