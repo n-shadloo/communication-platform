@@ -1,0 +1,4543 @@
+{
+  "components": {
+    "schemas": {
+      "AckIn": {
+        "additionalProperties": false,
+        "properties": {
+          "ids": {
+            "default": [],
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 200,
+            "title": "Ids",
+            "type": "array"
+          }
+        },
+        "title": "AckIn",
+        "type": "object"
+      },
+      "AckOut": {
+        "properties": {
+          "deleted": {
+            "title": "Deleted",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "deleted"
+        ],
+        "title": "AckOut",
+        "type": "object"
+      },
+      "AttachmentOut": {
+        "properties": {
+          "attachment_id": {
+            "title": "Attachment Id",
+            "type": "string"
+          },
+          "size": {
+            "title": "Size",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "attachment_id",
+          "size"
+        ],
+        "title": "AttachmentOut",
+        "type": "object"
+      },
+      "ClaimIn": {
+        "additionalProperties": false,
+        "description": "`{device_ids?}`. An absent list claims every live device of the account; an\nexplicit `[]` claims none.",
+        "properties": {
+          "device_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "maxItems": 100,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Device Ids"
+          }
+        },
+        "title": "ClaimIn",
+        "type": "object"
+      },
+      "ClaimOut": {
+        "properties": {
+          "bundles": {
+            "items": {
+              "$ref": "#/components/schemas/ClaimedBundleOut"
+            },
+            "title": "Bundles",
+            "type": "array"
+          }
+        },
+        "required": [
+          "bundles"
+        ],
+        "title": "ClaimOut",
+        "type": "object"
+      },
+      "ClaimedBundleOut": {
+        "description": "One X3DH bundle.\n\nThe four PQ members and `otpk` are absent from the body when the device holds\nno such material, never null and never zero-filled: a classical-only bundle\nmust be visibly classical-only, and an exhausted one-time pool must be\nvisibly exhausted. The route serialises with `exclude_unset`, so a member the\nservice left out of the dict does not reach the client. `cross_sig` is the\nopposite case and is always present, null included \u2014 an unsigned device must\nlook unsigned rather than absent.",
+        "properties": {
+          "bundle_version": {
+            "title": "Bundle Version",
+            "type": "integer"
+          },
+          "cross_sig": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cross Sig"
+          },
+          "device_id": {
+            "title": "Device Id",
+            "type": "string"
+          },
+          "ik_pub": {
+            "title": "Ik Pub",
+            "type": "string"
+          },
+          "otpk": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ClaimedOtpkOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "pq_otpk": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ClaimedOtpkOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "pq_spk_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pq Spk Id"
+          },
+          "pq_spk_pub": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pq Spk Pub"
+          },
+          "pq_spk_sig": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pq Spk Sig"
+          },
+          "registration_id": {
+            "title": "Registration Id",
+            "type": "integer"
+          },
+          "spk_id": {
+            "title": "Spk Id",
+            "type": "integer"
+          },
+          "spk_pub": {
+            "title": "Spk Pub",
+            "type": "string"
+          },
+          "spk_sig": {
+            "title": "Spk Sig",
+            "type": "string"
+          }
+        },
+        "required": [
+          "device_id",
+          "registration_id",
+          "ik_pub",
+          "spk_id",
+          "spk_pub",
+          "spk_sig",
+          "cross_sig",
+          "bundle_version"
+        ],
+        "title": "ClaimedBundleOut",
+        "type": "object"
+      },
+      "ClaimedOtpkOut": {
+        "properties": {
+          "key_id": {
+            "title": "Key Id",
+            "type": "integer"
+          },
+          "pub": {
+            "title": "Pub",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key_id",
+          "pub"
+        ],
+        "title": "ClaimedOtpkOut",
+        "type": "object"
+      },
+      "DeviceLogAppendIn": {
+        "additionalProperties": false,
+        "properties": {
+          "records": {
+            "items": {
+              "$ref": "#/components/schemas/DeviceLogRecordIn"
+            },
+            "maxItems": 50,
+            "minItems": 1,
+            "title": "Records",
+            "type": "array"
+          }
+        },
+        "required": [
+          "records"
+        ],
+        "title": "DeviceLogAppendIn",
+        "type": "object"
+      },
+      "DeviceLogAppendOut": {
+        "properties": {
+          "first_seq": {
+            "title": "First Seq",
+            "type": "integer"
+          },
+          "last_seq": {
+            "title": "Last Seq",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "first_seq",
+          "last_seq"
+        ],
+        "title": "DeviceLogAppendOut",
+        "type": "object"
+      },
+      "DeviceLogPageOut": {
+        "properties": {
+          "has_more": {
+            "title": "Has More",
+            "type": "boolean"
+          },
+          "head_seq": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Head Seq"
+          },
+          "records": {
+            "items": {
+              "$ref": "#/components/schemas/DeviceLogRecordOut"
+            },
+            "title": "Records",
+            "type": "array"
+          }
+        },
+        "required": [
+          "records",
+          "has_more",
+          "head_seq"
+        ],
+        "title": "DeviceLogPageOut",
+        "type": "object"
+      },
+      "DeviceLogRecordIn": {
+        "additionalProperties": false,
+        "description": "Record contents are client-defined ciphertext-shaped blobs; the only check\nis the bucket length. In particular the hash chain inside them is NOT validated\n\u2014 see `devices.services.append_log`.",
+        "properties": {
+          "blob": {
+            "maxLength": 1376,
+            "minLength": 1,
+            "title": "Blob",
+            "type": "string"
+          }
+        },
+        "required": [
+          "blob"
+        ],
+        "title": "DeviceLogRecordIn",
+        "type": "object"
+      },
+      "DeviceLogRecordOut": {
+        "properties": {
+          "blob": {
+            "title": "Blob",
+            "type": "string"
+          },
+          "seq": {
+            "title": "Seq",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "seq",
+          "blob"
+        ],
+        "title": "DeviceLogRecordOut",
+        "type": "object"
+      },
+      "DeviceRegisteredOut": {
+        "properties": {
+          "access": {
+            "title": "Access",
+            "type": "string"
+          },
+          "device_id": {
+            "title": "Device Id",
+            "type": "string"
+          },
+          "refresh": {
+            "title": "Refresh",
+            "type": "string"
+          },
+          "scope": {
+            "title": "Scope",
+            "type": "string"
+          }
+        },
+        "required": [
+          "device_id",
+          "access",
+          "refresh",
+          "scope"
+        ],
+        "title": "DeviceRegisteredOut",
+        "type": "object"
+      },
+      "DirectoryOut": {
+        "properties": {
+          "users": {
+            "items": {
+              "$ref": "#/components/schemas/DirectoryUserOut"
+            },
+            "title": "Users",
+            "type": "array"
+          }
+        },
+        "required": [
+          "users"
+        ],
+        "title": "DirectoryOut",
+        "type": "object"
+      },
+      "DirectoryUserOut": {
+        "properties": {
+          "user_id": {
+            "title": "User Id",
+            "type": "string"
+          },
+          "username": {
+            "title": "Username",
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_id",
+          "username"
+        ],
+        "title": "DirectoryUserOut",
+        "type": "object"
+      },
+      "DrainOut": {
+        "properties": {
+          "envelopes": {
+            "items": {
+              "$ref": "#/components/schemas/EnvelopeOut"
+            },
+            "title": "Envelopes",
+            "type": "array"
+          },
+          "has_more": {
+            "title": "Has More",
+            "type": "boolean"
+          },
+          "pruned_through": {
+            "title": "Pruned Through",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "envelopes",
+          "has_more",
+          "pruned_through"
+        ],
+        "title": "DrainOut",
+        "type": "object"
+      },
+      "EnvelopeOut": {
+        "properties": {
+          "blob": {
+            "title": "Blob",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "seq": {
+            "title": "Seq",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "seq",
+          "blob"
+        ],
+        "title": "EnvelopeOut",
+        "type": "object"
+      },
+      "ErrorOut": {
+        "description": "The error envelope. `detail` is a string on every code but\n`invalid_request`, where it maps a field path to the messages that failed.",
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "additionalProperties": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                "type": "object"
+              }
+            ],
+            "title": "Detail"
+          }
+        },
+        "required": [
+          "code",
+          "detail"
+        ],
+        "title": "ErrorOut",
+        "type": "object"
+      },
+      "FullScopeOut": {
+        "description": "The login answer when the request named a live device of the account.",
+        "properties": {
+          "access": {
+            "title": "Access",
+            "type": "string"
+          },
+          "device_id": {
+            "title": "Device Id",
+            "type": "string"
+          },
+          "refresh": {
+            "title": "Refresh",
+            "type": "string"
+          },
+          "scope": {
+            "const": "full",
+            "title": "Scope",
+            "type": "string"
+          },
+          "user_id": {
+            "title": "User Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "scope",
+          "access",
+          "refresh",
+          "user_id",
+          "device_id"
+        ],
+        "title": "FullScopeOut",
+        "type": "object"
+      },
+      "HealthOut": {
+        "description": "Liveness and nothing else: no version, no build, no component status.",
+        "properties": {
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "HealthOut",
+        "type": "object"
+      },
+      "IdentityIn": {
+        "additionalProperties": false,
+        "description": "Cross-signing identity upload. Like every signature this server stores, the\nbytes are stored and relayed, never verified: master_sig binds the subkeys to\nthe master key, and only clients \u2014 holding the out-of-band-confirmed master \u2014\ncan check that binding.",
+        "properties": {
+          "master_pub": {
+            "contentMediaType": "application/octet-stream",
+            "title": "Master Pub",
+            "type": "string"
+          },
+          "master_sig": {
+            "contentMediaType": "application/octet-stream",
+            "title": "Master Sig",
+            "type": "string"
+          },
+          "self_signing_pub": {
+            "contentMediaType": "application/octet-stream",
+            "title": "Self Signing Pub",
+            "type": "string"
+          },
+          "user_signing_pub": {
+            "contentMediaType": "application/octet-stream",
+            "title": "User Signing Pub",
+            "type": "string"
+          },
+          "version": {
+            "maximum": 2147483647.0,
+            "minimum": 0.0,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "master_pub",
+          "self_signing_pub",
+          "user_signing_pub",
+          "master_sig",
+          "version"
+        ],
+        "title": "IdentityIn",
+        "type": "object"
+      },
+      "IdentityOut": {
+        "properties": {
+          "master_pub": {
+            "title": "Master Pub",
+            "type": "string"
+          },
+          "master_sig": {
+            "title": "Master Sig",
+            "type": "string"
+          },
+          "self_signing_pub": {
+            "title": "Self Signing Pub",
+            "type": "string"
+          },
+          "user_signing_pub": {
+            "title": "User Signing Pub",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "master_pub",
+          "self_signing_pub",
+          "user_signing_pub",
+          "master_sig",
+          "version"
+        ],
+        "title": "IdentityOut",
+        "type": "object"
+      },
+      "KeyBackupIn": {
+        "additionalProperties": false,
+        "properties": {
+          "blob": {
+            "maxLength": 1398112,
+            "title": "Blob",
+            "type": "string"
+          },
+          "version": {
+            "minimum": 0.0,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "version",
+          "blob"
+        ],
+        "title": "KeyBackupIn",
+        "type": "object"
+      },
+      "KeyBackupOut": {
+        "properties": {
+          "blob": {
+            "title": "Blob",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "blob",
+          "version"
+        ],
+        "title": "KeyBackupOut",
+        "type": "object"
+      },
+      "LabelUpdateIn": {
+        "additionalProperties": false,
+        "properties": {
+          "label_blob": {
+            "maxLength": 1376,
+            "minLength": 1,
+            "title": "Label Blob",
+            "type": "string"
+          }
+        },
+        "required": [
+          "label_blob"
+        ],
+        "title": "LabelUpdateIn",
+        "type": "object"
+      },
+      "LoginIn": {
+        "additionalProperties": false,
+        "description": "Login parses anonymous input, so every field is typed here: a non-string\nusername and a non-UUID device id are both unauthenticated `500`s otherwise.\nThe username shape is deliberately not validated \u2014 a badly shaped name is\nwrong credentials, not a malformed request.",
+        "properties": {
+          "device_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Device Id"
+          },
+          "password": {
+            "maxLength": 256,
+            "title": "Password",
+            "type": "string"
+          },
+          "username": {
+            "maxLength": 32,
+            "title": "Username",
+            "type": "string"
+          }
+        },
+        "required": [
+          "username",
+          "password"
+        ],
+        "title": "LoginIn",
+        "type": "object"
+      },
+      "OtpkCountOut": {
+        "properties": {
+          "otpk_count": {
+            "title": "Otpk Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "otpk_count"
+        ],
+        "title": "OtpkCountOut",
+        "type": "object"
+      },
+      "OtpkIn": {
+        "additionalProperties": false,
+        "properties": {
+          "key_id": {
+            "maximum": 2147483647.0,
+            "minimum": 0.0,
+            "title": "Key Id",
+            "type": "integer"
+          },
+          "pub": {
+            "contentMediaType": "application/octet-stream",
+            "title": "Pub",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key_id",
+          "pub"
+        ],
+        "title": "OtpkIn",
+        "type": "object"
+      },
+      "OutgoingItemIn": {
+        "additionalProperties": false,
+        "properties": {
+          "blob": {
+            "maxLength": 349536,
+            "minLength": 1,
+            "title": "Blob",
+            "type": "string"
+          },
+          "device_id": {
+            "format": "uuid",
+            "title": "Device Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "device_id",
+          "blob"
+        ],
+        "title": "OutgoingItemIn",
+        "type": "object"
+      },
+      "OwnDeviceListOut": {
+        "properties": {
+          "devices": {
+            "items": {
+              "$ref": "#/components/schemas/OwnDeviceOut"
+            },
+            "title": "Devices",
+            "type": "array"
+          },
+          "log_head_seq": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Log Head Seq"
+          }
+        },
+        "required": [
+          "devices",
+          "log_head_seq"
+        ],
+        "title": "OwnDeviceListOut",
+        "type": "object"
+      },
+      "OwnDeviceOut": {
+        "properties": {
+          "created_date": {
+            "title": "Created Date",
+            "type": "string"
+          },
+          "device_id": {
+            "title": "Device Id",
+            "type": "string"
+          },
+          "label_blob": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label Blob"
+          },
+          "last_active_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Active Date"
+          },
+          "this_device": {
+            "title": "This Device",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "device_id",
+          "label_blob",
+          "created_date",
+          "last_active_date",
+          "this_device"
+        ],
+        "title": "OwnDeviceOut",
+        "type": "object"
+      },
+      "PeerDeviceListOut": {
+        "properties": {
+          "devices": {
+            "items": {
+              "$ref": "#/components/schemas/PeerDeviceOut"
+            },
+            "title": "Devices",
+            "type": "array"
+          },
+          "etag": {
+            "title": "Etag",
+            "type": "string"
+          },
+          "log_head_seq": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Log Head Seq"
+          }
+        },
+        "required": [
+          "devices",
+          "etag",
+          "log_head_seq"
+        ],
+        "title": "PeerDeviceListOut",
+        "type": "object"
+      },
+      "PeerDeviceOut": {
+        "properties": {
+          "bundle_version": {
+            "title": "Bundle Version",
+            "type": "integer"
+          },
+          "cross_sig": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cross Sig"
+          },
+          "device_id": {
+            "title": "Device Id",
+            "type": "string"
+          },
+          "ik_pub": {
+            "title": "Ik Pub",
+            "type": "string"
+          },
+          "registration_id": {
+            "title": "Registration Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "device_id",
+          "ik_pub",
+          "registration_id",
+          "cross_sig",
+          "bundle_version"
+        ],
+        "title": "PeerDeviceOut",
+        "type": "object"
+      },
+      "PqOtpkIn": {
+        "additionalProperties": false,
+        "properties": {
+          "key_id": {
+            "maximum": 2147483647.0,
+            "minimum": 0.0,
+            "title": "Key Id",
+            "type": "integer"
+          },
+          "pub": {
+            "contentMediaType": "application/octet-stream",
+            "title": "Pub",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key_id",
+          "pub"
+        ],
+        "title": "PqOtpkIn",
+        "type": "object"
+      },
+      "PqSignedPrekeyIn": {
+        "additionalProperties": false,
+        "description": "Same stance as SignedPrekeyIn: the signature is stored and relayed, never\nverified \u2014 the client verifies it against the device identity key.",
+        "properties": {
+          "pub": {
+            "contentMediaType": "application/octet-stream",
+            "title": "Pub",
+            "type": "string"
+          },
+          "sig": {
+            "contentMediaType": "application/octet-stream",
+            "title": "Sig",
+            "type": "string"
+          },
+          "spk_id": {
+            "maximum": 2147483647.0,
+            "minimum": 0.0,
+            "title": "Spk Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "spk_id",
+          "pub",
+          "sig"
+        ],
+        "title": "PqSignedPrekeyIn",
+        "type": "object"
+      },
+      "PrekeyCountOut": {
+        "properties": {
+          "otpk_count": {
+            "title": "Otpk Count",
+            "type": "integer"
+          },
+          "pq_otpk_count": {
+            "title": "Pq Otpk Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "otpk_count",
+          "pq_otpk_count"
+        ],
+        "title": "PrekeyCountOut",
+        "type": "object"
+      },
+      "PrekeyReplenishIn": {
+        "additionalProperties": false,
+        "properties": {
+          "bundle_version": {
+            "anyOf": [
+              {
+                "maximum": 2147483647.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bundle Version"
+          },
+          "cross_sig": {
+            "anyOf": [
+              {
+                "contentMediaType": "application/octet-stream",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cross Sig"
+          },
+          "otpks": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/OtpkIn"
+            },
+            "maxItems": 200,
+            "title": "Otpks",
+            "type": "array"
+          },
+          "pq_otpks": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/PqOtpkIn"
+            },
+            "maxItems": 100,
+            "title": "Pq Otpks",
+            "type": "array"
+          },
+          "pq_spk": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PqSignedPrekeyIn"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "spk": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SignedPrekeyIn"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "title": "PrekeyReplenishIn",
+        "type": "object"
+      },
+      "ProfileIn": {
+        "additionalProperties": false,
+        "properties": {
+          "blob": {
+            "maxLength": 8192,
+            "title": "Blob",
+            "type": "string"
+          },
+          "version": {
+            "minimum": 0.0,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "version",
+          "blob"
+        ],
+        "title": "ProfileIn",
+        "type": "object"
+      },
+      "ProfileOut": {
+        "properties": {
+          "blob": {
+            "title": "Blob",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "blob",
+          "version"
+        ],
+        "title": "ProfileOut",
+        "type": "object"
+      },
+      "RefreshIn": {
+        "additionalProperties": false,
+        "properties": {
+          "refresh": {
+            "maxLength": 4096,
+            "title": "Refresh",
+            "type": "string"
+          }
+        },
+        "required": [
+          "refresh"
+        ],
+        "title": "RefreshIn",
+        "type": "object"
+      },
+      "RegisterDeviceIn": {
+        "additionalProperties": false,
+        "properties": {
+          "bundle_version": {
+            "title": "Bundle Version"
+          },
+          "cross_sig": {
+            "title": "Cross Sig"
+          },
+          "ik_pub": {
+            "contentMediaType": "application/octet-stream",
+            "title": "Ik Pub",
+            "type": "string"
+          },
+          "label_blob": {
+            "anyOf": [
+              {
+                "maxLength": 1376,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label Blob"
+          },
+          "otpks": {
+            "items": {
+              "$ref": "#/components/schemas/OtpkIn"
+            },
+            "maxItems": 200,
+            "title": "Otpks",
+            "type": "array"
+          },
+          "pq_otpks": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/PqOtpkIn"
+            },
+            "maxItems": 100,
+            "title": "Pq Otpks",
+            "type": "array"
+          },
+          "pq_spk": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PqSignedPrekeyIn"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "registration_id": {
+            "maximum": 2147483647.0,
+            "minimum": 0.0,
+            "title": "Registration Id",
+            "type": "integer"
+          },
+          "spk_id": {
+            "maximum": 2147483647.0,
+            "minimum": 0.0,
+            "title": "Spk Id",
+            "type": "integer"
+          },
+          "spk_pub": {
+            "contentMediaType": "application/octet-stream",
+            "title": "Spk Pub",
+            "type": "string"
+          },
+          "spk_sig": {
+            "contentMediaType": "application/octet-stream",
+            "title": "Spk Sig",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ik_pub",
+          "spk_id",
+          "spk_pub",
+          "spk_sig",
+          "registration_id",
+          "otpks"
+        ],
+        "title": "RegisterDeviceIn",
+        "type": "object"
+      },
+      "RegisterIn": {
+        "additionalProperties": false,
+        "properties": {
+          "password": {
+            "maxLength": 256,
+            "title": "Password",
+            "type": "string"
+          },
+          "username": {
+            "maxLength": 32,
+            "title": "Username",
+            "type": "string"
+          }
+        },
+        "required": [
+          "username",
+          "password"
+        ],
+        "title": "RegisterIn",
+        "type": "object"
+      },
+      "RegisterOut": {
+        "properties": {
+          "user_id": {
+            "title": "User Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_id"
+        ],
+        "title": "RegisterOut",
+        "type": "object"
+      },
+      "RegisterScopeOut": {
+        "description": "The login answer when the request named no live device of the account: a\nshort token whose only power is `POST /me/devices`. It carries no refresh\ntoken, because the pair a refresh rotates is bound to a device.",
+        "properties": {
+          "access": {
+            "title": "Access",
+            "type": "string"
+          },
+          "scope": {
+            "const": "register",
+            "title": "Scope",
+            "type": "string"
+          },
+          "user_id": {
+            "title": "User Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "scope",
+          "access",
+          "user_id"
+        ],
+        "title": "RegisterScopeOut",
+        "type": "object"
+      },
+      "RoomCreatedOut": {
+        "properties": {
+          "room_id": {
+            "title": "Room Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "room_id"
+        ],
+        "title": "RoomCreatedOut",
+        "type": "object"
+      },
+      "RoomNameIn": {
+        "additionalProperties": false,
+        "properties": {
+          "name_blob": {
+            "maxLength": 1376,
+            "minLength": 1,
+            "title": "Name Blob",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name_blob"
+        ],
+        "title": "RoomNameIn",
+        "type": "object"
+      },
+      "RoomOut": {
+        "properties": {
+          "live_count": {
+            "title": "Live Count",
+            "type": "integer"
+          },
+          "name_blob": {
+            "title": "Name Blob",
+            "type": "string"
+          },
+          "room_id": {
+            "title": "Room Id",
+            "type": "string"
+          },
+          "updated_date": {
+            "title": "Updated Date",
+            "type": "string"
+          }
+        },
+        "required": [
+          "room_id",
+          "name_blob",
+          "updated_date",
+          "live_count"
+        ],
+        "title": "RoomOut",
+        "type": "object"
+      },
+      "RoomTokenOut": {
+        "properties": {
+          "expires_in": {
+            "title": "Expires In",
+            "type": "integer"
+          },
+          "token": {
+            "title": "Token",
+            "type": "string"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "url",
+          "token",
+          "expires_in"
+        ],
+        "title": "RoomTokenOut",
+        "type": "object"
+      },
+      "SendIn": {
+        "additionalProperties": false,
+        "properties": {
+          "messages": {
+            "items": {
+              "$ref": "#/components/schemas/OutgoingItemIn"
+            },
+            "maxItems": 256,
+            "minItems": 1,
+            "title": "Messages",
+            "type": "array"
+          }
+        },
+        "required": [
+          "messages"
+        ],
+        "title": "SendIn",
+        "type": "object"
+      },
+      "SendOut": {
+        "properties": {
+          "accepted": {
+            "title": "Accepted",
+            "type": "integer"
+          },
+          "stale_devices": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Stale Devices",
+            "type": "array"
+          }
+        },
+        "required": [
+          "accepted",
+          "stale_devices"
+        ],
+        "title": "SendOut",
+        "type": "object"
+      },
+      "SignedPrekeyIn": {
+        "additionalProperties": false,
+        "description": "The signature is stored and relayed, never verified: checking it would mean\nthe server parsing key material and committing to a curve, and the client is the\nparty that must verify spk_sig against ik_pub as part of X3DH. Validating it\nhere would imply a guarantee the server does not keep.",
+        "properties": {
+          "pub": {
+            "contentMediaType": "application/octet-stream",
+            "title": "Pub",
+            "type": "string"
+          },
+          "sig": {
+            "contentMediaType": "application/octet-stream",
+            "title": "Sig",
+            "type": "string"
+          },
+          "spk_id": {
+            "maximum": 2147483647.0,
+            "minimum": 0.0,
+            "title": "Spk Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "spk_id",
+          "pub",
+          "sig"
+        ],
+        "title": "SignedPrekeyIn",
+        "type": "object"
+      },
+      "TokenPairOut": {
+        "properties": {
+          "access": {
+            "title": "Access",
+            "type": "string"
+          },
+          "refresh": {
+            "title": "Refresh",
+            "type": "string"
+          }
+        },
+        "required": [
+          "access",
+          "refresh"
+        ],
+        "title": "TokenPairOut",
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "title": "communication platform",
+    "version": "v1"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/api/v1/attachments": {
+      "post": {
+        "description": "Store one already-encrypted, already-padded blob under a fresh capability id.\n\nThe bytes reach the disk before any row names them, which is the order that\nkeeps a failed write off the download path: no row exists for a file that was\nnever finished. The reverse order would publish a capability id for bytes that\nare not there.",
+        "operationId": "upload_attachment",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "properties": {
+                  "blob": {
+                    "description": "One already-encrypted, already-padded blob, of exactly one attachment bucket length.",
+                    "format": "binary",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "blob"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AttachmentOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`invalid_request`, `bad_bucket`"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`unauthenticated`, `invalid_token`, `token_revoked`"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`scope_forbidden`"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`payload_too_large`, `quota_exceeded`"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`throttled`"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`server_error`"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`unavailable`"
+          }
+        },
+        "summary": "Upload Attachment",
+        "tags": [
+          "attachments"
+        ]
+      }
+    },
+    "/api/v1/attachments/{attachment_id}": {
+      "get": {
+        "description": "Hand the bytes to nginx. This process never streams a file.\n\nAny live token may fetch by id; the unguessable id is the gate. The path is\nbuilt from the id the row holds, which is server-generated, so no request\nvalue ever steers it.",
+        "operationId": "download_attachment",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "attachment_id",
+            "required": true,
+            "schema": {
+              "title": "Attachment Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
+              }
+            },
+            "description": "The stored blob."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`unauthenticated`, `invalid_token`, `token_revoked`"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`scope_forbidden`"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`not_found`"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`throttled`"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`server_error`"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`unavailable`"
+          }
+        },
+        "summary": "Download Attachment",
+        "tags": [
+          "attachments"
+        ]
+      }
+    },
+    "/api/v1/auth/login": {
+      "post": {
+        "description": "Two success shapes: a full-scope pair when `device_id` names a live device\nof this account, and a register-scope token otherwise.",
+        "operationId": "login",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "discriminator": {
+                    "mapping": {
+                      "full": "#/components/schemas/FullScopeOut",
+                      "register": "#/components/schemas/RegisterScopeOut"
+                    },
+                    "propertyName": "scope"
+                  },
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/RegisterScopeOut"
+                    },
+                    {
+                      "$ref": "#/components/schemas/FullScopeOut"
+                    }
+                  ],
+                  "title": "Response Login"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`invalid_request`"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`invalid_credentials`"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`account_inactive`"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`payload_too_large`"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`throttled`"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`server_error`"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`unavailable`"
+          }
+        },
+        "summary": "Login",
+        "tags": [
+          "accounts"
+        ]
+      }
+    },
+    "/api/v1/auth/logout": {
+      "post": {
+        "description": "Takes no body: the caller is identified by the access token it presents,\nand the device row is what carries the revocation. The presented token dies\nwith the rest of the family, so a second call with it answers 401.",
+        "operationId": "logout",
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`unauthenticated`, `invalid_token`, `token_revoked`"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`scope_forbidden`"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`throttled`"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`server_error`"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`unavailable`"
+          }
+        },
+        "summary": "Logout",
+        "tags": [
+          "accounts"
+        ]
+      }
+    },
+    "/api/v1/auth/refresh": {
+      "post": {
+        "operationId": "refresh",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RefreshIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TokenPairOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`invalid_request`"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`invalid_token`, `token_revoked`"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`payload_too_large`"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`throttled`"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`server_error`"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`unavailable`"
+          }
+        },
+        "summary": "Refresh",
+        "tags": [
+          "accounts"
+        ]
+      }
+    },
+    "/api/v1/auth/register": {
+      "post": {
+        "operationId": "register",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RegisterOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`invalid_request`"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`username_taken`"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`payload_too_large`"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`throttled`"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`server_error`"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`unavailable`"
+          }
+        },
+        "summary": "Register",
+        "tags": [
+          "accounts"
+        ]
+      }
+    },
+    "/api/v1/envelopes": {
+      "post": {
+        "description": "The sender is used only for throttling and is never written; each recipient\ndevice gets its own copy.",
+        "operationId": "send_envelopes",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SendIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SendOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`invalid_request`, `bad_bucket`"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`unauthenticated`, `invalid_token`, `token_revoked`"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`scope_forbidden`"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`payload_too_large`"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`throttled`"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`server_error`"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`unavailable`"
+          }
+        },
+        "summary": "Send Envelopes",
+        "tags": [
+          "messaging"
+        ]
+      }
+    },
+    "/api/v1/health": {
+      "get": {
+        "description": "The client's startup reachability probe. It reads no state, so it needs no\nunit of work and carries no throttle scope.",
+        "operationId": "health",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`server_error`"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`unavailable`"
+          }
+        },
+        "summary": "Health",
+        "tags": [
+          "core"
+        ]
+      }
+    },
+    "/api/v1/me/devicelog": {
+      "post": {
+        "operationId": "append_device_log",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeviceLogAppendIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceLogAppendOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`invalid_request`, `bad_bucket`"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`unauthenticated`, `invalid_token`, `token_revoked`"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`scope_forbidden`"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`payload_too_large`"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`throttled`"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`server_error`"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`unavailable`"
+          }
+        },
+        "summary": "Append Device Log",
+        "tags": [
+          "devices"
+        ]
+      }
+    },
+    "/api/v1/me/devices": {
+      "get": {
+        "operationId": "own_devices",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "if-none-match",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "If-None-Match"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OwnDeviceListOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "304": {
+            "description": "`If-None-Match` carried the current ETag."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`unauthenticated`, `invalid_token`, `token_revoked`"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`scope_forbidden`"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`throttled`"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`server_error`"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`unavailable`"
+          }
+        },
+        "summary": "Own Devices",
+        "tags": [
+          "devices"
+        ]
+      },
+      "post": {
+        "description": "The one route a register-scope token reaches: it mints the device that token\nexists to add, and answers with the full-scope pair bound to it.",
+        "operationId": "register_device",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterDeviceIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceRegisteredOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`invalid_request`, `bad_bucket`, `identity_required`"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`unauthenticated`, `invalid_token`, `token_revoked`"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`device_limit`"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`payload_too_large`"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`throttled`"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`server_error`"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`unavailable`"
+          }
+        },
+        "summary": "Register Device",
+        "tags": [
+          "devices"
+        ]
+      }
+    },
+    "/api/v1/me/devices/{device_id}": {
+      "delete": {
+        "operationId": "revoke_device",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "device_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Device Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`invalid_request`"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`unauthenticated`, `invalid_token`, `token_revoked`"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`scope_forbidden`"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`not_found`"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`throttled`"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`server_error`"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`unavailable`"
+          }
+        },
+        "summary": "Revoke Device",
+        "tags": [
+          "devices"
+        ]
+      },
+      "put": {
+        "operationId": "relabel_device",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "device_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Device Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LabelUpdateIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`invalid_request`, `bad_bucket`"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`unauthenticated`, `invalid_token`, `token_revoked`"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`scope_forbidden`"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`not_found`"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`payload_too_large`"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`throttled`"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`server_error`"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`unavailable`"
+          }
+        },
+        "summary": "Relabel Device",
+        "tags": [
+          "devices"
+        ]
+      }
+    },
+    "/api/v1/me/devices/{device_id}/prekeys": {
+      "put": {
+        "operationId": "replenish_prekeys",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "device_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Device Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PrekeyReplenishIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OtpkCountOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`invalid_request`"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`unauthenticated`, `invalid_token`, `token_revoked`"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`scope_forbidden`, `forbidden`"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`prekey_limit`"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`payload_too_large`"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`throttled`"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`server_error`"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`unavailable`"
+          }
+        },
+        "summary": "Replenish Prekeys",
+        "tags": [
+          "devices"
+        ]
+      }
+    },
+    "/api/v1/me/devices/{device_id}/prekeys/count": {
+      "get": {
+        "operationId": "prekey_count",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "device_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Device Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PrekeyCountOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`invalid_request`"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`unauthenticated`, `invalid_token`, `token_revoked`"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`scope_forbidden`, `forbidden`"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`throttled`"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`server_error`"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`unavailable`"
+          }
+        },
+        "summary": "Prekey Count",
+        "tags": [
+          "devices"
+        ]
+      }
+    },
+    "/api/v1/me/envelopes": {
+      "get": {
+        "operationId": "drain_envelopes",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DrainOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`unauthenticated`, `invalid_token`, `token_revoked`"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`scope_forbidden`"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`throttled`"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`server_error`"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`unavailable`"
+          }
+        },
+        "summary": "Drain Envelopes",
+        "tags": [
+          "messaging"
+        ]
+      }
+    },
+    "/api/v1/me/envelopes/ack": {
+      "post": {
+        "operationId": "ack_envelopes",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AckIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AckOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`invalid_request`"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`unauthenticated`, `invalid_token`, `token_revoked`"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`scope_forbidden`"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`payload_too_large`"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`throttled`"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`server_error`"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`unavailable`"
+          }
+        },
+        "summary": "Ack Envelopes",
+        "tags": [
+          "messaging"
+        ]
+      }
+    },
+    "/api/v1/me/identity": {
+      "put": {
+        "operationId": "publish_identity",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IdentityIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`invalid_request`"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`unauthenticated`, `invalid_token`, `token_revoked`"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`scope_forbidden`"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`stale_version`"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`payload_too_large`"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`throttled`"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`server_error`"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`unavailable`"
+          }
+        },
+        "summary": "Publish Identity",
+        "tags": [
+          "devices"
+        ]
+      }
+    },
+    "/api/v1/me/keybackup": {
+      "get": {
+        "operationId": "read_key_backup",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KeyBackupOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`unauthenticated`, `invalid_token`, `token_revoked`"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`scope_forbidden`"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`not_found`"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`throttled`"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`server_error`"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`unavailable`"
+          }
+        },
+        "summary": "Read Key Backup",
+        "tags": [
+          "vault"
+        ]
+      },
+      "put": {
+        "operationId": "write_key_backup",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/KeyBackupIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`invalid_request`, `bad_bucket`"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`unauthenticated`, `invalid_token`, `token_revoked`"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`scope_forbidden`"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`stale_version`"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`payload_too_large`"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`throttled`"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`server_error`"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`unavailable`"
+          }
+        },
+        "summary": "Write Key Backup",
+        "tags": [
+          "vault"
+        ]
+      }
+    },
+    "/api/v1/me/profile": {
+      "get": {
+        "operationId": "my_profile",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProfileOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`unauthenticated`, `invalid_token`, `token_revoked`"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`scope_forbidden`"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`not_found`"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`throttled`"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`server_error`"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`unavailable`"
+          }
+        },
+        "summary": "My Profile",
+        "tags": [
+          "accounts"
+        ]
+      },
+      "put": {
+        "operationId": "write_my_profile",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProfileIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`invalid_request`, `bad_bucket`"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`unauthenticated`, `invalid_token`, `token_revoked`"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`scope_forbidden`"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`stale_version`"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`payload_too_large`"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`throttled`"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`server_error`"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`unavailable`"
+          }
+        },
+        "summary": "Write My Profile",
+        "tags": [
+          "accounts"
+        ]
+      }
+    },
+    "/api/v1/rooms": {
+      "post": {
+        "description": "The returned id is the capability: anyone who learns it through an\nencrypted invite can read, rename, subscribe and join. There is no owner\ncolumn and no member table.",
+        "operationId": "create_room",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RoomNameIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RoomCreatedOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`invalid_request`, `bad_bucket`"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`unauthenticated`, `invalid_token`, `token_revoked`"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`scope_forbidden`"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`payload_too_large`"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`throttled`"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`server_error`"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`unavailable`"
+          }
+        },
+        "summary": "Create Room",
+        "tags": [
+          "voicerooms"
+        ]
+      }
+    },
+    "/api/v1/rooms/{room_id}": {
+      "get": {
+        "operationId": "read_room",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "room_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Room Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RoomOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`invalid_request`"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`unauthenticated`, `invalid_token`, `token_revoked`"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`scope_forbidden`"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`not_found`"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`throttled`"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`server_error`"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`unavailable`"
+          }
+        },
+        "summary": "Read Room",
+        "tags": [
+          "voicerooms"
+        ]
+      },
+      "put": {
+        "operationId": "rename_room",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "room_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Room Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RoomNameIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`invalid_request`, `bad_bucket`"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`unauthenticated`, `invalid_token`, `token_revoked`"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`scope_forbidden`"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`not_found`"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`payload_too_large`"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`throttled`"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`server_error`"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`unavailable`"
+          }
+        },
+        "summary": "Rename Room",
+        "tags": [
+          "voicerooms"
+        ]
+      }
+    },
+    "/api/v1/rooms/{room_id}/token": {
+      "post": {
+        "description": "Mint a LiveKit join token for this room and the calling device. The server\nsigns the grant and never joins the media path.",
+        "operationId": "mint_room_token",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "room_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Room Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RoomTokenOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`invalid_request`"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`unauthenticated`, `invalid_token`, `token_revoked`"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`scope_forbidden`"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`not_found`"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`throttled`"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`server_error`"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`voice_unconfigured`, `unavailable`"
+          }
+        },
+        "summary": "Mint Room Token",
+        "tags": [
+          "voicerooms"
+        ]
+      }
+    },
+    "/api/v1/users": {
+      "get": {
+        "operationId": "user_directory",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DirectoryOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`unauthenticated`, `invalid_token`, `token_revoked`"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`scope_forbidden`"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`throttled`"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`server_error`"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`unavailable`"
+          }
+        },
+        "summary": "User Directory",
+        "tags": [
+          "accounts"
+        ]
+      }
+    },
+    "/api/v1/users/{user_id}/devicelog": {
+      "get": {
+        "operationId": "peer_device_log",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "User Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "after",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "After"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceLogPageOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`invalid_request`"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`unauthenticated`, `invalid_token`, `token_revoked`"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`scope_forbidden`"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`throttled`"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`server_error`"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`unavailable`"
+          }
+        },
+        "summary": "Peer Device Log",
+        "tags": [
+          "devices"
+        ]
+      }
+    },
+    "/api/v1/users/{user_id}/devices": {
+      "get": {
+        "operationId": "peer_devices",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "User Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "if-none-match",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "If-None-Match"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PeerDeviceListOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "304": {
+            "description": "`If-None-Match` carried the current ETag."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`invalid_request`"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`unauthenticated`, `invalid_token`, `token_revoked`"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`scope_forbidden`"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`throttled`"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`server_error`"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`unavailable`"
+          }
+        },
+        "summary": "Peer Devices",
+        "tags": [
+          "devices"
+        ]
+      }
+    },
+    "/api/v1/users/{user_id}/identity": {
+      "get": {
+        "operationId": "peer_identity",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "User Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentityOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`invalid_request`"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`unauthenticated`, `invalid_token`, `token_revoked`"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`scope_forbidden`"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`not_found`"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`throttled`"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`server_error`"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`unavailable`"
+          }
+        },
+        "summary": "Peer Identity",
+        "tags": [
+          "devices"
+        ]
+      }
+    },
+    "/api/v1/users/{user_id}/keys/claim": {
+      "post": {
+        "operationId": "claim_keys",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "User Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClaimIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClaimOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`invalid_request`"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`unauthenticated`, `invalid_token`, `token_revoked`"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`scope_forbidden`"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`payload_too_large`"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`throttled`"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`server_error`"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`unavailable`"
+          }
+        },
+        "summary": "Claim Keys",
+        "tags": [
+          "devices"
+        ]
+      }
+    },
+    "/api/v1/users/{user_id}/profile": {
+      "get": {
+        "operationId": "peer_profile",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "User Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProfileOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`invalid_request`"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`unauthenticated`, `invalid_token`, `token_revoked`"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`scope_forbidden`"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`not_found`"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`throttled`"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`server_error`"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`unavailable`"
+          }
+        },
+        "summary": "Peer Profile",
+        "tags": [
+          "accounts"
+        ]
+      }
+    }
+  }
+}

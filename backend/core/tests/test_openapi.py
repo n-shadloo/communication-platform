@@ -1,0 +1,255 @@
+"""The OpenAPI document: what it must contain, and the drift gate that keeps it.
+
+FastAPI has no counterpart to a generator warning. A route that declares no
+response model reaches the document as an empty schema and raises nothing, so
+both the drift gate and a diff against a released baseline would pass over a
+document full of holes. This file is the completeness check instead: it walks the
+generated document and fails a route whose declared set is missing what the route
+itself implies. `api/schema.py` is the mechanism it holds to.
+"""
+
+import json
+import warnings
+
+import pytest
+from django.conf import settings
+from fastapi.routing import iter_route_contexts
+
+from api.auth import require_full_device, require_register_or_full
+from api.schema import (
+    FULL_DEVICE,
+    INJECTED_VALIDATION_COMPONENTS,
+    INJECTED_VALIDATION_STATUS,
+    REGISTER_OR_FULL,
+    UNIVERSAL,
+    VOCABULARY,
+)
+from config.asgi import api_application, django_asgi_app
+from core.management.commands.openapi import ARTEFACT, rendered
+from core.tests.test_route_table import DOCUMENTATION
+from devices.routes import require_own_device
+
+ENVELOPE = "#/components/schemas/ErrorOut"
+LIMITER_PREFIX = "rate_limit_"
+# The statuses that are neither a success nor an error: a body was not sent
+# because the client already holds it.
+NOT_MODIFIED = "304"
+
+
+DOCUMENT = api_application.openapi()
+
+# Operation id -> the operation object. Built at collection: the document is a
+# pure function of the routes and the models, so a tree that cannot produce one
+# fails here rather than inside a test.
+OPERATIONS = {
+    operation["operationId"]: operation
+    for path in DOCUMENT["paths"].values()
+    for operation in path.values()
+}
+
+# Operation id -> the route it came from, keyed on the name because
+# `api/schema.py` makes the handler name the operation identifier — which
+# `test_the_operation_identifier_is_the_handler_name` is what proves.
+ROUTES = {
+    context.name: context
+    for context in iter_route_contexts(api_application.routes)
+    if context.methods is not None and context.path not in DOCUMENTATION
+}
+
+WITH_BODY = sorted(
+    operation_id
+    for operation_id, operation in OPERATIONS.items()
+    if "requestBody" in operation
+)
+
+WITH_TYPED_PATH_PARAMETER = sorted(
+    operation_id
+    for operation_id, operation in OPERATIONS.items()
+    if any(
+        parameter["in"] == "path" and parameter["schema"].get("format")
+        for parameter in operation.get("parameters", [])
+    )
+)
+
+
+def statuses(operation, floor=0):
+    return {status for status in operation["responses"] if int(status) >= floor}
+
+
+def implied(context):
+    """The statuses a route answers because of the dependencies it declares,
+    whatever its own body and its own service do."""
+    names = [dep.call.__name__ for dep in context.dependant.dependencies]
+    codes = set(UNIVERSAL)
+    if require_full_device.__name__ in names:
+        codes |= set(FULL_DEVICE)
+    if require_register_or_full.__name__ in names:
+        codes |= set(REGISTER_OR_FULL)
+    if require_own_device.__name__ in names:
+        codes.add("forbidden")
+    if any(name.startswith(LIMITER_PREFIX) for name in names):
+        codes.add("throttled")
+    return {str(VOCABULARY[code]) for code in codes}
+
+
+def test_the_committed_artefact_is_the_generated_document():
+    """The gate `manage.py openapi --check` runs in CI, run here too so a contract
+    change that forgets the artefact fails in the suite rather than on the branch."""
+    path = settings.BASE_DIR / ARTEFACT
+
+    assert path.read_text(encoding="utf-8") == rendered(), (
+        f"{ARTEFACT} has drifted. Run `python manage.py openapi`."
+    )
+
+
+def test_the_artefact_is_written_with_a_stable_key_order():
+    """Two generations of one tree must produce one file, or every drift check
+    after the first is noise."""
+    assert (
+        rendered() == json.dumps(json.loads(rendered()), indent=2, sort_keys=True) + "\n"
+    )
+
+
+@pytest.mark.parametrize("operation_id", sorted(OPERATIONS))
+def test_every_operation_declares_exactly_one_success_response(operation_id):
+    success = {
+        status for status in OPERATIONS[operation_id]["responses"] if status[0] == "2"
+    }
+
+    assert len(success) == 1, operation_id
+
+
+@pytest.mark.parametrize("operation_id", sorted(OPERATIONS))
+def test_no_response_carries_an_untyped_body(operation_id):
+    """The hole a missing response model leaves. FastAPI publishes `{}` for it,
+    which is a well-formed document that describes nothing."""
+    declared = OPERATIONS[operation_id]
+    untyped = [
+        f"{status} {media}"
+        for status, response in declared["responses"].items()
+        for media, body in response.get("content", {}).items()
+        if not body.get("schema")
+    ]
+
+    assert untyped == [], operation_id
+
+
+@pytest.mark.parametrize("operation_id", sorted(OPERATIONS))
+def test_every_response_carries_a_description(operation_id):
+    """The OpenAPI Response Object requires one, and a document that omits it
+    fails validation in the client generator rather than here."""
+    declared = OPERATIONS[operation_id]
+    undescribed = [
+        status
+        for status, response in declared["responses"].items()
+        if not response.get("description")
+    ]
+
+    assert undescribed == [], operation_id
+
+
+@pytest.mark.parametrize("operation_id", sorted(OPERATIONS))
+def test_every_error_response_renders_the_envelope(operation_id):
+    """One envelope on every error of this API, so a client branches on `code`
+    rather than on a shape it has to discover per route."""
+    declared = OPERATIONS[operation_id]
+    wrong = {
+        status: response.get("content")
+        for status, response in declared["responses"].items()
+        if int(status) >= 400
+        and response["content"]["application/json"]["schema"].get("$ref") != ENVELOPE
+    }
+
+    assert wrong == {}, operation_id
+
+
+@pytest.mark.parametrize("operation_id", sorted(ROUTES))
+def test_every_operation_declares_the_errors_its_dependencies_imply(operation_id):
+    """The gate on the next endpoint. A route that declares a requirement and a
+    limiter can answer their refusals whatever its own body does, so the document
+    carries them or this fails."""
+    missing = implied(ROUTES[operation_id]) - statuses(OPERATIONS[operation_id])
+
+    assert missing == set(), operation_id
+
+
+@pytest.mark.parametrize("operation_id", WITH_BODY)
+def test_an_operation_that_takes_a_body_declares_the_two_refusals_of_one(
+    operation_id,
+):
+    """A validation failure and a body above the route cap. Both are answered
+    before the handler runs, so neither is visible in the handler's own code."""
+    missing = {"400", "413"} - statuses(OPERATIONS[operation_id])
+
+    assert missing == set(), operation_id
+
+
+@pytest.mark.parametrize("operation_id", WITH_TYPED_PATH_PARAMETER)
+def test_an_operation_with_a_typed_path_parameter_declares_the_validation_refusal(
+    operation_id,
+):
+    """A path segment that must parse — every `{user_id}`, `{device_id}` and
+    `{room_id}` is a UUID — is a `400 invalid_request` on a value that does not."""
+    assert "400" in statuses(OPERATIONS[operation_id]), operation_id
+
+
+@pytest.mark.parametrize("operation_id", sorted(OPERATIONS))
+def test_no_operation_publishes_a_status_outside_the_vocabulary(operation_id):
+    """Every error status of this surface belongs to a code `core/API.md`
+    publishes. `304` is the one non-error status a route answers besides its own
+    success."""
+    declared = OPERATIONS[operation_id]
+    known = {str(status) for status in VOCABULARY.values()} | {NOT_MODIFIED}
+    unknown = {status for status in statuses(declared, floor=300) if status not in known}
+
+    assert unknown == set(), operation_id
+
+
+def test_the_operation_identifier_is_the_handler_name():
+    """The identifier is the method name a generated client gets, so it may not
+    move when a path moves and may never collide. FastAPI's own derivation does
+    both."""
+    assert sorted(OPERATIONS) == sorted(ROUTES)
+
+
+def test_every_operation_is_tagged_with_the_app_that_serves_it():
+    wrong = {
+        operation_id: operation["tags"]
+        for operation_id, operation in OPERATIONS.items()
+        if operation["tags"] != [ROUTES[operation_id].endpoint.__module__.split(".")[0]]
+    }
+
+    assert wrong == {}
+
+
+def test_no_component_name_carries_a_module_path():
+    """FastAPI resolves two models of one name by putting the module path into the
+    component name, so a file that moves renames a symbol in every generated
+    client with no field having changed."""
+    collided = [name for name in DOCUMENT["components"]["schemas"] if "__" in name]
+
+    assert collided == []
+
+
+def test_the_document_never_publishes_the_validation_shape_fastapi_injects():
+    """ADR-0007 replaced FastAPI's validation handler: a validation failure here is
+    `400 invalid_request` with the envelope, and `422` is never used."""
+    rendered_document = json.dumps(DOCUMENT)
+
+    assert INJECTED_VALIDATION_STATUS not in {
+        status for operation in OPERATIONS.values() for status in operation["responses"]
+    }
+    for component in INJECTED_VALIDATION_COMPONENTS:
+        assert component not in rendered_document
+
+
+def test_the_document_generates_with_no_warning():
+    """A fresh application, because the composed one has already cached its
+    document and a second generation would raise nothing whatever the routes say."""
+    from api.app import create_app
+
+    with warnings.catch_warnings(record=True) as raised:
+        warnings.simplefilter("always")
+        create_app(django_asgi_app).openapi()
+
+    assert [str(warning.message) for warning in raised] == []
