@@ -10,7 +10,7 @@ from django.utils import timezone
 from rest_framework_simplejwt.token_blacklist.models import OutstandingToken
 
 from attachments.models import Attachment
-from devices.models import Device, KeyPackage
+from devices.models import Device
 from messaging.models import QueuedEnvelope
 
 
@@ -24,13 +24,11 @@ class Command(BaseCommand):
         envelopes = self._prune_envelopes()
         tokens = self._flush_expired_refresh_tokens()
         attachments, files = self._prune_attachments()
-        keypackages = self._prune_keypackages()
 
         # Counts only: an id or a blob written here would land in the timer's journal.
         self.stdout.write(f"envelopes pruned: {envelopes}")
         self.stdout.write(f"refresh tokens flushed: {tokens}")
         self.stdout.write(f"attachments pruned: {attachments} (files removed: {files})")
-        self.stdout.write(f"keypackages pruned: {keypackages}")
 
     @staticmethod
     def _flush_expired_refresh_tokens():
@@ -47,8 +45,9 @@ class Command(BaseCommand):
         expired = QueuedEnvelope.objects.filter(queued_hour__lt=cutoff)
         with transaction.atomic():
             # Watermark before delete, in one transaction. A pruned envelope may have
-            # been an MLS commit the device can never re-obtain, so the device must be
-            # able to see that it missed something: queue_pruned_through is that
+            # carried a ratchet message or a group control event the device can never
+            # re-obtain, so the device must be able to see that it missed something:
+            # queue_pruned_through is that
             # signal (surfaced by GET /me/envelopes as `pruned_through`). Advancing
             # the watermark without the delete committing would tell a device it lost
             # envelopes it can still fetch, so both happen or neither does.
@@ -63,16 +62,6 @@ class Command(BaseCommand):
         return deleted
 
     @staticmethod
-    def _prune_keypackages():
-        # Rotation: stale consumable KeyPackages age out. The last-resort package
-        # is exempt — deleting it would make an idle device unaddable to groups,
-        # which is the exact failure it exists to prevent.
-        cutoff = timezone.now().date() - timedelta(days=settings.KEYPACKAGE_TTL_DAYS)
-        deleted, _ = KeyPackage.objects.filter(
-            is_last_resort=False, created_date__lt=cutoff).delete()
-        return deleted
-
-    @staticmethod
     def _prune_attachments():
         cutoff = timezone.now().date() - timedelta(days=settings.ATTACH_TTL_DAYS)
         expired_ids = []
@@ -80,8 +69,9 @@ class Command(BaseCommand):
         # Unlink before deleting the row: a crash in between leaves a row whose bytes
         # are already gone, which the next pass clears. Dropping the row first would
         # strand the file, since cleanup only ever walks rows.
-        for attachment in Attachment.objects.filter(
-                created_date__lt=cutoff).only("id").iterator():
+        for attachment in (
+            Attachment.objects.filter(created_date__lt=cutoff).only("id").iterator()
+        ):
             try:
                 os.remove(attachment.disk_path())
                 removed_files += 1

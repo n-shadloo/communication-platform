@@ -1,5 +1,6 @@
 """The socket authenticates with REST's strength: full scope, live device, matching
 token_generation, active user. A failed handshake joins no group."""
+
 import pytest
 from channels.db import database_sync_to_async
 from channels.layers import get_channel_layer
@@ -21,8 +22,9 @@ async def test_header_auth_path_connects(active_user, device):
 async def test_first_frame_auth_path_connects(active_user, device):
     """Browsers can't set WS headers: connect bare, then authenticate in-band."""
     comm = await connect_ok([])
-    await comm.send_json_to({"type": "auth",
-                             "access": await mint_access(active_user, device)})
+    await comm.send_json_to(
+        {"type": "auth", "access": await mint_access(active_user, device)}
+    )
     await probe(comm, device.id)
     await comm.disconnect()
 
@@ -33,7 +35,8 @@ async def test_connect_touches_last_active_date(active_user, device):
     await probe(comm, device.id)
 
     refreshed = await database_sync_to_async(
-        lambda: type(device).objects.get(id=device.id))()
+        lambda: type(device).objects.get(id=device.id)
+    )()
     assert refreshed.last_active_date == timezone.now().date()
     await comm.disconnect()
 
@@ -48,6 +51,7 @@ async def test_refresh_token_is_not_an_access_token(active_user, device):
     """A refresh JWT is validly signed but has the wrong token_type; REST rejects it
     and so must the socket."""
     from accounts.tokens import issue_full
+
     _access, refresh = await database_sync_to_async(issue_full)(active_user, device)
 
     comm = ws(bearer(refresh))
@@ -95,9 +99,9 @@ async def test_register_scope_token_via_auth_frame_closes_4001(active_user):
 
 async def test_revoked_devices_token_closes_4001(active_user, device):
     access = await mint_access(active_user, device)
-    await database_sync_to_async(
-        type(device).objects.filter(id=device.id).update)(
-            revoked_date=timezone.now().date())
+    await database_sync_to_async(type(device).objects.filter(id=device.id).update)(
+        revoked_date=timezone.now().date()
+    )
 
     comm = ws(bearer(access))
     connected, code = await comm.connect(timeout=2)
@@ -108,8 +112,9 @@ async def test_stale_token_generation_closes_4001(active_user, device):
     """Bumping token_generation (the revoke cascade) invalidates every outstanding
     token immediately, including on the socket."""
     access = await mint_access(active_user, device)
-    await database_sync_to_async(
-        type(device).objects.filter(id=device.id).update)(token_generation=2)
+    await database_sync_to_async(type(device).objects.filter(id=device.id).update)(
+        token_generation=2
+    )
 
     comm = ws(bearer(access))
     connected, code = await comm.connect(timeout=2)
@@ -119,7 +124,8 @@ async def test_stale_token_generation_closes_4001(active_user, device):
 async def test_inactive_users_token_closes_4001(active_user, device):
     access = await mint_access(active_user, device)
     await database_sync_to_async(
-        type(active_user).objects.filter(id=active_user.id).update)(is_active=False)
+        type(active_user).objects.filter(id=active_user.id).update
+    )(is_active=False)
 
     comm = ws(bearer(access))
     connected, code = await comm.connect(timeout=2)
@@ -140,6 +146,7 @@ async def test_missing_token_closes_4001_at_the_deadline(db, monkeypatch):
 
 
 # ---- origin allowlist -------------------------------------------------------
+
 
 async def test_unlisted_origin_closes_4403_even_with_a_valid_token(active_user, device):
     access = await mint_access(active_user, device)

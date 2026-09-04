@@ -35,7 +35,9 @@ public keys, and it enforces nothing security-relevant. Cross-signing material a
 device-list records pass through as blobs it never parses or verifies; every check that
 matters happens client-side, against keys the server has never held. No
 content-encryption key ever reaches the server, though it does hold infrastructure
-secrets — the TLS private key, the JWT signing key, and the LiveKit API secret.
+secrets — the TLS private key, the JWT signing key, and the LiveKit API secret. Group
+chats are pairwise: a message is encrypted once per member device, and the server
+keeps no roster, group object, or group key.
 
 The honest limit: an adversary holding live root on the box can watch which authenticated
 connection deposits into and collects from each device's queue, which is enough to
@@ -86,9 +88,12 @@ flowchart LR
 | [`backend/`](backend/) | [Nima Shadloo](https://github.com/n-shadloo) | Django server and system architecture: the `accounts`, `devices`, `vault`, `messaging`, `attachments`, `voicerooms`, `realtime`, `core`, and `config` apps, plus `ops/` deployment artefacts for a single VPS |
 | [`frontend/`](frontend/) | [realSeyed](https://github.com/realSeyed) | Flutter client for Android and Web, including all client-side cryptography |
 
-`backend/vendor/wheels` is a committed 26 MB cache of pinned, hash-verified Python
-wheels. It is required by the no-foreign-dependency constraint — the server must install
-and rebuild with no internet access — and is not repository bloat.
+`backend/vendor/wheels` is the offline wheel cache, and it is not tracked in git. The
+no-foreign-dependency constraint means the server must install and rebuild with no
+internet access, so the operator builds the cache on the VPS with
+[`backend/ops/vendor.sh`](backend/ops/vendor.sh) while the network is still available;
+[`backend/ops/offline_install.sh`](backend/ops/offline_install.sh) then installs from it
+with `--no-index` and `--require-hashes`.
 
 ## Documentation
 
@@ -98,7 +103,10 @@ and rebuild with no internet access — and is not repository bloat.
 | [backend/SECURITY.md](backend/SECURITY.md) | Threat model, the precise key invariant, what a seizure yields, and residual risk |
 | [backend/CLIENT_CONTRACT.md](backend/CLIENT_CONTRACT.md) | The client-side half of every security property; authoritative for client implementations |
 | Per-app API reference | [accounts](backend/accounts/API.md) · [devices](backend/devices/API.md) · [vault](backend/vault/API.md) · [messaging](backend/messaging/API.md) · [attachments](backend/attachments/API.md) · [voicerooms](backend/voicerooms/API.md) · [realtime](backend/realtime/API.md) · [core](backend/core/API.md) |
-| [frontend/docs/README.md](frontend/docs/README.md) | Index of the client engineering contract: threat model, cryptographic protocol, MLS profile, UI specification, sync engine, and platform notes |
+| [docs/architecture/DESIGN-RECORD.md](docs/architecture/DESIGN-RECORD.md) | The system of record for the architecture: the positions table, the assumption ledger, the deferral list, and the decision log |
+| [docs/architecture/GROUND-TRUTH.md](docs/architecture/GROUND-TRUTH.md) | The measured facts of the deployment: topology, configuration deviations, scale facts, and the domain rules the code must hold |
+| [docs/architecture/decisions/](docs/architecture/decisions/) | One ADR for each architecture decision |
+| [frontend/docs/README.md](frontend/docs/README.md) | Index of the client engineering contract: threat model, cryptographic protocol, UI specification, sync engine, and platform notes |
 
 ## Current status
 
@@ -117,6 +125,6 @@ been no external security audit, and the API surface is still moving —
 
 Apache License 2.0 — see [LICENSE](LICENSE). Copyright 2026 Nima Shadloo.
 
-Third-party components keep their own terms: `backend/vendor/wheels` contains third-party
-Python packages under their respective licenses, and `frontend/assets/fonts/vazirmatn/`
-bundles the Vazirmatn font under SIL OFL 1.1.
+Third-party components keep their own terms: the Python packages pinned in
+`backend/requirements/` stay under their respective licenses, and
+`frontend/assets/fonts/vazirmatn/` bundles the Vazirmatn font under SIL OFL 1.1.

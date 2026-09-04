@@ -17,12 +17,14 @@ Driven by core/tests/test_log_silence.py; needs the test DB, the in-memory chann
 layer, a temp ATTACHMENTS_ROOT, and fake LIVEKIT_* settings (token minting is local
 PyJWT; no network is ever touched).
 """
+
 import base64
 import logging
 import secrets as random_secrets
 from contextlib import contextmanager
 
-CANARY = "log-silence-audit-canary"
+CANARY_OPEN = "log-silence-audit-canary-open"
+CANARY_CLOSE = "log-silence-audit-canary-close"
 
 
 class _RawCapture(logging.Handler):
@@ -41,8 +43,9 @@ def capture_all_logging():
     handler = _RawCapture()
     root = logging.getLogger()
     named = [logging.getLogger(name) for name in list(logging.root.manager.loggerDict)]
-    targets = [root] + [lg for lg in named
-                        if isinstance(lg, logging.Logger) and lg.handlers]
+    targets = [root] + [
+        lg for lg in named if isinstance(lg, logging.Logger) and lg.handlers
+    ]
     saved = [(lg, lg.handlers[:], lg.level) for lg in targets]
     for lg in targets:
         lg.handlers[:] = [handler]
@@ -68,25 +71,37 @@ def _scripted_rest_traffic():
     from rest_framework.test import APIClient
 
     from accounts.models import User
-    from core.buckets import (ATTACHMENT_BUCKETS, DEVICELOG_BUCKETS, ENVELOPE_BUCKETS,
-                              KEYPACKAGE_BUCKETS, NAME_BUCKETS)
+    from core.buckets import (
+        ATTACHMENT_BUCKETS,
+        DEVICELOG_BUCKETS,
+        ENVELOPE_BUCKETS,
+        NAME_BUCKETS,
+    )
 
     api = APIClient()
     cache.clear()  # DRF throttle counters live in the shared cache
-    s = {"username": f"aud{random_secrets.token_hex(6)}",
-         "password": random_secrets.token_urlsafe(24)}
+    s = {
+        "username": f"aud{random_secrets.token_hex(6)}",
+        "password": random_secrets.token_urlsafe(24),
+    }
 
     # Register, then activate. Activation is the owner's admin action; its
     # server-side effect is the is_active flip.
-    r = api.post("/api/v1/auth/register",
-                 {"username": s["username"], "password": s["password"]}, format="json")
+    r = api.post(
+        "/api/v1/auth/register",
+        {"username": s["username"], "password": s["password"]},
+        format="json",
+    )
     assert r.status_code == 201, f"register: {r.status_code}"
     s["user id"] = r.json()["user_id"]
     User.objects.filter(id=s["user id"]).update(is_active=True)
 
     # Login with no device: the register-scope token whose only power is POST /me/devices.
-    r = api.post("/api/v1/auth/login",
-                 {"username": s["username"], "password": s["password"]}, format="json")
+    r = api.post(
+        "/api/v1/auth/login",
+        {"username": s["username"], "password": s["password"]},
+        format="json",
+    )
     assert r.status_code == 200, f"login: {r.status_code}"
     s["register-scope access token"] = r.json()["access"]
 
@@ -96,12 +111,17 @@ def _scripted_rest_traffic():
     # a cross signature never reaches a log line.
     r = api.post(
         "/api/v1/me/devices",
-        {"ik_pub": _b64_filled(64, 0x69), "spk_id": 1, "spk_pub": _b64_filled(32, 0x73),
-         "spk_sig": _b64_filled(32, 0x67), "registration_id": 4242,
-         "otpks": [{"key_id": 1, "pub": _b64_filled(32, 0x6F)}],
-         "keypackages": [_b64_filled(min(KEYPACKAGE_BUCKETS), 0x6B)]},
+        {
+            "ik_pub": _b64_filled(64, 0x69),
+            "spk_id": 1,
+            "spk_pub": _b64_filled(32, 0x73),
+            "spk_sig": _b64_filled(32, 0x67),
+            "registration_id": 4242,
+            "otpks": [{"key_id": 1, "pub": _b64_filled(32, 0x6F)}],
+        },
         format="json",
-        HTTP_AUTHORIZATION=f"Bearer {s['register-scope access token']}")
+        HTTP_AUTHORIZATION=f"Bearer {s['register-scope access token']}",
+    )
     assert r.status_code == 201, f"device register: {r.status_code}"
     body = r.json()
     s["device id"] = body["device_id"]
@@ -111,47 +131,70 @@ def _scripted_rest_traffic():
 
     # Cross-sign the device now that its device_id is known (CLIENT_CONTRACT.md §M).
     s["cross signature"] = _b64_filled(64, 0x78)
-    r = api.put(f"/api/v1/me/devices/{s['device id']}/prekeys",
-                {"cross_sig": s["cross signature"], "bundle_version": 1},
-                format="json", **auth)
+    r = api.put(
+        f"/api/v1/me/devices/{s['device id']}/prekeys",
+        {"cross_sig": s["cross signature"], "bundle_version": 1},
+        format="json",
+        **auth,
+    )
     assert r.status_code == 200, f"cross-sign: {r.status_code}"
 
     # Publish the cross-signing identity and append a device-log record: both new
     # surfaces carry key material and must stay as silent as the rest.
     s["master public key"] = _b64_filled(32, 0x6D)
-    r = api.put("/api/v1/me/identity",
-                {"master_pub": s["master public key"],
-                 "self_signing_pub": _b64_filled(32, 0x74),
-                 "user_signing_pub": _b64_filled(32, 0x75),
-                 "master_sig": _b64_filled(64, 0x76), "version": 1},
-                format="json", **auth)
+    r = api.put(
+        "/api/v1/me/identity",
+        {
+            "master_pub": s["master public key"],
+            "self_signing_pub": _b64_filled(32, 0x74),
+            "user_signing_pub": _b64_filled(32, 0x75),
+            "master_sig": _b64_filled(64, 0x76),
+            "version": 1,
+        },
+        format="json",
+        **auth,
+    )
     assert r.status_code == 200, f"identity publish: {r.status_code}"
     s["device log blob"] = _b64_filled(min(DEVICELOG_BUCKETS), 0xD1)
-    r = api.post("/api/v1/me/devicelog",
-                 {"records": [{"blob": s["device log blob"]}]}, format="json", **auth)
+    r = api.post(
+        "/api/v1/me/devicelog",
+        {"records": [{"blob": s["device log blob"]}]},
+        format="json",
+        **auth,
+    )
     assert r.status_code == 201, f"devicelog append: {r.status_code}"
     r = api.get(f"/api/v1/users/{s['user id']}/devicelog", **auth)
     assert r.status_code == 200, f"devicelog read: {r.status_code}"
 
     # Send an envelope to our own device (self-sync shape), drain it, ack it.
     s["envelope blob"] = _b64_filled(min(ENVELOPE_BUCKETS), 0xA5)
-    r = api.post("/api/v1/envelopes",
-                 {"messages": [{"device_id": s["device id"], "blob": s["envelope blob"]}]},
-                 format="json", **auth)
+    r = api.post(
+        "/api/v1/envelopes",
+        {"messages": [{"device_id": s["device id"], "blob": s["envelope blob"]}]},
+        format="json",
+        **auth,
+    )
     assert r.status_code == 202, f"send: {r.status_code}"
     r = api.get("/api/v1/me/envelopes", **auth)
     assert r.status_code == 200 and r.json()["envelopes"], "drain returned nothing"
     envelopes = r.json()["envelopes"]
     s["queued envelope id"] = envelopes[0]["id"]
-    r = api.post("/api/v1/me/envelopes/ack",
-                 {"ids": [e["id"] for e in envelopes]}, format="json", **auth)
+    r = api.post(
+        "/api/v1/me/envelopes/ack",
+        {"ids": [e["id"] for e in envelopes]},
+        format="json",
+        **auth,
+    )
     assert r.status_code == 200, f"ack: {r.status_code}"
 
     # Upload + download an attachment (download answers via X-Accel-Redirect).
     upload_bytes = b"\x01" * min(ATTACHMENT_BUCKETS)
-    r = api.post("/api/v1/attachments",
-                 {"blob": SimpleUploadedFile("blob", upload_bytes)},
-                 format="multipart", **auth)
+    r = api.post(
+        "/api/v1/attachments",
+        {"blob": SimpleUploadedFile("blob", upload_bytes)},
+        format="multipart",
+        **auth,
+    )
     assert r.status_code == 201, f"upload: {r.status_code}"
     s["attachment id"] = r.json()["attachment_id"]
     r = api.get(f"/api/v1/attachments/{s['attachment id']}", **auth)
@@ -159,8 +202,9 @@ def _scripted_rest_traffic():
 
     # Create a room and mint a LiveKit join token (local HS256 signing).
     s["room name blob"] = _b64_filled(min(NAME_BUCKETS), 0xB6)
-    r = api.post("/api/v1/rooms", {"name_blob": s["room name blob"]},
-                 format="json", **auth)
+    r = api.post(
+        "/api/v1/rooms", {"name_blob": s["room name blob"]}, format="json", **auth
+    )
     assert r.status_code == 201, f"room create: {r.status_code}"
     s["room id"] = r.json()["room_id"]
     r = api.post(f"/api/v1/rooms/{s['room id']}/token", **auth)
@@ -177,13 +221,16 @@ async def _scripted_socket_traffic(s):
     from config.asgi import application
 
     comm = WebsocketCommunicator(
-        application, "/ws",
-        headers=[(b"authorization", f"Bearer {s['access token']}".encode())])
+        application,
+        "/ws",
+        headers=[(b"authorization", f"Bearer {s['access token']}".encode())],
+    )
     connected, _ = await comm.connect(timeout=2)
     assert connected, "socket handshake refused"
     s["signal blob"] = f"volatile-{random_secrets.token_hex(12)}"
-    await comm.send_json_to({"type": "signal", "to_device": s["device id"],
-                             "blob": s["signal blob"]})
+    await comm.send_json_to(
+        {"type": "signal", "to_device": s["device id"], "blob": s["signal blob"]}
+    )
     frame = await comm.receive_json_from(timeout=2)
     assert frame == {"type": "signal", "blob": s["signal blob"]}, "signal did not relay"
     await comm.disconnect()
@@ -192,10 +239,12 @@ async def _scripted_socket_traffic(s):
 def scan(lines, secrets):
     """Every captured line vs every generated secret. Substring match: an id inside a
     traceback, a repr, or a formatted message is still a leak."""
-    return [f"{label} leaked into: {line[:160]}"
-            for line in lines
-            for label, secret in secrets.items()
-            if secret and str(secret) in line]
+    return [
+        f"{label} leaked into: {line[:160]}"
+        for line in lines
+        for label, secret in secrets.items()
+        if secret and str(secret) in line
+    ]
 
 
 async def run_audit(probe=None):
@@ -206,12 +255,24 @@ async def run_audit(probe=None):
     leak."""
     from channels.db import database_sync_to_async
 
+    # Import the ASGI application before the capture opens. That import runs
+    # django.setup(), which re-applies LOGGING through dictConfig and replaces the
+    # handlers this audit swapped in. Inside the capture window it would kill the
+    # capture halfway through, and every assertion after that point would grade an
+    # empty list instead of the real log stream.
+    import config.asgi  # noqa: F401
+
     with capture_all_logging() as lines:
-        logging.getLogger("ops.audit.canary").debug(CANARY)
+        logging.getLogger("ops.audit.canary").debug(CANARY_OPEN)
         secrets = await database_sync_to_async(_scripted_rest_traffic)()
         await _scripted_socket_traffic(secrets)
         if probe is not None:
             probe(secrets)
-    if not any(CANARY in line for line in lines):
+        logging.getLogger("ops.audit.canary").debug(CANARY_CLOSE)
+    if not any(CANARY_OPEN in line for line in lines):
         raise RuntimeError("log capture was not live; this audit proved nothing")
+    if not any(CANARY_CLOSE in line for line in lines):
+        raise RuntimeError(
+            "log capture stopped before the run ended; this audit proved nothing"
+        )
     return scan(lines, secrets), secrets, lines

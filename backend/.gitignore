@@ -11,10 +11,6 @@ venv/
 !.env.example
 ops/tls/out/
 
-# Agent-facing docs — kept local, not in version control
-ARCHITECTURE.md
-CLAUDE.md
-
 # Runtime artifacts
 media_root/
 static_root/
@@ -29,6 +25,7 @@ htmlcov/
 .DS_Store
 *.sqlite3
 
-# Vendored wheels are LARGE but are the offline lifeline. They are intentionally NOT
-# ignored: the human decides whether to commit them or store them elsewhere. Keep this
-# comment; do not add vendor/ below.
+# The offline wheel cache. The operator builds it on the VPS with ops/vendor.sh while
+# the network is available, and ops/offline_install.sh installs from it. It is a
+# large binary artifact rebuilt from requirements/, so it never enters git.
+vendor/

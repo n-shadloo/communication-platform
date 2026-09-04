@@ -2,7 +2,7 @@ import uuid
 
 from django.db import models
 
-from core.buckets import DEVICELOG_BUCKETS, KEYPACKAGE_BUCKETS, LABEL_BUCKETS
+from core.buckets import DEVICELOG_BUCKETS, LABEL_BUCKETS
 from core.fields import OpaqueBlobField
 
 
@@ -16,8 +16,12 @@ class UserIdentity(models.Model):
     the adversary in this design.
     """
 
-    user = models.OneToOneField("accounts.User", on_delete=models.CASCADE,
-                                primary_key=True, related_name="identity")
+    user = models.OneToOneField(
+        "accounts.User",
+        on_delete=models.CASCADE,
+        primary_key=True,
+        related_name="identity",
+    )
     master_pub = models.BinaryField()
     self_signing_pub = models.BinaryField()
     user_signing_pub = models.BinaryField()
@@ -32,8 +36,9 @@ class Device(models.Model):
     the server."""
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    user = models.ForeignKey("accounts.User", on_delete=models.CASCADE,
-                             related_name="devices")
+    user = models.ForeignKey(
+        "accounts.User", on_delete=models.CASCADE, related_name="devices"
+    )
     ik_pub = models.BinaryField()
     spk_id = models.PositiveIntegerField()
     spk_pub = models.BinaryField()
@@ -61,10 +66,10 @@ class Device(models.Model):
     queue_seq = models.BigIntegerField(default=0)
     # Highest seq the TTL prune has ever deleted from this device's mailbox. A
     # returning device whose last acked seq is below this lost envelopes it can
-    # never re-fetch — possibly MLS commits, which leaves it permanently desynced
-    # from those groups (client-to-client history transfer moves content, not
-    # ratchet state). Surfaced as `pruned_through` so the client knows to ask
-    # peers for a group re-add rather than failing silently.
+    # never re-fetch — possibly ratchet messages or group control events. Surfaced
+    # as `pruned_through` so the client knows to repair each affected pairwise
+    # session and ask a member for the current group state, rather than failing
+    # silently (CLIENT_CONTRACT.md §H).
     queue_pruned_through = models.BigIntegerField(default=0)
     # ML-KEM-768 signed prekey for hybrid PQXDH. All nullable: a device that never
     # uploaded PQ material serves classical-only bundles with the PQ fields omitted,
@@ -82,15 +87,17 @@ class OneTimePrekey(models.Model):
     # db_index=False: the unique constraint below already indexes this column as its
     # leading key, so the default FK index would be a redundant B-tree maintained on
     # every insert.
-    device = models.ForeignKey(Device, on_delete=models.CASCADE,
-                               related_name="onetime_prekeys", db_index=False)
+    device = models.ForeignKey(
+        Device, on_delete=models.CASCADE, related_name="onetime_prekeys", db_index=False
+    )
     key_id = models.PositiveIntegerField()
     pub = models.BinaryField()
 
     class Meta:
         constraints = [
-            models.UniqueConstraint(fields=["device", "key_id"],
-                                    name="uniq_onetimeprekey_device_key_id"),
+            models.UniqueConstraint(
+                fields=["device", "key_id"], name="uniq_onetimeprekey_device_key_id"
+            ),
         ]
 
 
@@ -103,34 +110,21 @@ class PqOneTimePrekey(models.Model):
     # db_index=False: the unique constraint below already indexes this column as its
     # leading key, so the default FK index would be a redundant B-tree maintained on
     # every insert.
-    device = models.ForeignKey(Device, on_delete=models.CASCADE,
-                               related_name="pq_onetime_prekeys", db_index=False)
+    device = models.ForeignKey(
+        Device,
+        on_delete=models.CASCADE,
+        related_name="pq_onetime_prekeys",
+        db_index=False,
+    )
     key_id = models.PositiveIntegerField()
     pub = models.BinaryField()
 
     class Meta:
         constraints = [
-            models.UniqueConstraint(fields=["device", "key_id"],
-                                    name="uniq_pq_onetimeprekey_device_key_id"),
+            models.UniqueConstraint(
+                fields=["device", "key_id"], name="uniq_pq_onetimeprekey_device_key_id"
+            ),
         ]
-
-
-class KeyPackage(models.Model):
-    """Opaque MLS KeyPackage, deleted when claimed — except the last-resort one.
-
-    A device with an exhausted (or fully expired) KeyPackage store could never be
-    added to a group, so each device may hold one last-resort package that claims
-    return without deleting. Reuse costs forward secrecy on the initial group
-    join, which is why it is the exhausted-pool fallback and never the preferred
-    path.
-    """
-
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    device = models.ForeignKey(Device, on_delete=models.CASCADE,
-                               related_name="key_packages")
-    blob = OpaqueBlobField(bucket_set=KEYPACKAGE_BUCKETS)
-    is_last_resort = models.BooleanField(default=False)
-    created_date = models.DateField(auto_now_add=True)
 
 
 class DeviceLogRecord(models.Model):
@@ -148,8 +142,12 @@ class DeviceLogRecord(models.Model):
     # db_index=False: the unique constraint below already indexes this column as its
     # leading key, so the default FK index would be a redundant B-tree maintained on
     # every insert.
-    user = models.ForeignKey("accounts.User", on_delete=models.CASCADE,
-                             related_name="device_log", db_index=False)
+    user = models.ForeignKey(
+        "accounts.User",
+        on_delete=models.CASCADE,
+        related_name="device_log",
+        db_index=False,
+    )
     seq = models.BigIntegerField()
     blob = OpaqueBlobField(bucket_set=DEVICELOG_BUCKETS)
     stored_date = models.DateField(auto_now_add=True)
@@ -157,5 +155,6 @@ class DeviceLogRecord(models.Model):
     class Meta:
         # The unique (user, seq) index also serves keyset paging and the Max(seq)
         # append probe, so a separate Index(user, seq) is deliberately not declared.
-        constraints = [models.UniqueConstraint(
-            fields=["user", "seq"], name="uq_devicelog_user_seq")]
+        constraints = [
+            models.UniqueConstraint(fields=["user", "seq"], name="uq_devicelog_user_seq")
+        ]

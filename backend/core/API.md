@@ -16,17 +16,13 @@ payload being echoed. Current sets, in bytes:
 | `PROFILE_BUCKETS` | 1024, 4096 | profile blobs |
 | `LABEL_BUCKETS` | 256, 1024 | device labels |
 | `NAME_BUCKETS` | 256, 1024 | room names |
-| `KEYPACKAGE_BUCKETS` | 4096, 16384 | MLS KeyPackages |
 | `DEVICELOG_BUCKETS` | 256, 1024 | device-list log records |
 | `BACKUP_BUCKETS` | 4096, 16384, 65536, 262144, 1048576 | key backup |
 | `ATTACHMENT_BUCKETS` | 64 KiB … 64 MiB, ×4 ladder | attachments |
 
-`KEYPACKAGE_BUCKETS` changed from `[2048, 8192]` to `[4096, 16384]` when PQ
-(ML-KEM-768) MLS ciphersuites landed — a **breaking** change: clients must re-pad
-KeyPackages or uploads fail with `bad_bucket`. `ENVELOPE_BUCKETS` deliberately has no
-2048 step even though a PQXDH initial message (≈1088-byte ML-KEM ciphertext) lands in
-the 4096 bucket: fewer buckets means better length uniformity, and at this scale the
-wasted bytes are irrelevant.
+`ENVELOPE_BUCKETS` deliberately has no 2048 step even though a PQXDH initial message
+(≈1088-byte ML-KEM ciphertext) lands in the 4096 bucket: fewer buckets means better
+length uniformity, and at this scale the wasted bytes are irrelevant.
 
 ## Health check
 

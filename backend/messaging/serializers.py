@@ -20,5 +20,6 @@ class OutgoingItemSerializer(StrictSerializer):
 
 
 class SendSerializer(StrictSerializer):
-    messages = serializers.ListField(child=OutgoingItemSerializer(),
-                                     min_length=1, max_length=256)
+    messages = serializers.ListField(
+        child=OutgoingItemSerializer(), min_length=1, max_length=256
+    )

@@ -11,15 +11,15 @@ class Migration(migrations.Migration):
     no return for any history not already held on a client device."""
 
     dependencies = [
-        ('vault', '0001_initial'),
+        ("vault", "0001_initial"),
     ]
 
     operations = [
         migrations.RemoveConstraint(
-            model_name='historyrecord',
-            name='uq_history_owner_seq',
+            model_name="historyrecord",
+            name="uq_history_owner_seq",
         ),
         migrations.DeleteModel(
-            name='HistoryRecord',
+            name="HistoryRecord",
         ),
     ]

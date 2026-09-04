@@ -4,6 +4,7 @@ No membership, no participant history, no room text; there is no table to hold a
 it. `transaction=True` matters for the dump tests: pg_dump runs in a separate process
 over a separate connection and sees only committed rows.
 """
+
 import pytest
 from django.db import connection
 
@@ -43,14 +44,18 @@ def test_a_seized_room_table_is_only_id_and_encrypted_name():
 
 @pytest.mark.django_db
 def test_there_is_no_membership_participant_or_room_text_table_anywhere():
-    """Live participants exist only in non-persistent Redis; membership is client MLS
+    """Live participants exist only in non-persistent Redis; membership is client-side
     state. The schema must have nowhere to persist either."""
     with connection.cursor() as cursor:
         tables = set(connection.introspection.table_names(cursor))
 
     assert TABLE in tables, "the room table itself is missing"
-    offenders = [t for t in tables if t != TABLE and
-                 ("room" in t or "member" in t or "participant" in t or "roster" in t)]
+    offenders = [
+        t
+        for t in tables
+        if t != TABLE
+        and ("room" in t or "member" in t or "participant" in t or "roster" in t)
+    ]
     assert offenders == [], f"a room-adjacent table exists at rest: {offenders}"
 
 

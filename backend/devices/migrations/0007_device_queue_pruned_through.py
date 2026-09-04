@@ -4,15 +4,14 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('devices', '0006_devicelogrecord'),
+        ("devices", "0006_devicelogrecord"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='device',
-            name='queue_pruned_through',
+            model_name="device",
+            name="queue_pruned_through",
             field=models.BigIntegerField(default=0),
         ),
     ]

@@ -39,8 +39,9 @@ class RegisterSerializer(StrictSerializer):
     # validate_username, after lowercasing. As a RegexField it would reject "BoB"
     # before the normalisation the User manager and model both perform.
     username = serializers.CharField(max_length=32)
-    password = serializers.CharField(write_only=True, max_length=256,
-                                     trim_whitespace=False)
+    password = serializers.CharField(
+        write_only=True, max_length=256, trim_whitespace=False
+    )
 
     def validate_username(self, value):
         value = value.lower()
@@ -58,8 +59,9 @@ class RegisterSerializer(StrictSerializer):
 
     def create(self, data):
         # Accounts are created inactive; the owner activates them.
-        return User.objects.create_user(username=data["username"],
-                                        password=data["password"])
+        return User.objects.create_user(
+            username=data["username"], password=data["password"]
+        )
 
 
 class LoginSerializer(StrictSerializer):

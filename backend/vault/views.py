@@ -17,12 +17,19 @@ class KeyBackupView(APIView):
     throttle_scope = "accounts"
 
     def get(self, request):
-        key_backup = KeyBackup.objects.filter(user_id=request.user.id).only(
-            "blob", "version").first()
+        key_backup = (
+            KeyBackup.objects.filter(user_id=request.user.id)
+            .only("blob", "version")
+            .first()
+        )
         if key_backup is None:
             return Response({"code": "not_found"}, status=404)
-        return Response({"blob": base64.b64encode(bytes(key_backup.blob)).decode(),
-                         "version": key_backup.version})
+        return Response(
+            {
+                "blob": base64.b64encode(bytes(key_backup.blob)).decode(),
+                "version": key_backup.version,
+            }
+        )
 
     def put(self, request):
         serializer = KeyBackupSerializer(data=request.data)
@@ -37,10 +44,14 @@ class KeyBackupView(APIView):
             # the check, and a lower version can clobber a higher one. Locking the
             # owner serialises first and subsequent writes alike.
             User.objects.select_for_update().filter(id=request.user.id).only("id").first()
-            current = KeyBackup.objects.filter(
-                user_id=request.user.id).values_list("version", flat=True).first()
+            current = (
+                KeyBackup.objects.filter(user_id=request.user.id)
+                .values_list("version", flat=True)
+                .first()
+            )
             if current is not None and version <= current:
                 return Response({"code": "stale_version"}, status=409)
             KeyBackup.objects.update_or_create(
-                user_id=request.user.id, defaults={"blob": raw, "version": version})
+                user_id=request.user.id, defaults={"blob": raw, "version": version}
+            )
         return Response(status=200)

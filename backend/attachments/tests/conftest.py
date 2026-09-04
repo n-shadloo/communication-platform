@@ -20,5 +20,11 @@ def bob(db):
 
 @pytest.fixture
 def bob_device(bob):
-    return Device.objects.create(user=bob, ik_pub=b"ik", spk_id=1, spk_pub=b"spk",
-                                 spk_sig=b"sig", registration_id=11)
+    return Device.objects.create(
+        user=bob,
+        ik_pub=b"ik",
+        spk_id=1,
+        spk_pub=b"spk",
+        spk_sig=b"sig",
+        registration_id=11,
+    )

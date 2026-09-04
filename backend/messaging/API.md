@@ -108,10 +108,10 @@ device offline longer than that loses whatever was queued for it.
 `pruned_through` is the queue-gap signal that makes that loss detectable: it is the
 highest sequence number the TTL prune has ever deleted from this mailbox (0 if
 never). **If the device's last acked seq is below `pruned_through`, envelopes were
-lost — possibly MLS commits, which cannot be re-obtained and leave the device
-permanently desynced from those groups.** The client must then signal peers to remove
-and re-add it to each affected group (fresh Welcome) and surface a recoverable state,
-never a silent failure (CLIENT_CONTRACT.md §H).
+lost — possibly ratchet messages or group control events, which the server cannot
+re-create.** The client must then repair each affected pairwise session through its
+authenticated repair path, ask a member for the current group control state, and
+surface a recoverable state, never a silent failure (CLIENT_CONTRACT.md §H).
 
 The `limit` parameter is clamped into 1–100 and never errors: a non-numeric value
 falls back to 100, a negative one clamps to 1.

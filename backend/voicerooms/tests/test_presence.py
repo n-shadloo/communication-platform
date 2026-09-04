@@ -1,5 +1,6 @@
 """Live room membership: a Redis set and nothing else, atomic under concurrency,
 self-cleaning when the room empties, never a database row."""
+
 import threading
 import uuid
 from concurrent.futures import ThreadPoolExecutor

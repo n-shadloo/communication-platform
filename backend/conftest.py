@@ -45,10 +45,12 @@ def device(active_user):
 def auth_headers():
     """Build request headers for a user. `scope="register"` mints the short-lived
     token whose only power is adding a device."""
+
     def build(user, device=None, scope="full"):
         if scope == "register":
             access = issue_register_scope(user)
         else:
             access, _refresh = issue_full(user, device)
         return {"HTTP_AUTHORIZATION": f"Bearer {access}"}
+
     return build

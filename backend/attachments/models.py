@@ -15,10 +15,12 @@ class Attachment(models.Model):
     delivered to recipients inside end-to-end encrypted messages. No recipient or
     ACL data exists."""
 
-    id = models.CharField(primary_key=True, max_length=43, default=_new_capability_id,
-                          editable=False)
-    uploader = models.ForeignKey("accounts.User", on_delete=models.SET_NULL, null=True,
-                                 related_name="attachments")
+    id = models.CharField(
+        primary_key=True, max_length=43, default=_new_capability_id, editable=False
+    )
+    uploader = models.ForeignKey(
+        "accounts.User", on_delete=models.SET_NULL, null=True, related_name="attachments"
+    )
     size = models.BigIntegerField()
     created_date = models.DateField(auto_now_add=True)
 

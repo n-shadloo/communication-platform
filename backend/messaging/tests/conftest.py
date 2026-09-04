@@ -16,7 +16,11 @@ def envelope_blob(filler=b"a", size=SMALLEST_BUCKET):
 
 def make_device(user, registration_id=1):
     return Device.objects.create(
-        user=user, ik_pub=b"ik", spk_id=1, spk_pub=b"spk", spk_sig=b"sig",
+        user=user,
+        ik_pub=b"ik",
+        spk_id=1,
+        spk_pub=b"spk",
+        spk_sig=b"sig",
         registration_id=registration_id,
     )
 

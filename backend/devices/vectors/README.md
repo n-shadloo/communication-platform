@@ -8,7 +8,7 @@ up as unverifiable devices rather than as an error anyone can debug — which is
 vectors exist rather than prose alone.
 
 **The server verifies none of this.** It stores and relays these signatures as opaque
-bytes and has no opinion on whether they are valid (ARCHITECTURE.md §A16, CLAUDE.md).
+bytes and has no opinion on whether they are valid (SECURITY.md § "Residual risk").
 Agreement between clients is the only thing that gives them meaning. Nothing in the
 server imports this directory; `generate.py` is a development-time tool.
 

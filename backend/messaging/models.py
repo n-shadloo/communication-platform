@@ -20,8 +20,9 @@ class QueuedEnvelope(models.Model):
     # db_index=False: the unique constraint below already indexes this column as its
     # leading key, so the default FK index would be a redundant B-tree maintained on
     # every insert.
-    recipient_device = models.ForeignKey("devices.Device", on_delete=models.CASCADE,
-                                         related_name="queue", db_index=False)
+    recipient_device = models.ForeignKey(
+        "devices.Device", on_delete=models.CASCADE, related_name="queue", db_index=False
+    )
     seq = models.BigIntegerField()
     blob = OpaqueBlobField(bucket_set=ENVELOPE_BUCKETS)
     queued_hour = models.DateTimeField(default=_truncate_hour, editable=False)
@@ -31,6 +32,7 @@ class QueuedEnvelope(models.Model):
         # ordered scan of (recipient_device, seq), so a separate index would only add
         # per-insert maintenance.
         constraints = [
-            models.UniqueConstraint(fields=["recipient_device", "seq"],
-                                    name="uq_queue_device_seq"),
+            models.UniqueConstraint(
+                fields=["recipient_device", "seq"], name="uq_queue_device_seq"
+            ),
         ]

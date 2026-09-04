@@ -3,9 +3,9 @@
 This backend is a blind relay: it stores and serves key material and ciphertext as
 opaque bytes and **verifies none of it**. Every security property below therefore lives
 in the client. This document is the binding list of those client-side halves, written
-for the Flutter developer. The server-side halves are specified in `ARCHITECTURE.md` and
+for the Flutter developer. The server-side halves are specified in `SECURITY.md` and
 the per-app `API.md` files; the residual-risk statement (what none of this protects) is
-`ARCHITECTURE.md` §A16.
+`SECURITY.md` § "Residual risk".
 
 A server-side sanity check (length, bucket, monotonic version) is never a security
 control. If the client ever skips a verification because "the server already checks
@@ -17,8 +17,8 @@ that," the design has failed — the server is the adversary.
   keys. Private keys go to platform secure storage (Keychain/Keystore) and **never**
   leave the device except inside the recovery-protected key backup blob
   (`PUT /me/keybackup`).
-- Per device: an Ed25519 device signing key, X25519 identity + prekeys, ML-KEM-768
-  prekeys, and the MLS credential/leaf key.
+- Per device: an Ed25519 device signing key, X25519 identity + prekeys, and ML-KEM-768
+  prekeys.
 - **`ik_pub` carries two of those keys in one field: exactly 64 bytes, the Ed25519
   device signing public key (bytes 0–31) then the X25519 identity public key (bytes
   32–63).** The Ed25519 half verifies `spk_sig` and `pq_spk_sig`; the X25519 half is the
@@ -133,13 +133,45 @@ signature you rely on to know a prekey belongs to the device serving it. Verify 
 | Master key change | Block the conversation pending re-verification. Never silently re-trust. |
 | Log fork detected | Global alert state; halt sensitive operations pending an out-of-band check |
 
-## F. Post-quantum
+## F. Sessions and groups
 
-- Always use hybrid **X25519 + ML-KEM-768** (PQXDH-style) for DM session establishment.
-  If a claimed bundle lacks PQ material, either refuse or clearly flag the session as
-  classical-only. **Never silently downgrade.**
-- Use an MLS PQ ciphersuite for groups. Pad KeyPackages to the current
-  `KEYPACKAGE_BUCKETS` `[4096, 16384]`.
+Every session — direct or group — is a pairwise PQXDH plus Double Ratchet session
+between two devices. The server holds no group object, no roster, no epoch, and no
+group key; a group exists only in its members' clients.
+
+- **Session start.** Always use hybrid **X25519 + ML-KEM-768** (PQXDH-style), from the
+  bundles `POST /users/{user_id}/keys/claim` serves. If a claimed bundle lacks PQ
+  material, either refuse or clearly flag the session as classical-only. **Never
+  silently downgrade.**
+- **A group session is a set of pairwise sessions**: one between the sender's device
+  and every live device of every member, and one with each of the sender's own other
+  devices. There is no group endpoint and no group key material to upload; start each
+  pairwise session from the same claimed bundles as a DM.
+- **Prekey material.** The pools, caps, and replenishment are unchanged: at most 200
+  classical and 100 ML-KEM one-time prekeys stored per device. Pairwise fan-out
+  consumes one one-time prekey per session start, so replenish on the counts the
+  server reports (`GET /me/devices/{device_id}/prekeys/count` and the response of
+  `PUT /me/devices/{device_id}/prekeys`) before a pool empties.
+- **Fan-out.** Encrypt the group message once per recipient device and send the copies
+  with `POST /envelopes`, up to 256 items per call; a larger fan-out is several calls.
+  Read `accepted` and `stale_devices` from every response: drop a stale device from
+  the group's session set and refresh that user's device list.
+- **Queue, acknowledgement, and time to live.** The server stores one padded row per
+  recipient device with a per-device `seq`, deletes the row on ack, and prunes an
+  undelivered row after `ENVELOPE_TTL_DAYS` (default 7). The drain response carries
+  `pruned_through` (§H).
+- **Replay defence and ordering.** The server gives each mailbox a monotonic `seq`,
+  delivers a row until it is acked, and never re-creates a deleted row. It adds
+  nothing else: replay defence inside a session is your ratchet counter and a bounded
+  skipped-key store, and any ordering across sessions is whatever the group protocol
+  carries inside its ciphertext.
+- **Device addition and removal** use the existing machinery: the device-list `ETag`,
+  the client-signed device log (§J), `stale_devices`, and the revocation cascade. A
+  member's new device joins the group when a member starts a pairwise session with
+  it; a revoked device leaves the fan-out when it appears in `stale_devices`.
+- **Member removal** is a client-side signed control event carried as an ordinary
+  envelope. The sender stops fan-out to the removed member's devices. The server takes
+  no part and learns nothing.
 
 ## G. History sync — changed; the server no longer stores history
 
@@ -150,14 +182,15 @@ signature you rely on to know a prekey belongs to the device serving it. Verify 
 - The key backup blob no longer contains a history key; it carries cross-signing private
   key material.
 
-## H. Queue gap handling — new, load-bearing for MLS
+## H. Queue gap handling
 
 - `GET /me/envelopes` returns `pruned_through`. If the client's last acked seq is
-  **below** `pruned_through`, envelopes were lost to the 7-day cap.
-- Lost envelopes may have included MLS commits. The device is then permanently desynced
-  from affected groups and **cannot** self-recover — client-to-client transfer moves
-  content, not ratchet/epoch state. It must signal peers to remove and re-add it to each
-  group (generating a fresh Welcome).
+  **below** `pruned_through`, envelopes were lost to the `ENVELOPE_TTL_DAYS` cap, and
+  the server cannot re-create them.
+- A lost envelope may have carried a ratchet message or a group control event. Repair
+  each affected pairwise session through its authenticated repair path, then ask a
+  member for the current group control state. Client-to-client history transfer (§G)
+  moves content, not ratchet state, so it is not the repair.
 - Surface this to the user as a recoverable state, not a silent failure.
 
 ## I. Cross-signature freshness
@@ -229,3 +262,16 @@ unusable. That, and the `identity_required` check, are completeness checks —
 **not** security controls. A modified server would skip them, so peers must verify
 regardless, and a device that never reaches step 4 must stay unverified in your UI
 forever rather than being trusted on the server's word.
+
+## N. Voice media keys
+
+- Each participant generates its own **per-sender media key** and sends it to every
+  other participant device over the pairwise session (§F), carried in volatile
+  `signal` frames on `/ws`. The server, LiveKit, and coturn never hold a media key:
+  the join token carries none, and the SFU forwards frames it cannot read.
+- Drive distribution from the `room_presence` frames: a `join` names a device that
+  needs every current sender's key before it hears anything, and a `leave` (explicit,
+  or on disconnect) triggers rotation, so a participant who left keeps only the audio
+  it already received.
+- `signal` frames are volatile and never touch disk. A distribution missed during a
+  reconnect is gone; ask the sender again rather than wait for it.

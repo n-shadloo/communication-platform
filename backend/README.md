@@ -37,16 +37,18 @@ authentication with 4001, an unlisted Origin with 4403, and revocation with 4003
 
 **Durable queue versus volatile relay.** A sent message is fanned out into one padded
 ciphertext row per recipient device, held until that device drains and acks it (or the
-TTL prunes it). Everything else — presence, typing-style signals, ephemeral room text —
+TTL prunes it). A group message is the same fan-out over every member device, each copy
+under its own pairwise session; the server holds no group object, roster, or group key.
+Everything else — presence, typing-style signals, ephemeral room text —
 is relayed between live sockets through the channel layer and never touches the
 database or disk. If no socket is listening, a volatile signal is dropped.
 
 **Voice.** Standalone voice rooms use a self-hosted LiveKit SFU, reverse-proxied at
 `/rtc`. The backend mints short-lived LiveKit join tokens server-side
 (`POST /api/v1/rooms/{id}/token`): audio-only grants scoped to one room and one
-device, signed with the LiveKit API secret. Media encryption keys are derived
-client-side and never reach the server or the SFU. A self-hosted coturn instance
-provides the TURN relay.
+device, signed with the LiveKit API secret. Each sender's media key is generated
+client-side and distributed to the other participants over pairwise sessions; no key
+reaches the server or the SFU. A self-hosted coturn instance provides the TURN relay.
 
 **Attachments.** Uploads are opaque encrypted blobs in fixed size buckets, stored on
 disk under a 43-character unguessable capability id. Download responses carry an
@@ -54,7 +56,7 @@ disk under a 43-character unguessable capability id. Download responses carry an
 Django never serves file contents.
 
 **Padding buckets.** Every stored ciphertext — envelopes, profiles, device labels,
-room names, key packages, key backups, device-log records, attachments — must be
+room names, key backups, device-log records, attachments — must be
 exactly one of a fixed set of sizes for its type. Off-bucket payloads are rejected
 (`400 {"code": "bad_bucket"}`) without being echoed. Size-within-a-bucket is therefore
 the only content-derived signal the server can observe.
@@ -72,15 +74,16 @@ online to transfer it. There is no server history API.
   non-persistent).
 - Daphne serving ASGI behind nginx; nginx terminates TLS and serves attachment bytes.
 - No CDN, no push service, no telemetry, no external CA or API. Dependencies are
-  pinned and hashed in `requirements/` and vendored as wheels in `vendor/` for
-  offline installs.
+  pinned and hashed in `requirements/`; the operator builds the untracked `vendor/`
+  wheel cache with `ops/vendor.sh` while online, and `ops/offline_install.sh`
+  installs from it with no network.
 
 ## Repository layout
 
 | Path | Owns |
 |---|---|
 | `accounts` | User model, register/login/refresh/logout, user directory, encrypted profile blobs, device-aware JWT authentication |
-| `devices` | Device registry, cross-signing identity, classical + ML-KEM prekeys, key packages, device-list log, peer bundles and claims, revocation cascade |
+| `devices` | Device registry, cross-signing identity, classical + ML-KEM prekeys, device-list log, peer bundles and claims, revocation cascade |
 | `vault` | Recovery key backup (cross-signing private key material, opaque to the server) |
 | `messaging` | Durable envelope queue: fan-out send, per-device drain, ack |
 | `attachments` | Bucketed encrypted blob store with capability-id access |
@@ -89,7 +92,7 @@ online to transfer it. There is no server history API.
 | `core` | Size buckets, opaque blob field, env helpers, log scrubbing, health endpoint, deploy checks |
 | `config` | Settings (`base`/`dev`/`prod`), ASGI entry point, root URLconf |
 | `ops` | Deployment units, nginx/coturn/LiveKit/redis config, offline-install and audit tooling |
-| `requirements`, `vendor` | Pinned, hashed dependencies and the offline wheel cache |
+| `requirements` | Pinned, hashed dependencies. `vendor/` holds the offline wheel cache that `ops/vendor.sh` builds; it is not tracked in git |
 
 ## Local development
 
@@ -134,7 +137,7 @@ Every environment variable the code reads, with its default:
 | `THROTTLE_LOGIN` | `20/hour` | Rate limit: login |
 | `THROTTLE_REFRESH` | `120/hour` | Rate limit: token refresh |
 | `THROTTLE_ACCOUNTS` | `120/min` | Rate limit: general account/device/room endpoints |
-| `THROTTLE_CLAIM` | `120/min` | Rate limit: prekey/key-package claims |
+| `THROTTLE_CLAIM` | `120/min` | Rate limit: prekey-bundle claims |
 | `THROTTLE_ENVELOPES` | `600/min` | Rate limit: send/drain/ack |
 | `THROTTLE_ATTACHMENTS` | `60/min` | Rate limit: attachment upload/download |
 | `THROTTLE_ROOMTOKEN` | `60/min` | Rate limit: LiveKit join-token minting |
@@ -142,7 +145,6 @@ Every environment variable the code reads, with its default:
 | `ATTACH_USER_QUOTA_BYTES` | `2147483648` | Per-user attachment quota (2 GiB) |
 | `ATTACH_TTL_DAYS` | `30` | Attachment retention, days |
 | `ENVELOPE_TTL_DAYS` | `7` | Undelivered-envelope retention, days (delivered rows are deleted on ack; pruning records the per-device `pruned_through` watermark) |
-| `KEYPACKAGE_TTL_DAYS` | `30` | Consumable MLS KeyPackage rotation, days; the last-resort package is kept |
 | `MAX_DEVICES_PER_USER` | `10` | Live-device cap per account |
 | `ALLOWED_WS_ORIGINS` | empty (dev: `http://localhost`) | WebSocket Origin allowlist; empty is a deploy-blocking error in prod |
 | `WS_MAX_FRAME` | `524288` | Maximum WebSocket frame, bytes |

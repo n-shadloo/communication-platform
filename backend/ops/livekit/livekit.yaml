@@ -3,8 +3,8 @@
 #
 # This process carries media only. It never sees an SFrame/media key: join tokens are
 # minted by Django (voicerooms/livekit.py) with LIVEKIT_API_KEY/SECRET, which are
-# infrastructure secrets, and SFrame keys are derived client-side from the live MLS
-# subgroup.
+# infrastructure secrets, and each sender's media key is generated client-side and
+# distributed to the other participants over pairwise sessions.
 #
 # No key material lives in this file: livekit.service composes the LIVEKIT_KEYS
 # environment variable ("<api-key>: <api-secret>") from /srv/chat/backend/.env.production.

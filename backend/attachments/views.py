@@ -37,8 +37,12 @@ class UploadAttachmentView(APIView):
             # quota; without it two in-flight requests both pass the SUM check and
             # overshoot. Only the same account blocks here.
             User.objects.select_for_update().filter(pk=request.user.id).only("id").first()
-            used = Attachment.objects.filter(uploader_id=request.user.id).aggregate(
-                s=Sum("size"))["s"] or 0
+            used = (
+                Attachment.objects.filter(uploader_id=request.user.id).aggregate(
+                    s=Sum("size")
+                )["s"]
+                or 0
+            )
             if used + size > settings.ATTACH_USER_QUOTA_BYTES:
                 return Response(QUOTA_EXCEEDED, status=413)
 
@@ -74,5 +78,7 @@ class DownloadAttachmentView(APIView):
         # attachment.id is server-generated base64url read back from the DB, so the
         # path cannot be steered by the caller and carries no traversal or
         # header-injection payload.
-        resp["X-Accel-Redirect"] = f"/_protected_attachments/{attachment.id[:2]}/{attachment.id}"
+        resp["X-Accel-Redirect"] = (
+            f"/_protected_attachments/{attachment.id[:2]}/{attachment.id}"
+        )
         return resp

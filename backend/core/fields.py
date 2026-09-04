@@ -1,8 +1,8 @@
 import base64
 import binascii
 
-from django.core.exceptions import ValidationError
 from django.db import models
+
 
 class OpaqueBlobField(models.BinaryField):
     """bytea that only ever holds opaque ciphertext of an exact bucket length; the
@@ -18,6 +18,7 @@ class OpaqueBlobField(models.BinaryField):
         kwargs["bucket_set"] = sorted(self.bucket_set)
         return name, path, args, kwargs
 
+
 def decode_blob_or_400(b64_str, bucket_set):
     """Decode base64 and require an exact bucket length. Raises BadBucket (mapped to
     HTTP 400 {"code":"bad_bucket"}) without echoing the payload."""
@@ -28,6 +29,7 @@ def decode_blob_or_400(b64_str, bucket_set):
     if len(raw) not in set(bucket_set):
         raise BadBucket()
     return raw
+
 
 class BadBucket(Exception):
     pass

@@ -3,6 +3,7 @@
 `TransactionTestCase` for the same reason as the claim race: the guard is a row lock
 held to commit, which a wrapping test transaction would hide.
 """
+
 import threading
 
 from django.core.cache import cache
@@ -20,12 +21,13 @@ CONCURRENT_REGISTRATIONS = 4
 
 
 class DeviceLimitRaceTests(TransactionTestCase):
-
     def setUp(self):
         cache.clear()
-        self.user = User.objects.create_user(username="collector", password=PASSWORD,
-                                             is_active=True)
+        self.user = User.objects.create_user(
+            username="collector", password=PASSWORD, is_active=True
+        )
         from .conftest import publish_identity
+
         publish_identity(self.user)  # registration past the first device needs one
 
     def _fill_to(self, live_devices):
@@ -42,17 +44,20 @@ class DeviceLimitRaceTests(TransactionTestCase):
         def register():
             try:
                 start.wait(timeout=10)
-                headers = {"HTTP_AUTHORIZATION":
-                           f"Bearer {issue_register_scope(self.user)}"}
-                response = APIClient().post(DEVICES_URL, register_payload(),
-                                            format="json", **headers)
+                headers = {
+                    "HTTP_AUTHORIZATION": f"Bearer {issue_register_scope(self.user)}"
+                }
+                response = APIClient().post(
+                    DEVICES_URL, register_payload(), format="json", **headers
+                )
                 with lock:
                     statuses.append(response.status_code)
             finally:
                 connections.close_all()
 
-        threads = [threading.Thread(target=register)
-                   for _ in range(CONCURRENT_REGISTRATIONS)]
+        threads = [
+            threading.Thread(target=register) for _ in range(CONCURRENT_REGISTRATIONS)
+        ]
         for thread in threads:
             thread.start()
         for thread in threads:
@@ -77,22 +82,30 @@ class DeviceLimitRaceTests(TransactionTestCase):
             try:
                 start.wait(timeout=10)
                 with transaction.atomic():
-                    n = Device.objects.select_for_update().filter(
-                        user_id=self.user.id, revoked_date__isnull=True).count()
+                    n = (
+                        Device.objects.select_for_update()
+                        .filter(user_id=self.user.id, revoked_date__isnull=True)
+                        .count()
+                    )
                     if n >= cap:
                         return
                     make_device(self.user, registration_id=999)
             finally:
                 connections.close_all()
 
-        threads = [threading.Thread(target=naive_register)
-                   for _ in range(CONCURRENT_REGISTRATIONS)]
+        threads = [
+            threading.Thread(target=naive_register)
+            for _ in range(CONCURRENT_REGISTRATIONS)
+        ]
         for thread in threads:
             thread.start()
         for thread in threads:
             thread.join(timeout=30)
 
         live = Device.objects.filter(user=self.user, revoked_date__isnull=True).count()
-        self.assertGreater(live, cap,
-                           "the device-row lock held after all, so the user-row lock "
-                           "in the view is not what is keeping the cap")
+        self.assertGreater(
+            live,
+            cap,
+            "the device-row lock held after all, so the user-row lock "
+            "in the view is not what is keeping the cap",
+        )

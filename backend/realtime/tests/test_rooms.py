@@ -5,6 +5,7 @@ The suite runs on the in-memory channel layer (conftest), so anything that survi
 a test could only have done so through a persistent store, which the zero-row and
 Redis-key assertions check directly.
 """
+
 import logging
 import uuid
 
@@ -36,13 +37,18 @@ async def subscribe_ok(comm, room_id):
     presence broadcast fires), so later receives are deterministic."""
     await comm.send_json_to({"type": "room_subscribe", "room_id": room_id})
     frame = await comm.receive_json_from(timeout=2)
-    assert frame == {"type": "room_presence", "room_id": room_id,
-                     "device_id": frame["device_id"], "state": "join"}
+    assert frame == {
+        "type": "room_presence",
+        "room_id": room_id,
+        "device_id": frame["device_id"],
+        "state": "join",
+    }
     return frame["device_id"]
 
 
 async def test_room_signal_relays_to_all_subscribers_and_writes_zero_rows(
-        active_user, device, peer, peer_device):
+    active_user, device, peer, peer_device
+):
     """The ephemeral-relay exit test: both devices receive room.relay; no table grows."""
     room = await make_room()
     room_id = str(room.id)
@@ -55,13 +61,21 @@ async def test_room_signal_relays_to_all_subscribers_and_writes_zero_rows(
     assert (await comm_a.receive_json_from(timeout=2))["state"] == "join"
 
     before = await table_counts()
-    await comm_a.send_json_to({"type": "room_signal", "room_id": room_id,
-                               "blob": "room-ciphertext-opaque-to-the-server"})
+    await comm_a.send_json_to(
+        {
+            "type": "room_signal",
+            "room_id": room_id,
+            "blob": "room-ciphertext-opaque-to-the-server",
+        }
+    )
 
     # Both subscribers, sender included, get the relay. The frame carries type, room
     # and blob only: no device id, structurally no sender.
-    expected = {"type": "room_signal", "room_id": room_id,
-                "blob": "room-ciphertext-opaque-to-the-server"}
+    expected = {
+        "type": "room_signal",
+        "room_id": room_id,
+        "blob": "room-ciphertext-opaque-to-the-server",
+    }
     assert await comm_a.receive_json_from(timeout=2) == expected
     assert await comm_b.receive_json_from(timeout=2) == expected
 
@@ -71,7 +85,8 @@ async def test_room_signal_relays_to_all_subscribers_and_writes_zero_rows(
 
 
 async def test_live_count_follows_join_leave_and_disconnect(
-        active_user, device, peer, peer_device):
+    active_user, device, peer, peer_device
+):
     room = await make_room()
     room_id = str(room.id)
     comm_a = await connect_ok(bearer(await mint_access(active_user, device)))
@@ -88,8 +103,12 @@ async def test_live_count_follows_join_leave_and_disconnect(
     before = await table_counts()
     await comm_a.send_json_to({"type": "room_leave", "room_id": room_id})
     frame = await comm_b.receive_json_from(timeout=2)
-    assert frame == {"type": "room_presence", "room_id": room_id,
-                     "device_id": str(device.id), "state": "leave"}
+    assert frame == {
+        "type": "room_presence",
+        "room_id": room_id,
+        "device_id": str(device.id),
+        "state": "leave",
+    }
     assert await live_count(room_id) == 1
 
     # Disconnect leaves every room without an explicit room_leave frame.
@@ -104,7 +123,7 @@ async def test_subscribing_to_a_nonexistent_room_is_ignored(active_user, device)
     ghost = str(uuid.uuid4())
 
     await comm.send_json_to({"type": "room_subscribe", "room_id": ghost})
-    await probe(comm, device.id)                    # consumer alive, no join echo came
+    await probe(comm, device.id)  # consumer alive, no join echo came
     assert await live_count(ghost) == 0
 
     # And the socket did not silently join the group: a signal to it goes nowhere.
@@ -128,7 +147,8 @@ async def test_malformed_room_subscribe_is_dropped_not_fatal(active_user, device
 
 
 async def test_room_signal_from_a_non_subscriber_is_dropped(
-        active_user, device, peer, peer_device):
+    active_user, device, peer, peer_device
+):
     """Knowing a room id is not enough to relay into it over this socket; the sender
     must have subscribed (joined the live session) first."""
     room = await make_room()
@@ -139,14 +159,15 @@ async def test_room_signal_from_a_non_subscriber_is_dropped(
 
     await comm_b.send_json_to({"type": "room_signal", "room_id": room_id, "blob": "x"})
 
-    await probe(comm_b, peer_device.id)             # dropped quietly, socket healthy
+    await probe(comm_b, peer_device.id)  # dropped quietly, socket healthy
     assert await comm_a.receive_nothing(timeout=0.2)
     await comm_a.disconnect()
     await comm_b.disconnect()
 
 
-async def test_oversized_room_blob_is_dropped(active_user, device, peer, peer_device,
-                                              settings):
+async def test_oversized_room_blob_is_dropped(
+    active_user, device, peer, peer_device, settings
+):
     settings.SIGNAL_MAX = 64
     room = await make_room()
     room_id = str(room.id)
@@ -156,7 +177,9 @@ async def test_oversized_room_blob_is_dropped(active_user, device, peer, peer_de
     await subscribe_ok(comm_b, room_id)
     assert (await comm_a.receive_json_from(timeout=2))["state"] == "join"
 
-    await comm_a.send_json_to({"type": "room_signal", "room_id": room_id, "blob": "b" * 65})
+    await comm_a.send_json_to(
+        {"type": "room_signal", "room_id": room_id, "blob": "b" * 65}
+    )
 
     assert await comm_b.receive_nothing(timeout=0.3)
     await comm_a.disconnect()
@@ -164,7 +187,8 @@ async def test_oversized_room_blob_is_dropped(active_user, device, peer, peer_de
 
 
 async def test_alternate_room_uuid_spellings_land_in_one_group(
-        active_user, device, peer, peer_device):
+    active_user, device, peer, peer_device
+):
     """uuid.UUID accepts braces/uppercase/urn spellings; without normalization the two
     sockets would sit in different `room.<spelling>` groups and never meet."""
     room = await make_room()
@@ -172,7 +196,7 @@ async def test_alternate_room_uuid_spellings_land_in_one_group(
     comm_a = await connect_ok(bearer(await mint_access(active_user, device)))
     comm_b = await connect_ok(bearer(await mint_access(peer, peer_device)))
 
-    echoed = await subscribe_ok(comm_a, room_id)        # canonical
+    echoed = await subscribe_ok(comm_a, room_id)  # canonical
     assert echoed == str(device.id)
     await comm_a.send_json_to({"type": "room_subscribe", "room_id": "{%s}" % room_id})
     # Braced spelling normalizes to the same group: the re-join echo names the
@@ -182,7 +206,7 @@ async def test_alternate_room_uuid_spellings_land_in_one_group(
 
     await comm_b.send_json_to({"type": "room_subscribe", "room_id": room_id.upper()})
     frame_b = await comm_b.receive_json_from(timeout=2)
-    assert frame_b["room_id"] == room_id                # normalized into the same namespace
+    assert frame_b["room_id"] == room_id  # normalized into the same namespace
     assert (await comm_a.receive_json_from(timeout=2))["state"] == "join"
 
     await comm_b.send_json_to({"type": "room_signal", "room_id": room_id, "blob": "s"})
@@ -192,8 +216,9 @@ async def test_alternate_room_uuid_spellings_land_in_one_group(
     await comm_b.disconnect()
 
 
-async def test_room_subscriptions_are_capped_per_connection(active_user, device,
-                                                            monkeypatch):
+async def test_room_subscriptions_are_capped_per_connection(
+    active_user, device, monkeypatch
+):
     """One socket cannot hoard unbounded room-group memberships (mirrors the
     500-target presence cap)."""
     monkeypatch.setattr("realtime.consumers.ROOM_SUBSCRIPTIONS_MAX", 1)
@@ -203,7 +228,7 @@ async def test_room_subscriptions_are_capped_per_connection(active_user, device,
     await subscribe_ok(comm, str(room_one.id))
     await comm.send_json_to({"type": "room_subscribe", "room_id": str(room_two.id)})
 
-    await probe(comm, device.id)                    # over-cap subscribe dropped quietly
+    await probe(comm, device.id)  # over-cap subscribe dropped quietly
     assert await live_count(str(room_two.id)) == 0
 
     # Re-subscribing a room already held is not "new" and stays allowed.
@@ -215,7 +240,8 @@ async def test_room_subscriptions_are_capped_per_connection(active_user, device,
 
 
 async def test_room_traffic_emits_no_identifier_or_payload_into_logs(
-        active_user, device, peer, peer_device):
+    active_user, device, peer, peer_device
+):
     """Capture swaps out all root handlers; caplog would grade the scrub filter's
     homework, not the code's."""
     room = await make_room()
@@ -229,18 +255,21 @@ async def test_room_traffic_emits_no_identifier_or_payload_into_logs(
         comm_b = await connect_ok(bearer(await mint_access(peer, peer_device)))
         await subscribe_ok(comm_a, room_id)
         await subscribe_ok(comm_b, room_id)
-        await comm_a.receive_json_from(timeout=2)   # B's join, seen by A
+        await comm_a.receive_json_from(timeout=2)  # B's join, seen by A
 
-        await comm_a.send_json_to({"type": "room_signal", "room_id": room_id, "blob": blob})
+        await comm_a.send_json_to(
+            {"type": "room_signal", "room_id": room_id, "blob": blob}
+        )
         await comm_a.receive_json_from(timeout=2)
         await comm_b.receive_json_from(timeout=2)
 
         # The malformed/ghost paths must be equally silent.
         await comm_a.send_json_to({"type": "room_subscribe", "room_id": "not-a-uuid"})
-        await comm_a.send_json_to({"type": "room_subscribe",
-                                   "room_id": str(uuid.uuid4())})
+        await comm_a.send_json_to(
+            {"type": "room_subscribe", "room_id": str(uuid.uuid4())}
+        )
         await comm_a.send_json_to({"type": "room_leave", "room_id": room_id})
-        await comm_b.receive_json_from(timeout=2)   # A's leave
+        await comm_b.receive_json_from(timeout=2)  # A's leave
         await comm_a.disconnect()
         await comm_b.disconnect()
 

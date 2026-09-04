@@ -28,8 +28,9 @@ def test_activate_action_flips_is_active(user_admin, rf):
 
 
 def test_deactivate_action_flips_is_active_back(user_admin, rf):
-    user = User.objects.create_user(username="bob", password="a-long-enough-pw",
-                                    is_active=True)
+    user = User.objects.create_user(
+        username="bob", password="a-long-enough-pw", is_active=True
+    )
 
     user_admin.deactivate_accounts(rf.post("/"), User.objects.filter(pk=user.pk))
 

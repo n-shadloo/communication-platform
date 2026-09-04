@@ -5,13 +5,19 @@ import uuid
 from channels.generic.websocket import AsyncJsonWebsocketConsumer
 from django.conf import settings
 
-from .auth import (_room_exists as _room_exists_query, authenticate_access,
-                   delete_envelopes, room_join_async, room_leave_async, touch_active)
+from .auth import _room_exists as _room_exists_query
+from .auth import (
+    authenticate_access,
+    delete_envelopes,
+    room_join_async,
+    room_leave_async,
+    touch_active,
+)
 
 AUTH_DEADLINE_SECONDS = 10
 RATE_WINDOW_SECONDS = 1.0
 RATE_MAX_IN_WINDOW = 100
-ROOM_SUBSCRIPTIONS_MAX = 100                     # bounded like presence_targets
+ROOM_SUBSCRIPTIONS_MAX = 100  # bounded like presence_targets
 
 
 class GatewayConsumer(AsyncJsonWebsocketConsumer):
@@ -61,12 +67,14 @@ class GatewayConsumer(AsyncJsonWebsocketConsumer):
             for room_id in list(getattr(self, "rooms", set())):
                 await self._leave_room(room_id)
             if self.device_group:
-                await self.channel_layer.group_discard(self.device_group, self.channel_name)
+                await self.channel_layer.group_discard(
+                    self.device_group, self.channel_name
+                )
 
     # ---- inbound ---------------------------------------------------------
     async def receive(self, text_data=None, bytes_data=None):
         if bytes_data is not None:
-            await self.close(code=4008)          # this protocol is JSON text only
+            await self.close(code=4008)  # this protocol is JSON text only
             return
         if text_data is not None and len(text_data) > settings.WS_MAX_FRAME:
             await self.close(code=4008)
@@ -138,7 +146,8 @@ class GatewayConsumer(AsyncJsonWebsocketConsumer):
         except (ValueError, TypeError):
             return
         await self.channel_layer.group_send(
-            f"dev.{to_device}", {"type": "signal.relay", "blob": blob})
+            f"dev.{to_device}", {"type": "signal.relay", "blob": blob}
+        )
 
     async def _handle_subscribe_presence(self, content):
         ids = content.get("device_ids") or []
@@ -147,7 +156,9 @@ class GatewayConsumer(AsyncJsonWebsocketConsumer):
         valid = set()
         for device_id in ids:
             try:
-                valid.add(str(uuid.UUID(str(device_id))))  # normalized like _handle_signal
+                valid.add(
+                    str(uuid.UUID(str(device_id)))
+                )  # normalized like _handle_signal
             except (ValueError, TypeError):
                 continue
         self.presence_targets = valid
@@ -184,32 +195,52 @@ class GatewayConsumer(AsyncJsonWebsocketConsumer):
         blob = content.get("blob")
         # Ephemeral room text/state: relayed to the room group, never persisted or
         # logged.
-        if room_id in self.rooms and isinstance(blob, str) and len(blob) <= settings.SIGNAL_MAX:
+        if (
+            room_id in self.rooms
+            and isinstance(blob, str)
+            and len(blob) <= settings.SIGNAL_MAX
+        ):
             await self.channel_layer.group_send(
-                f"room.{room_id}", {"type": "room.relay", "room_id": room_id, "blob": blob})
+                f"room.{room_id}",
+                {"type": "room.relay", "room_id": room_id, "blob": blob},
+            )
 
     # ---- channel-layer events (server -> this socket) --------------------
     async def envelope_push(self, event):
-        await self.send_json({"type": "envelope", "id": event["id"],
-                              "seq": event["seq"], "blob": event["blob"]})
+        await self.send_json(
+            {
+                "type": "envelope",
+                "id": event["id"],
+                "seq": event["seq"],
+                "blob": event["blob"],
+            }
+        )
 
     async def signal_relay(self, event):
         await self.send_json({"type": "signal", "blob": event["blob"]})
 
     async def presence_signal(self, event):
-        await self.send_json({"type": "presence", "device_id": event["device_id"],
-                              "state": event["state"]})
+        await self.send_json(
+            {"type": "presence", "device_id": event["device_id"], "state": event["state"]}
+        )
 
     async def room_relay(self, event):
-        await self.send_json({"type": "room_signal", "room_id": event["room_id"],
-                              "blob": event["blob"]})
+        await self.send_json(
+            {"type": "room_signal", "room_id": event["room_id"], "blob": event["blob"]}
+        )
 
     async def room_presence(self, event):
-        await self.send_json({"type": "room_presence", "room_id": event["room_id"],
-                              "device_id": event["device_id"], "state": event["state"]})
+        await self.send_json(
+            {
+                "type": "room_presence",
+                "room_id": event["room_id"],
+                "device_id": event["device_id"],
+                "state": event["state"],
+            }
+        )
 
     async def connection_close(self, event):
-        await self.close(code=4003)              # device was revoked
+        await self.close(code=4003)  # device was revoked
 
     # ---- helpers ---------------------------------------------------------
     # The auth-module existence query, bound as a method so tests can patch it.
@@ -224,8 +255,13 @@ class GatewayConsumer(AsyncJsonWebsocketConsumer):
     async def _room_presence(self, room_id, state):
         await self.channel_layer.group_send(
             f"room.{room_id}",
-            {"type": "room.presence", "room_id": room_id,
-             "device_id": str(self.device.id), "state": state})
+            {
+                "type": "room.presence",
+                "room_id": room_id,
+                "device_id": str(self.device.id),
+                "state": state,
+            },
+        )
 
     async def _bind(self, token_str):
         result = await authenticate_access(token_str)
@@ -249,13 +285,17 @@ class GatewayConsumer(AsyncJsonWebsocketConsumer):
         for device_id in self.presence_targets:
             await self.channel_layer.group_send(
                 f"dev.{device_id}",
-                {"type": "presence.signal", "device_id": str(self.device.id),
-                 "state": state})
+                {
+                    "type": "presence.signal",
+                    "device_id": str(self.device.id),
+                    "state": state,
+                },
+            )
 
     def _origin_ok(self):
         allowed = set(settings.ALLOWED_WS_ORIGINS or [])
         if not allowed:
-            return True                          # unset allowlist = allow (dev)
+            return True  # unset allowlist = allow (dev)
         headers = dict(self.scope.get("headers") or {})
         origin = headers.get(b"origin")
         if origin is None:

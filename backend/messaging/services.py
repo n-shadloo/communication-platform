@@ -21,11 +21,15 @@ def _push(created):
 
     for device_id, envelope in created:
         try:
-            async_to_sync(layer.group_send)(f"dev.{device_id}", {
-                "type": "envelope.push",
-                "id": str(envelope.id), "seq": envelope.seq,
-                "blob": _b64(envelope.blob),
-            })
+            async_to_sync(layer.group_send)(
+                f"dev.{device_id}",
+                {
+                    "type": "envelope.push",
+                    "id": str(envelope.id),
+                    "seq": envelope.seq,
+                    "blob": _b64(envelope.blob),
+                },
+            )
         except Exception:
             # The rows are committed and the drain endpoint will serve them, so a dead
             # channel layer must not fail the send: the client would retry and duplicate

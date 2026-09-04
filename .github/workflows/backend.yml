@@ -1,0 +1,136 @@
+name: backend
+
+# Every push, and every pull request that targets main. The three jobs are
+# independent: a lint failure must not hide a test failure, and the offline
+# install is the one gate that proves the no-foreign-dependency rule still holds.
+on:
+  push:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: backend-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: backend
+
+jobs:
+  lint:
+    name: lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements/*.txt
+      - name: Install the pinned toolchain
+        run: python -m pip install --require-hashes -r requirements/dev.txt
+      - name: ruff check
+        run: ruff check .
+      - name: ruff format --check
+        run: ruff format --check .
+
+  test:
+    name: test
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: chatapp
+          POSTGRES_USER: chatapp
+          POSTGRES_PASSWORD: chatapp
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U chatapp -d chatapp"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      # Test-only values. The suite runs under config.settings.dev, which reads
+      # both keys from the environment at import time; nothing here is a
+      # production credential and nothing here reaches a deployed host.
+      DJANGO_SECRET_KEY: ci-test-secret-not-used-outside-this-runner
+      JWT_SIGNING_KEY: ci-test-jwt-key-not-used-outside-this-runner
+      POSTGRES_DB: chatapp
+      POSTGRES_USER: chatapp
+      POSTGRES_PASSWORD: chatapp
+      POSTGRES_HOST: 127.0.0.1
+      POSTGRES_PORT: 5432
+      REDIS_URL: redis://127.0.0.1:6379/0
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements/*.txt
+      - name: Install the pinned toolchain
+        run: python -m pip install --require-hashes -r requirements/dev.txt
+      - name: pytest
+        # pytest-randomly reorders every run and prints the seed it used, so a
+        # failure that depends on test order is reproducible from the log.
+        run: pytest
+      - name: No model change is missing its migration
+        run: python manage.py makemigrations --check --dry-run
+      - name: Deploy checks against the production settings
+        # A fresh strong secret keeps security.W009 from firing on a value that
+        # exists only for the length of this step. --fail-level WARNING makes
+        # every other deploy warning a build failure rather than a note.
+        env:
+          DJANGO_SETTINGS_MODULE: config.settings.prod
+          DJANGO_ALLOWED_HOSTS: ci.invalid
+          ALLOWED_WS_ORIGINS: https://ci.invalid
+        run: |
+          export DJANGO_SECRET_KEY="$(python -c 'import secrets; print(secrets.token_urlsafe(64))')"
+          python manage.py check --deploy --fail-level WARNING
+
+  offline-install:
+    name: offline-install
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - name: Collect every dependency as a hash-verified wheel
+        # --only-binary=:all: refuses a source distribution, because the VPS has
+        # no compiler and no network when it installs. This is the same set that
+        # ops/vendor.sh produces on the VPS while it is still online.
+        run: |
+          python -m pip download \
+            --require-hashes --only-binary=:all: \
+            -r requirements/dev.txt -d "$RUNNER_TEMP/wheels"
+          echo "wheels collected: $(find "$RUNNER_TEMP/wheels" -name '*.whl' | wc -l)"
+      - name: Install from those wheels with the network index disabled
+        # --no-index is the whole point: pip may not reach any package index. A
+        # dependency that is not in the directory fails here instead of on a VPS
+        # during a shutdown.
+        run: |
+          python -m venv "$RUNNER_TEMP/offline"
+          "$RUNNER_TEMP/offline/bin/pip" install \
+            --no-index --find-links "$RUNNER_TEMP/wheels" \
+            --require-hashes -r requirements/dev.txt
+      - name: The offline tree imports
+        run: |
+          "$RUNNER_TEMP/offline/bin/python" -c "
+          import django, psycopg, redis
+          print('django', django.get_version())
+          "

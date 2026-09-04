@@ -29,21 +29,26 @@ class BasePostureTests(SimpleTestCase):
         self.assertTrue(settings.SIMPLE_JWT["BLACKLIST_AFTER_ROTATION"])
 
     def test_api_authenticates_with_the_device_aware_class(self):
-        self.assertEqual(settings.REST_FRAMEWORK["DEFAULT_AUTHENTICATION_CLASSES"],
-                         ["accounts.auth.DeviceJWTAuthentication"])
+        self.assertEqual(
+            settings.REST_FRAMEWORK["DEFAULT_AUTHENTICATION_CLASSES"],
+            ["accounts.auth.DeviceJWTAuthentication"],
+        )
 
     def test_datastores_are_localhost_only(self):
         self.assertIn(settings.DATABASES["default"]["HOST"], {"127.0.0.1", "localhost"})
-        for location in (settings.CACHES["default"]["LOCATION"],
-                         *settings.CHANNEL_LAYERS["default"]["CONFIG"]["hosts"]):
+        for location in (
+            settings.CACHES["default"]["LOCATION"],
+            *settings.CHANNEL_LAYERS["default"]["CONFIG"]["hosts"],
+        ):
             self.assertRegex(location, r"^redis://(127\.0\.0\.1|localhost):")
 
     def test_scrub_filter_is_attached_and_access_logging_is_off(self):
         logging = settings.LOGGING
 
         self.assertIn("scrub", logging["handlers"]["console"]["filters"])
-        self.assertEqual(logging["filters"]["scrub"]["()"],
-                         "core.logging_filters.ScrubFilter")
+        self.assertEqual(
+            logging["filters"]["scrub"]["()"], "core.logging_filters.ScrubFilter"
+        )
         for logger in ("django.request", "django.server"):
             self.assertEqual(logging["loggers"][logger]["level"], "ERROR")
 
@@ -78,8 +83,9 @@ class ProdPostureTests(SimpleTestCase):
 
     def test_transport_is_https_only(self):
         self.assertTrue(prod.SECURE_SSL_REDIRECT)
-        self.assertEqual(prod.SECURE_PROXY_SSL_HEADER,
-                         ("HTTP_X_FORWARDED_PROTO", "https"))
+        self.assertEqual(
+            prod.SECURE_PROXY_SSL_HEADER, ("HTTP_X_FORWARDED_PROTO", "https")
+        )
 
     def test_cookies_are_secure(self):
         self.assertTrue(prod.SESSION_COOKIE_SECURE)
