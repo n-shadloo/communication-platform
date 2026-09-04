@@ -8,7 +8,7 @@ same transaction, and a wrapping test transaction would hide exactly that.
 import threading
 
 from django.core.cache import cache
-from django.db import connections, transaction
+from django.db import connection, connections, transaction
 from django.test import TransactionTestCase
 from rest_framework.test import APIClient
 
@@ -19,6 +19,18 @@ from devices.models import OneTimePrekey
 from .conftest import PASSWORD, make_device, stock_prekeys
 
 CONCURRENT_CLAIMS = 12
+
+
+def _connect_then_wait(barrier):
+    """Open this thread's database connection before it waits at the barrier.
+
+    Connection setup costs 10-20 ms and varies by thread, more than the whole
+    read-then-delete transaction the race is about, so threads released together
+    would otherwise reach the row one at a time on a slow runner and the double-spend
+    the guard below proves would depend on the machine instead of on the lock.
+    """
+    connection.ensure_connection()
+    barrier.wait(timeout=10)
 
 
 class ClaimRaceTests(TransactionTestCase):
@@ -43,7 +55,7 @@ class ClaimRaceTests(TransactionTestCase):
 
         def claim():
             try:
-                start.wait(timeout=10)
+                _connect_then_wait(start)
                 response = APIClient().post(url, {}, format="json", **self.headers)
                 if response.status_code != 200:
                     with lock:
@@ -108,7 +120,7 @@ class ClaimRaceTests(TransactionTestCase):
 
         def naive_claim():
             try:
-                start.wait(timeout=10)
+                _connect_then_wait(start)
                 with transaction.atomic():
                     row = (
                         OneTimePrekey.objects.filter(device_id=self.owner_device.id)
