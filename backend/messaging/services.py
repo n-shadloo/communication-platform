@@ -41,8 +41,11 @@ def send(messages):
     has drained. Measured under the lock, so two concurrent sends cannot both fit
     into the same headroom.
 
-    Returns the accepted rows, in the order the batch named them, the ids the
-    batch could not reach, and the ids whose mailbox is full.
+    Returns the accepted rows paired with the base64 their sender sent, in the
+    order the batch named them, the ids the batch could not reach, and the ids
+    whose mailbox is full. The base64 rides along because the live push needs
+    exactly that string and re-deriving it from the stored bytes costs a second
+    pass over every blob on the event loop.
     """
     wanted = sorted({message.device_id for message in messages})  # one id per device
     with transaction.atomic():
@@ -71,7 +74,7 @@ def send(messages):
             if held.get(device_id, 0) + new > settings.MAILBOX_MAX_BYTES
         }
         stale = []
-        rows = []
+        accepted = []
         for message in messages:
             device = targets.get(message.device_id)
             if device is None:
@@ -80,11 +83,14 @@ def send(messages):
             if device.id in full:
                 continue
             device.queue_seq += 1
-            rows.append(
-                QueuedEnvelope(
-                    recipient_device_id=device.id,
-                    seq=device.queue_seq,
-                    blob=message.raw,
+            accepted.append(
+                (
+                    QueuedEnvelope(
+                        recipient_device_id=device.id,
+                        seq=device.queue_seq,
+                        blob=message.raw,
+                    ),
+                    message.blob,
                 )
             )
         # Both are no-ops on an empty list, so a batch that reached nothing live
@@ -93,29 +99,30 @@ def send(messages):
             [device for device in targets.values() if device.id not in full],
             ["queue_seq"],
         )
-        QueuedEnvelope.objects.bulk_create(rows)
-    return rows, stale, [str(device_id) for device_id in sorted(full)]
+        QueuedEnvelope.objects.bulk_create([row for row, _blob in accepted])
+    return accepted, stale, [str(device_id) for device_id in sorted(full)]
 
 
-async def push(envelopes):
+async def push(accepted):
     """Best-effort live delivery over the fan-out bus.
 
     Called after `send` has committed, never inside it: a publish from an open
     transaction would announce rows a rollback then takes away. Redis drops a
     publish to a topic nobody holds, so a device without a socket is a no-op.
 
+    One round trip for the batch, not one per copy, and the sender's own base64
+    rather than a re-encoding of the bytes it decoded to — `realtime.bus` carries
+    the measurements for both.
+
     The queue rows are the source of truth and are already committed, so a bus
     that is down must not fail the send — the client would retry and duplicate
-    every envelope. `realtime.bus.publish` is what swallows that, silently,
+    every envelope. `realtime.bus.publish_many` is what swallows that, silently,
     because the message would carry a device id.
     """
-    for envelope in envelopes:
-        await bus.push_envelope(
-            envelope.recipient_device_id,
-            str(envelope.id),
-            envelope.seq,
-            _b64(envelope.blob),
-        )
+    await bus.push_envelopes(
+        (envelope.recipient_device_id, str(envelope.id), envelope.seq, blob)
+        for envelope, blob in accepted
+    )
 
 
 def drain(device_id, limit):

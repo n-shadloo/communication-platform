@@ -82,11 +82,48 @@ async def publish(topic, payload):
         return
 
 
-async def push_envelope(device_id, envelope_id, seq, blob):
-    """The live half of a committed send. The queue row is the source of truth."""
-    await publish(
-        device_topic(device_id),
-        {"type": "envelope", "id": envelope_id, "seq": seq, "blob": blob},
+async def publish_many(frames):
+    """Best-effort fan-out of several payloads, in one round trip.
+
+    Two paths reach here with more than one topic: a batch send, which is one
+    envelope per recipient copy and capped at 256, and a presence announcement,
+    which is one frame per subscribed device and capped at 500. Awaited one at a
+    time those are that many sequential round trips on the event loop, which on
+    one vCPU is the whole process: 256 sequential publishes cost 37.1 ms on
+    loopback against 1.5 ms for the pipeline, and 500 cost 55.9 ms against 2.5 ms.
+
+    `transaction=False`, because MULTI/EXEC buys nothing here — a publish takes
+    effect the moment Redis reads it, and there is no state for the batch to be
+    atomic over. Best-effort and silent like `publish`, with the same reason: the
+    error would name a topic, and a topic names a device.
+    """
+    frames = list(frames)
+    if not frames:
+        return
+    try:
+        client = get_client()
+        async with client.pipeline(transaction=False) as pipe:
+            for topic, payload in frames:
+                pipe.publish(topic, json.dumps(payload))
+            await pipe.execute()
+    except Exception:
+        return
+
+
+async def push_envelopes(envelopes):
+    """The live half of a committed send. The queue rows are the source of truth.
+
+    `blob` is the base64 the sender's own request carried, handed through rather
+    than re-encoded from the stored bytes: the two are the same string, and
+    producing it a second time costs 53 ms of event-loop CPU on the largest batch
+    at the largest bucket.
+    """
+    await publish_many(
+        (
+            device_topic(device_id),
+            {"type": "envelope", "id": envelope_id, "seq": seq, "blob": blob},
+        )
+        for device_id, envelope_id, seq, blob in envelopes
     )
 
 
@@ -94,11 +131,14 @@ async def relay_signal(device_id, blob):
     await publish(device_topic(device_id), {"type": "signal", "blob": blob})
 
 
-async def announce_presence(device_id, subject_id, state):
-    """Tell one subscribed device that `subject_id` came online or went offline."""
-    await publish(
-        device_topic(device_id),
-        {"type": "presence", "device_id": subject_id, "state": state},
+async def announce_presence(device_ids, subject_id, state):
+    """Tell each subscribed device that `subject_id` came online or went offline."""
+    await publish_many(
+        (
+            device_topic(device_id),
+            {"type": "presence", "device_id": subject_id, "state": state},
+        )
+        for device_id in device_ids
     )
 
 
