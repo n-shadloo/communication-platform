@@ -46,13 +46,65 @@ is incomplete, not merely terse.
 | Rate limiting ([0010](decisions/0010-redis-rate-limiting-that-fails-closed.md)) | Redis holds the counters. The scope names, the `THROTTLE_*` variables, their defaults and their `N/period` syntax are unchanged. An authenticated request counts per user id, an anonymous one per client address. `429` carries `throttled` and `Retry-After`. When Redis is unreachable a throttled route answers `503 unavailable` | A counter in process memory is per worker, and a counter on disk violates the volatile-data rule | 0 to 2 | A second application host appears and the client address stops identifying a caller | Redis becomes a hard dependency of every throttled route. Its loss is an outage, by choice | Failing closed is the standard posture for a control whose purpose is to refuse traffic (current). Redis is already a hard dependency of the gateway (current) |
 | Admin ([0011](decisions/0011-django-unfold-admin-panel.md), panel record: [`../admin/PANEL-RECORD.md`](../admin/PANEL-RECORD.md)) | A django-unfold panel. Registered: `User`, `Device`, `Room`, `Attachment` and the admin `LogEntry` as a read-only audit log. Every key, blob, prekey, log-record, backup and queue model is hidden. Every administrative action writes a `LogEntry`. Lockout state lives only in Redis. Assets are served from the project | An operator needs a support surface, and the default admin would expose ciphertext, key bytes and the social graph | 0 to 1 | The staff workflow outgrows list-and-edit, or a second operator role needs permissions the admin cannot express | A dependency with its own template and asset surface. Every newly registered model must be re-audited for exposure | django-unfold is a maintained, widely used admin theme (current). The audit-log requirement is the operator half of the threat model — reasoned, not sourced |
 | Dependency policy ([0012](decisions/0012-pinned-hashed-and-untracked-wheel-cache.md)) | Every dependency is pinned and hashed. `backend/vendor/` is not tracked; the operator produces the wheel set on the VPS with `ops/vendor.sh` while online. CI proves that every dependency installs from wheels with `--no-index` and `--only-binary=:all:` | The system must install with no network, and a 26 MB binary cache in git is a cost paid by every clone forever | 0 to 4 | The VPS loses the ability to fetch wheels at all, and the cache must travel with the repository | The operator must run one command while online before the first offline install, and again after any version change | pip documents `--require-hashes`, `--no-index` and `--find-links` as the hash-verified offline install path (current) |
-| Testing ([0013](decisions/0013-pytest-and-ruff-as-the-test-and-lint-stack.md)) | pytest with pytest-django and pytest-asyncio, random order through pytest-randomly, `httpx` over `ASGITransport` driving the API, a hand-written ASGI communicator (`realtime/tests/socket.py`) driving `/ws`, and `hypothesis` driving property-based tests. ruff is the only linter and formatter. No type checker. Phase 4 sets a 95 percent branch-coverage gate in CI | A fixed collection order hides an order dependency until the day it fails alone | 0 to 4 | The suite runtime stops fitting a pre-push gate, or a class of defect appears that only a type checker catches | A random order makes a failure harder to reproduce without its seed. A coverage gate can be satisfied by tests that assert nothing. The socket driver is ninety lines the project maintains itself | ruff is a widely adopted linter and formatter (current). `hypothesis` is not yet installed; it arrives with the surface that needs it (current). The socket driver is written rather than taken from a library because both candidates were measured and each loses something the suite proves: Starlette's `TestClient` runs each socket in its own portal thread and event loop, which leaks one Redis client per test onto a loop the teardown cannot reach, and `httpx-ws`'s ASGI transport converts an exception inside the route into a close with code 1011 carrying `str(exception)` as the reason, which erases the crash-versus-clean-close distinction and puts that text on the wire (measured, 2026-09-04) |
+| Testing ([0013](decisions/0013-pytest-and-ruff-as-the-test-and-lint-stack.md)) | pytest with pytest-django and pytest-asyncio, random order through pytest-randomly, `httpx` over `ASGITransport` driving the API, a hand-written ASGI communicator (`realtime/tests/socket.py`) driving `/ws`, and `hypothesis` driving property-based tests. ruff is the only linter and formatter. No type checker. A 95 percent branch-coverage gate runs in CI, set in phase 4 run 13 | A fixed collection order hides an order dependency until the day it fails alone | 0 to 4 | The suite runtime stops fitting a pre-push gate, or a class of defect appears that only a type checker catches | A random order makes a failure harder to reproduce without its seed. A coverage gate can be satisfied by tests that assert nothing. The socket driver is ninety lines the project maintains itself | ruff is a widely adopted linter and formatter (current). `hypothesis` arrived in run 12 with the first property-based tests, and `jsonschema` in run 13 with the contract suite (current). The socket driver is written rather than taken from a library because both candidates were measured and each loses something the suite proves: Starlette's `TestClient` runs each socket in its own portal thread and event loop, which leaks one Redis client per test onto a loop the teardown cannot reach, and `httpx-ws`'s ASGI transport converts an exception inside the route into a close with code 1011 carrying `str(exception)` as the reason, which erases the crash-versus-clean-close distinction and puts that text on the wire (measured, 2026-09-04) |
 | Process hardening ([0014](decisions/0014-process-hardening-at-the-edge.md)) | uvicorn runs with `--proxy-headers`, `--forwarded-allow-ips 127.0.0.1` and `--no-access-log`. A pure-ASGI middleware sets a deadline on every HTTP request. Every route has an explicit body cap equal to the largest payload its contract admits. The trusted host list is `ALLOWED_HOSTS`. No CORS policy exists | One process on 1 GB of RAM has no headroom for an unbounded body or a request that never ends | 0 to 2 | A browser client is served from an origin other than the API origin, at which point a CORS policy becomes necessary | A deadline can cut a legitimate slow request. Each body cap is one more contract detail to keep true | Trusting forwarded headers only from the proxy address is uvicorn's documented posture (current). The single-origin argument against CORS is standard (current) |
 | Documents ([0015](decisions/0015-the-document-map.md)) | `backend/SECURITY.md` and `backend/CLIENT_CONTRACT.md` stay at their paths and are rewritten in place. New root documents: `API_CHANGES.md`, `ACCEPTED_RISKS.md`, `docs/architecture/` and `docs/admin/`. `backend/ops/RUNBOOK.md` becomes the operator runbook. A root document routes to a `backend/` document and never repeats it | `frontend/docs/` links to the three `backend/` document sets by path; moving one breaks the client's references | 0 to 4 | The client stops depending on the `backend/` paths | Two document roots to keep consistent, and one routing rule to enforce at review | Docs-as-code keeps the record in version control under review, next to the code (current) |
 | Voice media keys ([0016](decisions/0016-client-held-voice-media-keys.md)) | Each participant generates a per-sender media key and distributes it to every participant device over the pairwise session, carried in volatile `signal` frames. A `room_presence` leave rotates the key. The server, LiveKit and coturn never hold a media key | An SFU that can decrypt is a wiretap at the point the threat model assumes is hostile | 0 to 1 | A room needs a participant count at which per-sender key distribution over pairwise sessions stops being affordable | Key distribution is O(participants) for each sender, and it repeats on every leave | Per-participant keys distributed out of band, with rotation on membership change, is the end-to-end encryption model an SFU supports (current) |
-| Multi-row writes ([0017](decisions/0017-one-request-is-one-transaction-on-the-multi-row-writes.md)) | One request is one transaction on the two routes that write more than one row. The send locks every live target in one `ORDER BY id` statement, advances each counter under that lock and commits the batch as one update and one insert. The claim wraps the target read, the per-device `SKIP LOCKED` take and one delete by primary key | A per-item transaction lets one request commit half its effect, and the client cannot tell which half: on the send that half is a mailbox counter run ahead of its rows, which a client reads as message loss | 0 to 2 | Contention on one hot mailbox raises p95 send latency, or the lock wait shows in `pg_stat_activity` with `wait_event_type = 'Lock'` | A send holds a row lock on every recipient until it commits, so two sends to overlapping recipient sets serialise across the whole batch; a concurrent claim skips deeper into the prekey pool | `SELECT ... ORDER BY id FOR UPDATE` is the standard deadlock-avoidance form, and PostgreSQL's `LockRows` node sits above the `Sort` node that makes it work (current). Measured: a send costs 3 queries of its own at 1, 6 and 20 recipients alike (current) |
+| Multi-row writes ([0017](decisions/0017-one-request-is-one-transaction-on-the-multi-row-writes.md)) | One request is one transaction on the two routes that write more than one row. The send locks every live target in one `ORDER BY id` statement, advances each counter under that lock and commits the batch as one update and one insert. The claim wraps the target read, the per-device `SKIP LOCKED` take and one delete by primary key | A per-item transaction lets one request commit half its effect, and the client cannot tell which half: on the send that half is a mailbox counter run ahead of its rows, which a client reads as message loss | 0 to 2 | Contention on one hot mailbox raises p95 send latency, or the lock wait shows in `pg_stat_activity` with `wait_event_type = 'Lock'` | A send holds a row lock on every recipient until it commits, so two sends to overlapping recipient sets serialise across the whole batch; a concurrent claim skips deeper into the prekey pool | `SELECT ... ORDER BY id FOR UPDATE` is the standard deadlock-avoidance form, and PostgreSQL's `LockRows` node sits above the `Sort` node that makes it work (current). Measured: a send costs 4 queries of its own at 1, 6 and 20 recipients alike, the fourth being the mailbox-ceiling aggregate phase 4 added (current) |
+| Local trust boundary ([0018](decisions/0018-redis-is-authenticated-and-never-deserialized.md)) | Redis requires a password in production, refused otherwise by `core.E004` at `check --deploy`, and this process reads Redis only as strings: the rate counters, the login lockout and the presence sets go through the redis client, and Django's cache framework — which unpickles every value it reads — stays on its process-local default that nothing uses | The VPS is shared with two other projects, loopback is reachable by every local process, and a writer of an unauthenticated Redis could flush the counters, forge frames on the bus and plant a pickle under a key this process reads | 0 to 2 | Redis moves to a host of its own, or a second consumer of the instance needs an ACL user rather than one password | One more secret in the environment file, filled at deploy time. A Redis restart still clears every volatile key | Django 6.0.7's `RedisSerializer.loads` falls back to `pickle.loads` and its Redis cache backend calls it on every read (current). The audit planted a payload under the lockout key and observed it run in the test process (measured, 2026-09-04) |
+| Observability ([0019](decisions/0019-the-system-emits-no-request-scoped-telemetry.md)) | The system emits no request-scoped telemetry: no access log at any layer, no tracing, no metrics endpoint, no error reporter, and no log line that names a user, a device, a room, an attachment, a token or a path. The one deliberate record is the admin audit log — what the operator did, never what a user did | The request path of five routes carries a peer's user id, so a log of paths is the social graph at rest on the host the threat model assumes is hostile, and a log outlives the row it names | 0 to 2 | An incident a person cannot diagnose from the journal, `check --deploy` and the health route inside one working day; or a second application host, where correlation is what counters cannot replace | No p95 by route, no error rate, no way to answer "which request did that" after the fact, and no alerting: a failure is noticed by a person, never by a page | `ops/audit/log_silence.py` drives every route and the gateway at DEBUG with the scrubber bypassed and finds no identifier, blob or token (measured, 2026-09-04). nginx's `combined` format writes `$remote_addr` and `$request`, and a server block inherits the `http` block's access log unless it sets its own — which is what phase 4 found at the edge and closed (measured, 2026-09-04) |
 
-## 2. Assumption ledger
+## 2. Capacity model
+
+For band 0 and the one band of headroom above it. Every number here is measured;
+the measurements and their conditions are in
+[`GROUND-TRUTH.md`](GROUND-TRUTH.md) §4, §4.1 and §4.2, and none of them was taken
+on the VPS, which does not serve yet.
+
+**What one worker holds.** The load curve (§4.1) has a knee between 8 and 32
+concurrent HTTP requests. Below it the process is latency-bound and throughput
+rises with concurrency; above it throughput falls and p95 grows faster than
+concurrency, which is one event loop saturating. At the knee the heaviest
+measured route — a hundred-envelope drain, two queries and a 137 kB body — served
+577 requests a second at a p95 of 72 ms. That was measured on the developer
+machine, which has more than one core; on one vCPU the ORM threads and the
+generator share the core with the loop, so read the shape rather than the rate,
+and treat the VPS knee as lower until a VPS measurement replaces this.
+
+**Against the band, that is not close.** Band 0 is fewer than 50 accounts and at
+most 500 devices, and a device that is connected takes its envelopes over its
+WebSocket rather than by polling. The HTTP surface carries sends, acks, key
+claims and the occasional list. One send of 256 envelopes at the largest bucket
+costs about 131 ms of event-loop CPU and one pipelined Redis round trip; nothing
+else on the surface costs more than a few milliseconds.
+
+**The connection budget.** Sixteen per worker — the psycopg pool's `max_size` —
+plus one for the maintenance timer while it runs. At the default one worker that
+is 17 against PostgreSQL's own default `max_connections` of 100. The pool is not
+the binding constraint at the measured service times: 60 concurrent drains
+through a pool of one, with a one-second acquisition timeout, all returned `200`.
+Where it does run out, the caller now gets `503 unavailable` rather than a `500`,
+because a pool with nothing free is saturation and not a defect.
+
+**One knob bounds two things.** `--limit-concurrency 512` counts connections, and
+a live WebSocket is a connection, so the number is sized for the device ceiling
+of the band rather than for HTTP concurrency. uvicorn offers no second knob.
+Lowering it to the HTTP knee would refuse sockets the band expects to hold, so it
+stays at 512 and the knee is recorded here instead.
+
+**The flip trigger for a second worker is a second vCPU.** On one core a second
+worker splits the core rather than adding one, and it doubles the connection
+budget and the subscription count for nothing. So the trigger below is written
+against the host, not against the process:
+
+| Move | Trigger |
+|---|---|
+| A second vCPU | Sustained p95 above 1 s on any route class at real traffic, with the process CPU-bound rather than waiting — the same threshold A2 uses for send latency |
+| `WEB_CONCURRENCY` to 2 | The VPS has more than one vCPU **and** the resident set of one worker leaves room for a second under A3's 700 MB ceiling. Never before both |
+| An HTTP concurrency bound of its own, below `--limit-concurrency` | Sustained concurrent HTTP requests above the measured knee, which nothing observes today. Adding one now would shed traffic the process is currently serving |
+| A denormalised mailbox-bytes counter | AR-7's trigger in [`../../ACCEPTED_RISKS.md`](../../ACCEPTED_RISKS.md) |
+
+## 3. Assumption ledger
 
 Never delete or soften a row here to make the design look decided.
 
@@ -65,15 +117,16 @@ Never delete or soften a row here to make the design look decided.
 | A5 | Attachment bytes fit the VPS disk under the retention windows | `ATTACH_TTL_DAYS` and the per-user quota as configured | Disk usage above 70 percent, or the first quota rejection a user reports |
 | A6 | The retention windows are longer than a realistic offline period during a shutdown | `ENVELOPE_TTL_DAYS` as configured | A user reports a message that expired before delivery |
 | A7 | `check --deploy` in CI can run against a stub environment that is representative | A generated 50-character secret and a stub host list | The first deployment defect that a green `check --deploy` did not catch |
+| A8 | One mailbox's ceiling holds a week of a member's traffic, so a device that was merely offline is never refused | `MAILBOX_MAX_BYTES` of 32 MiB of undelivered bytes | The first `full_devices` a client reports for a device that was offline and not under attack, or the queue table above 2 GB |
 
-## 3. Deferrals
+## 4. Deferrals
 
 Never mark a row resolved without the trigger it names.
 
 | Item | Trigger that ends the deferral |
 |---|---|
 | A second factor on the admin login | A second operator exists. Recorded on 2026-09-04 as AR-1 in `ACCEPTED_RISKS.md` |
-| The 95 percent branch-coverage gate in CI | Phase 4 |
+| The 95 percent branch-coverage gate in CI | Resolved on 2026-09-04: run 13 set `--cov-fail-under=95` in `backend/pytest.ini` and in the CI test job, over the exclusions [0013](decisions/0013-pytest-and-ruff-as-the-test-and-lint-stack.md) names |
 | `hypothesis` in `requirements/dev.txt` | The first property-based test. `httpx` landed on 2026-09-04, with the first test that drives the FastAPI surface, and is no longer deferred |
 | `ACCEPTED_RISKS.md` | Resolved on 2026-09-04: it landed with the admin in phase 3, carrying the absent second factor, the attachment capability in the panel's page source, and the fail-closed lockout. `API_CHANGES.md` landed on 2026-09-03, in the second run of phase 1, and is no longer deferred |
 | `backend/ops/RUNBOOK.md` | Phase 5 |
@@ -83,7 +136,26 @@ Never mark a row resolved without the trigger it names.
 | A `verified` date check in CI over `GROUND-TRUTH.md` | The first entry passes the 90-day window |
 | Any second application host, read replica, worker fleet or cache tier | Band 1 is reached and measured, not assumed |
 
-## 4. Decision log
+## 5. Review notes
+
+A review never reopens an ADR. Where a review disagrees with one, or finds a
+field of one that cannot be observed, the disagreement is a note here with a
+trigger, and the ADR stands.
+
+| ADR | The note | Trigger that acts on it |
+|---|---|---|
+| [0002](decisions/0002-fastapi-as-the-only-http-api-surface.md) | Half of the flip trigger is not observable. "The cost of two frameworks in one process exceeds the response-path gain" needs the gain as a number, and no measurement of this surface against the DRF surface it replaced exists — the load curve in [`GROUND-TRUTH.md`](GROUND-TRUTH.md) §4.1 measures the FastAPI routes alone, so it establishes a knee and not a comparison. The seam review of phase 4 agrees with the decision and records only that this clause cannot fire on evidence. The other clause, "Django's own async story closes the gap", is observable by reading a release note | The first time a person proposes folding the API back into Django. The measurement that would settle it — the same route served both ways under the same generator, on the VPS — is worth taking then and not before, because it costs a DRF implementation of a route that no longer exists |
+
+## 6. Review log
+
+| Date | Review | Outcome |
+|---|---|---|
+| 2026-09-04 | Contract (`django-api-contract`) | Route table reconciled against the pre-rebuild `API.md` files at the phase-1 merge base: 35 operations to 32, the three removed ones already recorded. Success and request bodies diffed field for field; one addition (`full_devices`) already recorded, one stale claim corrected. Fixed: every id and `_date` the document publishes now declares its format; nine read routes gained the retry paragraph every other route carried; the `405` and `500` envelopes are asserted on the wire; `HEAD` and `OPTIONS` recorded as refused |
+| 2026-09-04 | Seam (`fastapi-alongside-django`) | Qualification verdict against [0002](decisions/0002-fastapi-as-the-only-http-api-surface.md): the long-lived connection qualifies the surface, and the note in §5 records the clause that cannot be measured. Seam facts in [`GROUND-TRUTH.md`](GROUND-TRUTH.md) §6 re-read against the tree and unchanged. Fixed: a socket's bind no longer queues behind the row lock a send holds — measured at 1.007 s before and 0.0005 s after — which mattered because a websocket scope enters no `ThreadSensitiveContext` and that wait was every socket's. The panel's login is now driven through the middleware stack in front of it, which no suite did |
+| 2026-09-04 | Architecture (`backend-system-design`) | Nineteen positions, eight assumptions and ten deferrals checked for their fields: all complete, every date inside the 90-day window. One position was missing entirely and is now [0019](decisions/0019-the-system-emits-no-request-scoped-telemetry.md): the system emits no request-scoped telemetry. That was the design's most consequential decision and existed only as an invariant and a set of configuration deviations, with no forcing function, no cost and no flip trigger a reader could find |
+| 2026-09-04 | Panel (`django-unfold-expert`) | Recorded in [`../admin/PANEL-RECORD.md`](../admin/PANEL-RECORD.md) §2 |
+
+## 7. Decision log
 
 | ADR | Title | Status | Phase | Landed | Supersedes / Superseded by |
 |---|---|---|---|---|---|
@@ -104,3 +176,5 @@ Never mark a row resolved without the trigger it names.
 | [0015](decisions/0015-the-document-map.md) | The document map | Accepted | 1 to 5 | — | — |
 | [0016](decisions/0016-client-held-voice-media-keys.md) | Client-held voice media keys | Accepted | 1 | 2026-09-03 | — |
 | [0017](decisions/0017-one-request-is-one-transaction-on-the-multi-row-writes.md) | One request is one transaction on the multi-row writes | Accepted | 2 | 2026-09-04 | — |
+| [0018](decisions/0018-redis-is-authenticated-and-never-deserialized.md) | Redis is authenticated, and nothing deserializes what it holds | Accepted | 4 | 2026-09-04 | — |
+| [0019](decisions/0019-the-system-emits-no-request-scoped-telemetry.md) | The system emits no request-scoped telemetry | Accepted | 1 to 4 | 2026-09-04 | — |

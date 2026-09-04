@@ -65,7 +65,8 @@ endpoint does not declare is refused.
 
 **Retry semantics.** A retry of the same `PUT` either applies it or answers `409
 stale_version` because the first attempt already stored that version. Both leave the
-stored blob correct; on `409` the device refetches and re-applies.
+stored blob correct; on `409` the device refetches and re-applies. `GET` writes nothing
+and is safe to repeat.
 
 **Responses**
 

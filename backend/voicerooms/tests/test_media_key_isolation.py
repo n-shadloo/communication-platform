@@ -12,10 +12,13 @@ import uuid
 from pathlib import Path
 
 import jwt
+import pytest
 from django.apps import apps
 from pydantic import BaseModel
 
 from voicerooms.livekit import mint_join_token
+
+from .conftest import LIVEKIT_SECRET, name_blob_b64
 
 # Identifier shapes that would mean content-key material had grown a server surface.
 # `_?` keeps prose ("media key" in a comment) from tripping it while any identifier
@@ -142,3 +145,54 @@ def test_room_token_is_a_pure_video_grant_with_no_key_material(settings):
         *claims["video"]["canPublishSources"],
     ]
     assert secret not in flat
+
+
+@pytest.mark.django_db(transaction=True)
+def test_the_room_read_answers_no_key_shaped_field(
+    http, active_user, device, bearer, room
+):
+    """The whole of what a client learns about a room: an id, an encrypted name it
+    already holds the key for, a date and a headcount. A key field appearing here
+    would mean the server had started distributing media crypto."""
+    body = http.get(
+        f"/api/v1/rooms/{room.id}", headers=bearer(active_user, device)
+    ).json()
+
+    assert set(body) == {"room_id", "name_blob", "updated_date", "live_count"}
+    assert [name for name in body if FORBIDDEN.search(name)] == []
+
+
+@pytest.mark.django_db(transaction=True)
+def test_the_minted_token_response_carries_no_key_material_end_to_end(
+    http, active_user, device, bearer, room, voice_settings
+):
+    """The unit-level walk above proves the payload; this one proves what actually
+    leaves the process — the response envelope and the JWT header included."""
+    body = http.post(
+        f"/api/v1/rooms/{room.id}/token", headers=bearer(active_user, device)
+    ).json()
+
+    assert [name for name in body if FORBIDDEN.search(name)] == []
+    header = jwt.get_unverified_header(body["token"])
+    assert [name for name in header if FORBIDDEN.search(name)] == []
+    claims = jwt.decode(body["token"], LIVEKIT_SECRET, algorithms=["HS256"])
+    assert [name for name in claims if FORBIDDEN.search(name)] == []
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.parametrize("field", ["media_key", "sframe_key", "room_key", "e2ee_key"])
+def test_no_room_route_gives_a_key_anywhere_to_land(
+    http, active_user, device, bearer, room, field
+):
+    """The inbound half: the request models forbid an undeclared field, so a
+    client that tried to hand the server a media key is refused rather than having
+    it silently dropped — and there is no column it could have reached."""
+    headers = bearer(active_user, device)
+    body = {"name_blob": name_blob_b64(), field: "AAAA"}
+
+    for method, url in (("POST", "/api/v1/rooms"), ("PUT", f"/api/v1/rooms/{room.id}")):
+        response = http.request(method, url, json=body, headers=headers)
+
+        assert response.status_code == 400
+        assert response.json()["code"] == "invalid_request"
+        assert field in response.json()["detail"]

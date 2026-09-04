@@ -5,6 +5,8 @@ published key material, its presence in peers' device lists, and the ETag siblin
 poll.
 """
 
+import base64
+
 import pytest
 
 from api.auth import issue_full
@@ -198,3 +200,91 @@ def test_relabelling_a_live_device_works(http, active_user, device, bearer):
 
     assert response.status_code == 200
     assert Device.objects.get(id=device.id).label_blob is not None
+
+
+def test_the_device_list_log_survives_a_revocation(
+    http, active_user, device, bearer, doomed, peer, peer_device
+):
+    """The log is the account's, not the device's, and it is append-only: a client
+    records the removal *in* it (CLIENT_CONTRACT.md §J), so a revocation that pruned
+    the log would erase the evidence peers compare heads over."""
+    from core.buckets import DEVICELOG_BUCKETS
+
+    blob = base64.b64encode(b"R" * min(DEVICELOG_BUCKETS)).decode()
+    headers = bearer(active_user, device)
+    http.post("/api/v1/me/devicelog", json={"records": [{"blob": blob}]}, headers=headers)
+
+    http.delete(f"{DEVICES_URL}/{doomed.id}", headers=headers)
+
+    page = http.get(
+        f"/api/v1/users/{active_user.id}/devicelog", headers=bearer(peer, peer_device)
+    ).json()
+    assert [record["blob"] for record in page["records"]] == [blob]
+    assert page["head_seq"] == 0
+
+
+def test_the_accounts_identity_survives_a_revocation(
+    http, active_user, device, bearer, doomed, peer, peer_device
+):
+    """Cross-signing identity belongs to the account. Revoking one device must not
+    make its peers treat every other device as unverifiable."""
+    from .conftest import publish_identity
+
+    publish_identity(active_user, version=3)
+
+    http.delete(f"{DEVICES_URL}/{doomed.id}", headers=bearer(active_user, device))
+
+    served = http.get(
+        f"/api/v1/users/{active_user.id}/identity", headers=bearer(peer, peer_device)
+    )
+    assert served.status_code == 200
+    assert served.json()["version"] == 3
+
+
+def test_revoking_a_device_id_that_never_existed_is_the_same_404(
+    http, active_user, device, bearer
+):
+    """A well-formed id for no device answers exactly as an id from another account
+    does, so a 404 never confirms that a device exists."""
+    import uuid as uuid_module
+
+    response = http.delete(
+        f"{DEVICES_URL}/{uuid_module.uuid4()}", headers=bearer(active_user, device)
+    )
+
+    assert response.status_code == 404
+    assert response.json()["code"] == "not_found"
+
+
+def test_a_revoked_device_cannot_replenish_its_own_prekeys(
+    http, active_user, device, bearer, doomed
+):
+    """The token generation bump reaches every route the device had, not just the
+    list: a revoked device must not be able to refill the pool the revocation just
+    emptied."""
+    access, _refresh = issue_full(active_user, doomed)
+    http.delete(f"{DEVICES_URL}/{doomed.id}", headers=bearer(active_user, device))
+
+    response = http.put(
+        f"{DEVICES_URL}/{doomed.id}/prekeys",
+        json={"otpks": [{"key_id": 1, "pub": base64.b64encode(b"k" * 32).decode()}]},
+        headers=access_headers(access),
+    )
+
+    assert response.status_code == 401
+    assert response.json()["code"] == "token_revoked"
+    assert OneTimePrekey.objects.filter(device=doomed).count() == 0
+
+
+def test_a_revoked_device_is_gone_from_its_owners_own_list_too(
+    http, active_user, device, bearer, doomed
+):
+    """The owner's view and the peers' view agree, so a client's own device table
+    does not keep offering a device it can no longer reach."""
+    headers = bearer(active_user, device)
+
+    http.delete(f"{DEVICES_URL}/{doomed.id}", headers=headers)
+
+    listed = http.get(DEVICES_URL, headers=headers).json()["devices"]
+    assert str(doomed.id) not in {entry["device_id"] for entry in listed}
+    assert str(device.id) in {entry["device_id"] for entry in listed}

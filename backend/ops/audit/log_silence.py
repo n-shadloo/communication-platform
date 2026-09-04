@@ -80,11 +80,9 @@ def _activate(user_id):
 async def _scripted_account_traffic(client):
     """The account half: register, activate, log in. Returns {label: generated
     secret}, everything a log line must never contain."""
-    from django.core.cache import cache
+    from api.redis import get_client
 
-    from api.orm import run_unit
-
-    await run_unit(cache.clear)  # rate counters are shared
+    await get_client().flushdb()  # rate counters are shared
     s = {
         "username": f"aud{random_secrets.token_hex(6)}",
         "password": random_secrets.token_urlsafe(24),

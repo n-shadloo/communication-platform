@@ -159,6 +159,11 @@ Tests use `config.settings.dev` (see `pytest.ini`) and require both services run
 The dev settings fall back to insecure dev keys for `DJANGO_SECRET_KEY` and
 `JWT_SIGNING_KEY` when unset; everything else reads from the environment.
 
+Branch coverage is gated at 95 percent over `backend/`. `pytest` on its own does not
+measure it, so the inner loop stays fast and a single file can be run alone; the gate
+is `pytest --cov --cov-branch`, which is what CI runs and what `pytest.ini` binds the
+floor to. `pyproject.toml` carries what is measured and what is excluded.
+
 Each app holds exactly one `0001_initial` migration. A developer database that
 recorded the history before it was regenerated cannot be migrated onto this one — drop
 and recreate it, as `ops/postgres/README.md` describes. A route change that alters the
@@ -183,8 +188,9 @@ Every environment variable the code reads, with its default:
 | `DB_POOL_MIN_SIZE` | `1` | psycopg connection pool, minimum size |
 | `DB_POOL_MAX_SIZE` | `16` | psycopg connection pool, maximum size; the ceiling on what one process takes from `max_connections` |
 | `DB_POOL_TIMEOUT` | `10` | Seconds to wait for a pooled connection |
-| `REDIS_URL` | `redis://127.0.0.1:6379/0` | Redis URL for the cache, the rate counters, the gateway bus, and room presence |
-| `JWT_SIGNING_KEY` | — (required) | HS256 signing key for all JWTs |
+| `REDIS_URL` | `redis://127.0.0.1:6379/0` | Redis URL for the rate counters, the login lockout, the gateway bus, and room presence. Production carries the `requirepass` value as `redis://:<password>@127.0.0.1:6379/0`; `check --deploy` refuses a URL without one (`core.E004`) |
+| `REDIS_COMMAND_TIMEOUT_SECONDS` | `2` | Connect and per-command timeout, seconds, for every Redis client of the process; a store that accepts the connection and then stops answering fails the command instead of holding its caller. The blocking pub/sub read of the gateway bus opts out of it |
+| `JWT_SIGNING_KEY` | — (required) | HS256 signing key for all JWTs; at least 32 characters and never equal to `DJANGO_SECRET_KEY`, or `check --deploy` refuses it (`core.E005`) |
 | `ACCESS_MIN` | `15` | Access-token lifetime, minutes |
 | `REFRESH_DAYS` | `14` | Refresh-token lifetime, days |
 | `REGISTER_SCOPE_ACCESS_MIN` | `10` | Register-scope token lifetime, minutes |
@@ -206,14 +212,16 @@ Every environment variable the code reads, with its default:
 | `ATTACH_USER_QUOTA_BYTES` | `2147483648` | Per-user attachment quota (2 GiB) |
 | `ATTACH_TTL_DAYS` | `30` | Attachment retention, days |
 | `ENVELOPE_TTL_DAYS` | `7` | Undelivered-envelope retention, days (delivered rows are deleted on ack; pruning records the per-device `pruned_through` watermark) |
+| `MAILBOX_MAX_BYTES` | `33554432` | Ceiling on the undelivered bytes of one mailbox (32 MiB); a send that would pass it is refused for that device and reported in `full_devices` |
 | `MAX_DEVICES_PER_USER` | `10` | Live-device cap per account |
+| `MAX_DEVICELOG_RECORDS` | `10000` | Ceiling on one account's device-list log; an append past it is `409 devicelog_limit` |
 | `WEB_CONCURRENCY` | `1` | uvicorn worker processes; each opens its own Redis subscription for the gateway bus |
 | `ALLOWED_WS_ORIGINS` | empty (dev: `http://localhost`) | WebSocket Origin allowlist; empty is a deploy-blocking error in prod |
 | `WS_MAX_FRAME` | `524288` | Maximum WebSocket frame, bytes |
 | `SIGNAL_MAX` | `16384` | Maximum volatile-signal blob, characters |
 | `LIVEKIT_URL` | empty | Client-facing LiveKit URL; voice is 503 when unset |
 | `LIVEKIT_API_KEY` | empty | LiveKit API key |
-| `LIVEKIT_API_SECRET` | empty | LiveKit API secret (infrastructure secret, not a media key) |
+| `LIVEKIT_API_SECRET` | empty | LiveKit API secret (infrastructure secret, not a media key); at least 32 characters when voice is configured, or `check --deploy` refuses it (`core.E005`) |
 | `LIVEKIT_TOKEN_TTL_SECONDS` | `300` | LiveKit join-token lifetime, seconds |
 
 `.env.example` lists all of these plus `DJANGO_SETTINGS_MODULE` and the two coturn

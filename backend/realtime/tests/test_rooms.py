@@ -15,7 +15,9 @@ import uuid
 import pytest
 
 from api.orm import run_unit
+from api.redis import get_client
 from core.buckets import NAME_BUCKETS
+from realtime.bus import get_subscriber, room_topic
 from voicerooms.models import Room
 from voicerooms.presence import room_live_count
 
@@ -27,6 +29,22 @@ pytestmark = pytest.mark.django_db(transaction=True)
 
 async def make_room():
     return await run_unit(Room.objects.create, name_blob=b"r" * min(NAME_BUCKETS))
+
+
+async def probe_past(comm, own_device_id):
+    """`conftest.probe`, tolerant of one frame that may or may not arrive.
+
+    A leave announcement is published before the socket gives the topic back, so
+    whether the leaving socket sees its own leave is a race with its own
+    unsubscribe. The probe still orders everything: it is published after the
+    unsubscribe has returned, and one subscriber connection delivers in publish
+    order, so a socket that has seen the probe has seen whatever came before it.
+    """
+    await comm.send_json_to(
+        {"type": "signal", "to_device": str(own_device_id), "blob": "probe"}
+    )
+    while await comm.receive_json_from(timeout=2) != {"type": "signal", "blob": "probe"}:
+        continue
 
 
 async def subscribe_ok(comm, room_id):
@@ -280,3 +298,86 @@ async def test_room_traffic_emits_no_identifier_or_payload_into_logs(
     for line in lines:
         for label, secret in forbidden.items():
             assert secret not in line, f"{label} leaked into a log line: {line[:80]}"
+
+
+async def test_a_room_leave_for_a_room_the_socket_never_joined_is_ignored(
+    active_user, device, peer, peer_device
+):
+    """Knowing a room id buys nothing on the way out either. A leave that fired for
+    a socket that never joined would announce a departure the room's subscribers
+    never saw arrive, and would drop a live count this device is not part of."""
+    room = await make_room()
+    room_id = str(room.id)
+    comm_a = await connect_ok(bearer(await mint_access(active_user, device)))
+    comm_b = await connect_ok(bearer(await mint_access(peer, peer_device)))
+    await subscribe_ok(comm_a, room_id)
+
+    await comm_b.send_json_to({"type": "room_leave", "room_id": room_id})
+
+    await probe(comm_b, peer_device.id)  # dropped quietly, the socket is healthy
+    assert await comm_a.receive_nothing(timeout=0.2)
+    assert await room_live_count(room_id) == 1
+    await comm_a.disconnect()
+    await comm_b.disconnect()
+
+
+async def test_a_room_blob_of_exactly_the_cap_still_relays(
+    active_user, device, peer, peer_device, settings
+):
+    """The bound is what a blob may be. Room text that lands exactly on it is the
+    largest message the room can carry, and refusing that one drops the message
+    without telling anybody."""
+    settings.SIGNAL_MAX = 64
+    room = await make_room()
+    room_id = str(room.id)
+    comm_a = await connect_ok(bearer(await mint_access(active_user, device)))
+    comm_b = await connect_ok(bearer(await mint_access(peer, peer_device)))
+    await subscribe_ok(comm_a, room_id)
+    await subscribe_ok(comm_b, room_id)
+    assert (await comm_a.receive_json_from(timeout=2))["state"] == "join"
+    blob = "b" * settings.SIGNAL_MAX
+
+    await comm_a.send_json_to({"type": "room_signal", "room_id": room_id, "blob": blob})
+
+    expected = {"type": "room_signal", "room_id": room_id, "blob": blob}
+    assert await comm_a.receive_json_from(timeout=2) == expected
+    assert await comm_b.receive_json_from(timeout=2) == expected
+    await comm_a.disconnect()
+    await comm_b.disconnect()
+
+
+async def test_leaving_a_room_gives_its_topic_back_to_the_worker(active_user, device):
+    """The subscription is per topic, so a room left but never unsubscribed keeps
+    this worker receiving every blob of a session it has no socket in — which is
+    the cost the pattern subscription was rejected for in the first place."""
+    room = await make_room()
+    room_id = str(room.id)
+    comm = await connect_ok(bearer(await mint_access(active_user, device)))
+    await subscribe_ok(comm, room_id)
+    assert room_topic(room_id) in get_subscriber()._sinks
+
+    await comm.send_json_to({"type": "room_leave", "room_id": room_id})
+    await probe_past(comm, device.id)
+
+    assert room_topic(room_id) not in get_subscriber()._sinks
+    assert await room_live_count(room_id) == 0
+    await comm.disconnect()
+
+
+async def test_a_disconnect_leaves_every_room_it_held_and_no_key_in_redis(
+    active_user, device
+):
+    """The live-count set is the only room key Redis holds, and Redis drops a set
+    the moment its last member goes. A count that stayed at zero rather than
+    vanishing would be a room roster at rest — small, but a roster."""
+    room_one, room_two = await make_room(), await make_room()
+    comm = await connect_ok(bearer(await mint_access(active_user, device)))
+    await subscribe_ok(comm, str(room_one.id))
+    await subscribe_ok(comm, str(room_two.id))
+    assert await room_live_count(str(room_one.id)) == 1
+
+    await comm.disconnect()
+
+    assert await room_live_count(str(room_two.id)) == 0
+    assert get_subscriber()._sinks == {}
+    assert await get_client().keys("*") == []

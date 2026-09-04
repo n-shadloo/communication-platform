@@ -77,3 +77,56 @@ def test_the_download_is_a_single_lookup(http, active_user, device, bearer):
     )
 
     assert resp.status_code == 200
+
+
+def test_a_capability_that_names_no_row_is_the_same_single_lookup(
+    http, active_user, device, bearer
+):
+    """A miss must not cost more than a hit: the id is unguessable, so a scan on
+    the way to a `404` would be work any caller could ask for at will."""
+    resp = counted(
+        http,
+        "GET",
+        f"{UPLOAD_URL}/{'z' * 43}",
+        AUTH_QUERY + 1,
+        headers=bearer(active_user, device),
+    )
+
+    assert resp.status_code == 404
+
+
+def test_a_body_the_route_cannot_read_costs_nothing_but_the_credential(
+    http, active_user, device, bearer
+):
+    """The parse fails before any unit of work opens, so a malformed upload is one
+    query — the credential the dependency already had to read."""
+    resp = counted(
+        http,
+        "POST",
+        UPLOAD_URL,
+        AUTH_QUERY,
+        data={"blob": "not a file part"},
+        headers=bearer(active_user, device),
+    )
+
+    assert resp.status_code == 400
+
+
+def test_a_quota_refusal_costs_the_lock_and_the_aggregate_and_no_insert(
+    http, active_user, device, bearer, settings, attachments_root
+):
+    """The refusal happens inside the same transaction as the check, so it costs
+    the row lock and the one SUM, and the insert never runs."""
+    settings.ATTACH_USER_QUOTA_BYTES = SMALLEST - 1
+
+    resp = counted(
+        http,
+        "POST",
+        UPLOAD_URL,
+        AUTH_QUERY + UPLOAD_QUERIES - 1,
+        files={"blob": ("blob", b"\x01" * SMALLEST)},
+        headers=bearer(active_user, device),
+    )
+
+    assert resp.status_code == 413
+    assert Attachment.objects.count() == 0

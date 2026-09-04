@@ -103,3 +103,104 @@ def test_locking_the_device_rows_would_not_have_held(collector):
         "the device-row lock held after all, so the user-row lock in the unit of "
         "work is not what is keeping the cap"
     )
+
+
+@pytest.fixture
+def two_slots_left(active_user):
+    """The same account with two free slots rather than one: the cap is a number,
+    not a boolean, so the interesting race is the one where some racers must win."""
+    publish_identity(active_user)
+    for i in range(CAP - 2):
+        make_device(active_user, registration_id=400 + i)
+    return active_user
+
+
+def test_concurrent_registrations_fill_the_free_slots_exactly(
+    new_http, two_slots_left, register_bearer
+):
+    """Three times as many racers as slots. The lock must let exactly the free
+    slots through — neither over the cap, which is the breach, nor under it, which
+    would be a lock that serialises devices out of existence."""
+    racers = 6
+    free = 2
+    start = threading.Barrier(racers)
+    statuses = []
+    lock = threading.Lock()
+
+    def register():
+        try:
+            connect_then_wait(start)
+            response = new_http().post(
+                DEVICES_URL,
+                json=register_payload(),
+                headers=register_bearer(two_slots_left),
+            )
+            with lock:
+                statuses.append(response.status_code)
+        finally:
+            connections.close_all()
+
+    threads = [threading.Thread(target=register) for _ in range(racers)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(timeout=30)
+
+    live = Device.objects.filter(user=two_slots_left, revoked_date__isnull=True).count()
+    assert live == CAP
+    assert statuses.count(201) == free
+    assert statuses.count(409) == racers - free
+
+
+def test_a_concurrent_revocation_frees_the_slot_it_took(
+    new_http, two_slots_left, register_bearer, bearer
+):
+    """Registration and revocation race over the same counter from opposite ends,
+    on an account that is already full: the registration can only succeed if it
+    reads the count after the revocation committed. Either order is legitimate, and
+    both leave the account inside the cap with the device set its two answers
+    describe."""
+    for i in range(2):
+        make_device(two_slots_left, registration_id=800 + i)
+    collector = two_slots_left
+    doomed = Device.objects.filter(user=collector).first()
+    start = threading.Barrier(2)
+    answers = {}
+
+    def register():
+        try:
+            connect_then_wait(start)
+            answers["register"] = (
+                new_http()
+                .post(
+                    DEVICES_URL,
+                    json=register_payload(),
+                    headers=register_bearer(collector),
+                )
+                .status_code
+            )
+        finally:
+            connections.close_all()
+
+    def revoke():
+        try:
+            connect_then_wait(start)
+            answers["revoke"] = (
+                new_http()
+                .delete(f"{DEVICES_URL}/{doomed.id}", headers=bearer(collector, doomed))
+                .status_code
+            )
+        finally:
+            connections.close_all()
+
+    threads = [threading.Thread(target=register), threading.Thread(target=revoke)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(timeout=30)
+
+    live = Device.objects.filter(user=collector, revoked_date__isnull=True).count()
+    assert answers["revoke"] == 204
+    assert answers["register"] in (201, 409)
+    assert live == (CAP if answers["register"] == 201 else CAP - 1)
+    assert live <= CAP

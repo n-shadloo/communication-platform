@@ -29,6 +29,13 @@ from core.fields import decode_blob_or_400
 # decode_blob_or_400's job.
 MAX_PROFILE_CHARS = 8192
 
+# `PositiveIntegerField` is a 32-bit signed column with a `>= 0` check. Without an
+# upper bound a larger integer reaches the column as psycopg's `DataError`, which is
+# a 500 on input this schema exists to filter — on `PUT /me/profile`, and through
+# `KeyBackupIn` on `PUT /me/keybackup` as well. `devices/schemas.py` bounds its own
+# key integers at the same ceiling and for the same reason.
+MAX_VERSION_INT = 2147483647
+
 
 class RequestModel(BaseModel):
     """Every inbound model of every app derives from this one."""
@@ -45,7 +52,7 @@ class BlobIn(RequestModel):
     it carries its own code and never echoes the payload.
     """
 
-    version: Annotated[int, Field(ge=0)]
+    version: Annotated[int, Field(ge=0, le=MAX_VERSION_INT)]
     _raw: bytes = PrivateAttr(default=b"")
 
     @property
@@ -111,7 +118,7 @@ class ProfileIn(BlobIn):
 
 
 class RegisterOut(BaseModel):
-    user_id: str
+    user_id: uuid.UUID
 
 
 class TokenPairOut(BaseModel):
@@ -126,7 +133,7 @@ class RegisterScopeOut(BaseModel):
 
     scope: Literal["register"]
     access: str
-    user_id: str
+    user_id: uuid.UUID
 
 
 class FullScopeOut(BaseModel):
@@ -135,8 +142,8 @@ class FullScopeOut(BaseModel):
     scope: Literal["full"]
     access: str
     refresh: str
-    user_id: str
-    device_id: str
+    user_id: uuid.UUID
+    device_id: uuid.UUID
 
 
 # Discriminated on `scope`, which is the field the client reads to tell the two
@@ -146,7 +153,7 @@ LoginOut = Annotated[RegisterScopeOut | FullScopeOut, Field(discriminator="scope
 
 
 class DirectoryUserOut(BaseModel):
-    user_id: str
+    user_id: uuid.UUID
     username: str
 
 

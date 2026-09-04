@@ -32,12 +32,12 @@ router = APIRouter(tags=["messaging"], dependencies=[Depends(require_full_device
 async def send_envelopes(payload: SendIn):
     """The sender is used only for throttling and is never written; each recipient
     device gets its own copy."""
-    rows, stale = await run_unit(services.send, payload.messages)
+    accepted, stale, full = await run_unit(services.send, payload.messages)
     # After the unit, never inside it: a push from an open transaction would
     # announce rows a reader cannot see yet, and a channel layer that is down must
     # not fail a send whose rows are already committed.
-    await services.push(rows)
-    return {"accepted": len(rows), "stale_devices": stale}
+    await services.push(accepted)
+    return {"accepted": len(accepted), "stale_devices": stale, "full_devices": full}
 
 
 @router.get(

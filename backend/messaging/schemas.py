@@ -74,11 +74,12 @@ class AckIn(RequestModel):
 
 class SendOut(BaseModel):
     accepted: int
-    stale_devices: list[str]
+    stale_devices: list[uuid.UUID]
+    full_devices: list[uuid.UUID]
 
 
 class EnvelopeOut(BaseModel):
-    id: str
+    id: uuid.UUID
     seq: int
     blob: str
 

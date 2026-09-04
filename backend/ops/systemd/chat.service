@@ -36,8 +36,27 @@ Environment=DJANGO_SETTINGS_MODULE=config.settings.prod
 # not a pin.
 #
 # --limit-concurrency bounds what one worker admits at once; past it uvicorn
-# answers 503 rather than queueing work a 1 GB host cannot hold. The
-# graceful-shutdown timeout is the drain window: on SIGTERM uvicorn stops
+# answers 503 rather than queueing work a 1 GB host cannot hold. It counts
+# *connections*, and a live WebSocket is one: both protocols share
+# `server_state.connections`, and the HTTP path reads the length of that shared
+# set — while the WebSocket handshake never consults it, because the upgrade
+# returns before the check. Sockets therefore take from this budget and never
+# give it back. Measured with the limit at 6: six live sockets, and every HTTP
+# request answers uvicorn's own plain-text 503, not even this API's envelope.
+#
+# So the number carries both halves of the band: 500 concurrent sockets (A1 in
+# the design record) plus one keep-alive HTTP connection for each of those
+# devices. 500 live sockets cost 47 MB of resident set — 189.8 MB idle against
+# 237.0 MB — and an idle HTTP connection is cheaper than a socket, so 1024 stays
+# well inside the 700 MB ceiling A3 sets for one worker.
+#
+# LimitNOFILE because a connection is a file descriptor and systemd's own default
+# soft limit is 1024: admitting more connections than the process has descriptors
+# for moves the failure rather than removing it, and the accept fails without a
+# 503. The budget is the connection limit, the sixteen the database pool holds,
+# the Redis client and its subscription, the listening socket and stdio.
+#
+# The graceful-shutdown timeout is the drain window: on SIGTERM uvicorn stops
 # accepting, closes every live WebSocket with 1012, and waits this long for the
 # in-flight requests before it stops regardless.
 ExecStart=/srv/chat/backend/.venv/bin/uvicorn \
@@ -46,11 +65,12 @@ ExecStart=/srv/chat/backend/.venv/bin/uvicorn \
     --no-access-log \
     --loop uvloop --http httptools --ws websockets-sansio \
     --workers ${WEB_CONCURRENCY} \
-    --limit-concurrency 512 \
+    --limit-concurrency 1024 \
     --timeout-graceful-shutdown 10 \
     config.asgi:application
 Restart=on-failure
 RestartSec=5s
+LimitNOFILE=4096
 
 # Hardening. This process holds infrastructure secrets and nothing else.
 NoNewPrivileges=true
@@ -63,9 +83,17 @@ ProtectKernelModules=true
 ProtectControlGroups=true
 RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
 RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
 LockPersonality=true
 MemoryDenyWriteExecute=true
-ReadWritePaths=/srv/chat/backend/media_root /srv/chat/backend/static_root
+ProtectClock=true
+ProtectHostname=true
+SystemCallArchitectures=native
+# The attachment bytes, and nothing else. The collected static tree is written by
+# the operator's `collectstatic` and served by nginx; a process that could write
+# it could replace the panel's own JavaScript.
+ReadWritePaths=/srv/chat/backend/media_root
 
 [Install]
 WantedBy=multi-user.target

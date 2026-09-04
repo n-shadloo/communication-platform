@@ -136,7 +136,9 @@ concern and not the client's.
 
 ## Changed response fields
 
-No success body changed. Every change below is in an error body.
+No success body changed **in the rebuild**. Every change in this section is in an error
+body; the one success body that has moved since arrived later and is recorded under
+[What the security audit bounded](#what-the-security-audit-bounded).
 
 | Item | Old behaviour | New behaviour | Client action |
 |---|---|---|---|
@@ -258,6 +260,121 @@ could not see before.
 Nothing else about the panel is observable to a client. It is served at `ADMIN_PATH`
 by the Django application mounted behind FastAPI, and every other path is still this
 API's own `404`.
+
+## What the security audit bounded
+
+Each row below is a limit the security audit of phase 4 added. Every one refuses
+something a client could previously do without bound, and every one is documented in
+the route's own reference.
+
+| Item | Old behaviour | New behaviour | Client action |
+|---|---|---|---|
+| `POST /api/v1/auth/login` after five failed attempts on one name within fifteen minutes | Every attempt answered `401 invalid_credentials`; only the per-address limiter stood between a guesser with many addresses and the password | `429 {"code": "throttled", "detail": "Too many sign-in attempts for this name. Wait and try again."}` with `Retry-After` in seconds, for that name, until the cool-off ends. The lock applies to a name whether or not an account holds it, so it confirms nothing about existence, and a successful sign-in clears the count | Back off for `Retry-After` seconds and tell the user. Do not treat the refusal as a wrong password, and do not retry inside the window |
+| `POST /api/v1/envelopes` to a device whose undelivered bytes would pass `MAILBOX_MAX_BYTES` (default 32 MiB) with this batch | Every item to a live device was queued; a mailbox had no ceiling | The device is refused whole — nothing is written for it and its sequence does not move — and named in a new `full_devices` list beside `stale_devices`; the rest of the batch proceeds and `accepted` counts only what was written | Read `full_devices` on every send. Keep a full device in the session set and retry its items once it has drained; a full device is live, not stale |
+| `POST /api/v1/me/devicelog` when the account's log would pass `MAX_DEVICELOG_RECORDS` (default 10 000) records | Every well-formed append was stored; the log had no ceiling | `409 {"code": "devicelog_limit", "detail": "The device-list log of this account is full."}`, and nothing of the batch is stored | Append only on a device-set change or an identity rotation, as §J of `backend/CLIENT_CONTRACT.md` already says; a client that reaches the ceiling has a defect |
+
+## Saturation now says so
+
+One observable change came out of the performance, background-work and migration
+audits. Everything else they touched — an index, a batched retention sweep, a pipelined
+fan-out, the base64 the push stopped reproducing — leaves every request and every
+response byte-identical: `backend/openapi.json` does not move.
+
+| Item | Old behaviour | New behaviour | Client action |
+|---|---|---|---|
+| Any route, when the database connection pool has nothing free and the acquisition times out | `500 {"code": "server_error", "detail": "Internal error."}` — which tells a client the request itself was at fault and it should stop | `503 {"code": "unavailable", "detail": "The service is temporarily unavailable."}` — the same envelope the rate limiter already answers when Redis is gone, and a code every route already declared | Retry a `503 unavailable` with backoff. Nothing new to handle: every route already declared the status and the code, and a `500` was never something to retry. `backend/core/API.md` now names this as its third source |
+
+Only a pool timeout reads this way. Django wraps every psycopg `OperationalError` in
+one class, and a deadlock or a dropped connection is still `500 server_error`.
+
+## What the reviews of phase 4 corrected
+
+The contract, seam, architecture and panel reviews of phase 4 moved no route, no
+status code and no response byte. Two things a client can observe are stated here for
+the first time, and one thing this file said about itself was wrong.
+
+### The document now declares the format of what it sends
+
+Every id this API returns is a UUID and every `_date` it returns is a calendar day, but
+`backend/openapi.json` declared each of them as a bare `string`. The same values were
+already `"format": "uuid"` where a client *sends* them — every `{user_id}`,
+`{device_id}` and `{room_id}` path parameter, `LoginIn.device_id`,
+`OutgoingItemIn.device_id`, `ClaimIn.device_ids` and `AckIn.ids` — so a generated client
+got one type on the way in and another on the way out for one value.
+
+| Field | Old declaration | New declaration |
+|---|---|---|
+| `user_id` in `RegisterOut`, `RegisterScopeOut`, `FullScopeOut`, `DirectoryUserOut` | `string` | `string`, `"format": "uuid"` |
+| `device_id` in `FullScopeOut`, `DeviceRegisteredOut`, `OwnDeviceOut`, `PeerDeviceOut`, `ClaimedBundleOut` | `string` | `string`, `"format": "uuid"` |
+| `room_id` in `RoomCreatedOut`, `RoomOut` | `string` | `string`, `"format": "uuid"` |
+| `id` in `EnvelopeOut` — the id `POST /api/v1/me/envelopes/ack` takes back | `string` | `string`, `"format": "uuid"` |
+| `stale_devices`, `full_devices` in `SendOut` | `array` of `string` | `array` of `string`, `"format": "uuid"` |
+| `created_date`, `last_active_date` in `OwnDeviceOut`, `updated_date` in `RoomOut` | `string` | `string`, `"format": "date"` |
+
+**No response byte moved.** A UUID still serialises to the same canonical lowercase
+form and a date to the same `YYYY-MM-DD`; only the published description changed.
+`attachment_id` is deliberately absent from the table: an attachment id is a 43-character
+capability, not a UUID, and it stays an unformatted string in the path and in the body
+alike.
+
+**Client action.** None, unless the client is generated from the schema and its
+generator maps `format` to a type — a regenerated client may now type these fields as
+`UUID` and `Date` rather than `String`. The values it receives are unchanged.
+
+### `HEAD` and `OPTIONS` are refused
+
+Before the rebuild, Django REST Framework answered `HEAD` on every route that served
+`GET`, and answered `OPTIONS` with a metadata document this API never meant to publish.
+FastAPI registers only the methods a route declares, so both now answer
+`405 {"code": "method_not_allowed", "detail": "That method is not allowed."}` with
+`Allow` naming the methods of the one route object.
+
+**Client action.** None for a client that issues neither. A reachability probe uses
+`GET /api/v1/health`, which is what it was always for.
+
+The refusal itself is `_ROUTING_REFUSALS` in
+[`backend/api/errors.py`](backend/api/errors.py), which is what puts the envelope on a
+`405` where Starlette's own handler answers a bare body.
+
+### One standing claim in this file was stale
+
+The **Changed response fields** section opens "No success body changed." That was true
+of the rebuild it describes and is no longer true of this file as a whole: the mailbox
+ceiling the security audit added put a `full_devices` list into the `202` body of
+`POST /api/v1/envelopes`, recorded under **What the security audit bounded**. The
+sentence now says which change it is scoped to.
+
+### The no-echo claim in `core/API.md` was wider than the behaviour
+
+`backend/core/API.md` said "No error body ever echoes request input." Run 13's
+malformed-input sweep found one fragment that does cross: a type message for a
+malformed identifier names the offending character and its offset — "Input should be a
+valid UUID, invalid character: found `z` at 35" — which `backend/messaging/API.md` had
+been publishing as an example all along, so the two documents disagreed. The behaviour did not change and needs nothing from a client.
+`core/API.md` now states the property that actually holds: no error body echoes a
+value — no blob, no password, no token, no username, no identifier — and the one
+fragment that crosses is a character of a malformed identifier, never of a payload.
+
+## What the test suite found at the column boundaries
+
+Runs 12 and 13 drove every route with malformed input. Run 12 covered `core`, `api`,
+`accounts`, `devices`, `vault` and the migrations; run 13 covered `messaging`,
+`attachments`, `voicerooms`, `realtime` and, through the contract suite, every route
+of the document at once. Five routes answered `500` to input the schema existed to
+filter, and all five are fixed. A `500` on input is a defect on this surface, never a
+documented answer, so a client that branched on one was branching on a bug.
+
+| Item | Old behaviour | New behaviour | Client action |
+|---|---|---|---|
+| `PUT /api/v1/me/profile` and `PUT /api/v1/me/keybackup` with `version` above 2147483647 | `500 {"code": "server_error"}`. `version` lands in a 32-bit column and the schema bounded it below but not above, so the integer reached PostgreSQL as a `DataError` | `400 {"code": "invalid_request", "detail": {"version": [...]}}`. `accounts.schemas.BlobIn` now carries the ceiling, which both routes inherit. `version` = 2147483647 is still accepted and still stores | None, unless the client generated versions without a bound. The ceiling is the column's, not a policy: a client that increments a version per write will not reach it |
+| `PUT /api/v1/me/devices/{device_id}/prekeys` with `cross_sig` and `bundle_version` both sent as `null` | `500 {"code": "server_error"}`. Both keys present satisfies the pairing guard, and `null` reached `Device.bundle_version`, which is not nullable | `400 {"code": "invalid_request", "detail": {"bundle_version": ["bundle_version must be a number when it is sent"]}}`. A sent `null` is half a pair in substance: a `cross_sig` stored against no version is one peers must reject | None. Clearing a signature against a version that is a number — `{"cross_sig": null, "bundle_version": 3}` — is unchanged and still `200` |
+| `GET /api/v1/attachments/{attachment_id}` with a NUL byte in the id | `500 {"code": "server_error"}`. The same cause as the login defect below: PostgreSQL text carries no NUL, so psycopg refused the lookup rather than returning no row | `404 {"code": "not_found", "detail": "No such attachment."}`, the same answer a capability nobody holds gets. A capability id is base64url of 32 random bytes, so an id carrying the byte is an id nobody has | None. It was carried as AR-10 through run 12, because `attachments/` was outside that run's scope |
+| `POST /api/v1/auth/login` with a NUL byte in `username` | `500 {"code": "server_error"}` on **anonymous** input. PostgreSQL text carries no NUL, so psycopg refused the lookup rather than returning no row | `401 {"code": "invalid_credentials"}`, the same answer every other unregistrable name gets | None. Deliberately not a `400`: `LoginIn` treats a badly shaped name as wrong credentials rather than a malformed request, and answering otherwise would tell an anonymous caller which names the column could have held |
+
+`POST /api/v1/auth/register` was already correct — a control character in a username
+has always been `400 invalid_request` there — so the two surfaces now agree: a name
+that could never be registered is wrong credentials at login, and a malformed name is
+a refusal at registration.
 
 ## What the client can build against now
 

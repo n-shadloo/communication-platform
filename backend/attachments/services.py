@@ -10,6 +10,8 @@ from accounts.models import User
 from api.errors import ApiError
 from attachments.models import Attachment
 
+NOT_FOUND = "No such attachment."
+
 
 def record(attachment):
     """Charge the upload against the quota and insert its row, in one transaction.
@@ -42,10 +44,19 @@ def locate(attachment_id):
 
     Only the id: the row carries the uploader, and the response must name nobody.
     A missing row and a pruned one are the same answer.
+
+    A NUL byte is the third: PostgreSQL text carries none, so psycopg refuses the
+    statement rather than returning no row, and the route raised instead of
+    answering without this (AR-10). A capability id is base64url of 32 random
+    bytes, so no stored id can hold one — an id carrying it is an id nobody has,
+    which is the answer below. This is a malformed-input guard, never a control:
+    the unguessable id is the whole access check.
     """
+    if "\x00" in attachment_id:
+        raise ApiError(404, "not_found", NOT_FOUND)
     stored = Attachment.objects.filter(id=attachment_id).only("id").first()
     if stored is None:
-        raise ApiError(404, "not_found", "No such attachment.")
+        raise ApiError(404, "not_found", NOT_FOUND)
     return stored.id
 
 

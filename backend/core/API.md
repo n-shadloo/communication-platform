@@ -13,8 +13,14 @@ Every error this API returns is
 ```
 
 `detail` is a string, except for `invalid_request`, where it is an object mapping a
-field path to the list of messages that failed. No error body ever echoes request
-input, and a `500` body carries no traceback.
+field path to the list of messages that failed. A `500` body carries no traceback.
+
+No error body echoes a value: no blob, no password, no token, no username, no
+identifier. The one fragment that crosses is the offending character a type message
+names, as in "Input should be a valid UUID, invalid character: found `z` at 35" —
+a character of a malformed identifier, never of a payload. A blob that fails is
+`bad_bucket` with the fixed `"Invalid payload."`; a blob that is merely too long is
+refused by a length message that names the limit and not the string.
 
 The vocabulary is fixed. A client branches on `code`, never on `detail`.
 
@@ -37,11 +43,12 @@ The vocabulary is fixed. A client branches on `code`, never on `detail`.
 | 409 | `stale_version` | A version did not increase. |
 | 409 | `device_limit` | The account holds `MAX_DEVICES_PER_USER` live devices. |
 | 409 | `prekey_limit` | A prekey pool cap is reached. |
+| 409 | `devicelog_limit` | The account's device-list log holds `MAX_DEVICELOG_RECORDS` records. |
 | 413 | `payload_too_large` | The body exceeds the route cap. |
 | 413 | `quota_exceeded` | The attachment quota is exhausted. |
-| 429 | `throttled` | Rate limit reached. `Retry-After` carries the seconds to wait. |
+| 429 | `throttled` | Rate limit reached, or a login name in its cool-off. `Retry-After` carries the seconds to wait. |
 | 500 | `server_error` | Unhandled failure. `detail` is `"Internal error."`. |
-| 503 | `unavailable` | The rate-limit store is unreachable, or the request exceeded its deadline. |
+| 503 | `unavailable` | The server is saturated or a store it needs is gone: the rate-limit store is unreachable, the request exceeded its deadline, or the database connection pool had nothing free. Retry with backoff; the request itself is not at fault. |
 | 503 | `voice_unconfigured` | LiveKit is not configured. |
 
 One surface serves this API. Every route of every app answers through FastAPI and
@@ -66,7 +73,7 @@ anything it does:
 | `401` | `unauthenticated`, `invalid_token`, `token_revoked` | the authentication requirement the route declares, before the handler runs |
 | `403` | `scope_forbidden` | the same requirement, on a register-scope token |
 | `500` | `server_error` | the unhandled-failure handler, on any route |
-| `503` | `unavailable` | the request deadline of `api/middleware.py`, on any route |
+| `503` | `unavailable` | the request deadline of `api/middleware.py`, and an exhausted database connection pool, on any route |
 
 A route with no authentication requirement — `GET /api/v1/health`, and the three
 `/auth` routes a client reaches before it holds a token — answers neither `401
@@ -158,6 +165,10 @@ limit, so it still answers while the rate-limit store is down.
 **Request body**
 
 None.
+
+**Retry semantics.** Safe to repeat: the route reads no state and writes none. It runs
+inside no unit of work and takes no database or Redis connection, so a client may poll
+it while the rest of the surface is refusing.
 
 **Responses**
 

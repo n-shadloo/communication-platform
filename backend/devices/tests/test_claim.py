@@ -2,6 +2,7 @@
 case is test_claim_race.py."""
 
 import base64
+import uuid
 
 import pytest
 from django.utils import timezone
@@ -196,3 +197,76 @@ def test_claiming_a_users_own_devices_is_normal(http, active_user, device, beare
 
 def test_an_anonymous_claim_is_rejected(http, peer, peer_device):
     assert http.post(claim_url(peer.id), json={}).status_code == 401
+
+
+def test_an_unknown_or_foreign_device_id_yields_no_bundle_and_no_error(
+    http, active_user, device, bearer, peer, peer_device
+):
+    """`device_ids` narrows a filter that is already scoped to the account in the
+    path, so an id from somewhere else selects nothing. Answering 404 instead would
+    confirm which ids exist to anyone who can guess one."""
+    stock_prekeys(peer_device, 1)
+
+    response = http.post(
+        claim_url(peer.id),
+        json={"device_ids": [str(uuid.uuid4()), str(device.id)]},
+        headers=bearer(active_user, device),
+    )
+
+    assert response.status_code == 200
+    assert response.json()["bundles"] == []
+    assert OneTimePrekey.objects.filter(device=peer_device).count() == 1
+
+
+def test_the_bundles_come_back_in_device_id_order(
+    http, active_user, device, bearer, peer, peer_device
+):
+    """A stable order across polls: a client fanning a message out diffs the set it
+    was handed, and an arbitrary order looks like churn that never happened."""
+    others = [make_device(peer, registration_id=560 + i) for i in range(4)]
+    expected = sorted(str(row.id) for row in [peer_device, *others])
+
+    bundles = http.post(
+        claim_url(peer.id), json={}, headers=bearer(active_user, device)
+    ).json()["bundles"]
+
+    assert [bundle["device_id"] for bundle in bundles] == expected
+
+
+def test_a_second_claim_on_an_emptied_pool_still_serves_the_rest_of_the_bundle(
+    http, active_user, device, bearer, peer, peer_device
+):
+    """A claim is not idempotent — it consumes — but running out is not an error:
+    the X3DH bundle without a one-time prekey is still a usable bundle, and the
+    client is the party that decides what a missing `otpk` means."""
+    stock_prekeys(peer_device, 1, start=9)
+    headers = bearer(active_user, device)
+
+    first = http.post(claim_url(peer.id), json={}, headers=headers).json()["bundles"][0]
+    second = http.post(claim_url(peer.id), json={}, headers=headers).json()["bundles"][0]
+
+    assert first["otpk"]["key_id"] == 9
+    assert "otpk" not in second
+    assert second["ik_pub"] == first["ik_pub"]
+    assert second["spk_id"] == first["spk_id"]
+    assert second["registration_id"] == first["registration_id"]
+
+
+def test_a_claim_that_names_only_foreign_devices_consumes_nothing(
+    http, active_user, device, bearer, peer, peer_device
+):
+    """The narrowing runs inside the same query as the ownership predicate, so a
+    caller cannot spend another account's one-time keys by naming them."""
+    mine = make_device(active_user, registration_id=78)
+    stock_prekeys(mine, 2)
+    stock_prekeys(peer_device, 2)
+
+    response = http.post(
+        claim_url(peer.id),
+        json={"device_ids": [str(mine.id)]},
+        headers=bearer(active_user, device),
+    )
+
+    assert response.json()["bundles"] == []
+    assert OneTimePrekey.objects.filter(device=mine).count() == 2
+    assert OneTimePrekey.objects.filter(device=peer_device).count() == 2

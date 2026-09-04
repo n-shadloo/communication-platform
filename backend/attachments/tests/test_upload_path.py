@@ -2,6 +2,7 @@
 the bytes never cross the process whole, and the quota holds under concurrency.
 """
 
+import os
 import threading
 
 import pytest
@@ -96,3 +97,73 @@ def test_concurrent_uploads_never_overshoot_the_quota(
     assert sum(row.size for row in stored) <= settings.ATTACH_USER_QUOTA_BYTES
     # The refused uploads left no bytes behind either.
     assert len([p for p in attachments_root.rglob("*") if p.is_file()]) == 2
+
+
+def test_the_copy_creates_the_shard_directory_the_capability_names(tmp_path):
+    """Every stored file sits under a two-character shard of its own id, and the
+    upload is the only thing that ever creates those directories."""
+    path = str(tmp_path / "Xk" / "Xk3vT9qLm2WnPzR8sYb4cJdF6hA1gE5uV7iO0wQtN_M")
+
+    routes._spool_to_disk(RecordingSource(b"ciphertext"), path)
+
+    assert (tmp_path / "Xk").is_dir()
+    assert open(path, "rb").read() == b"ciphertext"
+
+
+def test_a_second_file_lands_in_a_shard_that_already_exists(tmp_path):
+    """`exist_ok`: two capabilities sharing a prefix is the common case at any
+    volume, and the second upload must not fail on the directory the first made."""
+    first = str(tmp_path / "Xk" / "Xk3v")
+    second = str(tmp_path / "Xk" / "XkZZ")
+
+    routes._spool_to_disk(RecordingSource(b"one"), first)
+    routes._spool_to_disk(RecordingSource(b"two"), second)
+
+    assert open(second, "rb").read() == b"two"
+    assert sorted(p.name for p in (tmp_path / "Xk").iterdir()) == ["Xk3v", "XkZZ"]
+
+
+def test_a_payload_that_ends_exactly_on_a_chunk_boundary_is_copied_whole(tmp_path):
+    """The boundary of the copy loop: the last full read is followed by an empty
+    one, which is what ends the walrus loop rather than a short read."""
+    payload = b"\xa5" * (routes.CHUNK_BYTES * 2)
+    source = RecordingSource(payload)
+    path = str(tmp_path / "ab" / "abcdef")
+
+    routes._spool_to_disk(source, path)
+
+    assert open(path, "rb").read() == payload
+    # Two full chunks, then the empty read that ends the loop.
+    assert len(source.requested) == 3
+
+
+def test_an_empty_part_leaves_an_empty_file_rather_than_no_file(tmp_path):
+    """The rare case the bucket check refuses before it ever reaches here. The copy
+    itself still has to be total: a missing file would strand a row that names it."""
+    path = str(tmp_path / "ab" / "abcdef")
+
+    routes._spool_to_disk(RecordingSource(b""), path)
+
+    assert open(path, "rb").read() == b""
+
+
+def test_the_discard_removes_the_bytes_a_refused_upload_wrote(tmp_path):
+    """What a quota refusal calls: the file is written before the row is charged,
+    so the bytes have to be dropped by hand when the row is refused."""
+    path = str(tmp_path / "ab" / "abcdef")
+    routes._spool_to_disk(RecordingSource(b"ciphertext"), path)
+
+    routes._discard(path)
+
+    assert not os.path.exists(path)
+
+
+def test_discarding_a_path_that_is_already_gone_is_not_an_error(tmp_path):
+    """`missing_ok`: the discard runs on every failure of the row write, including
+    the ones that happen before anything was written."""
+    path = str(tmp_path / "ab" / "abcdef")
+
+    routes._discard(path)
+
+    assert not os.path.exists(path)
+    assert not (tmp_path / "ab").exists()

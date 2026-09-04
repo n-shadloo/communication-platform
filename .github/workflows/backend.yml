@@ -116,7 +116,12 @@ jobs:
       - name: pytest
         # pytest-randomly reorders every run and prints the seed it used, so a
         # failure that depends on test order is reproducible from the log.
-        run: pytest
+        #
+        # Measured, and gated: `--cov-fail-under` is what makes a branch the
+        # suite stopped covering a failed build rather than a number in a report
+        # nobody reads. It repeats `pytest.ini`'s floor on purpose, so the job
+        # states the contract it enforces instead of inheriting it silently.
+        run: pytest --cov --cov-branch --cov-fail-under=95
       - name: No model change is missing its migration
         run: python manage.py makemigrations --check --dry-run
       - name: Deploy checks against the production settings
@@ -127,6 +132,9 @@ jobs:
           DJANGO_SETTINGS_MODULE: config.settings.prod
           DJANGO_ALLOWED_HOSTS: ci.invalid
           ALLOWED_WS_ORIGINS: https://ci.invalid
+          # The check refuses a URL without a password (core.E004) and opens no
+          # connection, so the value only has to carry one.
+          REDIS_URL: redis://:ci-test-redis-password-not-used-outside-this-runner@127.0.0.1:6379/0
         run: |
           export DJANGO_SECRET_KEY="$(python -c 'import secrets; print(secrets.token_urlsafe(64))')"
           python manage.py check --deploy --fail-level WARNING

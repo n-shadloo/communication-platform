@@ -5,6 +5,8 @@ import uuid
 
 import pytest
 
+from api.redis import get_client
+
 from .conftest import bearer, connect_ok, mint_access, probe, table_counts
 
 pytestmark = pytest.mark.django_db(transaction=True)
@@ -111,5 +113,65 @@ async def test_alternate_uuid_spellings_still_reach_a_live_target(
             "type": "signal",
             "blob": "s",
         }
+    await comm_a.disconnect()
+    await comm_b.disconnect()
+
+
+async def test_a_signal_whose_blob_is_not_a_string_is_dropped(
+    active_user, device, peer, peer_device
+):
+    """The blob is relayed verbatim and never inspected, so the one thing the
+    gateway does check is that it is a string. A JSON object or number reaching the
+    publish would be re-encoded into a frame whose `blob` no client can decrypt."""
+    comm_a = await connect_ok(bearer(await mint_access(active_user, device)))
+    comm_b = await connect_ok(bearer(await mint_access(peer, peer_device)))
+
+    for blob in (42, {"nested": "ciphertext"}, ["ciphertext"], None, True):
+        await comm_a.send_json_to(
+            {"type": "signal", "to_device": str(peer_device.id), "blob": blob}
+        )
+
+    await probe(comm_a, device.id)  # the drops did not kill the sender
+    assert await comm_b.receive_nothing(timeout=0.2)
+    await comm_a.disconnect()
+    await comm_b.disconnect()
+
+
+async def test_a_signal_blob_of_exactly_the_cap_still_relays(
+    active_user, device, peer, peer_device, settings
+):
+    """`SIGNAL_MAX` is what a blob may be, not what it must be under. A client whose
+    key-exchange message lands exactly on the bound has no smaller message to
+    send, so an off-by-one here silently breaks a whole protocol step."""
+    settings.SIGNAL_MAX = 64
+    comm_a = await connect_ok(bearer(await mint_access(active_user, device)))
+    comm_b = await connect_ok(bearer(await mint_access(peer, peer_device)))
+    blob = "b" * settings.SIGNAL_MAX
+
+    await comm_a.send_json_to(
+        {"type": "signal", "to_device": str(peer_device.id), "blob": blob}
+    )
+
+    assert await comm_b.receive_json_from(timeout=2) == {"type": "signal", "blob": blob}
+    await comm_a.disconnect()
+    await comm_b.disconnect()
+
+
+async def test_a_relayed_signal_leaves_no_key_in_redis(
+    active_user, device, peer, peer_device
+):
+    """Publish and subscribe holds a message only for the instant it takes to hand
+    it to whoever is connected. A relay that left a key behind would be a message
+    store — on an instance that runs with `save ""`, but a store all the same, and
+    one a client that reconnects could be served from."""
+    comm_a = await connect_ok(bearer(await mint_access(active_user, device)))
+    comm_b = await connect_ok(bearer(await mint_access(peer, peer_device)))
+
+    await comm_a.send_json_to(
+        {"type": "signal", "to_device": str(peer_device.id), "blob": "ciphertext"}
+    )
+    await comm_b.receive_json_from(timeout=2)
+
+    assert await get_client().keys("*") == []
     await comm_a.disconnect()
     await comm_b.disconnect()

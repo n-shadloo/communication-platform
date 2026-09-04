@@ -4,6 +4,8 @@ The one request model forbids an unknown field and runs in strict mode, like
 every other inbound model of this API.
 """
 
+import datetime
+import uuid
 from typing import Annotated
 
 from pydantic import BaseModel, Field, PrivateAttr, model_validator
@@ -36,13 +38,13 @@ class RoomNameIn(RequestModel):
 
 
 class RoomCreatedOut(BaseModel):
-    room_id: str
+    room_id: uuid.UUID
 
 
 class RoomOut(BaseModel):
-    room_id: str
+    room_id: uuid.UUID
     name_blob: str
-    updated_date: str
+    updated_date: datetime.date
     live_count: int
 
 

@@ -71,7 +71,7 @@ holds *infrastructure* secrets:
 | Attachment content keys | content | inside E2E messages | never | that attachment only |
 | Recovery secret | content | user-held only | never | can unwrap the key backup → cross-signing private keys |
 | TLS private key | infrastructure | server (nginx) | yes (by definition) | impersonate transport (mitigated by client SPKI pinning); no message content |
-| JWT signing key | infrastructure | server env | yes | mint tokens → account access; cannot decrypt any message |
+| JWT signing key | infrastructure | server env, at least 32 generated characters (`check --deploy` refuses less) | yes | mint tokens → account access; cannot decrypt any message |
 | Django `SECRET_KEY`, Argon2 params | infrastructure | server env | yes | session/signing integrity; no message content |
 | Password hashes (Argon2id) | auth (not a key) | DB | yes (hash only) | offline guessing per account; no message content |
 
@@ -95,8 +95,9 @@ A full seizure of this server (disk + database) reveals, in total:
   keys, cross-signing public keys and their opaque signatures, day-granularity activity;
 - per-user **device-list log records** — opaque client-signed blobs, day-coarse dates;
 - that **delivery happened, to which device, at hour granularity** — pending queue rows
-  (at most 7 days deep) tie an opaque blob to a recipient device, never to a sender or
-  a conversation; acked rows are deleted outright;
+  (at most 7 days deep, and at most `MAILBOX_MAX_BYTES` for each device) tie an opaque
+  blob to a recipient device, never to a sender or a conversation; acked rows are
+  deleted outright;
 - that **rooms exist**, each an ID plus an encrypted name — no membership, no
   participant history;
 - per-user **attachment upload counts, bucketed sizes, and days** — no recipient data
@@ -202,9 +203,21 @@ None of these is ever described as one of the others.
 - **Authentication vs encryption identity are never conflated.** The password authorizes
   the account (Argon2id-hashed, device-bound short-lived JWTs with a rotating refresh);
   a device's cryptographic identity is created client-side and only its public keys are
-  uploaded. Owner activation gates every account; revoking a device bumps its token
+  uploaded. Five failed attempts on a name within fifteen minutes lock that name for
+  fifteen minutes on both password surfaces — the API login and the admin panel —
+  before any hash is computed, and a locked name answers the same whether or not an
+  account holds it. Owner activation gates every account; revoking a device bumps its token
   generation (access dies ≤ 15 min, refresh immediately) and deletes its queue and its
   classical and PQ prekeys in one transaction.
+- **A neighbouring process on the host is not trusted.** The VPS is shared, and
+  loopback is reachable by every local process. Redis therefore requires a password
+  in production (`manage.py check --deploy` refuses a `REDIS_URL` without one), and
+  this process never turns a Redis value back into a Python object: the rate
+  counters, the login lockout and the presence sets are read as strings through the
+  redis client, and Django's cache framework — which unpickles everything it reads —
+  is kept off Redis entirely. What Redis holds is volatile and content-free either
+  way; what the password protects is the integrity of the counters, the lockout, and
+  the frames on the fan-out bus.
 - **No token is stored, so no login history exists at rest.** Revocation is two integers
   on the device row: `token_generation`, checked on every request, and
   `refresh_generation`, checked on every rotation. A refresh presented after it was
@@ -219,6 +232,8 @@ The properties above are enforced by the test suite, not by this document:
 `core/tests/test_log_silence.py` + per-app log-silence suites (no identifier, blob, or
 token reaches any log line), `core/tests/test_settings_posture.py` + `manage.py check
 --deploy` (deploy posture, including a hard error on an empty WebSocket origin
-allowlist), per-app at-rest, no-graph, and no-history suites, the adversarial
+allowlist, and `access_log off` in every nginx server block — the reverse proxy sees
+every request path one hop before uvicorn does, and would otherwise inherit a log of
+them from the packaged configuration), per-app at-rest, no-graph, and no-history suites, the adversarial
 cross-signing/PQ/device-log suites in `devices/tests/`, and
 `ops/audit/offline_rehearsal.sh` (the repo rebuilds and passes with no network).

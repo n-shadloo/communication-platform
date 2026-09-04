@@ -471,3 +471,353 @@ class TestLogout:
         assert response.status_code == 401
         assert response.json()["code"] == "unauthenticated"
         assert response.headers["www-authenticate"] == "Bearer"
+
+
+class TestLoginLockout:
+    """The cool-off on a login name, shared with the admin panel (`core/lockout.py`).
+
+    The address limiter alone bounds a guesser to its rate per address, and an
+    attacker with many addresses multiplies it. The name is the thing being
+    attacked, so the name is what locks: five failures in fifteen minutes refuse
+    the name — real or not, so the lock confirms nothing about existence — before
+    the password is hashed.
+    """
+
+    def fail(self, http, username, times):
+        for _ in range(times):
+            response = http.post(
+                LOGIN_URL, json={"username": username, "password": "the-wrong-one"}
+            )
+            assert response.status_code == 401
+
+    def test_repeated_failures_lock_the_name_with_a_retry_after(self, http, active_user):
+        from core.lockout import COOLOFF_SECONDS, FAILURE_THRESHOLD
+
+        self.fail(http, "alice", FAILURE_THRESHOLD)
+
+        # The right password now, and it is still refused.
+        response = http.post(LOGIN_URL, json={"username": "alice", "password": PASSWORD})
+
+        assert response.status_code == 429
+        assert response.json()["code"] == "throttled"
+        assert 0 < int(response.headers["Retry-After"]) <= COOLOFF_SECONDS
+
+    def test_a_locked_name_never_reaches_the_password_hash(self, http, active_user):
+        from core.lockout import FAILURE_THRESHOLD
+
+        self.fail(http, "alice", FAILURE_THRESHOLD)
+
+        with (
+            mock.patch.object(User, "check_password", autospec=True) as known,
+            mock.patch("accounts.services.check_password") as unknown,
+        ):
+            http.post(LOGIN_URL, json={"username": "alice", "password": PASSWORD})
+
+        assert known.call_count == 0
+        assert unknown.call_count == 0
+
+    def test_the_lock_is_keyed_on_the_name_and_not_on_existence(self, http):
+        """A name that exists and one that does not lock the same way, so the
+        lock is not an oracle for the directory."""
+        from core.lockout import FAILURE_THRESHOLD
+
+        self.fail(http, "ghost", FAILURE_THRESHOLD)
+
+        response = http.post(LOGIN_URL, json={"username": "ghost", "password": PASSWORD})
+
+        assert response.status_code == 429
+        assert response.json()["code"] == "throttled"
+
+    def test_the_lock_holds_for_one_name_only(self, http, active_user, bob):
+        from core.lockout import FAILURE_THRESHOLD
+
+        self.fail(http, "alice", FAILURE_THRESHOLD)
+
+        response = http.post(LOGIN_URL, json={"username": "bob", "password": PASSWORD})
+
+        assert response.status_code == 200
+
+    def test_a_successful_login_forgets_the_earlier_failures(self, http, active_user):
+        from core.lockout import FAILURE_THRESHOLD
+
+        self.fail(http, "alice", FAILURE_THRESHOLD - 1)
+        assert (
+            http.post(
+                LOGIN_URL, json={"username": "alice", "password": PASSWORD}
+            ).status_code
+            == 200
+        )
+        self.fail(http, "alice", FAILURE_THRESHOLD - 1)
+
+        response = http.post(LOGIN_URL, json={"username": "alice", "password": PASSWORD})
+
+        assert response.status_code == 200
+
+    def test_the_lock_refuses_when_redis_cannot_be_read(
+        self, http, active_user, monkeypatch
+    ):
+        """Fails closed, like the address limiter (ADR-0010) and the admin form:
+        a control whose purpose is to refuse cannot answer "allow" when it does
+        not know."""
+        import redis
+
+        class Unreachable:
+            def ttl(self, *args, **kwargs):
+                raise redis.ConnectionError("redis is down")
+
+        monkeypatch.setattr("core.lockout._redis", lambda: Unreachable())
+
+        response = http.post(LOGIN_URL, json={"username": "alice", "password": PASSWORD})
+
+        assert response.status_code == 503
+        assert response.json()["code"] == "unavailable"
+
+
+class TestTheAccountSideOfReplay:
+    """What a rotation, a revocation and a deactivation look like from the account
+    rather than from the token. The verifier's half — what a claim set must carry
+    and how a signature is checked — is `test_device_auth.py`."""
+
+    def test_a_login_retires_the_refresh_but_leaves_the_access_token_alive(
+        self, http, active_user, device
+    ):
+        """The two counters draw a line ADR-0006 depends on: a login advances the
+        refresh generation only, so the pair a second client is holding keeps
+        working until its access token expires on its own."""
+        access, older = issue_full(active_user, device)
+
+        http.post(
+            LOGIN_URL,
+            json={
+                "username": "alice",
+                "password": PASSWORD,
+                "device_id": str(device.id),
+            },
+        )
+
+        device.refresh_from_db()
+        assert (device.token_generation, device.refresh_generation) == (1, 2)
+        assert (
+            http.get(
+                DIRECTORY_URL, headers={"Authorization": f"Bearer {access}"}
+            ).status_code
+            == 200
+        )
+
+        replay = http.post(REFRESH_URL, json={"refresh": older})
+
+        assert replay.status_code == 401
+        device.refresh_from_db()
+        # The replay ended the family; the login before it had not.
+        assert device.token_generation == 2
+
+    def test_a_login_on_one_device_never_touches_another_devices_pair(
+        self, http, active_user, device
+    ):
+        second = Device.objects.create(
+            user=active_user,
+            ik_pub=b"ik",
+            spk_id=2,
+            spk_pub=b"spk",
+            spk_sig=b"sig",
+            registration_id=2002,
+        )
+        _access, untouched = issue_full(active_user, second)
+
+        http.post(
+            LOGIN_URL,
+            json={
+                "username": "alice",
+                "password": PASSWORD,
+                "device_id": str(device.id),
+            },
+        )
+
+        assert http.post(REFRESH_URL, json={"refresh": untouched}).status_code == 200
+        second.refresh_from_db()
+        assert second.refresh_generation == 2  # advanced by its own rotation, not ours
+
+    def test_logout_ends_the_session_without_ending_the_device(
+        self, http, active_user, device, bearer
+    ):
+        """Logout is not revocation: the device row stays live, so the same device
+        signs in again and is handed a working pair."""
+        http.post(LOGOUT_URL, headers=bearer(active_user, device))
+
+        device.refresh_from_db()
+        assert device.revoked_date is None
+
+        again = http.post(
+            LOGIN_URL,
+            json={
+                "username": "alice",
+                "password": PASSWORD,
+                "device_id": str(device.id),
+            },
+        )
+
+        assert again.json()["scope"] == "full"
+        assert (
+            http.get(
+                DIRECTORY_URL,
+                headers={"Authorization": f"Bearer {again.json()['access']}"},
+            ).status_code
+            == 200
+        )
+
+    def test_a_replay_after_a_logout_escalates_nothing_further(
+        self, http, active_user, device, bearer
+    ):
+        """A refresh token whose generation is already behind the row is refused on
+        that alone, so replaying one after a logout cannot advance the counter a
+        second time and cut a session the account has since started."""
+        _access, stale = issue_full(active_user, device)
+        http.post(LOGOUT_URL, headers=bearer(active_user, device))
+
+        replay = http.post(REFRESH_URL, json={"refresh": stale})
+
+        assert replay.status_code == 401
+        assert replay.json()["code"] == "token_revoked"
+        device.refresh_from_db()
+        assert device.token_generation == 2
+
+    def test_deactivating_an_account_freezes_its_live_tokens_and_thaws_them_back(
+        self, http, active_user, device
+    ):
+        """Deactivation is a flag on the account, not a generation bump: every live
+        token stops working while the flag is down and works again if the operator
+        puts it back. The irreversible answer is revoking the devices, which is what
+        the panel's other action does."""
+        access, refresh = issue_full(active_user, device)
+        auth = {"Authorization": f"Bearer {access}"}
+        active_user.is_active = False
+        active_user.save(update_fields=["is_active"])
+
+        frozen = http.get(DIRECTORY_URL, headers=auth)
+        device.refresh_from_db()
+        assert frozen.status_code == 401
+        assert frozen.json()["code"] == "token_revoked"
+        assert (device.token_generation, device.refresh_generation) == (1, 1)
+
+        active_user.is_active = True
+        active_user.save(update_fields=["is_active"])
+
+        assert http.get(DIRECTORY_URL, headers=auth).status_code == 200
+        assert http.post(REFRESH_URL, json={"refresh": refresh}).status_code == 200
+
+    def test_a_deactivated_account_cannot_sign_in_to_mint_new_tokens(
+        self, http, active_user, device
+    ):
+        active_user.is_active = False
+        active_user.save(update_fields=["is_active"])
+
+        response = http.post(
+            LOGIN_URL,
+            json={
+                "username": "alice",
+                "password": PASSWORD,
+                "device_id": str(device.id),
+            },
+        )
+
+        assert response.status_code == 403
+        assert response.json()["code"] == "account_inactive"
+
+
+class TestTheLockoutBoundary:
+    """The threshold is a number, and both sides of it are behaviour a person
+    hits: one mistyped password too many locks an account out of its own server."""
+
+    def fail(self, http, username, times):
+        for _ in range(times):
+            assert (
+                http.post(
+                    LOGIN_URL, json={"username": username, "password": "the-wrong-one"}
+                ).status_code
+                == 401
+            )
+
+    def test_one_failure_short_of_the_threshold_leaves_the_name_open(
+        self, http, active_user
+    ):
+        from core.lockout import FAILURE_THRESHOLD
+
+        self.fail(http, "alice", FAILURE_THRESHOLD - 1)
+
+        response = http.post(LOGIN_URL, json={"username": "alice", "password": PASSWORD})
+
+        assert response.status_code == 200
+        assert response.json()["scope"] == "register"
+
+    def test_the_failure_that_reaches_the_threshold_is_still_answered_as_a_refusal(
+        self, http, active_user
+    ):
+        """The lock is read before the attempt and written after it, so the attempt
+        that trips the threshold is refused for the password it got wrong; only the
+        one after it is refused for the lock."""
+        from core.lockout import FAILURE_THRESHOLD
+
+        self.fail(http, "alice", FAILURE_THRESHOLD - 1)
+
+        tripping = http.post(
+            LOGIN_URL, json={"username": "alice", "password": "the-wrong-one"}
+        )
+        after = http.post(LOGIN_URL, json={"username": "alice", "password": PASSWORD})
+
+        assert tripping.status_code == 401
+        assert tripping.json()["code"] == "invalid_credentials"
+        assert after.status_code == 429
+        assert after.json()["code"] == "throttled"
+
+
+class TestRegistrationCannotTakeOverAName:
+    def test_a_second_registration_never_replaces_the_stored_password(self, http):
+        """The conflict has to be a refusal rather than an update: an account that
+        is awaiting activation would otherwise be a name anybody could claim by
+        registering it again."""
+        first = http.post(
+            REGISTER_URL, json={"username": "bob", "password": GOOD_PASSWORD}
+        )
+
+        response = http.post(
+            REGISTER_URL, json={"username": "bob", "password": "a-different-passphrase"}
+        )
+
+        assert response.status_code == 409
+        account = User.objects.get(id=first.json()["user_id"])
+        assert account.check_password(GOOD_PASSWORD) is True
+        assert account.check_password("a-different-passphrase") is False
+
+    def test_an_account_awaiting_activation_already_holds_its_name(self, http):
+        http.post(REGISTER_URL, json={"username": "bob", "password": GOOD_PASSWORD})
+
+        response = http.post(
+            REGISTER_URL, json={"username": "bob", "password": GOOD_PASSWORD}
+        )
+
+        assert response.status_code == 409
+        assert User.objects.filter(username="bob", is_active=False).count() == 1
+
+
+def test_the_api_login_writes_no_login_timing(http, active_user, device):
+    """ADR-0006 stores no token because a per-device login record at rest is the
+    login history a seizure would otherwise yield. A `last_login` written by the
+    client-facing login would be that record by another name, so this route must
+    leave the column alone.
+
+    `login` in `accounts/services.py` authenticates against the hash directly and
+    never calls `django.contrib.auth.login`, so it sends no `user_logged_in` and
+    Django's `update_last_login` receiver never fires. That is the property; this
+    test is what keeps a later refactor onto the Django helper from ending it
+    silently."""
+    before = User.objects.get(pk=active_user.pk).last_login
+
+    response = http.post(
+        LOGIN_URL,
+        json={"username": "alice", "password": PASSWORD, "device_id": str(device.id)},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["scope"] == "full"
+    assert before is None
+    assert User.objects.get(pk=active_user.pk).last_login is None

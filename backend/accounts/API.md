@@ -141,6 +141,12 @@ Unknown usernames and wrong passwords return the same body, and unknown username
 still pay for a real Argon2 verification, so the two cases are not distinguishable by
 response or by timing. Activation state is only revealed after a correct password.
 
+Five failed attempts on one name within fifteen minutes lock that name for fifteen
+minutes, whether or not an account holds it, so the lock confirms nothing about
+existence. A locked name answers `429 throttled` with `Retry-After` before the
+password is hashed, and a successful sign-in clears the count. The per-address limit
+below stands beside it.
+
 **Headers**
 
 | Header | Required | Value |
@@ -228,7 +234,13 @@ The cap on this route is 16 KiB, counted as the bytes arrive rather than read fr
 
 ### Rate limited — `429 Too Many Requests`
 
-Scope `login`, default 20/hour per client address.
+```json
+{ "code": "throttled", "detail": "Too many sign-in attempts for this name. Wait and try again." }
+```
+
+Scope `login`, default 20/hour per client address, with `detail` `"Request was
+throttled."`. The body above is the other cause of the same status: the name is in
+its cool-off, and `Retry-After` carries the seconds left in it.
 
 ## Refresh tokens
 
@@ -408,6 +420,10 @@ is not paginated, because the scale band caps it at fewer than 50 accounts.
 
 None.
 
+**Retry semantics.** Safe to repeat: the route writes nothing. Two calls a moment
+apart can differ all the same, because the operator activates and deactivates accounts
+between them; the directory is a current answer, never a stable one.
+
 **Responses**
 
 ### Listed — `200 OK`
@@ -462,6 +478,10 @@ a peer announces a change.
 **Request body**
 
 None.
+
+**Retry semantics.** Safe to repeat: the route writes nothing. `version` is what tells
+two answers apart, so a client that caches a profile compares that rather than the
+blob.
 
 **Responses**
 
@@ -535,7 +555,8 @@ losing writer gets `409 stale_version`, refetches, and reapplies.
 
 **Retry semantics.** A retry of the same `PUT` either applies it or answers `409
 stale_version` because the first attempt already stored that version. Both outcomes
-leave the stored blob correct; on `409` the client refetches and re-applies.
+leave the stored blob correct; on `409` the client refetches and re-applies. `GET`
+writes nothing and is safe to repeat.
 
 **Responses**
 

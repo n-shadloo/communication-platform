@@ -101,3 +101,46 @@ def test_the_capture_is_live_and_unscrubbed(bob):
         logging.getLogger("messaging.tests.canary").debug("device %s", planted.id)
 
     assert any(str(planted.id) in line for line in lines)
+
+
+def test_a_rejected_ack_never_echoes_the_identifier_it_could_not_read(
+    http, active_user, device, bearer
+):
+    """The refusal path of the ack, which the send's own refusal above does not
+    cover: what a client sends here is envelope ids, and a validation failure that
+    reached a log line would put the mailbox of a device into the journal without
+    anything ever being delivered."""
+    unreadable = "e4f8a1c2-9b3d-4e5f-8a70-NOT-A-UUID"
+
+    with capture_all_logging() as lines:
+        resp = http.post(
+            "/api/v1/me/envelopes/ack",
+            json={"ids": [unreadable]},
+            headers=bearer(active_user, device),
+        )
+
+    assert resp.status_code == 400
+    for line in lines:
+        assert unreadable not in line
+        assert str(device.id) not in line
+
+
+def test_the_query_string_of_a_drain_never_reaches_a_log_line(
+    http, active_user, device, bearer
+):
+    """There is no access log, and a request path is an identifier. The drain is
+    the route a client polls, so it is the one whose path would appear most
+    often — and the parameter it carries is attacker-chosen text."""
+    marker = "drain-query-string-canary"
+
+    with capture_all_logging() as lines:
+        resp = http.get(
+            "/api/v1/me/envelopes",
+            params={"limit": marker},
+            headers=bearer(active_user, device),
+        )
+
+    assert resp.status_code == 200
+    for line in lines:
+        assert marker not in line
+        assert "/api/v1/me/envelopes" not in line

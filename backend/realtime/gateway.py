@@ -349,11 +349,12 @@ class Connection:
     async def _emit_presence(self, state):
         # Presence is metadata the server inherently knows (socket up or down);
         # only the devices the client authorized through subscribe_presence are
-        # told. No content is involved.
+        # told. No content is involved. One round trip for the whole set, because
+        # the set holds up to PRESENCE_TARGETS_MAX and this runs on the receive
+        # loop and again on every disconnect.
         if not self.device:
             return
-        for device_id in self.presence_targets:
-            await bus.announce_presence(device_id, str(self.device.id), state)
+        await bus.announce_presence(self.presence_targets, str(self.device.id), state)
 
     def _rate_ok(self):
         now = time.monotonic()

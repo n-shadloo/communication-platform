@@ -13,9 +13,9 @@ every published frame to every worker, which then drops what it holds no socket
 for. The common case makes that expensive: a live push to a device that is
 offline is a whole envelope blob — up to a base64 bucket — carried across the
 loopback socket only to be discarded. Per-topic instead: Redis drops the publish
-server-side when nobody holds the topic, and the process pays one round trip on
-each bind, room join and room leave, which is connection-lifecycle rate rather
-than frame rate.
+server-side when nobody holds the topic, and the process pays one subscribe or
+unsubscribe round trip on each bind, room join and room leave, which is
+connection-lifecycle rate rather than frame rate.
 
 **Every publish is best-effort and silent.** The durable mailbox is the source of
 truth for an envelope, and presence, signals and room traffic are volatile by
@@ -29,7 +29,7 @@ import json
 import redis
 from django.conf import settings
 
-from api.redis import get_client
+from api.redis import get_client, timeouts
 
 # The control event. Not a server frame: it names an action on the socket rather
 # than something to forward, and `realtime/gateway.py` is the only reader.
@@ -39,6 +39,17 @@ CLOSE = "socket.close"
 # topic on `on_connect` — so the reader only has to stop spinning while the
 # connection is down.
 RECONNECT_DELAY_SECONDS = 1.0
+
+# The payload bytes one pipeline may carry before it is sent. A pipeline packs
+# every command into memory before it writes any of them, so one that carried a
+# whole fan-out would hold it twice: the serialized payloads and the packed bytes.
+# Measured on the largest batch the body cap admits — 200 envelopes at the 262 144
+# bucket, 70 MB of base64 — one pipeline peaked at 178.3 MB of resident set against
+# 37.8 MB for the same publishes issued one at a time, which is 140 MB of a 1 GB
+# host bought with 35 ms of event loop. A mebibyte carries every presence fan-out
+# and every batch of small envelopes in one round trip, and splits the rare batch
+# of large ones into far fewer round trips than it has frames.
+PIPELINE_BYTES = 1024 * 1024
 
 _subscribers = {}
 
@@ -82,11 +93,63 @@ async def publish(topic, payload):
         return
 
 
-async def push_envelope(device_id, envelope_id, seq, blob):
-    """The live half of a committed send. The queue row is the source of truth."""
-    await publish(
-        device_topic(device_id),
-        {"type": "envelope", "id": envelope_id, "seq": seq, "blob": blob},
+async def publish_many(frames):
+    """Best-effort fan-out of several payloads, a bounded pipeline at a time.
+
+    Two paths reach here with more than one topic: a batch send, which is one
+    envelope per recipient copy and capped at 256, and a presence announcement,
+    which is one frame per subscribed device and capped at 500. Awaited one at a
+    time those are that many sequential round trips on the event loop, which on
+    one vCPU is the whole process: 256 sequential publishes cost 37.1 ms on
+    loopback against 1.5 ms for the pipeline, and 500 cost 55.9 ms against 2.5 ms.
+
+    `transaction=False`, because MULTI/EXEC buys nothing here — a publish takes
+    effect the moment Redis reads it, and there is no state for the batch to be
+    atomic over. Best-effort and silent like `publish`, with the same reason: the
+    error would name a topic, and a topic names a device. A failure part-way
+    therefore leaves the earlier pipelines delivered and the rest dropped, which is
+    what best-effort already meant one publish at a time.
+    """
+    try:
+        client = get_client()
+        pending, held = [], 0
+        for topic, payload in frames:
+            body = json.dumps(payload)
+            pending.append((topic, body))
+            held += len(body)
+            if held >= PIPELINE_BYTES:
+                await _flush(client, pending)
+                pending, held = [], 0
+        await _flush(client, pending)
+    except Exception:
+        return
+
+
+async def _flush(client, pending):
+    """Send one pipeline's worth. A no-op on an empty list, so a fan-out that
+    reached nothing costs no round trip at all."""
+    if not pending:
+        return
+    async with client.pipeline(transaction=False) as pipe:
+        for topic, body in pending:
+            pipe.publish(topic, body)
+        await pipe.execute()
+
+
+async def push_envelopes(envelopes):
+    """The live half of a committed send. The queue rows are the source of truth.
+
+    `blob` is the base64 the sender's own request carried, handed through rather
+    than re-encoded from the stored bytes: the two are the same string, and
+    producing it a second time costs 53 ms of event-loop CPU on the largest batch
+    at the largest bucket.
+    """
+    await publish_many(
+        (
+            device_topic(device_id),
+            {"type": "envelope", "id": envelope_id, "seq": seq, "blob": blob},
+        )
+        for device_id, envelope_id, seq, blob in envelopes
     )
 
 
@@ -94,11 +157,14 @@ async def relay_signal(device_id, blob):
     await publish(device_topic(device_id), {"type": "signal", "blob": blob})
 
 
-async def announce_presence(device_id, subject_id, state):
-    """Tell one subscribed device that `subject_id` came online or went offline."""
-    await publish(
-        device_topic(device_id),
-        {"type": "presence", "device_id": subject_id, "state": state},
+async def announce_presence(device_ids, subject_id, state):
+    """Tell each subscribed device that `subject_id` came online or went offline."""
+    await publish_many(
+        (
+            device_topic(device_id),
+            {"type": "presence", "device_id": subject_id, "state": state},
+        )
+        for device_id in device_ids
     )
 
 
@@ -133,7 +199,7 @@ def close_device_sockets(device_id):
     """
     client = None
     try:
-        client = redis.Redis.from_url(settings.REDIS_URL)
+        client = redis.Redis.from_url(settings.REDIS_URL, **timeouts())
         client.publish(device_topic(device_id), json.dumps({"type": CLOSE}))
     except Exception:
         pass

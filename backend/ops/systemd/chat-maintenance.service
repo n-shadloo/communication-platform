@@ -11,8 +11,14 @@ UMask=0027
 WorkingDirectory=/srv/chat/backend
 EnvironmentFile=/srv/chat/backend/.env.production
 Environment=DJANGO_SETTINGS_MODULE=config.settings.prod
-# Deletes expired queue rows, flushes expired refresh tokens, GCs unreferenced
-# attachments. Ciphertext and metadata only; never a remote-wipe guarantee.
+# Deletes queued envelopes, attachments and admin audit rows that are past their
+# retention window. Ciphertext and metadata only; never a remote-wipe guarantee.
+# No token is flushed here, because no token is stored (ADR-0006).
+#
+# The command holds a PostgreSQL advisory lock for its whole run and declines,
+# with exit status 0, when another run already has it. That guard — not this
+# unit's state — is what stops the timer's fire from interleaving with a sweep an
+# operator started by hand.
 ExecStart=/srv/chat/backend/.venv/bin/python manage.py prune
 
 NoNewPrivileges=true
@@ -25,5 +31,10 @@ ProtectKernelModules=true
 ProtectControlGroups=true
 RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
 RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
 LockPersonality=true
+ProtectClock=true
+ProtectHostname=true
+SystemCallArchitectures=native
 ReadWritePaths=/srv/chat/backend/media_root

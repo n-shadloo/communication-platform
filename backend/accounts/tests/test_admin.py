@@ -19,6 +19,7 @@ import pytest
 from django.apps import apps
 from django.contrib import admin as django_admin
 from django.contrib.admin.models import ADDITION, CHANGE, DELETION, LogEntry
+from django.contrib.messages import get_messages
 from django.contrib.staticfiles import finders
 from django.core.management import call_command
 from django.db import connection
@@ -142,6 +143,33 @@ def test_the_site_is_an_unfold_site_and_nothing_else():
     the panel silently lists nothing."""
     assert type(django_admin.site).__module__ == "unfold.sites"
     assert type(django_admin.site).__name__ == "UnfoldAdminSite"
+
+
+def test_every_registered_project_app_names_itself_in_operator_words():
+    """The breadcrumb of every page reads the app's `verbose_name`, and Django
+    derives one from the label when the app declares none — `voicerooms` became
+    `Voicerooms`, a word that is in no language, on every voice-room page.
+
+    Declared rather than derived, on every project app the panel registers a model
+    from, so the next app cannot ship a run-together label by omission. This is the
+    app half of the vocabulary pass; the model half needs a migration and stays
+    deferred in `docs/admin/PANEL-RECORD.md`.
+    """
+    project_apps = {
+        model._meta.app_config
+        for model in django_admin.site._registry
+        if model._meta.label in REGISTERED and model._meta.app_label != "admin"
+    }
+    assert project_apps, "no project app is registered"
+
+    derived = {
+        config.label: config.verbose_name
+        for config in project_apps
+        if config.verbose_name == config.label.title()
+        and "verbose_name" not in vars(type(config))
+    }
+
+    assert derived == {}, derived
 
 
 def test_exactly_the_five_decided_models_are_registered():
@@ -802,18 +830,73 @@ def test_the_lockout_writes_no_database_row(client):
 def test_the_lockout_refuses_when_redis_cannot_be_read(client, monkeypatch):
     """Fails closed, like the rate limiter (ADR-0010): a control whose purpose is to
     refuse cannot answer "allow" when it does not know."""
+    import redis
+
     User.objects.create_superuser(username="owner", password=PASSWORD)
 
-    def unreachable(*args, **kwargs):
-        raise ConnectionError("redis is down")
+    class Unreachable:
+        def ttl(self, *args, **kwargs):
+            raise redis.ConnectionError("redis is down")
 
-    monkeypatch.setattr("core.lockout.cache.get", unreachable)
+    monkeypatch.setattr("core.lockout._redis", lambda: Unreachable())
     response = client.post(
         reverse("admin:login"), {"username": "owner", "password": PASSWORD}
     )
 
     assert response.status_code == 200
     assert "_auth_user_id" not in client.session
+
+
+# Set by `detonate` when a planted Redis value is deserialized as a Python object.
+DETONATED = []
+
+
+def detonate():
+    DETONATED.append(True)
+
+
+class Detonator:
+    """A pickle whose unpickling calls `detonate`, the shape of a payload that a
+    writer of the Redis instance would plant under a key this process reads."""
+
+    def __reduce__(self):
+        return (detonate, ())
+
+
+def test_a_value_planted_in_redis_is_never_deserialized(client):
+    """The lockout reads Redis on every sign-in attempt, under a key an outside
+    party can compute from the submitted name. Django's own Redis cache backend
+    unpickles every value it reads, so a writer of the instance — Redis listens on
+    loopback of a shared host — would run code in this process the moment the
+    operator's name was tried. The state is read as bytes and never as an object.
+
+    Planted under both spellings: the raw key this module reads, and the
+    `:1:`-prefixed key the cache framework would read, so a return to
+    `django.core.cache` fails here.
+    """
+    import pickle
+
+    import redis
+    from django.conf import settings
+
+    from core.lockout import ADMIN, _key
+
+    DETONATED.clear()
+    payload = pickle.dumps(Detonator())
+    store = redis.Redis.from_url(settings.REDIS_URL)
+    try:
+        for key in (_key(ADMIN, "lock", "owner"), f":1:{_key(ADMIN, 'lock', 'owner')}"):
+            store.set(key, payload, ex=60)
+        response = client.post(
+            reverse("admin:login"), {"username": "owner", "password": PASSWORD}
+        )
+    finally:
+        store.close()
+
+    assert DETONATED == []
+    # The planted bytes were read: a non-empty value under the lock key is a lock.
+    assert response.status_code == 200
+    assert "Too many sign-in attempts" in response.content.decode()
 
 
 # --- Assets ----------------------------------------------------------------------
@@ -902,3 +985,139 @@ def test_the_retention_window_is_configured_and_documented():
     assert (
         "ADMIN_AUDIT_RETENTION_DAYS" in (settings.BASE_DIR / ".env.example").read_text()
     )
+
+
+# --- The set-password dialog -----------------------------------------------------
+
+
+def test_the_set_password_dialog_refuses_two_that_do_not_match(client, owner, alice):
+    """A mistyped confirmation must leave the account exactly as it was: the
+    operator is the only one who can undo a password they did not mean to set."""
+    response = client.post(
+        reverse("admin:accounts_user_set_password", args=[alice.pk]),
+        {
+            "password": "another-long-password",
+            "confirm": "a-different-long-password",
+            "_form_submitted": "1",
+        },
+    )
+
+    alice.refresh_from_db()
+    assert response.status_code == 200
+    assert alice.check_password(PASSWORD)
+    assert LogEntry.objects.filter(change_message="Set a new password.").count() == 0
+
+
+def test_the_set_password_dialog_holds_the_same_rules_as_registration(
+    client, owner, alice
+):
+    """The dialog runs Django's configured validators, so the panel cannot set a
+    password the client registration path would have refused."""
+    response = client.post(
+        reverse("admin:accounts_user_set_password", args=[alice.pk]),
+        {"password": "short", "confirm": "short", "_form_submitted": "1"},
+    )
+
+    alice.refresh_from_db()
+    assert response.status_code == 200
+    assert alice.check_password(PASSWORD)
+    assert LogEntry.objects.count() == 0
+
+
+def test_the_set_password_dialog_refuses_an_empty_submission(client, owner, alice):
+    """The field is required, so a submission with nothing in it is the form
+    saying so — not a password of zero length reaching the validators."""
+    response = client.post(
+        reverse("admin:accounts_user_set_password", args=[alice.pk]),
+        {"password": "", "confirm": "", "_form_submitted": "1"},
+    )
+
+    alice.refresh_from_db()
+    assert response.status_code == 200
+    assert alice.check_password(PASSWORD)
+    assert LogEntry.objects.count() == 0
+
+
+# --- The change form -------------------------------------------------------------
+
+
+def test_deactivating_on_the_change_form_closes_the_sockets_after_the_commit(
+    client, owner, alice, device, django_capture_on_commit_callbacks, monkeypatch
+):
+    """The bulk action is not the only way to deactivate an account: the change
+    form is, and a socket authenticated once at connect would otherwise keep
+    relaying until it happened to drop."""
+    alice.is_active = True
+    alice.save(update_fields=["is_active"])
+    closed = []
+    monkeypatch.setattr("accounts.admin.close_device_sockets", closed.append)
+
+    with django_capture_on_commit_callbacks(execute=True) as callbacks:
+        response = client.post(reverse("admin:accounts_user_change", args=[alice.pk]), {})
+
+    alice.refresh_from_db()
+    assert response.status_code == 302
+    assert alice.is_active is False
+    assert len(callbacks) == 1
+    assert closed == [device.pk]
+
+
+def test_activating_on_the_change_form_closes_nothing(
+    client, owner, alice, device, django_capture_on_commit_callbacks, monkeypatch
+):
+    """The other side of the same branch: a save that switches activation on has
+    no session to end."""
+    closed = []
+    monkeypatch.setattr("accounts.admin.close_device_sockets", closed.append)
+
+    with django_capture_on_commit_callbacks(execute=True) as callbacks:
+        client.post(
+            reverse("admin:accounts_user_change", args=[alice.pk]), {"is_active": "on"}
+        )
+
+    alice.refresh_from_db()
+    assert alice.is_active is True
+    assert callbacks == []
+    assert closed == []
+
+
+# --- An action with nothing to do ------------------------------------------------
+
+
+def test_revoking_the_devices_of_an_account_that_has_none_writes_nothing(
+    client, owner, alice
+):
+    """An action that changed nothing must say so rather than claim a revocation:
+    an audit row for work that never happened is a false record."""
+    response = _post_action(
+        client, "admin:accounts_user_changelist", "revoke_all_devices", [alice.pk]
+    )
+
+    assert response.status_code == 302
+    assert LogEntry.objects.count() == 0
+    assert [str(message) for message in get_messages(response.wsgi_request)] == [
+        "Nothing to do: no selected row needed the change."
+    ]
+
+
+def test_revoking_the_devices_of_one_account_leaves_another_accounts_alone(
+    client, owner, alice, device
+):
+    other = User.objects.create_user(username="carol", password=PASSWORD)
+    theirs = Device.objects.create(
+        user=other,
+        ik_pub=b"k" * 32,
+        spk_id=1,
+        spk_pub=b"k" * 32,
+        spk_sig=b"s" * 64,
+        registration_id=202,
+    )
+
+    _post_action(
+        client, "admin:accounts_user_changelist", "revoke_all_devices", [alice.pk]
+    )
+
+    device.refresh_from_db()
+    theirs.refresh_from_db()
+    assert device.revoked_date is not None
+    assert theirs.revoked_date is None

@@ -8,13 +8,18 @@ to be able to answer before the response starts.
 """
 
 import json
+import time
+from unittest import mock
 
 import anyio
 import pytest
 from django.conf import settings
+from django.db import OperationalError
+from django.test import override_settings
 from fastapi.routing import iter_route_contexts
+from psycopg_pool import PoolTimeout
 
-from api.app import route_limits
+from api.app import create_app, route_limits, wrap
 from api.middleware import (
     SECURITY_HEADERS,
     BodyCap,
@@ -24,9 +29,14 @@ from api.middleware import (
     ThreadSensitive,
     TrustedHost,
 )
-from config.asgi import api_application
-from core.buckets import ATTACHMENT_BUCKETS
+from config.asgi import api_application, application, django_asgi_app
+from conftest import AsgiClient
+from core.buckets import ATTACHMENT_BUCKETS, NAME_BUCKETS
 from core.tests.test_route_table import DOCUMENTATION
+from devices.models import Device
+from messaging import services
+from voicerooms import routes as voicerooms_routes
+from voicerooms.models import Room
 
 CAP = Limits(body_bytes=16, deadline_seconds=0.05)
 
@@ -300,3 +310,203 @@ class TestTheRouteLimitTable:
 
         assert fallback.body_bytes == settings.BODY_CAP_JSON_BYTES
         assert fallback.deadline_seconds == settings.REQUEST_DEADLINE_SECONDS
+
+
+def test_an_exhausted_connection_pool_is_reported_as_unavailable(
+    http, active_user, device, bearer, monkeypatch
+):
+    """A pool with no free connection is saturation, not a defect. Reported as a
+    `500` the client stops; reported as a `503` it retries, which is the same
+    answer the rate limiter gives when Redis is gone.
+
+    The pool is not the binding constraint at the measured service times — sixty
+    concurrent drains through a pool of one all returned `200` — but a burst of
+    maximum-size sends holds sixteen connections for as long as their inserts take,
+    and the pool's ten-second timeout fires inside the fifteen-second deadline.
+    """
+    exhausted = OperationalError("connection pool exhausted")
+    exhausted.__cause__ = PoolTimeout("couldn't get a connection after 10.00 sec")
+
+    with mock.patch.object(Device.objects, "select_related", side_effect=exhausted):
+        response = http.get("/api/v1/me/envelopes", headers=bearer(active_user, device))
+
+    assert response.status_code == 503
+    assert response.json()["code"] == "unavailable"
+
+
+def test_any_other_operational_failure_stays_a_server_error(
+    http, active_user, device, bearer
+):
+    """Django wraps every psycopg `OperationalError` in one class. A dropped
+    connection or a deadlock is not saturation, and telling a client to retry
+    would be telling it the wrong thing."""
+    with mock.patch.object(
+        Device.objects,
+        "select_related",
+        side_effect=OperationalError("server closed the connection unexpectedly"),
+    ):
+        response = http.get("/api/v1/me/envelopes", headers=bearer(active_user, device))
+
+    assert response.status_code == 500
+    assert response.json()["code"] == "server_error"
+
+
+def test_an_unhandled_failure_renders_the_envelope_and_leaks_nothing(
+    active_user, device, bearer, monkeypatch
+):
+    """The `500` of the vocabulary, read off the wire rather than off the handler.
+
+    Every other suite drives the surface through a transport that re-raises, so
+    the envelope this handler renders had never been observed: a body carrying the
+    exception text would have passed every one of them. The client contract is a
+    fixed string, and an exception message is the one thing on this path that
+    could carry an identifier into a response.
+    """
+    secret = "device 8a1f-… had 41 undelivered envelopes"
+
+    def explode(*_args, **_kwargs):
+        raise RuntimeError(secret)
+
+    monkeypatch.setattr(services, "drain", explode)
+    client = AsgiClient(application, api_application, reraise=False)
+
+    response = client.get("/api/v1/me/envelopes", headers=bearer(active_user, device))
+
+    assert response.status_code == 500
+    assert response.json() == {"code": "server_error", "detail": "Internal error."}
+    assert secret not in response.text
+    assert response.headers["content-type"].startswith("application/json")
+    for header, value in SECURITY_HEADERS:
+        assert response.headers[header.decode()] == value.decode()
+
+
+@pytest.mark.django_db(transaction=True)
+def test_a_route_waiting_on_the_loop_is_refused_at_the_deadline_the_settings_carry(
+    active_user, device, bearer, monkeypatch
+):
+    """The table's number, end to end.
+
+    Every deadline test above drives `RequestDeadline` directly with a `Limits` of
+    its own, which proves the middleware and not the wiring. This proves the value
+    a deployment puts in `REQUEST_DEADLINE_SECONDS` is the value a slow route is
+    actually held to, and that the client gets a whole response with the security
+    headers rather than a socket that never answers.
+
+    The slow part is an await, because that is what the deadline can reach; the
+    test below this one is the other half. The application is rebuilt inside the
+    override because `wrap` reads the table once, when the stack is assembled.
+    """
+    deadline = 0.2
+
+    async def crawl(*_args, **_kwargs):
+        await anyio.sleep(deadline * 4)
+        raise AssertionError("the deadline should have cut this request off")
+
+    monkeypatch.setattr(voicerooms_routes, "room_live_count", crawl)
+    room = Room.objects.create(name_blob=b"n" * min(NAME_BUCKETS))
+    with override_settings(REQUEST_DEADLINE_SECONDS=deadline):
+        fresh = create_app(django_asgi_app)
+        client = AsgiClient(wrap(fresh), fresh, reraise=False)
+        started = time.monotonic()
+        response = client.get(
+            f"/api/v1/rooms/{room.id}", headers=bearer(active_user, device)
+        )
+        waited = time.monotonic() - started
+
+    assert response.status_code == 503
+    assert response.json() == {
+        "code": "unavailable",
+        "detail": "The request exceeded its deadline.",
+    }
+    assert deadline <= waited < deadline * 4
+    for header, value in SECURITY_HEADERS:
+        assert response.headers[header.decode()] == value.decode()
+
+
+def test_a_wrong_method_renders_the_envelope_with_the_methods_of_one_route(http):
+    """The `405` of the vocabulary. Starlette's own handler answers a bare body,
+    so the envelope here is `errors.install` registering on the base class the
+    router raises rather than on FastAPI's subclass.
+
+    `Allow` names the methods of the one route object, which on a path two route
+    objects share is one of them and not both — `API_CHANGES.md` tells the client
+    not to read it as the method set of the path, and this is that behaviour.
+    """
+    response = http.delete("/api/v1/health")
+
+    assert response.status_code == 405
+    assert response.json() == {
+        "code": "method_not_allowed",
+        "detail": "That method is not allowed.",
+    }
+    assert response.headers["allow"] == "GET"
+    for header, value in SECURITY_HEADERS:
+        assert response.headers[header.decode()] == value.decode()
+
+
+class TestEveryMiddlewareRefusalIsAWholeResponse:
+    """`_send_envelope` is what answers before a route is reached: the unknown
+    host, the oversized body and the missed deadline. Each of those responses is
+    written by the middleware and by nothing else — `SecurityHeaders` sits *below*
+    `TrustedHost` and `RequestDeadline`, so it never sees them — which is why each
+    one carries the headers itself.
+    """
+
+    async def refusals(self):
+        oversized = one_body(b"x" * (CAP.body_bytes + 1))
+        return {
+            "unknown host": await drive(
+                TrustedHost(reader(), ["testserver"]),
+                http_scope(host=b"evil.example"),
+                one_body(b""),
+            ),
+            "oversized body": await drive(
+                BodyCap(reader(), limits_for), http_scope(), oversized
+            ),
+            "missed deadline": await drive(
+                RequestDeadline(reader(delay=CAP.deadline_seconds * 10), limits_for),
+                http_scope(),
+                one_body(b""),
+            ),
+        }
+
+    async def test_each_refusal_carries_the_security_headers_of_this_surface(self):
+        for label, (_status, headers, _body) in (await self.refusals()).items():
+            for name, value in SECURITY_HEADERS:
+                assert headers.get(name) == value, (label, name)
+
+    async def test_each_refusal_is_json_with_a_content_length(self):
+        """A body with no `Content-Length` on a connection the client is still
+        writing to is a hang, not a refusal."""
+        for label, (_status, headers, body) in (await self.refusals()).items():
+            assert headers[b"content-type"] == b"application/json", label
+            assert int(headers[b"content-length"]) == len(body), label
+
+    async def test_each_refusal_renders_the_error_envelope_and_nothing_else(self):
+        for label, (_status, _headers, body) in (await self.refusals()).items():
+            assert set(json.loads(body)) == {"code", "detail"}, label
+
+    async def test_the_body_cap_lets_a_websocket_scope_through_untouched(self):
+        """A socket has no request body to count, and both bounded middlewares
+        pass a non-HTTP scope on: what bounds the socket is the gateway's own
+        frame cap and send-queue bound."""
+        seen = []
+
+        async def app(scope, receive, send):
+            seen.append(scope["type"])
+
+        await BodyCap(app, limits_for)({"type": "websocket"}, None, None)
+        await TrustedHost(app, ["testserver"])({"type": "websocket"}, None, None)
+        await SecurityHeaders(app)({"type": "websocket"}, None, None)
+
+        assert seen == ["websocket"] * 3
+
+
+def test_the_liveness_probe_takes_the_smallest_body_cap_of_the_surface(http):
+    """A probe no caller has to authenticate for is the cheapest thing to point a
+    flood at, so it takes the smallest class rather than the batch one — sixteen
+    kilobytes against seventy megabytes."""
+    per_route, fallback = route_limits()
+
+    assert per_route["/api/v1/health"] == fallback
+    assert per_route["/api/v1/health"].body_bytes == settings.BODY_CAP_JSON_BYTES

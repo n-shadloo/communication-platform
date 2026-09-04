@@ -84,13 +84,25 @@ DATABASES = {
     }
 }
 
+# Read as strings by the redis client, and never through the Django cache
+# framework: every built-in cache backend unpickles what it reads, and Redis is a
+# store another process on the host can write to (ADR-0018). `CACHES` therefore
+# stays on Django's process-local default, which nothing in this project uses.
 REDIS_URL = env("REDIS_URL", default="redis://127.0.0.1:6379/0")
-CACHES = {
-    "default": {
-        "BACKEND": "django.core.cache.backends.redis.RedisCache",
-        "LOCATION": REDIS_URL,
-    }
-}
+# Both the connect timeout and the per-command timeout of every Redis client this
+# process builds. Without one, a Redis that accepts the connection and then stops
+# answering — a blocked instance, or a half-open socket after the network moved
+# under it — holds its caller for ever. On the HTTP surface the request deadline
+# would eventually answer `503`; the WebSocket gateway has no deadline at all, so
+# a presence announcement or a room join would wait until the client gave up.
+# Loopback commands on this host are sub-millisecond, so two seconds is a hang and
+# never a slow answer, and the throttled routes fail closed on it exactly as they
+# already do when Redis refuses the connection (ADR-0010).
+#
+# It does not silence the fan-out bus: redis-py hands `math.inf` to the blocking
+# pub/sub read, which opts that one read out of the socket timeout while the
+# reconnect, AUTH and re-subscribe it performs around it still honour it.
+REDIS_COMMAND_TIMEOUT_SECONDS = env_int("REDIS_COMMAND_TIMEOUT_SECONDS", default=2)
 # Argon2id first. Password hashing protects auth only, never content.
 PASSWORD_HASHERS = [
     "django.contrib.auth.hashers.Argon2PasswordHasher",
@@ -163,7 +175,18 @@ ATTACH_TTL_DAYS = env_int("ATTACH_TTL_DAYS", default=30)
 # message or a group control event, and the device must then repair the affected
 # pairwise sessions — see queue_pruned_through.
 ENVELOPE_TTL_DAYS = env_int("ENVELOPE_TTL_DAYS", default=7)
+# The ceiling on the undelivered bytes one mailbox holds. Any member can address
+# any mailbox, so without it a member's sends are a write primitive against the
+# disk of the host; with it the worst case is the ceiling times the device count.
+# A device whose mailbox would pass it is refused whole and named in
+# `full_devices`, and the sender retries once the device has drained.
+MAILBOX_MAX_BYTES = env_int("MAILBOX_MAX_BYTES", default=32 * 1024 * 1024)
 MAX_DEVICES_PER_USER = env_int("MAX_DEVICES_PER_USER", default=10)
+# The ceiling on one account's device-list log. The log is append-only and never
+# pruned, and a client appends one record for each device-set change, so ten
+# thousand is a lifetime of changes; without a ceiling one account grows the
+# table at the batch cap times the rate limit for as long as it likes.
+MAX_DEVICELOG_RECORDS = env_int("MAX_DEVICELOG_RECORDS", default=10000)
 
 # Realtime gateway bounds.
 ALLOWED_WS_ORIGINS = env_list("ALLOWED_WS_ORIGINS", default=[])

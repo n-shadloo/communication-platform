@@ -19,6 +19,7 @@ peers can check them.
 
 import base64
 import binascii
+import datetime
 import uuid
 from typing import Annotated, Any
 
@@ -246,6 +247,16 @@ class PrekeyReplenishIn(RequestModel):
             raise PydanticCustomError(
                 "cross_sig_pair", "cross_sig and bundle_version must be sent together"
             )
+        # A sent `null` is half a pair in substance, whichever half it is: a
+        # cross_sig stored against no version is one peers must reject, and
+        # `Device.bundle_version` cannot hold null at all — without this the value
+        # reached the column and the route answered `500` rather than refusing the
+        # body. The union above exists so that "not sent" is expressible, and
+        # nothing else.
+        if "bundle_version" in sent and self.bundle_version is None:
+            raise PydanticCustomError(
+                "cross_sig_pair", "bundle_version must be a number when it is sent"
+            )
         _reject_duplicate_key_ids(self.otpks)
         _reject_duplicate_key_ids(self.pq_otpks)
         return self
@@ -330,17 +341,17 @@ class IdentityOut(BaseModel):
 
 
 class DeviceRegisteredOut(BaseModel):
-    device_id: str
+    device_id: uuid.UUID
     access: str
     refresh: str
     scope: str
 
 
 class OwnDeviceOut(BaseModel):
-    device_id: str
+    device_id: uuid.UUID
     label_blob: str | None
-    created_date: str
-    last_active_date: str | None
+    created_date: datetime.date
+    last_active_date: datetime.date | None
     this_device: bool
 
 
@@ -350,7 +361,7 @@ class OwnDeviceListOut(BaseModel):
 
 
 class PeerDeviceOut(BaseModel):
-    device_id: str
+    device_id: uuid.UUID
     ik_pub: str
     registration_id: int
     cross_sig: str | None
@@ -405,7 +416,7 @@ class ClaimedBundleOut(BaseModel):
     look unsigned rather than absent.
     """
 
-    device_id: str
+    device_id: uuid.UUID
     registration_id: int
     ik_pub: str
     spk_id: int

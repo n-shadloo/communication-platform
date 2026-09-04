@@ -397,6 +397,14 @@ def append_log(user_id, records):
             "m"
         ]
         start = (current if current is not None else -1) + 1
+        # `seq` is contiguous from 0 and the log is never pruned, so `start` is
+        # the record count. The ceiling is a storage bound: the log is append-only
+        # and a client appends one record for each device-set change, so an
+        # account that reaches it is growing the table on purpose.
+        if start + len(records) > settings.MAX_DEVICELOG_RECORDS:
+            raise ApiError(
+                409, "devicelog_limit", "The device-list log of this account is full."
+            )
         DeviceLogRecord.objects.bulk_create(
             [
                 DeviceLogRecord(user_id=user_id, seq=start + i, blob=record.raw)

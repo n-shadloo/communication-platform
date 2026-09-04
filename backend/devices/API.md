@@ -148,6 +148,10 @@ self-contained so no such indirection exists.
 |---|---|---|---|
 | `user_id` | UUID | yes | Account whose identity is fetched |
 
+**Retry semantics.** Safe to repeat: the route writes nothing. `version` moves when the
+user rotates the identity, and a client that has pinned one compares that rather than
+the key bytes.
+
 **Responses**
 
 ### Found — `200 OK`
@@ -567,7 +571,9 @@ applied either — no prekey rotation, no signature update.
 > canonical device bundle, so replacing it invalidates the stored cross-signature.
 > Send a fresh `cross_sig` and an incremented `bundle_version` **in the same call**,
 > or peers fetching your bundle will correctly reject this device. Sending one without
-> the other is a `400`; beyond that the server stores whatever it is given and never
+> the other is a `400`, and so is sending `bundle_version` as `null` — the version is a
+> number or it is not sent, because a `cross_sig` stored against no version is one peers
+> must reject. Beyond that the server stores whatever it is given and never
 > checks that the signature matches the bundle — only peers can, so there is no server
 > error to save a client that signs the wrong bytes.
 
@@ -691,6 +697,10 @@ has stored. Same self-only gate as replenishment.
 
 None.
 
+**Retry semantics.** Safe to repeat: the route writes nothing. The two counts fall
+whenever a peer claims a bundle, so treat an answer as a reading taken at that instant
+and never as a reservation.
+
 **Responses**
 
 ### Counted — `200 OK`
@@ -762,6 +772,10 @@ session state / log-head comparison should be refreshed.
 **Request body**
 
 None.
+
+**Retry semantics.** Safe to repeat: the route writes nothing. A retry that carries the
+`ETag` of the first answer gets `304` while the device set is unchanged, which is the
+cheap way to poll it.
 
 **Responses**
 
@@ -953,6 +967,12 @@ actually compare (clients gossip heads inside ordinary E2EE messages).
 Appending changes the account's device-list `ETag`, so polling peers re-fetch and see
 the new head.
 
+The log holds at most `MAX_DEVICELOG_RECORDS` records (default 10 000) and is never
+pruned. An append that would pass the ceiling is refused whole with
+`409 devicelog_limit` and stores nothing. A client appends one record for each
+device-set change, so a log that reaches the ceiling is a client defect, not a
+condition to handle by trimming: nothing on the server removes a record.
+
 **Retry semantics.** Not idempotent: the server assigns `seq` and never inspects a
 record, so a retry after a lost response appends the same blobs again under fresh
 sequence numbers. The log is a hash chain the client builds, so the duplicate records
@@ -1001,6 +1021,14 @@ nginx admits; the list caps of the schema refuse a larger body long before it.
 ```json
 { "code": "bad_bucket", "detail": "Invalid payload." }
 ```
+
+### Log full — `409 Conflict`
+
+```json
+{ "code": "devicelog_limit", "detail": "The device-list log of this account is full." }
+```
+
+Nothing of the batch is stored.
 
 ### Register-scope token — `403 Forbidden`
 
@@ -1052,6 +1080,11 @@ never a `500`.
 **Request body**
 
 None.
+
+**Retry semantics.** Safe to repeat: the route writes nothing and a keyset page is
+stable, because a record is only ever appended and never edited or deleted. Re-reading
+a page after a lost response yields the same records; pass the same `after` rather than
+restarting from the head.
 
 **Responses**
 

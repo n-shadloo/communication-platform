@@ -107,7 +107,8 @@ and bumps `updated_date`, which is how peers polling `GET` notice a rename.
 **Retry semantics.** `PUT` is idempotent: it replaces the stored blob, so a repeated
 call with the same body leaves the same name. It carries no version, so two clients
 renaming at once settle on whichever write lands last — there is no `409` here, and a
-client that must not lose a rename re-reads before it writes.
+client that must not lose a rename re-reads before it writes. `GET` writes nothing and
+is safe to repeat, though `live_count` is a reading taken at that instant.
 
 **Headers**
 

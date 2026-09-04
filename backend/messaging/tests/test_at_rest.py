@@ -6,14 +6,18 @@ separate connection, so it sees only committed rows.
 """
 
 import base64
-from datetime import datetime
+from datetime import datetime, timedelta
 from datetime import timezone as dt_timezone
+from io import StringIO
 
 import pytest
+from django.core.management import call_command
+from django.utils import timezone
 
 from accounts.models import User
 from accounts.tests.test_at_rest import PG_DUMP, pg_dump_table
 from core.buckets import ENVELOPE_BUCKETS
+from messaging.models import QueuedEnvelope
 
 from .conftest import PASSWORD, envelope_blob, make_device
 
@@ -144,3 +148,67 @@ def test_the_model_declares_no_sender_or_recipient_list_field():
 
     assert names == {"id", "recipient_device", "seq", "blob", "queued_hour"}
     assert not any("sender" in n for n in names)
+
+
+@pytest.mark.skipif(PG_DUMP is None, reason="pg_dump not on PATH")
+@pytest.mark.django_db(transaction=True)
+def test_a_ttl_pruned_envelope_leaves_no_trace_in_a_raw_table_dump(
+    http, active_user, device, bearer, three_recipient_devices, settings
+):
+    """The other retention path, and the one that runs without a client.
+
+    Delivery-ack bounds a seizure by what the recipient has not yet fetched; the
+    TTL bounds it by time, for the mailbox of a device that never comes back. A
+    row that survived its window would make the queue an archive of every
+    undelivered message the deployment has ever carried.
+    """
+    settings.ENVELOPE_TTL_DAYS = 7
+    recipient = three_recipient_devices[0]
+    blob = envelope_blob(b"T")
+    resp = http.post(
+        "/api/v1/envelopes",
+        json={"messages": [{"device_id": str(recipient.id), "blob": blob}]},
+        headers=bearer(active_user, device),
+    )
+    assert resp.status_code == 202
+    stored = QueuedEnvelope.objects.get(recipient_device_id=recipient.id)
+    QueuedEnvelope.objects.filter(id=stored.id).update(
+        queued_hour=timezone.now() - timedelta(days=8)
+    )
+
+    call_command("prune", stdout=StringIO())
+
+    dump = pg_dump_table(TABLE)
+    _cols, rows = copy_block(dump, TABLE)
+    assert rows == []
+    assert base64.b64decode(blob).hex() not in dump  # bytea renders as \x<hex>
+    assert str(stored.id) not in dump
+
+
+@pytest.mark.skipif(PG_DUMP is None, reason="pg_dump not on PATH")
+@pytest.mark.django_db(transaction=True)
+def test_a_drained_envelope_is_still_at_rest_until_it_is_acked(
+    http, active_user, device, bearer, three_recipient_devices
+):
+    """Draining consumes nothing, and the dump is where that is visible rather
+    than inferred: the row a client has read is still on disk, which is what makes
+    a drain safe to repeat after a crash — and what makes the ack, not the read,
+    the moment retention takes effect."""
+    recipient = three_recipient_devices[0]
+    blob = envelope_blob(b"D")
+    http.post(
+        "/api/v1/envelopes",
+        json={"messages": [{"device_id": str(recipient.id), "blob": blob}]},
+        headers=bearer(active_user, device),
+    )
+    owner_headers = bearer(recipient.user, recipient)
+
+    first = http.get("/api/v1/me/envelopes", headers=owner_headers).json()
+    second = http.get("/api/v1/me/envelopes", headers=owner_headers).json()
+
+    assert [one["id"] for one in first["envelopes"]] == [
+        one["id"] for one in second["envelopes"]
+    ]
+    _cols, rows = copy_block(pg_dump_table(TABLE), TABLE)
+    assert len(rows) == 1
+    assert rows[0]["recipient_device_id"] == str(recipient.id)

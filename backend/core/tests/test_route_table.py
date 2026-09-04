@@ -247,3 +247,44 @@ def test_the_schema_and_its_documentation_are_closed_outside_debug(path):
     answer = AsgiClient(wrap(closed), closed).get(path)
     assert answer.status_code == 404
     assert answer.json() == {"code": "not_found", "detail": "No such route or resource."}
+
+
+def test_every_http_route_is_served_under_the_version_prefix():
+    """A route registered outside `/api/v1` is one no client version covers and
+    no future version can move: the prefix is the whole of this API's versioning
+    scheme (ADR-0008)."""
+    unversioned = sorted(
+        path for _method, path in served() if not path.startswith("/api/v1/")
+    )
+
+    assert unversioned == []
+
+
+def test_the_gateway_is_the_only_path_the_prefix_does_not_cover():
+    """`/ws` is at the root because that is the path `realtime/API.md` publishes
+    and the client already opens; it is recorded here rather than left as the one
+    exception every reader has to rediscover."""
+    outside = {
+        context.path
+        for context in iter_route_contexts(api_application.routes)
+        if not context.path.startswith("/api/v1/") and context.path not in DOCUMENTATION
+    }
+
+    assert outside == {"/ws"}
+
+
+def test_no_method_and_path_is_registered_twice():
+    """`served()` is a mapping, so a route registered a second time would replace
+    the first and every assertion in this file would read the survivor. Two route
+    objects on one method and path is a shadowed handler: the router matches the
+    first and the second is unreachable, whatever it declares."""
+    registered = []
+    for context in iter_route_contexts(api_application.routes):
+        if context.methods is None or context.path in DOCUMENTATION:
+            continue
+        registered.extend((method, context.path) for method in context.methods)
+
+    duplicated = sorted({pair for pair in registered if registered.count(pair) > 1})
+
+    assert duplicated == []
+    assert len(registered) == len(EXPECTED)

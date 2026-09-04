@@ -1,7 +1,11 @@
 import base64
 import uuid
+from datetime import timedelta
+from io import StringIO
 
 import pytest
+from django.core.management import call_command
+from django.utils import timezone
 
 from messaging.models import QueuedEnvelope
 
@@ -237,3 +241,79 @@ def test_the_drain_response_carries_no_recipient_or_sender_field(
     body = http.get(DRAIN_URL, headers=bearer(active_user, device)).json()
 
     assert set(body["envelopes"][0]) == {"id", "seq", "blob"}
+
+
+def test_an_empty_mailbox_drains_to_the_documented_body_rather_than_a_404(
+    http, active_user, device, bearer
+):
+    """A device with nothing waiting is the common case — most polls are empty —
+    so the answer has to be a page, not a refusal a client would have to branch
+    on."""
+    resp = http.get(DRAIN_URL, headers=bearer(active_user, device))
+
+    assert resp.status_code == 200
+    assert resp.json() == {"envelopes": [], "has_more": False, "pruned_through": 0}
+
+
+@pytest.mark.parametrize("held, has_more", [(1, False), (2, False), (3, True)])
+def test_the_further_page_flag_turns_over_one_past_the_page_size(
+    http, active_user, device, bearer, held, has_more
+):
+    """The boundary from both sides. A mailbox exactly the size of the page has no
+    further page, and one row more does: an off-by-one here is either a client
+    that stops a page early or one that polls an empty page for ever."""
+    enqueue(device, held)
+
+    body = http.get(f"{DRAIN_URL}?limit=2", headers=bearer(active_user, device)).json()
+
+    assert len(body["envelopes"]) == min(held, 2)
+    assert body["has_more"] is has_more
+
+
+def test_a_client_pages_a_mailbox_by_draining_and_acking_until_it_empties(
+    http, active_user, device, bearer
+):
+    """The loop `CLIENT_CONTRACT.md` describes, run end to end: drain a page,
+    store it, ack it, drain again. Each page is the rows the last ack left, so the
+    sequence numbers come back once each and in order."""
+    enqueue(device, 5)
+    headers = bearer(active_user, device)
+    seen = []
+
+    while True:
+        page = http.get(f"{DRAIN_URL}?limit=2", headers=headers).json()
+        seen.extend(one["seq"] for one in page["envelopes"])
+        acked = http.post(
+            ACK_URL,
+            json={"ids": [one["id"] for one in page["envelopes"]]},
+            headers=headers,
+        )
+        assert acked.json() == {"deleted": len(page["envelopes"])}
+        if not page["has_more"]:
+            break
+
+    assert seen == [1, 2, 3, 4, 5]
+    assert QueuedEnvelope.objects.count() == 0
+
+
+def test_acking_an_envelope_the_ttl_already_took_deletes_nothing(
+    http, active_user, device, bearer, settings
+):
+    """The rare case a returning device hits: it drained before it went offline,
+    the prune ran while it was away, and the ack it retries now names rows that no
+    longer exist. It must answer a count, not an error — the watermark is where
+    the loss is reported."""
+    settings.ENVELOPE_TTL_DAYS = 7
+    row = enqueue(device, 1)[0]
+    QueuedEnvelope.objects.filter(id=row.id).update(
+        queued_hour=timezone.now() - timedelta(days=8)
+    )
+    call_command("prune", stdout=StringIO())
+
+    resp = http.post(
+        ACK_URL, json={"ids": [str(row.id)]}, headers=bearer(active_user, device)
+    )
+
+    assert resp.json() == {"deleted": 0}
+    device.refresh_from_db()
+    assert device.queue_pruned_through == row.seq

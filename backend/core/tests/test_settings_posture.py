@@ -1,10 +1,28 @@
 import re
 
 from django.conf import settings
+from django.core.checks import Tags, run_checks
 from django.test import SimpleTestCase, override_settings
 
 from config.settings import prod
 from core.checks import no_foreign_or_telemetry, ws_origin_allowlist_set
+
+# The band's ceiling on concurrent WebSocket connections: fewer than 50 accounts
+# at `MAX_DEVICES_PER_USER` devices each, recorded as A1 in
+# `docs/architecture/DESIGN-RECORD.md`. It lives there rather than in a setting,
+# because nothing in this process enforces it.
+SOCKET_CEILING = 500
+
+
+def deploy_check_ids():
+    """The ids `manage.py check --deploy` would report under the current settings,
+    read through the registry so a check that is written but never registered
+    for deployment fails here."""
+    return {
+        message.id
+        for message in run_checks(tags=[Tags.security], include_deployment_checks=True)
+    }
+
 
 BANNED_TELEMETRY = {"sentry_sdk", "ddtrace", "newrelic", "elasticapm"}
 
@@ -121,10 +139,11 @@ class BasePostureTests(SimpleTestCase):
 
     def test_datastores_are_localhost_only(self):
         self.assertIn(settings.DATABASES["default"]["HOST"], {"127.0.0.1", "localhost"})
-        # One Redis URL now, not two: the cache, the rate counters, the room
-        # presence sets and the gateway's fan-out bus all read `REDIS_URL`.
-        for location in (settings.CACHES["default"]["LOCATION"], settings.REDIS_URL):
-            self.assertRegex(location, r"^redis://(127\.0\.0\.1|localhost):")
+        # One Redis URL: the rate counters, the lockout, the room presence sets and
+        # the gateway's fan-out bus all read `REDIS_URL`.
+        self.assertRegex(
+            settings.REDIS_URL, r"^redis://(:[^@]+@)?(127\.0\.0\.1|localhost):"
+        )
 
     def test_scrub_filter_is_attached_and_access_logging_is_off(self):
         logging = settings.LOGGING
@@ -182,6 +201,98 @@ class BasePostureTests(SimpleTestCase):
         ):
             self.assertIn(flag, unit)
 
+    def test_the_edge_writes_no_access_log_and_no_request_line(self):
+        """The other half of `--no-access-log`, one layer out.
+
+        nginx sees every request the process sees, one hop earlier, and it has no
+        `access_log off` of its own to inherit: the compiled-in default is
+        `access_log logs/access.log combined`, and every packaged `nginx.conf`
+        sets one in the `http` block that a `server` block inherits unless it
+        overrides it. The `combined` format writes `$remote_addr` and `$request`,
+        which is the client address and the whole URI — the peer user UUID of the
+        key-claim and device routes, the operator-chosen admin path, and the
+        bearer capability that downloads an attachment.
+
+        `error_log` carries the same line: an upstream failure is logged at
+        `error` level with `client:` and `request:` fields, so a restarting worker
+        would write the paths the access log no longer does. `crit` is the level
+        above it.
+        """
+        for conf in (settings.BASE_DIR / "ops" / "nginx").glob("*.conf"):
+            body = conf.read_text()
+            # Per server block, not per file: a directive in one block does not
+            # reach the other, and the plaintext block sees a URI too — whatever
+            # path a request named before the redirect sends it on.
+            blocks = len(re.findall(r"^server \{", body, re.M))
+
+            self.assertEqual(body.count("access_log off;"), blocks, conf.name)
+            self.assertEqual(
+                len(re.findall(r"error_log\s+\S+\s+crit;", body)), blocks, conf.name
+            )
+
+    def test_the_concurrency_limit_leaves_room_for_http_beside_the_sockets(self):
+        """uvicorn's `--limit-concurrency` counts *connections*, and a live
+        WebSocket is one: both protocols share `server_state.connections`, and the
+        HTTP path answers `503` from the length of that shared set. The WebSocket
+        handshake never consults it — the upgrade returns before the check — so
+        sockets take from the budget and never give it back.
+
+        Measured with the limit at 6: six live sockets, and every HTTP request
+        answers uvicorn's own plain-text `503 Service Unavailable`, not even this
+        API's envelope. At the band's ceiling of `SOCKET_CEILING` concurrent
+        sockets, a limit of 512 would leave twelve connections for every send, ack,
+        drain and key claim the deployment makes.
+
+        So the limit carries both: the socket ceiling, plus one keep-alive HTTP
+        connection for each of those devices. 500 live sockets cost 47 MB of
+        resident set (189.8 MB idle against 237.0 MB), and an idle HTTP connection
+        is cheaper than a socket, so the memory stays inside A3's 700 MB ceiling.
+        """
+        unit = (settings.BASE_DIR / "ops" / "systemd" / "chat.service").read_text()
+        limit = int(re.search(r"--limit-concurrency (\d+)", unit).group(1))
+
+        self.assertGreaterEqual(limit, 2 * SOCKET_CEILING)
+
+    def test_the_serving_unit_raises_its_file_descriptor_limit_to_match(self):
+        """A connection is a file descriptor, and systemd's own default soft
+        `LimitNOFILE` is 1024. Admitting more connections than the process has
+        descriptors for moves the failure rather than removing it: the accept fails
+        instead of the concurrency check, and it fails without a `503`.
+
+        The budget is the connection limit, plus the sixteen the database pool
+        holds, plus the Redis client and its subscription, plus the listening
+        socket and stdio.
+        """
+        unit = (settings.BASE_DIR / "ops" / "systemd" / "chat.service").read_text()
+        limit = int(re.search(r"--limit-concurrency (\d+)", unit).group(1))
+        descriptors = re.search(r"LimitNOFILE=(\d+)", unit)
+
+        self.assertIsNotNone(descriptors, "the unit sets no LimitNOFILE")
+        self.assertGreater(int(descriptors.group(1)), limit)
+
+    def test_the_units_write_only_what_they_must_and_drop_what_they_never_use(self):
+        """`ReadWritePaths` is the whole of what a compromised process can change
+        on a `ProtectSystem=strict` host. The serving process never writes the
+        collected static tree — `collectstatic` is the operator's command and
+        nginx serves the result — so a writable `static_root` was a way for a
+        compromised process to replace the panel's own JavaScript. The rest are the
+        directives a Python service never needs and a hardened unit drops."""
+        units = settings.BASE_DIR / "ops" / "systemd"
+        serving = (units / "chat.service").read_text()
+        maintenance = (units / "chat-maintenance.service").read_text()
+
+        self.assertIn("ReadWritePaths=/srv/chat/backend/media_root\n", serving)
+        self.assertNotIn("static_root", serving)
+        for unit in (serving, maintenance):
+            for directive in (
+                "RestrictRealtime=true",
+                "RestrictSUIDSGID=true",
+                "ProtectClock=true",
+                "ProtectHostname=true",
+                "SystemCallArchitectures=native",
+            ):
+                self.assertIn(directive, unit)
+
     def test_the_example_environment_lists_every_variable_the_code_reads(self):
         """An operator fills in `.env.example` and expects a working deployment. A
         variable the code reads and the example omits is a default nobody chose."""
@@ -237,6 +348,67 @@ class BasePostureTests(SimpleTestCase):
             errors = ws_origin_allowlist_set(None)
         self.assertEqual([e.id for e in errors], ["core.E003"])
 
+    def test_no_django_cache_backend_reads_redis(self):
+        """Every built-in Django cache backend unpickles what it reads, and Redis
+        is a store another process on the host can write to. Nothing in this
+        process may turn Redis bytes back into Python objects: the counters, the
+        lockout state and the presence sets are read as strings through the redis
+        client, and the Django cache framework is left on its process-local
+        default that no other software reaches."""
+        backend = settings.CACHES["default"]["BACKEND"]
+
+        self.assertNotIn("redis", backend.lower())
+        self.assertTrue(backend.endswith("LocMemCache"), backend)
+
+    def test_the_deploy_checks_refuse_a_redis_url_without_a_password(self):
+        """Redis listens on loopback of a host shared with other projects. Without
+        `requirepass` every local process can flush the rate counters and the
+        lockout, inject frames on the fan-out bus, and read the presence sets."""
+        with override_settings(REDIS_URL="redis://127.0.0.1:6379/0"):
+            failing = deploy_check_ids()
+        with override_settings(REDIS_URL="redis://:generated-secret@127.0.0.1:6379/0"):
+            passing = deploy_check_ids()
+
+        self.assertIn("core.E004", failing)
+        self.assertNotIn("core.E004", passing)
+
+    def test_the_deploy_checks_refuse_a_weak_infrastructure_secret(self):
+        """The signing key mints a token for any account, and the LiveKit secret
+        mints a join token for any room. Django checks its own SECRET_KEY's
+        strength and nothing checked these two, so a short value or the
+        development fallback reached production in silence."""
+        strong = "s" * 32
+        cases = {
+            "short signing key": {"JWT_SIGNING_KEY": "s" * 31},
+            "the development fallback": {"JWT_SIGNING_KEY": "dev-insecure-jwt-key"},
+            "the signing key reused as SECRET_KEY": {
+                "JWT_SIGNING_KEY": strong,
+                "SECRET_KEY": strong,
+            },
+            "short LiveKit secret with voice configured": {
+                "LIVEKIT_URL": "wss://chat.example",
+                "LIVEKIT_API_KEY": "key",
+                "LIVEKIT_API_SECRET": "s" * 31,
+            },
+        }
+        for label, overrides in cases.items():
+            with self.subTest(label), override_settings(**overrides):
+                self.assertIn("core.E005", deploy_check_ids(), label)
+
+        with override_settings(
+            JWT_SIGNING_KEY=strong,
+            SECRET_KEY="k" * 50,
+            LIVEKIT_URL="wss://chat.example",
+            LIVEKIT_API_KEY="key",
+            LIVEKIT_API_SECRET="l" * 32,
+        ):
+            self.assertNotIn("core.E005", deploy_check_ids())
+        # Voice off: the LiveKit secret is not read at all, so an empty one passes.
+        with override_settings(
+            JWT_SIGNING_KEY=strong, LIVEKIT_URL="", LIVEKIT_API_SECRET=""
+        ):
+            self.assertNotIn("core.E005", deploy_check_ids())
+
 
 class ProdPostureTests(SimpleTestCase):
     """`config.settings.prod` is what `check --deploy` runs against."""
@@ -257,6 +429,24 @@ class ProdPostureTests(SimpleTestCase):
         self.assertEqual(prod.SESSION_COOKIE_SAMESITE, "Strict")
         self.assertEqual(prod.CSRF_COOKIE_SAMESITE, "Strict")
 
+    def test_the_admin_cookies_carry_the_host_prefix(self):
+        """The VPS serves two other projects, on sibling names of the same domain
+        for all this configuration knows. A `__Host-` cookie is accepted only over
+        HTTPS, without a `Domain`, and with `Path=/`, so a sibling site — or a
+        subdomain an attacker controls — cannot set one for the panel and no
+        broader cookie of the same name can shadow it."""
+        from django.conf import global_settings
+
+        def effective(name):
+            return getattr(prod, name, getattr(global_settings, name))
+
+        self.assertEqual(prod.SESSION_COOKIE_NAME, "__Host-sessionid")
+        self.assertEqual(prod.CSRF_COOKIE_NAME, "__Host-csrftoken")
+        self.assertIsNone(effective("SESSION_COOKIE_DOMAIN"))
+        self.assertIsNone(effective("CSRF_COOKIE_DOMAIN"))
+        self.assertEqual(effective("SESSION_COOKIE_PATH"), "/")
+        self.assertEqual(effective("CSRF_COOKIE_PATH"), "/")
+
     def test_hsts_is_a_full_year_with_subdomains_and_preload(self):
         self.assertEqual(prod.SECURE_HSTS_SECONDS, 31536000)
         self.assertTrue(prod.SECURE_HSTS_INCLUDE_SUBDOMAINS)
@@ -265,3 +455,94 @@ class ProdPostureTests(SimpleTestCase):
     def test_content_type_and_framing_are_locked_down(self):
         self.assertTrue(prod.SECURE_CONTENT_TYPE_NOSNIFF)
         self.assertEqual(prod.X_FRAME_OPTIONS, "DENY")
+
+
+# The trees `coverage` omits that are not this project's code: the installed
+# toolchain, and the untracked wheel cache of ADR-0012.
+NOT_PROJECT_CODE = frozenset({".venv/*", "vendor/*"})
+# The project code it omits, and the reason each one is not measured.
+UNMEASURED = {
+    "*/migrations/*": "generated by makemigrations; the migration suite replays them",
+    "*/tests/*": "the suite does not measure itself",
+    "manage.py": "a four-line Django entry point",
+    "devices/vectors/generate.py": "a developer tool that writes the golden vectors",
+}
+
+
+class TestToolchainPostureTests(SimpleTestCase):
+    """How the suite itself is configured to run.
+
+    Two knobs decide what the numbers this run produces mean. The coverage omit
+    list decides what the figure is a figure *of* — an omission added quietly is a
+    module that stops being measured and never fails a floor. And the Hypothesis
+    profile decides whether the property tests explore the same inputs twice: the
+    suite runs under `pytest-randomly`, which reseeds the global RNG for every
+    test, so an entropy-driven profile would give the gate's two orderings two
+    different sets of examples and a failure nobody could reproduce.
+    """
+
+    def coverage_config(self):
+        import tomllib
+
+        text = (settings.BASE_DIR / "pyproject.toml").read_text()
+        return tomllib.loads(text)["tool"]["coverage"]
+
+    def test_coverage_measures_branches_over_the_whole_repository(self):
+        """`source` is the repository rather than a list of apps, so a new app is
+        measured the day it is created and not the day somebody remembers it."""
+        run = self.coverage_config()["run"]
+
+        self.assertIs(run["branch"], True)
+        self.assertEqual(run["source"], ["."])
+
+    def test_coverage_omits_exactly_the_four_project_paths_that_were_decided(self):
+        """Anything else in this list is code that silently stops being counted."""
+        omitted = set(self.coverage_config()["run"]["omit"])
+
+        self.assertEqual(omitted - NOT_PROJECT_CODE, set(UNMEASURED))
+        self.assertEqual(omitted & NOT_PROJECT_CODE, NOT_PROJECT_CODE)
+
+    def test_every_omitted_file_still_exists(self):
+        """An omit for a path that moved excludes nothing and reads as though it
+        still does."""
+        for name in UNMEASURED:
+            if "*" in name:
+                continue
+            with self.subTest(name=name):
+                self.assertTrue((settings.BASE_DIR / name).exists(), name)
+
+    def test_the_property_tests_run_under_the_derandomised_profile(self):
+        """`conftest.py` registers it and loads it. Entropy here would mean a
+        property that fails in one ordering and passes in the other, with the
+        failing example behind a seed nobody recorded."""
+        from hypothesis import settings as hypothesis_settings
+
+        profile = hypothesis_settings.default
+
+        self.assertIs(profile.derandomize, True)
+        self.assertIsNone(profile.database)
+        self.assertIsNone(profile.deadline)
+
+    def test_the_example_budget_is_fixed_and_bounded(self):
+        """This is a suite, not a fuzzing campaign: the gate has to finish, and a
+        budget nobody can read from the code is a runtime nobody can predict."""
+        from hypothesis import settings as hypothesis_settings
+
+        self.assertEqual(hypothesis_settings.default.max_examples, 200)
+
+    def test_no_hypothesis_example_database_is_written_into_the_tree(self):
+        """`database=None` is what keeps the example database off disk.
+
+        Without it a property that failed once replays its failing example from a
+        directory in the working tree, so a run's result depends on an earlier
+        run's — and the derandomised profile above would no longer be the whole
+        story. Hypothesis writes its own constant and unicode caches under
+        `.hypothesis/` whatever the database setting is, and ships a `.gitignore`
+        of its own that keeps them out of git; that is the part the repository
+        tolerates.
+        """
+        tree = settings.BASE_DIR / ".hypothesis"
+
+        self.assertFalse((tree / "examples").exists())
+        if tree.exists():
+            self.assertIn("\n*", (tree / ".gitignore").read_text())
