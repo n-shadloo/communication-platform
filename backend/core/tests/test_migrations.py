@@ -12,6 +12,7 @@ schema.
 """
 
 import copy
+from io import StringIO
 
 import pytest
 from django.apps import apps
@@ -23,6 +24,19 @@ from django.db.utils import load_backend
 
 INITIAL = "0001_initial"
 ALIAS = "migration_replay"
+
+# Every migration this project owns, in the order each app applies them. A file
+# that is not written here fails `test_every_app_owns_the_migrations_recorded_here`,
+# which is what forces a new migration through the classification below rather than
+# into the tree unreviewed.
+HISTORY = {
+    "accounts": [INITIAL],
+    "attachments": [INITIAL],
+    "devices": [INITIAL],
+    "messaging": [INITIAL],
+    "vault": [INITIAL],
+    "voicerooms": [INITIAL],
+}
 
 # The apps of this project that own a table. `core` and `realtime` declare no
 # model, so they carry no migrations directory at all.
@@ -120,14 +134,16 @@ def empty_database():
             cursor.execute(f"DROP DATABASE IF EXISTS {quoted}")
 
 
-def test_every_app_owns_exactly_one_migration():
-    """ADR-0009: one regenerated `0001_initial` for each app, and nothing before
-    it. A second file here means the history started growing again, which is
-    correct from phase 3 on and a defect inside this run."""
+def test_every_app_owns_the_migrations_recorded_here():
+    """ADR-0009 regenerated the history, so each app starts at one `0001_initial`
+    and nothing precedes it. What follows grows, and `HISTORY` is the record of
+    what it grew to: a file nobody wrote down fails here, which is what puts every
+    new migration through the classification below."""
     loader = MigrationLoader(None, ignore_no_migrations=True)
     ours = {(app, name) for app, name in loader.disk_migrations if app in PROJECT_APPS}
 
-    assert ours == {(app, INITIAL) for app in PROJECT_APPS}
+    assert ours == {(app, name) for app, names in HISTORY.items() for name in names}
+    assert set(HISTORY) == set(PROJECT_APPS)
 
 
 def test_each_initial_declares_the_dependencies_recorded_here():
@@ -152,7 +168,7 @@ def test_the_graph_has_one_leaf_for_each_app():
     loader = MigrationLoader(None, ignore_no_migrations=True)
     leaves = {node for node in loader.graph.leaf_nodes() if node[0] in PROJECT_APPS}
 
-    assert leaves == {(app, INITIAL) for app in PROJECT_APPS}
+    assert leaves == {(app, names[-1]) for app, names in HISTORY.items()}
 
 
 def test_no_migration_names_a_model_or_an_app_that_left():
@@ -162,12 +178,13 @@ def test_no_migration_names_a_model_or_an_app_that_left():
     which is what ADR-0006 refuses to hold."""
     gone = ("KeyPackage", "keypackage", "token_blacklist", "HistoryRecord")
     written = {
-        app: (settings.BASE_DIR / app / "migrations" / f"{INITIAL}.py").read_text()
-        for app in PROJECT_APPS
+        (app, name): (settings.BASE_DIR / app / "migrations" / f"{name}.py").read_text()
+        for app, names in HISTORY.items()
+        for name in names
     }
     found = {
-        (app, marker)
-        for app, source in written.items()
+        (node, marker)
+        for node, source in written.items()
         for marker in gone
         if marker in source
     }
@@ -215,3 +232,116 @@ def test_the_whole_history_unapplies_in_reverse_dependency_order(empty_database)
         call_command("migrate", app, "zero", database=empty_database, verbosity=0)
 
     assert tables_in(empty_database) & project_tables() == set()
+
+
+# --- Lock classification ----------------------------------------------------------
+# Every operation this project's migrations may carry, and the lock it takes on
+# PostgreSQL 16. An operation outside this table is unclassified, which is what
+# `test_every_operation_takes_a_classified_lock` refuses: the reviewer has to name
+# the lock and decide whether it can run under traffic before the file lands.
+#
+# `CreateModel` takes ACCESS EXCLUSIVE, which blocks reads and writes — but only on
+# a relation the same migration is creating, so no other session can name it yet.
+# `AddIndexConcurrently` takes SHARE UPDATE EXCLUSIVE and blocks neither, at the
+# price of two table scans and a migration that cannot be atomic.
+LOCK_CLASSES = {
+    "CreateModel": "ACCESS EXCLUSIVE on a relation this migration creates",
+    "AddIndexConcurrently": "SHARE UPDATE EXCLUSIVE",
+}
+
+# The operations that cannot run inside a transaction block. A migration carrying
+# one declares `atomic = False`, and Django raises NotSupportedError otherwise.
+NON_ATOMIC_OPERATIONS = {"AddIndexConcurrently", "RemoveIndexConcurrently"}
+
+# The statement forms the classification above admits. `sqlmigrate` output is read
+# against this rather than trusted: an operation name says what Django meant, and
+# the SQL says what PostgreSQL will do.
+ALLOWED_STATEMENTS = (
+    "CREATE TABLE",
+    "CREATE INDEX CONCURRENTLY",
+    "CREATE INDEX",
+    "CREATE UNIQUE INDEX",
+    "ALTER TABLE",  # narrowed below: ADD CONSTRAINT only
+)
+
+
+def migration_nodes():
+    return [(app, name) for app, names in HISTORY.items() for name in names]
+
+
+def loaded(app, name):
+    return MigrationLoader(None, ignore_no_migrations=True).disk_migrations[(app, name)]
+
+
+@pytest.mark.parametrize(("app", "name"), migration_nodes())
+def test_every_operation_takes_a_classified_lock(app, name):
+    """The gate on a migration nobody has priced. Every operation in the tree is one
+    whose lock is written down in `LOCK_CLASSES`; an `AddField`, an `AlterField`, a
+    plain `AddIndex` or an `AddConstraint` lands here as an unclassified operation
+    and stays out of the tree until its lock is named and judged."""
+    unclassified = {
+        type(operation).__name__
+        for operation in loaded(app, name).operations
+        if type(operation).__name__ not in LOCK_CLASSES
+    }
+
+    assert unclassified == set(), f"{app}.{name} carries {sorted(unclassified)}"
+
+
+@pytest.mark.parametrize(("app", "name"), migration_nodes())
+def test_the_atomic_flag_matches_the_operations_the_migration_carries(app, name):
+    """A concurrent index build outside a transaction, everything else inside one.
+    Django raises NotSupportedError for the first mismatch; the second — an atomic
+    migration downgraded to `atomic = False` for no reason — it accepts silently,
+    and a failure part-way then leaves half the schema applied."""
+    migration = loaded(app, name)
+    needs_own_transaction = {
+        type(operation).__name__ for operation in migration.operations
+    } & NON_ATOMIC_OPERATIONS
+
+    assert migration.atomic is not bool(needs_own_transaction)
+
+
+def statements_of(sql):
+    """The statements of one `sqlmigrate` run, comments and the wrapper gone."""
+    body = " ".join(
+        line.strip()
+        for line in sql.splitlines()
+        if line.strip() and not line.strip().startswith("--")
+    )
+    return [
+        " ".join(statement.split())
+        for statement in body.split(";")
+        if statement.strip() and statement.strip() not in ("BEGIN", "COMMIT")
+    ]
+
+
+# `transaction=True`, not the default atomic wrapper: `sqlmigrate` builds the
+# statements through the real schema editor, and `AddIndexConcurrently` refuses to
+# do that inside a transaction — the same NotSupportedError a wrongly-atomic
+# migration would raise on the deployment host.
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.parametrize(("app", "name"), migration_nodes())
+def test_the_generated_sql_is_only_the_statements_the_classification_covers(app, name):
+    """The `sqlmigrate` review, run rather than remembered.
+
+    Every statement is a relation this migration creates, or a concurrent index
+    build. An `ALTER TABLE` that is anything but `ADD CONSTRAINT` on a
+    same-migration table would be a rewrite or an ACCESS EXCLUSIVE hold on a
+    relation with rows in it.
+
+    The transaction wrapper is read from the same output, because the `atomic`
+    flag is only a claim until the SQL carries it: a concurrent index build inside
+    a `BEGIN` is a statement PostgreSQL refuses outright.
+    """
+    out = StringIO()
+    call_command("sqlmigrate", app, name, stdout=out)
+    sql = out.getvalue()
+    statements = statements_of(sql)
+
+    assert statements
+    assert ("BEGIN;" in sql) is loaded(app, name).atomic
+    for statement in statements:
+        assert statement.startswith(ALLOWED_STATEMENTS), statement
+        if statement.startswith("ALTER TABLE"):
+            assert "ADD CONSTRAINT" in statement, statement
