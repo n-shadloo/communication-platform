@@ -1,6 +1,6 @@
 name: backend
 
-# Every push, and every pull request that targets main. The three jobs are
+# Every push, and every pull request that targets main. The four jobs are
 # independent: a lint failure must not hide a test failure, and the offline
 # install is the one gate that proves the no-foreign-dependency rule still holds.
 on:
@@ -36,6 +36,35 @@ jobs:
         run: ruff check .
       - name: ruff format --check
         run: ruff format --check .
+
+  schema:
+    name: schema
+    runs-on: ubuntu-latest
+    # No service container: composing the application and generating the
+    # document opens neither PostgreSQL nor Redis, so the drift gate needs the
+    # settings and nothing else.
+    env:
+      # Test-only values, read at import time by config.settings.dev. Nothing
+      # here is a production credential and nothing here reaches a deployed host.
+      DJANGO_SECRET_KEY: ci-test-secret-not-used-outside-this-runner
+      JWT_SIGNING_KEY: ci-test-jwt-key-not-used-outside-this-runner
+      POSTGRES_DB: chatapp
+      POSTGRES_USER: chatapp
+      POSTGRES_PASSWORD: chatapp
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements/*.txt
+      - name: Install the pinned toolchain
+        run: python -m pip install --require-hashes -r requirements/dev.txt
+      - name: The committed document is the one this code generates
+        # Exits non-zero on drift. The artefact is what a client generates
+        # from, so a contract change that forgets it fails here rather than in
+        # a client built against a document the server no longer serves.
+        run: python manage.py openapi --check
 
   test:
     name: test
