@@ -1,0 +1,31 @@
+{# The page a staff account that is not the owner sees when it opens a panel URL.  #}
+{#                                                                                #}
+{# There is one role in this panel: the superuser owner (ADR-0011). A staff        #}
+{# account gets an index with nothing on it, and this page when it reaches for a   #}
+{# model URL directly. Django's own `permission_denied` view renders it, so the    #}
+{# only context it may rely on is the request and the context processors — never   #}
+{# `AdminSite.each_context`. That is why it extends the unauthenticated layout,     #}
+{# which needs no sidebar, no application list and no site branding callbacks.      #}
+{#                                                                                #}
+{# Written against django-unfold 0.105.0. Django serves it for every 403 in this   #}
+{# process, and every path this process serves is the admin: the API is FastAPI    #}
+{# and answers its own error envelope.                                             #}
+{% extends "unfold/layouts/unauthenticated.html" %}
+
+{% load i18n %}
+
+{% block title %}{% translate "Not your page" %}{% endblock %}
+
+{% block content %}
+    <h1 class="font-semibold mb-4 text-font-important-light text-xl dark:text-font-important-dark">
+        {% translate "You cannot open this page" %}
+    </h1>
+
+    <p class="leading-relaxed mb-6 text-sm">
+        {% translate "This back office has one operator, and this account is not it. Nothing is wrong with your sign-in — the page simply is not yours." %}
+    </p>
+
+    <a href="{% url 'admin:index' %}" class="font-medium text-primary-600 text-sm dark:text-primary-500">
+        {% translate "Back to the panel" %}
+    </a>
+{% endblock %}

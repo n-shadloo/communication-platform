@@ -13,7 +13,7 @@ FastAPI is the only API surface. It is the root application and serves every rou
 of every app, `/ws` included; the Django application behind it answers `ADMIN_PATH`
 and, in development, the static files the admin renders with. Any other path is this
 API's own `404`, never a Django page. Django keeps the ORM, the migrations, the admin
-and the settings.
+panel and the settings.
 
 `openapi.json` is the generated contract of that surface: `python manage.py openapi`
 writes it and `--check` fails when the committed file is not what the routes produce,
@@ -172,7 +172,8 @@ Every environment variable the code reads, with its default:
 |---|---|---|
 | `DJANGO_SECRET_KEY` | — (required) | Django secret key |
 | `DJANGO_ALLOWED_HOSTS` | empty | Comma-separated `ALLOWED_HOSTS` |
-| `ADMIN_PATH` | `admin/` | URL path of the Django admin |
+| `ADMIN_PATH` | `admin/` | URL path of the admin panel; the nginx site needs a matching location |
+| `ADMIN_AUDIT_RETENTION_DAYS` | `90` | How long an admin audit row survives before `manage.py prune` deletes it |
 | `POSTGRES_DB` | — (required) | Database name |
 | `POSTGRES_USER` | — (required) | Database role |
 | `POSTGRES_PASSWORD` | — (required) | Database password |
@@ -218,13 +219,40 @@ Every environment variable the code reads, with its default:
 `.env.example` lists all of these plus `DJANGO_SETTINGS_MODULE` and the two coturn
 values (`TURN_REALM`, `TURN_STATIC_AUTH_SECRET`) consumed by `ops/coturn/turnserver.conf`.
 
+## The admin panel
+
+The back office runs on [django-unfold](https://unfoldadmin.com/) at `ADMIN_PATH`,
+served by the same uvicorn process as the API. It registers five things and hides
+everything else: accounts, devices, voice rooms, attachments, and a read-only audit
+log. It renders no ciphertext, no key or signature bytes, no password hash and no
+token — a device label and a room name are ciphertext, so neither is shown.
+
+There is one role, the superuser owner; a staff account that is not the owner gets an
+empty panel. Every administrative act writes an audit row, bulk actions included, and
+`manage.py prune` deletes a row older than `ADMIN_AUDIT_RETENTION_DAYS`. Five failed
+sign-ins lock an account name for fifteen minutes, in Redis and nowhere else, and a
+session lasts at most eight hours and ends at browser close.
+
+Every asset is served by this deployment: run `python manage.py collectstatic` on
+deploy, and nginx serves `STATIC_ROOT` — without it the panel renders unstyled. The
+nginx site needs a `location` for `ADMIN_PATH`; `ops/nginx/chat.nimashadloo.dev.conf`
+carries the default one, and it and `ADMIN_PATH` are one setting in two places.
+
+[`docs/admin/PANEL-RECORD.md`](../docs/admin/PANEL-RECORD.md) is the system of record
+for the panel: the pinned release, every position with its band and flip signal, the
+override ledger, the role model, the upgrade debts and the deferrals. Read it before
+changing the panel.
+
 ## Deployment
 
 Deployment artefacts live under `ops/`: systemd units for uvicorn and the maintenance
 timer, the nginx site, coturn and LiveKit configuration, PostgreSQL setup notes, and
 the offline-install scripts (`ops/vendor.sh`, `ops/offline_install.sh`). The operator
 runbook in those directories is the authoritative sequence; this README does not
-duplicate it.
+duplicate it. One step is worth naming because nothing fails loudly without it:
+`python manage.py collectstatic --noinput` must run on every deploy that changes a
+dependency, or nginx serves an empty `STATIC_ROOT` and the panel loads with no styling
+at all.
 
 ## What the server can still see
 

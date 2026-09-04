@@ -1,0 +1,81 @@
+{# The operator's first page.                                                     #}
+{#                                                                                #}
+{# Overrides the `admin/index.html` django-unfold 0.105.0 ships, which draws the  #}
+{# application list. The application list is the database's shape; this page is   #}
+{# the operator's: the accounts still waiting, then the four numbers that say      #}
+{# whether anything needs attention, each one a link to the list behind it.        #}
+{#                                                                                #}
+{# It extends `admin/base.html` and repeats unfold's own `title` and `branding`    #}
+{# blocks verbatim, so `content` is the only block it owns. Every class comes from #}
+{# a shipped component rather than from hand-written Tailwind, because the         #}
+{# compiled stylesheet only carries the classes the package itself built.          #}
+{# Context: `core.panel.dashboard`.                                               #}
+{% extends "admin/base.html" %}
+
+{% load i18n unfold %}
+
+{% block title %}{% if subtitle %}{{ subtitle }} | {% endif %}{{ title }} | {{ site_title|default:_('Django site admin') }}{% endblock %}
+
+{% block branding %}
+    {% include "unfold/helpers/site_branding.html" %}
+{% endblock %}
+
+{% block content %}
+    {% if not is_owner %}
+        {% component "unfold/components/card.html" with title=_("Nothing here for this account") %}
+            {% component "unfold/components/text.html" %}{% translate "This back office has one operator, and this account is not it. Nothing is wrong with your sign-in — there is simply nothing here for you." %}{% endcomponent %}
+        {% endcomponent %}
+    {% else %}
+    <div class="flex flex-col gap-8">
+        <div class="grid grid-cols-1 gap-6 lg:grid-cols-2 xl:grid-cols-4">
+            {% component "unfold/components/card.html" with href=accounts_url icon="person" %}
+                {% component "unfold/components/text.html" %}{% translate "Active accounts" %}{% endcomponent %}
+                {% component "unfold/components/title.html" %}{{ active_accounts }}{% endcomponent %}
+            {% endcomponent %}
+
+            {% component "unfold/components/card.html" with href=devices_url icon="smartphone" %}
+                {% component "unfold/components/text.html" %}{% translate "Live devices" %}{% endcomponent %}
+                {% component "unfold/components/title.html" %}{{ live_devices }}{% endcomponent %}
+            {% endcomponent %}
+
+            {% component "unfold/components/card.html" with href=rooms_url icon="graphic_eq" %}
+                {% component "unfold/components/text.html" %}{% translate "Voice rooms" %}{% endcomponent %}
+                {% component "unfold/components/title.html" %}{{ room_count }}{% endcomponent %}
+            {% endcomponent %}
+
+            {% component "unfold/components/card.html" with href=attachments_url icon="attach_file" %}
+                {% component "unfold/components/text.html" %}{% translate "Attachment storage" %}{% endcomponent %}
+                {% component "unfold/components/title.html" %}{{ storage_used }}{% endcomponent %}
+                {% component "unfold/components/progress.html" with value=storage_percent %}{% endcomponent %}
+                {% component "unfold/components/text.html" %}{% blocktranslate %}of {{ storage_ceiling }} available{% endblocktranslate %}{% endcomponent %}
+            {% endcomponent %}
+        </div>
+
+        {% component "unfold/components/card.html" with title=_("Waiting for activation") %}
+            {% if pending_accounts %}
+                {% component "unfold/components/text.html" %}{% translate "A new account cannot sign in until you activate it." %}{% endcomponent %}
+
+                <form method="post" action="{{ accounts_url }}">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="activate_accounts">
+                    <input type="hidden" name="index" value="0">
+
+                    <div class="flex flex-col">
+                        {% for account in pending_accounts %}
+                            <label class="border-b border-base-200 cursor-pointer flex flex-row gap-3 items-center py-3 last:border-b-0 dark:border-base-800">
+                                <input type="checkbox" name="_selected_action" value="{{ account.pk }}" checked>
+                                <span class="font-medium text-font-important-light dark:text-font-important-dark">{{ account.username }}</span>
+                                <span class="ml-auto text-font-subtle-light dark:text-font-subtle-dark">{{ account.created_date }}</span>
+                            </label>
+                        {% endfor %}
+                    </div>
+
+                    {% component "unfold/components/button.html" with submit=1 class="mt-4" %}{% translate "Activate the ticked accounts" %}{% endcomponent %}
+                </form>
+            {% else %}
+                {% component "unfold/components/text.html" %}{% translate "Nothing is waiting. Every account is activated." %}{% endcomponent %}
+            {% endif %}
+        {% endcomponent %}
+    </div>
+    {% endif %}
+{% endblock %}

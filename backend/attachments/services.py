@@ -1,5 +1,7 @@
 """The synchronous units of work behind the attachment routes."""
 
+import os
+
 from django.conf import settings
 from django.db import transaction
 from django.db.models import Sum
@@ -45,3 +47,39 @@ def locate(attachment_id):
     if stored is None:
         raise ApiError(404, "not_found", "No such attachment.")
     return stored.id
+
+
+def purge(attachments, audit=None):
+    """Delete these attachment rows and unlink their bytes.
+
+    The one write path that removes an attachment. `manage.py prune` calls it for
+    the retention sweep and the admin panel calls it for the operator's own
+    deletion, so the order below is the order both get.
+
+    Unlink before deleting the row: a crash in between leaves a row whose bytes are
+    already gone, which the next pass clears. Dropping the row first would strand
+    the file, since cleanup only ever walks rows.
+
+    `audit` is called once, with the rows that are about to go, before the delete.
+    The retention sweep passes none — a scheduled expiry is not an administrative
+    act and no operator performed it.
+    """
+    doomed = []
+    removed_files = 0
+    for attachment in attachments:
+        try:
+            os.remove(attachment.disk_path())
+            removed_files += 1
+        except FileNotFoundError:
+            pass  # already gone; the row still needs clearing
+        except OSError:
+            # One unreadable file must not stop the sweep. The rows go in a single
+            # pass below, so an escaping error would stall retention entirely.
+            continue
+        doomed.append(attachment)
+    if audit is not None and doomed:
+        audit(doomed)
+    deleted, _ = Attachment.objects.filter(
+        id__in=[attachment.id for attachment in doomed]
+    ).delete()
+    return deleted, removed_files

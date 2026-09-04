@@ -1,13 +1,14 @@
-import os
 from datetime import timedelta
 
 from django.conf import settings
+from django.contrib.admin.models import LogEntry
 from django.core.management.base import BaseCommand
 from django.db import transaction
 from django.db.models import Max
 from django.utils import timezone
 
 from attachments.models import Attachment
+from attachments.services import purge
 from devices.models import Device
 from messaging.models import QueuedEnvelope
 
@@ -16,15 +17,17 @@ class Command(BaseCommand):
     """Idempotent: every pass deletes only what is already past its TTL, so re-running
     it after a crash is safe."""
 
-    help = "Prune expired queued envelopes and attachments."
+    help = "Prune expired queued envelopes, attachments and audit rows."
 
     def handle(self, *args, **options):
         envelopes = self._prune_envelopes()
         attachments, files = self._prune_attachments()
+        audit_rows = self._prune_audit()
 
         # Counts only: an id or a blob written here would land in the timer's journal.
         self.stdout.write(f"envelopes pruned: {envelopes}")
         self.stdout.write(f"attachments pruned: {attachments} (files removed: {files})")
+        self.stdout.write(f"audit rows pruned: {audit_rows}")
 
     @staticmethod
     def _prune_envelopes():
@@ -51,24 +54,22 @@ class Command(BaseCommand):
     @staticmethod
     def _prune_attachments():
         cutoff = timezone.now().date() - timedelta(days=settings.ATTACH_TTL_DAYS)
-        expired_ids = []
-        removed_files = 0
-        # Unlink before deleting the row: a crash in between leaves a row whose bytes
-        # are already gone, which the next pass clears. Dropping the row first would
-        # strand the file, since cleanup only ever walks rows.
-        for attachment in (
+        # Through the same service the panel's own deletion uses, so the row and
+        # the file always go in the same order by the same code. No audit row: an
+        # expiry is not an administrative act and no operator performed it.
+        return purge(
             Attachment.objects.filter(created_date__lt=cutoff).only("id").iterator()
-        ):
-            try:
-                os.remove(attachment.disk_path())
-                removed_files += 1
-            except FileNotFoundError:
-                pass  # already gone; the row still needs clearing
-            except OSError:
-                # One unreadable file must not stop the sweep. The rows are deleted in
-                # a single pass below, so an escaping error would stall retention
-                # entirely.
-                continue
-            expired_ids.append(attachment.id)
-        deleted, _ = Attachment.objects.filter(id__in=expired_ids).delete()
-        return deleted, removed_files
+        )
+
+    @staticmethod
+    def _prune_audit():
+        """Retention on the admin audit log (ADR-0011).
+
+        The rows name an operator, a time and an object, and for a deleted
+        attachment the object id is that attachment's spent capability. Ninety days
+        is long enough to answer "what did I change last quarter" and short enough
+        that a seizure takes one quarter rather than the life of the deployment.
+        """
+        cutoff = timezone.now() - timedelta(days=settings.ADMIN_AUDIT_RETENTION_DAYS)
+        deleted, _ = LogEntry.objects.filter(action_time__lt=cutoff).delete()
+        return deleted

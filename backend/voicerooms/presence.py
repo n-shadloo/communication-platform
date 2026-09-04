@@ -13,6 +13,9 @@ already on the event loop — the room routes and the WebSocket gateway — and 
 synchronous client there would block it for the round trip.
 """
 
+import redis
+from django.conf import settings
+
 from api.redis import get_client
 
 # Self-healing bound: a worker that dies without running disconnect() strands its
@@ -40,3 +43,35 @@ async def room_leave(room_id, device_id):
 
 async def room_live_count(room_id):
     return await get_client().scard(_key(room_id))
+
+
+def live_counts(room_ids):
+    """The live size of several rooms at once, synchronously, for the admin page.
+
+    Synchronous and on a connection of its own, for the reason
+    `realtime.bus.close_device_sockets` is: the caller is a Django admin request
+    running on the ORM thread, where there is no event loop to borrow and where a
+    loop built for the call would strand the shared async client behind it.
+
+    One pipeline rather than one command for each row, because the changelist calls
+    this once for a whole page. Best-effort: a room whose count cannot be read
+    reports zero rather than breaking the page, and the error would name a room id.
+    """
+    if not room_ids:
+        return {}
+    keys = [str(room_id) for room_id in room_ids]
+    client = None
+    try:
+        client = redis.Redis.from_url(settings.REDIS_URL)
+        pipeline = client.pipeline()
+        for key in keys:
+            pipeline.scard(_key(key))
+        return dict(zip(keys, pipeline.execute(), strict=True))
+    except Exception:
+        return dict.fromkeys(keys, 0)
+    finally:
+        if client is not None:
+            try:
+                client.close()
+            except Exception:
+                pass
