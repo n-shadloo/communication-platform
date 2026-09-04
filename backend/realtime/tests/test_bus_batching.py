@@ -9,6 +9,7 @@ against 1.5 ms for one pipeline, and 500 cost 55.9 ms against 2.5 ms.
 """
 
 import asyncio
+import json
 
 import pytest
 from redis.asyncio import Redis
@@ -98,3 +99,31 @@ async def test_a_dead_bus_swallows_the_whole_batch(monkeypatch, round_trips):
     await bus.publish_many(frames(TOPICS))
 
     assert round_trips == {"publishes": 0, "executes": 1}
+
+
+async def test_a_fan_out_larger_than_the_pipeline_budget_is_split(
+    round_trips, monkeypatch
+):
+    """A pipeline packs every command into memory before it writes any of them, so
+    one that carries the whole fan-out holds it twice — the serialized payloads and
+    the packed bytes.
+
+    Measured on the largest batch the body cap admits, 200 envelopes at the
+    262 144 bucket and 70 MB of base64: one pipeline peaked at 178.3 MB of resident
+    set, against 37.8 MB for the same publishes issued one at a time. That is 140 MB
+    of a 1 GB host bought with 35 ms of event loop, which is the wrong trade. The
+    budget bounds what is held; the round trips stay far below one for each frame.
+    """
+    monkeypatch.setattr(bus, "PIPELINE_BYTES", 1000)
+    frames = [
+        (bus.device_topic(f"large-{index}"), {"blob": "x" * 400}) for index in range(10)
+    ]
+    each = len(json.dumps(frames[0][1]))
+    per_batch = -(-bus.PIPELINE_BYTES // each)  # frames before the budget is passed
+
+    await bus.publish_many(frames)
+
+    assert round_trips == {
+        "publishes": 0,
+        "executes": -(-len(frames) // per_batch),
+    }
