@@ -8,16 +8,18 @@ to be able to answer before the response starts.
 """
 
 import json
+import time
 from unittest import mock
 
 import anyio
 import pytest
 from django.conf import settings
-from django.db import OperationalError
+from django.db import OperationalError, connection
+from django.test import override_settings
 from fastapi.routing import iter_route_contexts
 from psycopg_pool import PoolTimeout
 
-from api.app import route_limits
+from api.app import create_app, route_limits, wrap
 from api.middleware import (
     SECURITY_HEADERS,
     BodyCap,
@@ -27,12 +29,14 @@ from api.middleware import (
     ThreadSensitive,
     TrustedHost,
 )
-from config.asgi import api_application, application
+from config.asgi import api_application, application, django_asgi_app
 from conftest import AsgiClient
-from core.buckets import ATTACHMENT_BUCKETS
+from core.buckets import ATTACHMENT_BUCKETS, NAME_BUCKETS
 from core.tests.test_route_table import DOCUMENTATION
 from devices.models import Device
 from messaging import services
+from voicerooms import routes as voicerooms_routes
+from voicerooms.models import Room
 
 CAP = Limits(body_bytes=16, deadline_seconds=0.05)
 
@@ -374,6 +378,88 @@ def test_an_unhandled_failure_renders_the_envelope_and_leaks_nothing(
     assert response.headers["content-type"].startswith("application/json")
     for header, value in SECURITY_HEADERS:
         assert response.headers[header.decode()] == value.decode()
+
+
+@pytest.mark.django_db(transaction=True)
+def test_a_route_waiting_on_the_loop_is_refused_at_the_deadline_the_settings_carry(
+    active_user, device, bearer, monkeypatch
+):
+    """The table's number, end to end.
+
+    Every deadline test above drives `RequestDeadline` directly with a `Limits` of
+    its own, which proves the middleware and not the wiring. This proves the value
+    a deployment puts in `REQUEST_DEADLINE_SECONDS` is the value a slow route is
+    actually held to, and that the client gets a whole response with the security
+    headers rather than a socket that never answers.
+
+    The slow part is an await, because that is what the deadline can reach; the
+    test below this one is the other half. The application is rebuilt inside the
+    override because `wrap` reads the table once, when the stack is assembled.
+    """
+    deadline = 0.2
+
+    async def crawl(*_args, **_kwargs):
+        await anyio.sleep(deadline * 4)
+        raise AssertionError("the deadline should have cut this request off")
+
+    monkeypatch.setattr(voicerooms_routes, "room_live_count", crawl)
+    room = Room.objects.create(name_blob=b"n" * min(NAME_BUCKETS))
+    with override_settings(REQUEST_DEADLINE_SECONDS=deadline):
+        fresh = create_app(django_asgi_app)
+        client = AsgiClient(wrap(fresh), fresh, reraise=False)
+        started = time.monotonic()
+        response = client.get(
+            f"/api/v1/rooms/{room.id}", headers=bearer(active_user, device)
+        )
+        waited = time.monotonic() - started
+
+    assert response.status_code == 503
+    assert response.json() == {
+        "code": "unavailable",
+        "detail": "The request exceeded its deadline.",
+    }
+    assert deadline <= waited < deadline * 4
+    for header, value in SECURITY_HEADERS:
+        assert response.headers[header.decode()] == value.decode()
+
+
+@pytest.mark.django_db(transaction=True)
+def test_the_deadline_does_not_cut_off_a_statement_already_running(
+    active_user, device, bearer, monkeypatch
+):
+    """The limit of the deadline, pinned so nobody reads it as more than it is.
+
+    `anyio.fail_after` cancels at an await point. A unit of work is synchronous
+    and runs on a worker thread, and asgiref answers the cancellation by cancelling
+    its inner task and then awaiting the executor coroutine anyway — a thread inside
+    `cursor.execute` cannot be interrupted from the loop. So a statement that hangs
+    holds its connection and its thread until PostgreSQL returns, however short the
+    deadline is, and the deadline bounds the awaits around it rather than the query
+    itself. `ACCEPTED_RISKS.md` carries what that costs and what would close it.
+
+    Asserted through a real statement rather than a sleeping thread, because the
+    query is the case that matters.
+    """
+    deadline = 0.05
+    statement = 0.4
+
+    def crawl(*_args, **_kwargs):
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT pg_sleep(%s)", [statement])
+        return [], False
+
+    monkeypatch.setattr(services, "drain", crawl)
+    with override_settings(UPLOAD_DEADLINE_SECONDS=deadline):
+        fresh = create_app(django_asgi_app)
+        client = AsgiClient(wrap(fresh), fresh, reraise=False)
+        started = time.monotonic()
+        response = client.get("/api/v1/me/envelopes", headers=bearer(active_user, device))
+        waited = time.monotonic() - started
+
+    # The deadline did fire, so the answer is the envelope — but only once the
+    # statement had run to completion, which is the whole point of this test.
+    assert response.status_code == 503
+    assert waited >= statement
 
 
 def test_a_wrong_method_renders_the_envelope_with_the_methods_of_one_route(http):
