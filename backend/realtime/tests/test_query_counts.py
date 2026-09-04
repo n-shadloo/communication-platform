@@ -1,9 +1,12 @@
-"""Pins the query count of every DB touch the consumer can make.
+"""Pins the query count of every DB touch the gateway can make.
 
-Each helper's underlying sync function (`.func`) is measured directly: the async
-boundary is exercised by the live consumer tests, and `database_sync_to_async`'s
-close_old_connections would sever the test transaction's connection under
-CONN_MAX_AGE=0."""
+Each unit of work is measured as the synchronous function it is, not through the
+`async` wrapper beside it: the async boundary is exercised by the live socket
+tests, and `run_unit`'s `close_old_connections` bracket would sever this test's
+own transaction under CONN_MAX_AGE=0 — Django closes a connection whose
+autocommit flag disagrees with its settings, which inside pytest-django's atomic
+block is every connection, and the reopen then fails with "Cannot open a new
+connection in an atomic block"."""
 
 import pytest
 from django.db import connection
@@ -12,16 +15,16 @@ from django.test.utils import CaptureQueriesContext
 from api.auth import issue_full
 from core.buckets import ENVELOPE_BUCKETS
 from messaging.models import QueuedEnvelope
-from realtime.auth import authenticate_access, delete_envelopes, touch_active
+from realtime.auth import _authenticate_access, _delete_envelopes, _touch_active
 
 pytestmark = pytest.mark.django_db
 
 TXN_BOOKKEEPING = ("BEGIN", "COMMIT", "SAVEPOINT", "RELEASE SAVEPOINT")
 
 
-def _count(wrapped, *args):
+def _count(unit, *args):
     with CaptureQueriesContext(connection) as ctx:
-        wrapped.func(*args)
+        unit(*args)
     return [q["sql"] for q in ctx.captured_queries]
 
 
@@ -30,14 +33,14 @@ def test_authenticate_access_is_one_joined_query(active_user, device):
     query cheaper than REST's two-step lookup."""
     access, _ = issue_full(active_user, device)
 
-    queries = _count(authenticate_access, access)
+    queries = _count(_authenticate_access, access)
 
     assert len(queries) == 1
     assert "JOIN" in queries[0]
 
 
 def test_touch_active_is_one_update(device):
-    queries = _count(touch_active, device.id)
+    queries = _count(_touch_active, device.id)
 
     assert len(queries) == 1
     assert queries[0].startswith("UPDATE")
@@ -55,7 +58,7 @@ def test_ack_delete_is_one_statement(active_user, device):
         ]
     )
 
-    queries = _count(delete_envelopes, device.id, [r.id for r in rows])
+    queries = _count(_delete_envelopes, device.id, [r.id for r in rows])
 
     deletes = [q for q in queries if q.startswith("DELETE")]
     assert len(deletes) == 1

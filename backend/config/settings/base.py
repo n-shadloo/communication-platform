@@ -36,7 +36,6 @@ MIDDLEWARE = [
 ]
 
 ROOT_URLCONF = "config.urls"
-ASGI_APPLICATION = "config.asgi.application"
 WSGI_APPLICATION = None  # ASGI-only
 
 TEMPLATES = [
@@ -82,13 +81,6 @@ CACHES = {
         "LOCATION": REDIS_URL,
     }
 }
-CHANNEL_LAYERS = {
-    "default": {
-        "BACKEND": "channels_redis.core.RedisChannelLayer",
-        "CONFIG": {"hosts": [REDIS_URL]},
-    }
-}
-
 # Argon2id first. Password hashing protects auth only, never content.
 PASSWORD_HASHERS = [
     "django.contrib.auth.hashers.Argon2PasswordHasher",
@@ -199,5 +191,17 @@ LOGGING = {
         "django.request": {"handlers": ["console"], "level": "ERROR", "propagate": False},
         "django.server": {"handlers": ["console"], "level": "ERROR", "propagate": False},
         "daphne": {"handlers": ["console"], "level": "WARNING", "propagate": False},
+        # redis-py logs every publish-and-subscribe push it receives — the topic
+        # and the payload, so a device id and a ciphertext blob — and installs a
+        # `StreamHandler` to stdout for it the first time a `PubSub` is built
+        # without a push handler. Naming the logger here is what stops that: the
+        # library only installs its handler when the logger does not exist yet,
+        # and `dictConfig` creates it. `realtime.bus` passes its own handler as
+        # well, so nothing formats the push in the first place.
+        "push_response": {
+            "handlers": ["console"],
+            "level": "WARNING",
+            "propagate": False,
+        },
     },
 }

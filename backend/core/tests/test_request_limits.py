@@ -251,9 +251,28 @@ class TestTheRouteLimitTable:
         """A route missing from the table takes the fallback in silence, and the
         fallback is 16 KiB — small enough to refuse a legal prekey batch."""
         per_route, _fallback = route_limits()
-        served = {context.path for context in iter_route_contexts(api_application.routes)}
+        served = {
+            context.path
+            for context in iter_route_contexts(api_application.routes)
+            if context.methods is not None
+        }
 
         assert served == set(per_route)
+
+    def test_the_gateway_is_the_one_route_outside_the_table(self):
+        """A body cap counts a request body and a deadline bounds a request; a
+        socket has neither, and both middlewares pass a websocket scope through
+        untouched. What bounds the socket instead is the gateway's own frame cap,
+        rate cap, send-queue bound and authentication deadline."""
+        per_route, _fallback = route_limits()
+        outside = {
+            context.path
+            for context in iter_route_contexts(api_application.routes)
+            if context.methods is None
+        }
+
+        assert outside == {"/ws"}
+        assert "/ws" not in per_route
 
     def test_the_upload_route_takes_the_largest_bucket_plus_the_wrapper(self):
         per_route, _fallback = route_limits()

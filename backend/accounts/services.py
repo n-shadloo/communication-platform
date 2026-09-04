@@ -15,7 +15,7 @@ from accounts.models import ProfileBlob, User
 from api.auth import issue_full, issue_register_scope
 from api.errors import ApiError
 from devices.models import Device
-from realtime.auth import close_device_sockets
+from realtime.bus import close_device_sockets
 
 INVALID_CREDENTIALS = "Username or password is incorrect."
 

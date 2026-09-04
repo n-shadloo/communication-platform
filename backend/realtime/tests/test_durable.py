@@ -2,8 +2,8 @@
 the frame, is the source of truth. The send route enqueues, the socket optimizes."""
 
 import pytest
-from channels.db import database_sync_to_async
 
+from api.orm import run_unit
 from core.buckets import ENVELOPE_BUCKETS
 from messaging.models import QueuedEnvelope
 
@@ -30,9 +30,10 @@ async def send(access, device_id, blob):
     )
 
 
-@database_sync_to_async
-def queue_count(device_id):
-    return QueuedEnvelope.objects.filter(recipient_device_id=device_id).count()
+async def queue_count(device_id):
+    return await run_unit(
+        QueuedEnvelope.objects.filter(recipient_device_id=device_id).count
+    )
 
 
 async def test_enqueued_envelope_is_pushed_acked_and_deleted(
@@ -47,10 +48,8 @@ async def test_enqueued_envelope_is_pushed_acked_and_deleted(
     assert resp.status_code == 202 and resp.json()["accepted"] == 1
 
     frame = await comm.receive_json_from(timeout=2)
-    row_id = await database_sync_to_async(
-        lambda: str(QueuedEnvelope.objects.get(recipient_device_id=peer_device.id).id)
-    )()
-    assert frame == {"type": "envelope", "id": row_id, "seq": 1, "blob": blob}
+    row = await run_unit(QueuedEnvelope.objects.get, recipient_device_id=peer_device.id)
+    assert frame == {"type": "envelope", "id": str(row.id), "seq": 1, "blob": blob}
 
     await comm.send_json_to({"type": "ack", "ids": [frame["id"]]})
     await probe(comm, peer_device.id)  # barrier: the ack has been fully processed
@@ -63,8 +62,11 @@ async def test_ack_only_touches_the_calling_devices_rows(
 ):
     """Device A acking device B's envelope id must delete nothing: the socket's
     device identity scopes the delete exactly like REST's ack."""
-    row = await database_sync_to_async(QueuedEnvelope.objects.create)(
-        recipient_device_id=peer_device.id, seq=1, blob=b"e" * min(ENVELOPE_BUCKETS)
+    row = await run_unit(
+        QueuedEnvelope.objects.create,
+        recipient_device_id=peer_device.id,
+        seq=1,
+        blob=b"e" * min(ENVELOPE_BUCKETS),
     )
     comm = await connect_ok(bearer(await mint_access(active_user, device)))
 

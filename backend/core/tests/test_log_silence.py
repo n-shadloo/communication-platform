@@ -15,24 +15,27 @@ import pytest
 from fastapi.routing import iter_route_contexts
 from starlette.routing import compile_path
 
+from api.redis import close_client
 from config.asgi import api_application
 from core.tests.test_route_table import EXPECTED
 from ops.audit.log_silence import run_audit
+from realtime.bus import stop_subscriber
 
 pytestmark = pytest.mark.django_db(transaction=True)
 
 
 @pytest.fixture(autouse=True)
-def _isolated_runtime(settings, tmp_path):
-    """Volatile stays volatile (in-memory layer), uploads stay out of the repo, and
-    LiveKit minting gets fake infrastructure credentials (signing is local PyJWT)."""
-    settings.CHANNEL_LAYERS = {
-        "default": {"BACKEND": "channels.layers.InMemoryChannelLayer"}
-    }
+async def _isolated_runtime(settings, tmp_path):
+    """Uploads stay out of the repo, LiveKit minting gets fake infrastructure
+    credentials (signing is local PyJWT), and the bus the socket half opens is
+    released with the loop it was opened on."""
     settings.ATTACHMENTS_ROOT = tmp_path
     settings.LIVEKIT_URL = "wss://livekit.audit.test"
     settings.LIVEKIT_API_KEY = "lk-audit-key"
     settings.LIVEKIT_API_SECRET = "lk-audit-secret-0123456789abcdef0123456789abcdef"
+    yield
+    await stop_subscriber()
+    await close_client()
 
 
 def matchers():
@@ -42,6 +45,8 @@ def matchers():
     router included under a prefix is not itself a route with a path.
     """
     for context in iter_route_contexts(api_application.routes):
+        if context.methods is None:
+            continue  # the `/ws` gateway, which the audit drives as a socket
         regex, _format, _convertors = compile_path(context.path)
         for method in context.methods:
             yield method, regex, context.path

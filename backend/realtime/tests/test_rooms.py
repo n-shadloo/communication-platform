@@ -1,17 +1,20 @@
 """Room real-time: live membership and ephemeral room text ride the socket and
 non-persistent Redis, never the database and never the logs.
 
-The suite runs on the in-memory channel layer (conftest), so anything that survived
-a test could only have done so through a persistent store, which the zero-row and
-Redis-key assertions check directly.
+Room traffic crosses a Redis publish and subscribe topic, which stores nothing:
+Redis holds a published message only for the instant it takes to hand it to the
+subscribers connected right then. The only room key Redis keeps is the live-count
+set of `voicerooms/presence.py`, and it is asserted directly below. So anything a
+test finds afterwards could only have reached a persistent store, which the
+zero-row assertions check.
 """
 
 import logging
 import uuid
 
 import pytest
-from channels.db import database_sync_to_async
 
+from api.orm import run_unit
 from core.buckets import NAME_BUCKETS
 from voicerooms.models import Room
 from voicerooms.presence import room_live_count
@@ -22,9 +25,8 @@ from .test_log_silence import raw_root_capture
 pytestmark = pytest.mark.django_db(transaction=True)
 
 
-@database_sync_to_async
-def make_room():
-    return Room.objects.create(name_blob=b"r" * min(NAME_BUCKETS))
+async def make_room():
+    return await run_unit(Room.objects.create, name_blob=b"r" * min(NAME_BUCKETS))
 
 
 async def subscribe_ok(comm, room_id):
@@ -216,7 +218,7 @@ async def test_room_subscriptions_are_capped_per_connection(
 ):
     """One socket cannot hoard unbounded room-group memberships (mirrors the
     500-target presence cap)."""
-    monkeypatch.setattr("realtime.consumers.ROOM_SUBSCRIPTIONS_MAX", 1)
+    monkeypatch.setattr("realtime.gateway.ROOM_SUBSCRIPTIONS_MAX", 1)
     room_one, room_two = await make_room(), await make_room()
     comm = await connect_ok(bearer(await mint_access(active_user, device)))
 

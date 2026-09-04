@@ -34,7 +34,7 @@ from devices.schemas import (
     RegisterDeviceIn,
     page_bounds,
 )
-from realtime.auth import close_device_sockets
+from realtime.bus import close_device_sockets
 
 registration = APIRouter(
     tags=["devices"], dependencies=[Depends(require_register_or_full)]
@@ -115,9 +115,10 @@ async def revoke_device(
 ):
     await run_unit(services.revoke, principal.user.id, device_id)
     # After the unit, never inside it: the sockets must close against committed
-    # state, and a channel layer that is down must not roll the revocation back.
-    # Through `run_unit` because the helper is synchronous and reaches the layer
-    # with `async_to_sync`, which raises on a thread that is running the loop.
+    # state, and a bus that is down must not roll the revocation back. Through
+    # `run_unit` because the helper is synchronous — it opens a connection of its
+    # own rather than borrowing the loop's — and blocking calls belong off the
+    # loop.
     await run_unit(close_device_sockets, device_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 

@@ -12,6 +12,7 @@ from django.db import transaction
 
 from devices.models import Device
 from messaging.models import QueuedEnvelope
+from realtime import bus
 
 
 def _b64(raw):
@@ -64,35 +65,24 @@ def send(messages):
 
 
 async def push(envelopes):
-    """Best-effort live delivery over the channel layer.
+    """Best-effort live delivery over the fan-out bus.
 
-    A group_send to a group with no members is dropped, so a device without a
-    socket is a no-op. The queue rows are the source of truth and are already
-    committed; this only saves the next poll.
+    Called after `send` has committed, never inside it: a publish from an open
+    transaction would announce rows a rollback then takes away. Redis drops a
+    publish to a topic nobody holds, so a device without a socket is a no-op.
+
+    The queue rows are the source of truth and are already committed, so a bus
+    that is down must not fail the send — the client would retry and duplicate
+    every envelope. `realtime.bus.publish` is what swallows that, silently,
+    because the message would carry a device id.
     """
-    from channels.layers import get_channel_layer
-
-    layer = get_channel_layer()
-    if layer is None:
-        return
     for envelope in envelopes:
-        try:
-            await layer.group_send(
-                f"dev.{envelope.recipient_device_id}",
-                {
-                    "type": "envelope.push",
-                    "id": str(envelope.id),
-                    "seq": envelope.seq,
-                    "blob": _b64(envelope.blob),
-                },
-            )
-        except Exception:
-            # The rows are committed and the drain route will serve them, so a dead
-            # channel layer must not fail the send: the client would retry and
-            # duplicate every envelope. One failure means the layer is down; stop
-            # rather than eat a timeout per device. Nothing is logged because the
-            # message would carry a device id.
-            return
+        await bus.push_envelope(
+            envelope.recipient_device_id,
+            str(envelope.id),
+            envelope.seq,
+            _b64(envelope.blob),
+        )
 
 
 def drain(device_id, limit):

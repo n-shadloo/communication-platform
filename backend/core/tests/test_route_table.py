@@ -76,17 +76,48 @@ LIMITER_PREFIX = "rate_limit_"
 
 
 def served():
-    """(method, path) -> the names of the dependencies the route declares."""
+    """(method, path) -> the names of the dependencies the route declares.
+
+    HTTP only. The `/ws` gateway declares no dependency because it authenticates
+    inside the frame protocol instead, and it is held by the two tests below
+    rather than by this table.
+    """
     table = {}
     for context in iter_route_contexts(api_application.routes):
+        if context.methods is None:
+            continue
         names = [dep.call.__name__ for dep in context.dependant.dependencies]
         for method in context.methods:
             table[(method, context.path)] = names
     return table
 
 
+def websocket_routes():
+    return [
+        context
+        for context in iter_route_contexts(api_application.routes)
+        if context.methods is None
+    ]
+
+
 def test_the_route_table_is_exactly_the_declared_one():
     assert set(served()) == set(EXPECTED)
+
+
+def test_the_gateway_is_the_only_route_without_an_http_method():
+    """A second WebSocket route would otherwise be invisible to every assertion in
+    this file, because each one walks the HTTP table."""
+    assert [context.path for context in websocket_routes()] == ["/ws"]
+
+
+def test_the_gateway_declares_no_authentication_dependency():
+    """It cannot: a browser cannot set a header on a WebSocket handshake, so the
+    token arrives in the first frame and the check is the state machine of
+    `realtime/gateway.py`. `realtime/tests/test_auth.py` is the gate that proves
+    it, with the same strength the HTTP requirement has."""
+    declared = {dep.call.__name__ for dep in websocket_routes()[0].dependant.dependencies}
+
+    assert declared & REQUIREMENTS == set()
 
 
 @pytest.mark.parametrize("route", sorted(EXPECTED))

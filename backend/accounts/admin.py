@@ -10,21 +10,14 @@ def _close_user_sockets(user_ids):
     relaying volatile signals until it happened to drop. Best-effort and silent,
     because the error would name device ids."""
     try:
-        from asgiref.sync import async_to_sync
-        from channels.layers import get_channel_layer
-
         from devices.models import Device
+        from realtime.bus import close_device_sockets
 
-        layer = get_channel_layer()
-        if layer is None:
-            return
         device_ids = Device.objects.filter(
             user_id__in=user_ids, revoked_date__isnull=True
         ).values_list("id", flat=True)
         for device_id in device_ids:
-            async_to_sync(layer.group_send)(
-                f"dev.{device_id}", {"type": "connection.close"}
-            )
+            close_device_sockets(device_id)
     except Exception:
         pass
 

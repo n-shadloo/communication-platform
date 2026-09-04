@@ -10,20 +10,21 @@ Two properties make this stricter than per-app spot checks:
   scrubber is a backstop; the primary control, audited here, is that nothing is ever
   logged in the first place.
 - The capture swaps the handlers of the root logger and of every named logger that
-  has its own (django.request/django.server/daphne set propagate=False, so a
-  root-only swap, which is what assertLogs does, never sees them).
+  has its own (django.request/django.server/uvicorn/websockets set propagate=False,
+  so a root-only swap, which is what assertLogs does, never sees them).
 
-One httpx client over the composed ASGI application drives every HTTP route, and a
-Channels communicator drives the socket. The client records what it asked for, so
-`core/tests/test_log_silence.py` can hold the pass to the whole route table rather
+One httpx client over the composed ASGI application drives every HTTP route, and
+the gateway suite's own ASGI socket driver drives `/ws`. The client records what it
+asked for, so `core/tests/test_log_silence.py` can hold the pass to the route table
+rather
 than to whatever it happened to call. The httpx client logs the URL of every
 request it makes, which is a request path in a log line — the suite's
 `conftest.py` disables that logger, because the client is this harness and not the
 server.
 
-Driven by core/tests/test_log_silence.py; needs the test DB, the in-memory channel
-layer, a temp ATTACHMENTS_ROOT, and fake LIVEKIT_* settings (token minting is local
-PyJWT; no network is ever touched).
+Driven by core/tests/test_log_silence.py; needs the test DB, a running Redis for
+the fan-out bus, a temp ATTACHMENTS_ROOT, and fake LIVEKIT_* settings (token
+minting is local PyJWT; no network is ever touched).
 """
 
 import base64
@@ -79,10 +80,11 @@ def _activate(user_id):
 async def _scripted_account_traffic(client):
     """The account half: register, activate, log in. Returns {label: generated
     secret}, everything a log line must never contain."""
-    from channels.db import database_sync_to_async
     from django.core.cache import cache
 
-    await database_sync_to_async(cache.clear)()  # rate counters are shared
+    from api.orm import run_unit
+
+    await run_unit(cache.clear)  # rate counters are shared
     s = {
         "username": f"aud{random_secrets.token_hex(6)}",
         "password": random_secrets.token_urlsafe(24),
@@ -96,7 +98,9 @@ async def _scripted_account_traffic(client):
     )
     assert r.status_code == 201, f"register: {r.status_code}"
     s["user id"] = r.json()["user_id"]
-    await database_sync_to_async(_activate)(s["user id"])
+    from api.orm import run_unit
+
+    await run_unit(_activate, s["user id"])
 
     # Login with no device: the register-scope token whose only power is
     # POST /me/devices.
@@ -335,11 +339,10 @@ async def _scripted_logout(client, s):
 async def _scripted_socket_traffic(s):
     """The realtime half: authenticated connect, a volatile signal round-trip to our own
     device, disconnect. Adds the signal blob to the secret set."""
-    from channels.testing import WebsocketCommunicator
-
     from config.asgi import application
+    from realtime.tests.socket import WebSocketCommunicator
 
-    comm = WebsocketCommunicator(
+    comm = WebSocketCommunicator(
         application,
         "/ws",
         headers=[(b"authorization", f"Bearer {s['access token']}".encode())],

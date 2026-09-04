@@ -2,15 +2,27 @@
 token_generation, active user. A failed handshake joins no group."""
 
 import pytest
-from channels.db import database_sync_to_async
-from channels.layers import get_channel_layer
 from django.utils import timezone
 
 from api.auth import issue_register_scope
+from api.orm import run_unit
+from realtime.bus import get_subscriber
 
 from .conftest import bearer, connect_ok, expect_close, mint_access, probe, ws
 
 pytestmark = pytest.mark.django_db(transaction=True)
+
+
+def no_topic_is_held():
+    """The bus subscription registry of this worker is empty.
+
+    The Redis-side twin of the old in-memory `channel_layer.groups == {}`: there is
+    no inspectable registry on Redis, so what a refused handshake must leave behind
+    is checked where the gateway actually keeps it. A socket that never bound
+    subscribed to no device topic, and a socket that bound and then failed
+    unsubscribed on its way out.
+    """
+    return get_subscriber()._sinks == {}
 
 
 async def test_header_auth_path_connects(active_user, device):
@@ -34,9 +46,7 @@ async def test_connect_touches_last_active_date(active_user, device):
     comm = await connect_ok(bearer(await mint_access(active_user, device)))
     await probe(comm, device.id)
 
-    refreshed = await database_sync_to_async(
-        lambda: type(device).objects.get(id=device.id)
-    )()
+    refreshed = await run_unit(type(device).objects.get, id=device.id)
     assert refreshed.last_active_date == timezone.now().date()
     await comm.disconnect()
 
@@ -52,7 +62,7 @@ async def test_refresh_token_is_not_an_access_token(active_user, device):
     and so must the socket."""
     from api.auth import issue_full
 
-    _access, refresh = await database_sync_to_async(issue_full)(active_user, device)
+    _access, refresh = await run_unit(issue_full, active_user, device)
 
     comm = ws(bearer(refresh))
     connected, code = await comm.connect(timeout=2)
@@ -61,13 +71,13 @@ async def test_refresh_token_is_not_an_access_token(active_user, device):
 
 async def test_register_scope_token_closes_4001_and_joins_no_group(active_user):
     """`register` scope buys exactly one REST endpoint and no socket."""
-    token = await database_sync_to_async(issue_register_scope)(active_user)
+    token = await run_unit(issue_register_scope, active_user)
 
     comm = ws(bearer(token))
     connected, code = await comm.connect(timeout=2)
 
     assert (connected, code) == (False, 4001)
-    assert get_channel_layer().groups == {}
+    assert no_topic_is_held()
 
 
 async def test_register_scope_with_device_claims_still_closes_4001(active_user, device):
@@ -96,25 +106,26 @@ async def test_register_scope_with_device_claims_still_closes_4001(active_user, 
             algorithm=settings.JWT_ALGORITHM,
         )
 
-    comm = ws(bearer(await database_sync_to_async(forge)()))
+    comm = ws(bearer(await run_unit(forge)))
     connected, code = await comm.connect(timeout=2)
     assert (connected, code) == (False, 4001)
 
 
 async def test_register_scope_token_via_auth_frame_closes_4001(active_user):
-    token = await database_sync_to_async(issue_register_scope)(active_user)
+    token = await run_unit(issue_register_scope, active_user)
     comm = await connect_ok([])
 
     await comm.send_json_to({"type": "auth", "access": token})
 
     await expect_close(comm, 4001)
-    assert get_channel_layer().groups == {}
+    assert no_topic_is_held()
 
 
 async def test_revoked_devices_token_closes_4001(active_user, device):
     access = await mint_access(active_user, device)
-    await database_sync_to_async(type(device).objects.filter(id=device.id).update)(
-        revoked_date=timezone.now().date()
+    await run_unit(
+        type(device).objects.filter(id=device.id).update,
+        revoked_date=timezone.now().date(),
     )
 
     comm = ws(bearer(access))
@@ -126,9 +137,7 @@ async def test_stale_token_generation_closes_4001(active_user, device):
     """Bumping token_generation (the revoke cascade) invalidates every outstanding
     token immediately, including on the socket."""
     access = await mint_access(active_user, device)
-    await database_sync_to_async(type(device).objects.filter(id=device.id).update)(
-        token_generation=2
-    )
+    await run_unit(type(device).objects.filter(id=device.id).update, token_generation=2)
 
     comm = ws(bearer(access))
     connected, code = await comm.connect(timeout=2)
@@ -137,9 +146,9 @@ async def test_stale_token_generation_closes_4001(active_user, device):
 
 async def test_inactive_users_token_closes_4001(active_user, device):
     access = await mint_access(active_user, device)
-    await database_sync_to_async(
-        type(active_user).objects.filter(id=active_user.id).update
-    )(is_active=False)
+    await run_unit(
+        type(active_user).objects.filter(id=active_user.id).update, is_active=False
+    )
 
     comm = ws(bearer(access))
     connected, code = await comm.connect(timeout=2)
@@ -150,11 +159,11 @@ async def test_unauthed_socket_sending_any_other_frame_closes_4001(db):
     comm = await connect_ok([])
     await comm.send_json_to({"type": "signal", "to_device": "x", "blob": "y"})
     await expect_close(comm, 4001)
-    assert get_channel_layer().groups == {}
+    assert no_topic_is_held()
 
 
 async def test_missing_token_closes_4001_at_the_deadline(db, monkeypatch):
-    monkeypatch.setattr("realtime.consumers.AUTH_DEADLINE_SECONDS", 0.05)
+    monkeypatch.setattr("realtime.gateway.AUTH_DEADLINE_SECONDS", 0.05)
     comm = await connect_ok([])
     await expect_close(comm, 4001)
 

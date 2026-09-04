@@ -1,11 +1,21 @@
-from channels.db import database_sync_to_async
+"""The database half of the gateway: the token check and the three writes.
+
+Each unit of work is a module-level synchronous function that opens no
+transaction of its own and never awaits, and each has a thin `async` wrapper that
+runs it through `api/orm.py`. That is the same shape every FastAPI route uses,
+for the same reason: the ORM is synchronous, and a call to it from the event loop
+raises. Splitting the pair also keeps the unit measurable — `tests/
+test_query_counts.py` counts the queries of the synchronous half directly, which
+it cannot do through the wrapper, because the wrapper's connection bracket closes
+the connection the test's own transaction holds.
+"""
 
 from api.auth import FULL, decode_access, load_device
 from api.errors import ApiError
+from api.orm import run_unit
 
 
-@database_sync_to_async
-def authenticate_access(token_str):
+def _authenticate_access(token_str):
     """Validate an access token through the one verifier, exactly as the HTTP
     surface does: full scope, a live device, an active account. Returns
     (user, device) on success, None on any failure."""
@@ -21,32 +31,13 @@ def authenticate_access(token_str):
     return device.user, device
 
 
-def close_device_sockets(device_id):
-    """Best-effort: tell the realtime consumer, if any, to drop this device's
-    sockets. Safe no-op when none exists, and silent because the error would
-    name a device id. Run 06 replaces the body when the gateway moves."""
-    try:
-        from asgiref.sync import async_to_sync
-        from channels.layers import get_channel_layer
-
-        layer = get_channel_layer()
-        if layer:
-            async_to_sync(layer.group_send)(
-                f"dev.{device_id}", {"type": "connection.close"}
-            )
-    except Exception:
-        pass
-
-
-@database_sync_to_async
-def delete_envelopes(device_id, ids):
+def _delete_envelopes(device_id, ids):
     from messaging.models import QueuedEnvelope
 
     QueuedEnvelope.objects.filter(recipient_device_id=device_id, id__in=ids).delete()
 
 
-@database_sync_to_async
-def touch_active(device_id):
+def _touch_active(device_id):
     from django.utils import timezone
 
     from devices.models import Device
@@ -54,8 +45,23 @@ def touch_active(device_id):
     Device.objects.filter(id=device_id).update(last_active_date=timezone.now().date())
 
 
-@database_sync_to_async
 def _room_exists(room_id):
     from voicerooms.models import Room
 
     return Room.objects.filter(id=room_id).exists()
+
+
+async def authenticate_access(token_str):
+    return await run_unit(_authenticate_access, token_str)
+
+
+async def delete_envelopes(device_id, ids):
+    return await run_unit(_delete_envelopes, device_id, ids)
+
+
+async def touch_active(device_id):
+    return await run_unit(_touch_active, device_id)
+
+
+async def room_exists(room_id):
+    return await run_unit(_room_exists, room_id)

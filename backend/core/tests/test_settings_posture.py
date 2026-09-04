@@ -21,8 +21,12 @@ class BasePostureTests(SimpleTestCase):
         self.assertEqual(BANNED_TELEMETRY & installed, set())
 
     def test_deployment_is_asgi_only(self):
+        """There is no `ASGI_APPLICATION` to assert against: that setting is read
+        by Channels, which is gone. uvicorn is told the application on its command
+        line, and the unit test below is what pins it."""
         self.assertIsNone(settings.WSGI_APPLICATION)
-        self.assertEqual(settings.ASGI_APPLICATION, "config.asgi.application")
+        self.assertFalse(hasattr(settings, "ASGI_APPLICATION"))
+        self.assertFalse(hasattr(settings, "CHANNEL_LAYERS"))
 
     def test_no_token_application_is_installed(self):
         """A token table is a per-device login record at rest. Revocation lives in
@@ -89,10 +93,9 @@ class BasePostureTests(SimpleTestCase):
 
     def test_datastores_are_localhost_only(self):
         self.assertIn(settings.DATABASES["default"]["HOST"], {"127.0.0.1", "localhost"})
-        for location in (
-            settings.CACHES["default"]["LOCATION"],
-            *settings.CHANNEL_LAYERS["default"]["CONFIG"]["hosts"],
-        ):
+        # One Redis URL now, not two: the cache, the rate counters, the room
+        # presence sets and the gateway's fan-out bus all read `REDIS_URL`.
+        for location in (settings.CACHES["default"]["LOCATION"], settings.REDIS_URL):
             self.assertRegex(location, r"^redis://(127\.0\.0\.1|localhost):")
 
     def test_scrub_filter_is_attached_and_access_logging_is_off(self):
@@ -105,11 +108,22 @@ class BasePostureTests(SimpleTestCase):
         for logger in ("django.request", "django.server"):
             self.assertEqual(logging["loggers"][logger]["level"], "ERROR")
 
-    def test_the_asgi_unit_disables_daphnes_own_access_log(self):
-        """The Django half of access logging is off above, but daphne keeps its own:
-        it writes an HTTP access log to stdout whenever verbosity is 1 or more (the
-        default) and writes to that stream directly, never through Django's LOGGING,
-        so ScrubFilter cannot reach it. Without the flag every request path reaches
+    def test_the_pubsub_push_logger_is_claimed(self):
+        """redis-py logs every publish-and-subscribe push it receives — the topic,
+        so a device id, and the payload, so a ciphertext blob — and installs a
+        `StreamHandler` to stdout for it the first time a `PubSub` is built,
+        unless the logger already exists. Claiming it here is what creates it, and
+        what routes anything it does emit through ScrubFilter."""
+        claimed = settings.LOGGING["loggers"]["push_response"]
+
+        self.assertEqual(claimed["handlers"], ["console"])
+        self.assertEqual(claimed["level"], "WARNING")
+        self.assertFalse(claimed["propagate"])
+
+    def test_the_asgi_unit_disables_its_servers_own_access_log(self):
+        """The Django half of access logging is off above, but the ASGI server
+        keeps its own, written to stdout rather than through Django's LOGGING, so
+        ScrubFilter cannot reach it. Without the flag every request path reaches
         the journal, user UUIDs in the peer-key routes included."""
         unit = (settings.BASE_DIR / "ops" / "systemd" / "chat.service").read_text()
 

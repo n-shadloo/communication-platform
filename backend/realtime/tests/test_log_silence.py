@@ -13,6 +13,8 @@ from contextlib import contextmanager
 
 import pytest
 
+from realtime import bus
+
 from .conftest import bearer, connect_ok, envelope_blob, expect_close, mint_access, ws
 
 pytestmark = pytest.mark.django_db(transaction=True)
@@ -59,17 +61,7 @@ async def test_every_socket_scenario_emits_no_identifier_or_payload(
         await comm_b.send_json_to({"type": "auth", "access": access_b})
 
         # Durable push and ack, including a malformed ack.
-        from channels.layers import get_channel_layer
-
-        await get_channel_layer().group_send(
-            f"dev.{device.id}",
-            {
-                "type": "envelope.push",
-                "id": str(uuid.uuid4()),
-                "seq": 1,
-                "blob": push_blob,
-            },
-        )
+        await bus.push_envelope(device.id, str(uuid.uuid4()), 1, push_blob)
         frame = await comm_a.receive_json_from(timeout=2)
         await comm_a.send_json_to({"type": "ack", "ids": [frame["id"]]})
         await comm_a.send_json_to({"type": "ack", "ids": [str(device.id) + "-corrupt"]})

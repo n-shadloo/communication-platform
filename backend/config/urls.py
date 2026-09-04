@@ -14,7 +14,7 @@ ADMIN_PATH = env("ADMIN_PATH", default="admin/")
 urlpatterns = [path(ADMIN_PATH, admin.site.urls)]
 
 if settings.DEBUG:
-    # The admin's own CSS and JS. daphne serves this process rather than
+    # The admin's own CSS and JS. uvicorn serves this process rather than
     # `runserver`, so nothing else would serve them in development; in production
     # nginx serves STATIC_ROOT and this list is empty.
     urlpatterns += staticfiles_urlpatterns()

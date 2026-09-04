@@ -1,9 +1,10 @@
 """The Redis client of the process.
 
-One client, shared by everything that speaks to Redis on the async side: the
-rate limiter's counters and the live-room presence sets. Sharing matters because
+One client, shared by everything that speaks to Redis on the async side: the rate
+limiter's counters, the live-room presence sets, and the gateway's fan-out bus,
+whose subscription connection is borrowed from this pool. Sharing matters because
 a client owns a connection pool, and a second client would double the pool
-against an instance that also carries the Django cache and the channel layer.
+against an instance that also carries the Django cache.
 
 An asyncio Redis client belongs to the event loop that created it: its
 connections hold that loop's reader and writer, and a call from another loop
@@ -23,11 +24,12 @@ _clients = {}
 def get_client():
     """The client of the running loop, built on first use.
 
-    Not built in a lifespan handler: during the transition daphne serves the
-    process, and daphne never sends the ASGI lifespan messages, so a client that
-    only startup creates would be absent on every production request. Building it
-    here needs no await before the assignment, so two concurrent first callers on
-    one loop cannot build two clients.
+    On first use rather than in a lifespan startup, because the map is keyed by
+    loop and a startup handler only ever sees one of them: the tests drive the
+    application on a loop of their own, and a worker that never opens a socket
+    never needs a client at all. Building it here needs no await before the
+    assignment, so two concurrent first callers on one loop cannot build two
+    clients.
     """
     loop = asyncio.get_running_loop()
     client = _clients.get(loop)
