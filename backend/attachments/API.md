@@ -26,6 +26,12 @@ refused. The body cap of this route is the largest attachment bucket plus 8 KiB 
 multipart wrapper (`MULTIPART_OVERHEAD_BYTES`); a larger body is `413
 payload_too_large`.
 
+**Retry semantics.** Not idempotent: a retry after a lost response stores the bytes a
+second time under a second capability id, and both ids remain fetchable until the
+attachment TTL prunes them. Nothing links the two, because nothing links an
+attachment to a message. The client discards the id it never received and counts the
+duplicate against its own quota.
+
 **Headers**
 
 | Header | Required | Value |
@@ -105,6 +111,9 @@ kept.
 { "code": "throttled", "detail": "Request was throttled." }
 ```
 
+Scope `attachments`, default 60/min per account, shared by the upload and the
+download. `Retry-After` carries the seconds to wait.
+
 `Retry-After` carries the seconds to wait.
 
 ## Download an attachment
@@ -179,3 +188,6 @@ row answers this; the id is never parsed or validated beyond the row lookup.
 ```json
 { "code": "throttled", "detail": "Request was throttled." }
 ```
+
+Scope `attachments`, default 60/min per account, shared by the upload and the
+download. `Retry-After` carries the seconds to wait.

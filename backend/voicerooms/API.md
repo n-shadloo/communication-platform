@@ -17,6 +17,10 @@ Creates a room from an encrypted name blob and returns its id. The id is the
 capability: anyone who holds it (learned through an encrypted invite) can read,
 rename, subscribe, and join voice. There is no owner column and no member table.
 
+**Retry semantics.** Not idempotent: a retry after a lost response creates a second
+room with a second id, and the first is unreachable because nobody was told its id.
+An orphan room is one row holding an encrypted name; nothing else refers to it.
+
 **Headers**
 
 | Header | Required | Value |
@@ -68,6 +72,15 @@ input.
 { "code": "bad_bucket", "detail": "Invalid payload." }
 ```
 
+### Body too large — `413 Payload Too Large`
+
+```json
+{ "code": "payload_too_large", "detail": "Request body is too large." }
+```
+
+The cap on this route is 16 KiB, counted as the bytes arrive rather than read from
+`Content-Length`, so an understated header does not defeat it.
+
 ### Register-scope token — `403 Forbidden`
 
 ```json
@@ -90,6 +103,11 @@ Scope `accounts`, default 120/min. `Retry-After` carries the seconds to wait.
 `GET` returns the room's encrypted name, its day-coarse `updated_date`, and the
 number of devices currently in the live voice session. `PUT` replaces the name blob
 and bumps `updated_date`, which is how peers polling `GET` notice a rename.
+
+**Retry semantics.** `PUT` is idempotent: it replaces the stored blob, so a repeated
+call with the same body leaves the same name. It carries no version, so two clients
+renaming at once settle on whichever write lands last — there is no `409` here, and a
+client that must not lose a rename re-reads before it writes.
 
 **Headers**
 
@@ -150,6 +168,15 @@ Both methods answer this.
 A `{room_id}` that is not a UUID is the same code, with `room_id` as the field path.
 An off-bucket name is `400 {"code": "bad_bucket", "detail": "Invalid payload."}`.
 
+### Body too large — `413 Payload Too Large` (PUT)
+
+```json
+{ "code": "payload_too_large", "detail": "Request body is too large." }
+```
+
+The cap on this route is 16 KiB, counted as the bytes arrive rather than read from
+`Content-Length`, so an understated header does not defeat it.
+
 ### Register-scope token — `403 Forbidden`
 
 ```json
@@ -177,6 +204,10 @@ negotiated client-side and the server never joins the media path.
 
 The LiveKit identity is the device id, which every full-scope token names. Mint on
 join and re-mint on reconnect; tokens default to a 300-second lifetime.
+
+**Retry semantics.** Safe to repeat: minting writes nothing. Each call signs a fresh
+token with a fresh expiry, and the previous one stays valid until its own expiry
+passes.
 
 **Headers**
 
@@ -211,6 +242,14 @@ None.
   "expires_in": 300
 }
 ```
+
+### Invalid request — `400 Bad Request`
+
+```json
+{ "code": "invalid_request", "detail": { "room_id": ["Input should be a valid UUID, invalid character: found `n` at 1"] } }
+```
+
+A `room_id` that is not a UUID never reaches the room lookup.
 
 ### Register-scope token — `403 Forbidden`
 

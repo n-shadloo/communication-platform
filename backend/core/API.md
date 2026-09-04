@@ -55,6 +55,44 @@ One code in the table is reserved rather than reachable today.
 requirement itself does not supply one; every route now takes a requirement that
 does, so no route returns it. It stays in the vocabulary.
 
+## What a route's own section does not repeat
+
+Every `API.md` section lists the responses that route produces. Four statuses are not
+repeated there, because a route answers them from what it declares rather than from
+anything it does:
+
+| Status | Codes | Why every route can answer it |
+|---|---|---|
+| `401` | `unauthenticated`, `invalid_token`, `token_revoked` | the authentication requirement the route declares, before the handler runs |
+| `403` | `scope_forbidden` | the same requirement, on a register-scope token |
+| `500` | `server_error` | the unhandled-failure handler, on any route |
+| `503` | `unavailable` | the request deadline of `api/middleware.py`, on any route |
+
+A route with no authentication requirement — `GET /api/v1/health`, and the three
+`/auth` routes a client reaches before it holds a token — answers neither `401
+unauthenticated` nor `403 scope_forbidden` for that reason. Where one of these
+statuses carries a code of its own, the route does list it: `403 forbidden` on the
+two prekey routes, `503 voice_unconfigured` on the join-token route.
+
+Three refusals belong to no route at all, because the surface answers them before it
+has chosen one: `400 invalid_request` for a `Host` that `DJANGO_ALLOWED_HOSTS` does
+not list, `404 not_found` for a path no route serves, and `405 method_not_allowed`
+for a method a route does not carry.
+
+## The machine-readable form
+
+`backend/openapi.json` is the OpenAPI document of this surface, generated from the
+routes by `python manage.py openapi` and checked against them in CI. It carries every
+path, every method, every request and response shape, and every status of the table
+above. It does not carry what these files exist for: the retry semantics of each
+mutating route, the bucket rules, and the WebSocket close codes.
+
+Under `DEBUG` the same document is served at `/openapi.json`, with the interactive
+views at `/docs` and `/redoc`. All three are closed outside `DEBUG` — a route map is
+reconnaissance on a server whose posture is to reveal nothing — and the two
+interactive views load their JavaScript from a public CDN, so the committed artefact
+is the reference that works offline.
+
 ## Request limits
 
 Every response carries `X-Content-Type-Options: nosniff`, `Cache-Control: no-store`
@@ -83,7 +121,7 @@ payload being echoed. Current sets, in bytes:
 | `NAME_BUCKETS` | 256, 1024 | room names |
 | `DEVICELOG_BUCKETS` | 256, 1024 | device-list log records |
 | `BACKUP_BUCKETS` | 4096, 16384, 65536, 262144, 1048576 | key backup |
-| `ATTACHMENT_BUCKETS` | 64 KiB … 64 MiB, ×4 ladder | attachments |
+| `ATTACHMENT_BUCKETS` | 65536, 262144, 1048576, 4194304, 16777216, 67108864 | attachments |
 
 `ENVELOPE_BUCKETS` deliberately has no 2048 step even though a PQXDH initial message
 (≈1088-byte ML-KEM ciphertext) lands in the 4096 bucket: fewer buckets means better

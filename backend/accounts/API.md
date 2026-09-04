@@ -99,6 +99,15 @@ the name, so a client that means to own the name should log in to confirm.
 { "code": "invalid_request", "detail": { "password": ["Field required"] } }
 ```
 
+### Body too large — `413 Payload Too Large`
+
+```json
+{ "code": "payload_too_large", "detail": "Request body is too large." }
+```
+
+The cap on this route is 16 KiB, counted as the bytes arrive rather than read from
+`Content-Length`, so an understated header does not defeat it.
+
 ### Username taken — `409 Conflict`
 
 ```json
@@ -196,6 +205,15 @@ older tokens.
 { "code": "invalid_request", "detail": { "device_id": ["Input should be a valid UUID, invalid character: found `n` at 1"] } }
 ```
 
+### Body too large — `413 Payload Too Large`
+
+```json
+{ "code": "payload_too_large", "detail": "Request body is too large." }
+```
+
+The cap on this route is 16 KiB, counted as the bytes arrive rather than read from
+`Content-Length`, so an understated header does not defeat it.
+
 ### Wrong credentials — `401 Unauthorized`
 
 ```json
@@ -263,6 +281,25 @@ that does not learn the outcome logs in again.
 ```json
 { "access": "eyJhbGciOiJIUzI1NiIs…", "refresh": "eyJhbGciOiJIUzI1NiIs…" }
 ```
+
+### Invalid request — `400 Bad Request`
+
+```json
+{ "code": "invalid_request", "detail": { "refresh": ["Field required"] } }
+```
+
+A body that is not an object, a missing `refresh`, a non-string one, and one above
+4096 characters all land here. A well-formed string that is not a valid token is
+`401` instead.
+
+### Body too large — `413 Payload Too Large`
+
+```json
+{ "code": "payload_too_large", "detail": "Request body is too large." }
+```
+
+The cap on this route is 16 KiB, counted as the bytes arrive rather than read from
+`Content-Length`, so an understated header does not defeat it.
 
 ### Missing or malformed token — `401 Unauthorized`
 
@@ -532,6 +569,15 @@ Empty body.
 
 The rejected payload is never echoed. Field validation runs first, so a body that is
 both malformed and off-bucket reports the field error.
+
+### Body too large — `413 Payload Too Large` (PUT)
+
+```json
+{ "code": "payload_too_large", "detail": "Request body is too large." }
+```
+
+The cap on this route is 16 KiB, counted as the bytes arrive rather than read from
+`Content-Length`, so an understated header does not defeat it.
 
 ### Stale version — `409 Conflict` (PUT)
 

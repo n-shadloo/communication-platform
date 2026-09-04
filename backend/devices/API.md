@@ -50,6 +50,10 @@ A fresh account publishes its identity immediately after registering its first d
 (the first registration is the only one allowed without a published identity — see
 device registration below).
 
+**Retry semantics.** A retry of the same `PUT` either applies it or answers `409
+stale_version`, because the first attempt already stored that version. Both leave the
+stored identity correct; on `409` the client re-reads before it writes again.
+
 **Headers**
 
 | Header | Required | Value |
@@ -83,6 +87,15 @@ Empty body.
 ```json
 { "code": "invalid_request", "detail": { "master_sig": ["bad signature length"] } }
 ```
+
+### Body too large — `413 Payload Too Large`
+
+```json
+{ "code": "payload_too_large", "detail": "Request body is too large." }
+```
+
+The cap on this route is 16 KiB, counted as the bytes arrive rather than read from
+`Content-Length`, so an understated header does not defeat it.
 
 ### Stale version — `409 Conflict`
 
@@ -148,6 +161,14 @@ self-contained so no such indirection exists.
   "version": 3
 }
 ```
+
+### Malformed id — `400 Bad Request`
+
+```json
+{ "code": "invalid_request", "detail": { "user_id": ["Input should be a valid UUID, invalid character: found `n` at 1"] } }
+```
+
+A `user_id` that is not a UUID never reaches the lookup.
 
 ### No published identity, unknown or deactivated user — `404 Not Found`
 
@@ -268,6 +289,12 @@ head of the account's device-list log (null when empty). The response carries an
 the live device set **and** the device-log head, so a log append also invalidates it —
 expect more frequent invalidation than under the device-set-only tag.
 
+**Retry semantics.** `POST` is not idempotent: a retry after a lost response mints a
+second device with a second id and a second token pair, and the first device stays
+live and counts against `MAX_DEVICES_PER_USER`. A client that has lost the response
+lists its devices with `GET` before it registers again, and revokes the device it
+cannot use. `GET` writes nothing.
+
 **Headers**
 
 | Header | Required | Value |
@@ -386,13 +413,23 @@ Both fields are named when both are sent.
 { "code": "identity_required", "detail": "Publish a cross-signing identity before adding another device." }
 ```
 
+### Body too large — `413 Payload Too Large` (POST)
+
+```json
+{ "code": "payload_too_large", "detail": "Request body is too large." }
+```
+
+The cap on this route is 70 MiB, counted as the bytes arrive rather than read from
+`Content-Length`, so an understated header does not defeat it. The 70 MiB is what nginx
+admits; the list caps of the schema refuse a larger body long before it.
+
 ### Device cap reached — `409 Conflict` (POST)
 
 ```json
 { "code": "device_limit", "detail": "This account has too many devices." }
 ```
 
-### Register-scope token on GET — `403 Forbidden`
+### Register-scope token — `403 Forbidden` (GET)
 
 ```json
 { "code": "scope_forbidden", "detail": "This token cannot access this endpoint." }
@@ -419,6 +456,12 @@ device lists. Revocation is permanent; a "re-added"
 device is a new registration. Any device of the account may revoke any other (or
 itself). The client appends a device-list log record for the removal
 (CLIENT_CONTRACT.md §J).
+
+**Retry semantics.** `PUT` is idempotent: it replaces the label blob, so a repeated
+call with the same body leaves the same label. `DELETE` is safe to repeat and
+self-reporting: the first call revokes, and a second answers `404` because a revoked
+device is no longer found — which is also what an id from another account answers, so
+a `404` never confirms that a device exists.
 
 **Headers**
 
@@ -462,6 +505,23 @@ Empty body.
 ```
 
 An off-bucket label is `400 {"code": "bad_bucket", "detail": "Invalid payload."}`.
+
+### Malformed id — `400 Bad Request`
+
+```json
+{ "code": "invalid_request", "detail": { "device_id": ["Input should be a valid UUID, invalid character: found `n` at 1"] } }
+```
+
+A `device_id` that is not a UUID never reaches the lookup.
+
+### Body too large — `413 Payload Too Large` (PUT)
+
+```json
+{ "code": "payload_too_large", "detail": "Request body is too large." }
+```
+
+The cap on this route is 16 KiB, counted as the bytes arrive rather than read from
+`Content-Length`, so an understated header does not defeat it.
 
 ### Unknown, foreign, or already-revoked device — `404 Not Found`
 
@@ -513,6 +573,14 @@ applied either — no prekey rotation, no signature update.
 
 Clients watch the count endpoint (or the `otpk_count` in this response) and replenish
 when the pools run low, since every peer claim consumes one of each.
+
+**Retry semantics.** Idempotent on the keys: a `key_id` the device already stores is
+ignored rather than rejected, so re-sending a batch stores nothing twice and the
+returned `otpk_count` is the truth either way. Two cases are not idempotent. The
+signed prekey and the cross-signature are replaced by whatever the retry carries, and
+the pool cap is checked against the batch as sent, so a retry of a batch that already
+landed can answer `409 prekey_limit` while storing nothing. On `409` the client reads
+`GET .../prekeys/count` before it decides what to send.
 
 **Headers**
 
@@ -569,6 +637,16 @@ keys must decode to exactly 1184 bytes; `cross_sig` and `pq_spk.sig` to exactly 
 { "code": "forbidden", "detail": "This token does not belong to that device." }
 ```
 
+### Body too large — `413 Payload Too Large`
+
+```json
+{ "code": "payload_too_large", "detail": "Request body is too large." }
+```
+
+The cap on this route is 70 MiB, counted as the bytes arrive rather than read from
+`Content-Length`, so an understated header does not defeat it. The 70 MiB is what nginx
+admits; the list caps of the schema refuse a larger body long before it.
+
 ### Pool cap reached — `409 Conflict`
 
 ```json
@@ -620,6 +698,14 @@ None.
 ```json
 { "otpk_count": 173, "pq_otpk_count": 88 }
 ```
+
+### Malformed id — `400 Bad Request`
+
+```json
+{ "code": "invalid_request", "detail": { "device_id": ["Input should be a valid UUID, invalid character: found `n` at 1"] } }
+```
+
+A `device_id` that is not a UUID never reaches the lookup.
 
 ### Not this device — `403 Forbidden`
 
@@ -701,6 +787,14 @@ Header: `ETag: "5b3a9c1d7e2f4a6b8c0d1e2f3a4b5c6d"`. `cross_sig` and `log_head_se
 may be `null`. An unknown or deactivated user yields `{"devices": [], "etag": …,
 "log_head_seq": null}` with `200`.
 
+### Malformed id — `400 Bad Request`
+
+```json
+{ "code": "invalid_request", "detail": { "user_id": ["Input should be a valid UUID, invalid character: found `n` at 1"] } }
+```
+
+A `user_id` that is not a UUID never reaches the lookup.
+
 ### Not modified — `304 Not Modified`
 
 Empty body.
@@ -742,6 +836,12 @@ nothing — the empty list is honoured, not treated as "all" — so batch carefu
 Group sessions start here too: a group is a set of pairwise sessions, one per member
 device, so starting one claims from each member's `user_id` in turn
 (CLIENT_CONTRACT.md §F). There is no group-specific key material.
+
+**Retry semantics.** Not idempotent, and expensively so: every call consumes one
+one-time prekey from each target device, so a retry after a lost response burns a
+second key per device and the first is gone for good. Nothing recovers it — a
+one-time prekey is handed out once by construction. A client that loses the response
+treats the claim as spent and starts the session from the bundle the retry returned.
 
 **Headers**
 
@@ -808,6 +908,16 @@ yields `{"bundles": []}` with `200`.
 { "code": "invalid_request", "detail": { "device_ids.0": ["Input should be a valid UUID, invalid character: found `n` at 1"] } }
 ```
 
+### Body too large — `413 Payload Too Large`
+
+```json
+{{ "code": "payload_too_large", "detail": "Request body is too large." }}
+```
+
+The cap on this route is 70 MiB, counted as the bytes arrive rather than read from
+`Content-Length`, so an understated header does not defeat it. The 70 MiB is what
+nginx admits; the list caps of the schema refuse a larger body long before it.
+
 ### Register-scope token — `403 Forbidden`
 
 ```json
@@ -843,6 +953,13 @@ actually compare (clients gossip heads inside ordinary E2EE messages).
 Appending changes the account's device-list `ETag`, so polling peers re-fetch and see
 the new head.
 
+**Retry semantics.** Not idempotent: the server assigns `seq` and never inspects a
+record, so a retry after a lost response appends the same blobs again under fresh
+sequence numbers. The log is a hash chain the client builds, so the duplicate records
+link to the same predecessor and every reader sees a fork. Before retrying, read the
+log back with `GET /users/{user_id}/devicelog` and compare `head_seq` against what the
+append should have produced.
+
 **Headers**
 
 | Header | Required | Value |
@@ -868,6 +985,16 @@ the new head.
 
 Sequence numbers are server-assigned, per-user, contiguous within a batch, starting
 at 0.
+
+### Body too large — `413 Payload Too Large`
+
+```json
+{{ "code": "payload_too_large", "detail": "Request body is too large." }}
+```
+
+The cap on this route is 70 MiB, counted as the bytes arrive rather than read from
+`Content-Length`, so an understated header does not defeat it. The 70 MiB is what
+nginx admits; the list caps of the schema refuse a larger body long before it.
 
 ### Off-bucket record — `400 Bad Request`
 
@@ -940,6 +1067,14 @@ None.
 
 `head_seq` is `null` and `records` empty for an empty log, an unknown user, or a
 deactivated user.
+
+### Malformed id — `400 Bad Request`
+
+```json
+{ "code": "invalid_request", "detail": { "user_id": ["Input should be a valid UUID, invalid character: found `n` at 1"] } }
+```
+
+A `user_id` that is not a UUID never reaches the lookup.
 
 ### Register-scope token — `403 Forbidden`
 

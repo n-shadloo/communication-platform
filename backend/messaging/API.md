@@ -43,9 +43,15 @@ state and refresh the peer's device list. The whole batch validates before anyth
 is written: one off-bucket blob rejects the entire request.
 
 **One call is one transaction.** Every accepted item of a batch is committed together
-with the counter advance behind its sequence number, so a retry after an unclear
-outcome finds either the whole batch queued or none of it — never a partial batch,
-and never a mailbox whose counter ran ahead of its rows.
+with the counter advance behind its sequence number, so the batch is queued whole or
+not at all — never a partial batch, and never a mailbox whose counter ran ahead of
+its rows.
+
+**Retry semantics.** Not idempotent, and deliberately so: there is no idempotency
+store, because a stored response for a send would link a sender to its recipients at
+rest. A retry after a lost response queues the batch a second time, and each
+recipient device then drains two copies under two sequence numbers. The client
+deduplicates on its own message id; `CLIENT_CONTRACT.md` §H is where that duty sits.
 
 **Headers**
 
@@ -103,6 +109,16 @@ that path.
 
 The rejected payload is never echoed.
 
+### Body too large — `413 Payload Too Large`
+
+```json
+{ "code": "payload_too_large", "detail": "Request body is too large." }
+```
+
+The cap on this route is 70 MiB, which is what nginx admits, counted as the bytes
+arrive rather than read from `Content-Length`. A 256-item batch of 256 KiB envelopes
+is refused by the schema long before it.
+
 ### Register-scope token — `403 Forbidden`
 
 ```json
@@ -114,6 +130,9 @@ The rejected payload is never echoed.
 ```json
 { "code": "throttled", "detail": "Request was throttled." }
 ```
+
+Scope `envelopes`, default 600/min per account, shared by all three routes of this
+app. `Retry-After` carries the seconds to wait.
 
 ## Drain my mailbox
 
@@ -188,15 +207,21 @@ separate device-binding refusal, because a full-scope token always carries one.
 { "code": "throttled", "detail": "Request was throttled." }
 ```
 
+Scope `envelopes`, default 600/min per account, shared by all three routes of this
+app. `Retry-After` carries the seconds to wait.
+
 ## Acknowledge envelopes
 
 **Method:** `POST`
 **Path:** `/api/v1/me/envelopes/ack`
 
 Deletes up to 200 envelopes from the calling device's own queue by id. Ids from any
-other mailbox — even a sibling device of the same account — match nothing, and acking
-an already-acked id is an idempotent no-op, so retrying after a lost response is
-safe. Ack only after the envelope's contents are durably stored client-side.
+other mailbox — even a sibling device of the same account — match nothing. Ack only
+after the envelope's contents are durably stored client-side.
+
+**Retry semantics.** Idempotent. An id that is already gone matches nothing, so a
+repeated call deletes what is left and reports it in `deleted`; a lost response
+costs the client only the count.
 
 **Headers**
 
@@ -242,6 +267,16 @@ A missing `ids` key acks nothing and returns `{"deleted": 0}`.
 Non-object bodies, a non-list `ids`, more than 200 entries, and non-UUID values all
 land here; the field path names which one.
 
+### Body too large — `413 Payload Too Large`
+
+```json
+{ "code": "payload_too_large", "detail": "Request body is too large." }
+```
+
+The cap on this route is 70 MiB, which is what nginx admits, counted as the bytes
+arrive rather than read from `Content-Length`. A 256-item batch of 256 KiB envelopes
+is refused by the schema long before it.
+
 ### Register-scope token — `403 Forbidden`
 
 ```json
@@ -253,3 +288,6 @@ land here; the field path names which one.
 ```json
 { "code": "throttled", "detail": "Request was throttled." }
 ```
+
+Scope `envelopes`, default 600/min per account, shared by all three routes of this
+app. `Retry-After` carries the seconds to wait.
