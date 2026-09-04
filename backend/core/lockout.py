@@ -6,15 +6,20 @@ than on the client address: the operator reaches the panel through nginx on
 loopback, so every attempt carries the same address and an address lock would be a
 lock on everybody.
 
-Two properties this file exists to keep:
+Three properties this file exists to keep:
 
 * **Nothing lands in the database.** A failed-attempt table is a login record at
   rest, which the threat model refuses to keep, and the state here is volatile by
-  the same rule as the rate counters (invariant 7). The Django cache is Redis, and
-  Redis runs with persistence off.
+  the same rule as the rate counters (invariant 7). Redis runs with persistence
+  off.
 * **A locked name costs no password hash.** The refusal happens in the form's
   `clean()`, before `authenticate()` is ever called, so an attacker cannot spend
   the server's Argon2 budget on a name that is already locked.
+* **Nothing read from Redis becomes a Python object.** The state is a counter and
+  a flag, read as bytes through the redis client. Django's own cache framework
+  unpickles every value it reads, and Redis is a store another process on the
+  host can write to, so a lock kept through `django.core.cache` would let a
+  writer of the instance run code here on the next sign-in attempt (ADR-0018).
 
 The name is keyed by digest, not in the clear: a `KEYS` over a Redis an attacker
 has reached should not enumerate the operator's account names.
@@ -22,8 +27,9 @@ has reached should not enumerate the operator's account names.
 
 import hashlib
 
+import redis
+from django.conf import settings
 from django.contrib.auth.signals import user_logged_in, user_login_failed
-from django.core.cache import cache
 from django.core.exceptions import ValidationError
 from django.dispatch import receiver
 from django.utils.translation import gettext_lazy as _
@@ -42,9 +48,24 @@ LOCKED_MESSAGE = _(
 )
 UNAVAILABLE_MESSAGE = _("Sign-in is unavailable right now. Try again shortly.")
 
+_store = None
+
 
 class LockoutUnavailable(Exception):
     """The lock state could not be read, so no answer about it can be trusted."""
+
+
+def _redis():
+    """The synchronous client of this module, built on first use.
+
+    Synchronous because every caller runs on the ORM thread — the admin form and
+    the login signals — where the loop-bound async client of `api/redis.py` cannot
+    be used. One client for the process, so the pool is paid for once.
+    """
+    global _store
+    if _store is None:
+        _store = redis.Redis.from_url(settings.REDIS_URL)
+    return _store
 
 
 def _key(prefix, username):
@@ -59,10 +80,13 @@ def is_locked(username):
     is to refuse an attempt cannot answer "allow" when it does not know — the same
     posture the rate limiter takes when Redis is unreachable (ADR-0010). The
     operator's recovery is to bring Redis back on the host they already hold.
+
+    Presence is the lock: the value is never interpreted, so whatever bytes sit
+    under the key, a lock is all they can mean.
     """
     try:
-        return bool(cache.get(_key("lock", username)))
-    except Exception as exc:
+        return _redis().get(_key("lock", username)) is not None
+    except redis.RedisError as exc:
         raise LockoutUnavailable from exc
 
 
@@ -73,19 +97,21 @@ def note_failure(username):
     an account. `is_locked` is where an unreachable Redis is refused.
     """
     try:
-        count = (cache.get(_key("fails", username)) or 0) + 1
-        cache.set(_key("fails", username), count, COOLOFF_SECONDS)
+        store = _redis()
+        fails = _key("fails", username)
+        count = store.incr(fails)
+        store.expire(fails, COOLOFF_SECONDS)
         if count >= FAILURE_THRESHOLD:
-            cache.set(_key("lock", username), True, COOLOFF_SECONDS)
-    except Exception:
+            store.set(_key("lock", username), 1, ex=COOLOFF_SECONDS)
+    except redis.RedisError:
         pass
 
 
 def clear(username):
     """Forget the failures of a name that has just signed in."""
     try:
-        cache.delete_many([_key("fails", username), _key("lock", username)])
-    except Exception:
+        _redis().delete(_key("fails", username), _key("lock", username))
+    except redis.RedisError:
         pass
 
 

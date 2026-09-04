@@ -127,6 +127,9 @@ jobs:
           DJANGO_SETTINGS_MODULE: config.settings.prod
           DJANGO_ALLOWED_HOSTS: ci.invalid
           ALLOWED_WS_ORIGINS: https://ci.invalid
+          # The check refuses a URL without a password (core.E004) and opens no
+          # connection, so the value only has to carry one.
+          REDIS_URL: redis://:ci-test-redis-password-not-used-outside-this-runner@127.0.0.1:6379/0
         run: |
           export DJANGO_SECRET_KEY="$(python -c 'import secrets; print(secrets.token_urlsafe(64))')"
           python manage.py check --deploy --fail-level WARNING

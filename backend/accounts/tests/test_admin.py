@@ -802,18 +802,73 @@ def test_the_lockout_writes_no_database_row(client):
 def test_the_lockout_refuses_when_redis_cannot_be_read(client, monkeypatch):
     """Fails closed, like the rate limiter (ADR-0010): a control whose purpose is to
     refuse cannot answer "allow" when it does not know."""
+    import redis
+
     User.objects.create_superuser(username="owner", password=PASSWORD)
 
-    def unreachable(*args, **kwargs):
-        raise ConnectionError("redis is down")
+    class Unreachable:
+        def get(self, *args, **kwargs):
+            raise redis.ConnectionError("redis is down")
 
-    monkeypatch.setattr("core.lockout.cache.get", unreachable)
+    monkeypatch.setattr("core.lockout._redis", lambda: Unreachable())
     response = client.post(
         reverse("admin:login"), {"username": "owner", "password": PASSWORD}
     )
 
     assert response.status_code == 200
     assert "_auth_user_id" not in client.session
+
+
+# Set by `detonate` when a planted Redis value is deserialized as a Python object.
+DETONATED = []
+
+
+def detonate():
+    DETONATED.append(True)
+
+
+class Detonator:
+    """A pickle whose unpickling calls `detonate`, the shape of a payload that a
+    writer of the Redis instance would plant under a key this process reads."""
+
+    def __reduce__(self):
+        return (detonate, ())
+
+
+def test_a_value_planted_in_redis_is_never_deserialized(client):
+    """The lockout reads Redis on every sign-in attempt, under a key an outside
+    party can compute from the submitted name. Django's own Redis cache backend
+    unpickles every value it reads, so a writer of the instance — Redis listens on
+    loopback of a shared host — would run code in this process the moment the
+    operator's name was tried. The state is read as bytes and never as an object.
+
+    Planted under both spellings: the raw key this module reads, and the
+    `:1:`-prefixed key the cache framework would read, so a return to
+    `django.core.cache` fails here.
+    """
+    import pickle
+
+    import redis
+    from django.conf import settings
+
+    from core.lockout import _key
+
+    DETONATED.clear()
+    payload = pickle.dumps(Detonator())
+    store = redis.Redis.from_url(settings.REDIS_URL)
+    try:
+        for key in (_key("lock", "owner"), f":1:{_key('lock', 'owner')}"):
+            store.set(key, payload, ex=60)
+        response = client.post(
+            reverse("admin:login"), {"username": "owner", "password": PASSWORD}
+        )
+    finally:
+        store.close()
+
+    assert DETONATED == []
+    # The planted bytes were read: a non-empty value under the lock key is a lock.
+    assert response.status_code == 200
+    assert "Too many sign-in attempts" in response.content.decode()
 
 
 # --- Assets ----------------------------------------------------------------------

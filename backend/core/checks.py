@@ -20,6 +20,27 @@ def no_foreign_or_telemetry(app_configs, **kwargs):
 
 
 @register(Tags.security, deploy=True)
+def redis_requires_a_password(app_configs, **kwargs):
+    from urllib.parse import urlsplit
+
+    from django.conf import settings
+
+    # Redis listens on loopback of a host shared with other projects, and loopback
+    # is reachable by every local process. Without `requirepass` any of them can
+    # flush the rate counters and the lockout, publish frames on the fan-out bus
+    # and read the presence sets. ADR-0018.
+    if urlsplit(settings.REDIS_URL).password:
+        return []
+    return [
+        Error(
+            "REDIS_URL carries no password. Set `requirepass` in the Redis "
+            "configuration and carry it as redis://:<password>@127.0.0.1:6379/0.",
+            id="core.E004",
+        )
+    ]
+
+
+@register(Tags.security, deploy=True)
 def ws_origin_allowlist_set(app_configs, **kwargs):
     from django.conf import settings
 

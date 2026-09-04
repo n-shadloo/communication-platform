@@ -205,6 +205,15 @@ None of these is ever described as one of the others.
   uploaded. Owner activation gates every account; revoking a device bumps its token
   generation (access dies ≤ 15 min, refresh immediately) and deletes its queue and its
   classical and PQ prekeys in one transaction.
+- **A neighbouring process on the host is not trusted.** The VPS is shared, and
+  loopback is reachable by every local process. Redis therefore requires a password
+  in production (`manage.py check --deploy` refuses a `REDIS_URL` without one), and
+  this process never turns a Redis value back into a Python object: the rate
+  counters, the login lockout and the presence sets are read as strings through the
+  redis client, and Django's cache framework — which unpickles everything it reads —
+  is kept off Redis entirely. What Redis holds is volatile and content-free either
+  way; what the password protects is the integrity of the counters, the lockout, and
+  the frames on the fan-out bus.
 - **No token is stored, so no login history exists at rest.** Revocation is two integers
   on the device row: `token_generation`, checked on every request, and
   `refresh_generation`, checked on every rotation. A refresh presented after it was

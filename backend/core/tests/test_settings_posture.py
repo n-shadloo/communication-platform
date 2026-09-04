@@ -1,10 +1,22 @@
 import re
 
 from django.conf import settings
+from django.core.checks import Tags, run_checks
 from django.test import SimpleTestCase, override_settings
 
 from config.settings import prod
 from core.checks import no_foreign_or_telemetry, ws_origin_allowlist_set
+
+
+def deploy_check_ids():
+    """The ids `manage.py check --deploy` would report under the current settings,
+    read through the registry so a check that is written but never registered
+    for deployment fails here."""
+    return {
+        message.id
+        for message in run_checks(tags=[Tags.security], include_deployment_checks=True)
+    }
+
 
 BANNED_TELEMETRY = {"sentry_sdk", "ddtrace", "newrelic", "elasticapm"}
 
@@ -121,10 +133,11 @@ class BasePostureTests(SimpleTestCase):
 
     def test_datastores_are_localhost_only(self):
         self.assertIn(settings.DATABASES["default"]["HOST"], {"127.0.0.1", "localhost"})
-        # One Redis URL now, not two: the cache, the rate counters, the room
-        # presence sets and the gateway's fan-out bus all read `REDIS_URL`.
-        for location in (settings.CACHES["default"]["LOCATION"], settings.REDIS_URL):
-            self.assertRegex(location, r"^redis://(127\.0\.0\.1|localhost):")
+        # One Redis URL: the rate counters, the lockout, the room presence sets and
+        # the gateway's fan-out bus all read `REDIS_URL`.
+        self.assertRegex(
+            settings.REDIS_URL, r"^redis://(:[^@]+@)?(127\.0\.0\.1|localhost):"
+        )
 
     def test_scrub_filter_is_attached_and_access_logging_is_off(self):
         logging = settings.LOGGING
@@ -236,6 +249,30 @@ class BasePostureTests(SimpleTestCase):
         with override_settings(ALLOWED_WS_ORIGINS=[]):
             errors = ws_origin_allowlist_set(None)
         self.assertEqual([e.id for e in errors], ["core.E003"])
+
+    def test_no_django_cache_backend_reads_redis(self):
+        """Every built-in Django cache backend unpickles what it reads, and Redis
+        is a store another process on the host can write to. Nothing in this
+        process may turn Redis bytes back into Python objects: the counters, the
+        lockout state and the presence sets are read as strings through the redis
+        client, and the Django cache framework is left on its process-local
+        default that no other software reaches."""
+        backend = settings.CACHES["default"]["BACKEND"]
+
+        self.assertNotIn("redis", backend.lower())
+        self.assertTrue(backend.endswith("LocMemCache"), backend)
+
+    def test_the_deploy_checks_refuse_a_redis_url_without_a_password(self):
+        """Redis listens on loopback of a host shared with other projects. Without
+        `requirepass` every local process can flush the rate counters and the
+        lockout, inject frames on the fan-out bus, and read the presence sets."""
+        with override_settings(REDIS_URL="redis://127.0.0.1:6379/0"):
+            failing = deploy_check_ids()
+        with override_settings(REDIS_URL="redis://:generated-secret@127.0.0.1:6379/0"):
+            passing = deploy_check_ids()
+
+        self.assertIn("core.E004", failing)
+        self.assertNotIn("core.E004", passing)
 
 
 class ProdPostureTests(SimpleTestCase):

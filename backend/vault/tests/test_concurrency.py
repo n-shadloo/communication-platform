@@ -9,14 +9,13 @@ devices/tests/test_device_log.py when server-side history was removed.)
 import base64
 import threading
 
-from django.core.cache import cache
 from django.db import connection, connections
 from django.test import TransactionTestCase
 
 from accounts.models import User
 from api.auth import issue_full
 from config.asgi import api_application, application
-from conftest import AsgiClient
+from conftest import AsgiClient, flush_redis
 from vault.models import KeyBackup
 
 from .conftest import PASSWORD, backup_blob, make_device
@@ -40,7 +39,7 @@ class KeyBackupVersionRaceTests(TransactionTestCase):
         access_high, _ = issue_full(self.owner, make_device(self.owner, 2))
         self.low = {"Authorization": f"Bearer {access_low}"}
         self.high = {"Authorization": f"Bearer {access_high}"}
-        cache.clear()  # a shared limiter store would otherwise bleed across rounds
+        flush_redis()  # a shared limiter store would otherwise bleed across rounds
 
     def test_concurrent_first_write_never_lets_the_lower_version_win(self):
         high_blob = backup_blob(b"H")

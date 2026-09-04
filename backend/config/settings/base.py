@@ -84,13 +84,11 @@ DATABASES = {
     }
 }
 
+# Read as strings by the redis client, and never through the Django cache
+# framework: every built-in cache backend unpickles what it reads, and Redis is a
+# store another process on the host can write to (ADR-0018). `CACHES` therefore
+# stays on Django's process-local default, which nothing in this project uses.
 REDIS_URL = env("REDIS_URL", default="redis://127.0.0.1:6379/0")
-CACHES = {
-    "default": {
-        "BACKEND": "django.core.cache.backends.redis.RedisCache",
-        "LOCATION": REDIS_URL,
-    }
-}
 # Argon2id first. Password hashing protects auth only, never content.
 PASSWORD_HASHERS = [
     "django.contrib.auth.hashers.Argon2PasswordHasher",

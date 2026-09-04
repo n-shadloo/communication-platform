@@ -2,8 +2,9 @@ import logging
 
 import httpx
 import pytest
+import redis
 from asgiref.sync import async_to_sync
-from django.core.cache import cache
+from django.conf import settings
 from httpx import ASGITransport
 
 from accounts.models import User
@@ -63,13 +64,22 @@ class AsgiClient:
         return self.request("DELETE", url, **kwargs)
 
 
+def flush_redis():
+    """Empty the shared Redis database: the rate counters, the lockout state and
+    the presence sets. Through the redis client rather than Django's cache
+    framework, which this project keeps off Redis (ADR-0018)."""
+    store = redis.Redis.from_url(settings.REDIS_URL)
+    try:
+        store.flushdb()
+    finally:
+        store.close()
+
+
 @pytest.fixture(autouse=True)
-def clear_throttle_cache():
+def flush_redis_state():
     """Rate-limit counters live in the shared Redis instance, so without this they
-    leak between tests and across whole runs (the login scope is 20/hour). The
-    Django cache backend clears by flushing the database, which takes the
-    FastAPI limiter's own keys with it."""
-    cache.clear()
+    leak between tests and across whole runs (the login scope is 20/hour)."""
+    flush_redis()
     yield
 
 
