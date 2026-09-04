@@ -2,7 +2,9 @@ import base64
 
 import pytest
 
+from core.buckets import LABEL_BUCKETS
 from devices.models import Device, OneTimePrekey
+from devices.schemas import MAX_KEY_INT
 
 from .conftest import (
     DEVICES_URL,
@@ -283,3 +285,103 @@ def test_the_first_device_is_exempt_from_the_identity_precondition(
     )
 
     assert response.status_code == 201
+
+
+def test_exactly_two_hundred_prekeys_are_accepted(http, active_user, device, bearer):
+    """The boundary either side of MAX_OTPKS: 201 is refused above, so 200 is the
+    largest batch a device can arrive with."""
+    publish_identity(active_user)
+
+    response = http.post(
+        DEVICES_URL, json=register_payload(otpks=200), headers=bearer(active_user, device)
+    )
+
+    assert response.status_code == 201
+    assert (
+        OneTimePrekey.objects.filter(device_id=response.json()["device_id"]).count()
+        == 200
+    )
+
+
+@pytest.mark.parametrize("registration_id", [0, MAX_KEY_INT])
+def test_a_registration_id_on_either_bound_of_the_column_is_stored(
+    http, active_user, device, bearer, peer, peer_device, registration_id
+):
+    """`registration_id` is a 32-bit column and the value is opaque: the schema
+    bounds it so the column never sees a DataError, and stores whatever fits."""
+    publish_identity(active_user)
+
+    response = http.post(
+        DEVICES_URL,
+        json=register_payload(registration_id=registration_id),
+        headers=bearer(active_user, device),
+    )
+
+    assert response.status_code == 201
+    stored = Device.objects.get(id=response.json()["device_id"])
+    assert stored.registration_id == registration_id
+
+
+@pytest.mark.parametrize("size", LABEL_BUCKETS)
+def test_a_label_at_either_bucket_size_round_trips_byte_identically(
+    http, active_user, device, bearer, size
+):
+    """Both buckets are legal lengths, and the label is ciphertext: it comes back
+    exactly as it went in, with no re-encoding in between."""
+    publish_identity(active_user)
+    blob = base64.b64encode(bytes(range(256)) * (size // 256)).decode()
+
+    registered = http.post(
+        DEVICES_URL,
+        json=register_payload(label_blob=blob),
+        headers=bearer(active_user, device),
+    )
+
+    assert registered.status_code == 201
+    stored = Device.objects.get(id=registered.json()["device_id"])
+    assert bytes(stored.label_blob) == base64.b64decode(blob)
+    listed = http.get(DEVICES_URL, headers=bearer(active_user, device)).json()
+    labels = [entry["label_blob"] for entry in listed["devices"] if entry["label_blob"]]
+    assert labels == [blob]
+
+
+def test_the_issued_token_is_bound_to_the_new_device_and_no_other(
+    http, active_user, device, bearer
+):
+    """The pair the 201 carries is what the client cross-signs with, so it must
+    reach the new device's own prekeys route and be refused on a sibling's."""
+    publish_identity(active_user)
+    registered = http.post(
+        DEVICES_URL, json=register_payload(), headers=bearer(active_user, device)
+    ).json()
+    issued = {"Authorization": f"Bearer {registered['access']}"}
+
+    own = http.get(
+        f"{DEVICES_URL}/{registered['device_id']}/prekeys/count", headers=issued
+    )
+    sibling = http.get(f"{DEVICES_URL}/{device.id}/prekeys/count", headers=issued)
+
+    assert own.status_code == 200
+    assert own.json() == {"otpk_count": 1, "pq_otpk_count": 0}  # the one it arrived with
+    assert sibling.status_code == 403
+    assert sibling.json()["code"] == "forbidden"
+
+
+def test_a_registration_that_carries_pq_material_but_no_prekeys_is_accepted(
+    http, active_user, device, bearer
+):
+    """The two optional halves are independent: a device may arrive with a PQ signed
+    prekey and an empty classical pool, and neither absence stands in for the
+    other."""
+    from .test_pq_prekeys import pq_spk
+
+    publish_identity(active_user)
+    payload = register_payload(otpks=0, pq_spk=pq_spk(b"W", spk_id=5))
+
+    response = http.post(DEVICES_URL, json=payload, headers=bearer(active_user, device))
+
+    assert response.status_code == 201
+    stored = Device.objects.get(id=response.json()["device_id"])
+    assert stored.pq_spk_id == 5
+    assert stored.pq_spk_updated_date is not None
+    assert OneTimePrekey.objects.filter(device=stored).count() == 0

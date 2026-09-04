@@ -76,3 +76,51 @@ def test_the_same_token_is_still_accepted_for_registration(
     )
 
     assert response.status_code == 201
+
+
+@pytest.mark.parametrize("name", list(endpoints("d", "u")))
+def test_a_full_scope_token_reaches_every_device_endpoint(
+    http, active_user, device, bearer, name
+):
+    """Guards the guard above: without this, the parametrised refusal would pass
+    just as well against a router that admitted nothing at all. Only the scope is
+    asserted — what each endpoint then makes of a minimal body is its own file's
+    business."""
+    method, url, body = endpoints(device.id, active_user.id)[name]
+    headers = bearer(active_user, device)
+
+    response = (
+        getattr(http, method)(url, json=body, headers=headers)
+        if body is not None
+        else getattr(http, method)(url, headers=headers)
+    )
+
+    assert response.status_code != 403, f"{name} refused a full-scope token"
+    if response.content:
+        assert response.json().get("code") != "scope_forbidden"
+
+
+@pytest.mark.parametrize("name", list(endpoints("d", "u")))
+def test_no_device_endpoint_answers_without_a_token(http, active_user, device, name):
+    """The whole surface, including the registration route the scope split exists
+    to single out: an absent header is a 401 with the challenge, never a 403 and
+    never a body."""
+    method, url, body = endpoints(device.id, active_user.id)[name]
+
+    response = (
+        getattr(http, method)(url, json=body)
+        if body is not None
+        else getattr(http, method)(url)
+    )
+
+    assert response.status_code == 401
+    assert response.json()["code"] == "unauthenticated"
+    assert response.headers["www-authenticate"] == "Bearer"
+
+
+def test_registration_itself_refuses_an_absent_token(http, active_user):
+    """The one route a register-scope token reaches still needs one."""
+    response = http.post(DEVICES_URL, json=register_payload())
+
+    assert response.status_code == 401
+    assert response.json()["code"] == "unauthenticated"

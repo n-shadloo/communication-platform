@@ -403,3 +403,98 @@ def test_publishing_an_identity_is_constant_query(http, active_user, device, bea
     )
 
     assert response.status_code == 200
+
+
+def test_a_peer_list_304_skips_the_list_query_entirely(
+    http, active_user, device, bearer, peer, peer_device
+):
+    """The cheap poll, on the route peers actually poll: the tag is computed from
+    two constant queries and the list is never touched."""
+    headers = bearer(active_user, device)
+    etag = http.get(peer_url(peer.id), headers=headers).headers["etag"]
+
+    response = counted(
+        http,
+        "GET",
+        peer_url(peer.id),
+        AUTH_QUERY + ETAG_QUERIES,
+        headers={**headers, "If-None-Match": etag},
+    )
+
+    assert response.status_code == 304
+
+
+def test_a_claim_that_selects_no_device_costs_nothing_beyond_the_lookup(
+    http, active_user, device, bearer, peer, peer_device
+):
+    """An explicit empty `device_ids` asks for no devices, so there is no locked
+    select and no delete: the cost of asking for nothing must not be the cost of
+    asking for everything."""
+    stock_prekeys(peer_device, 5)
+
+    response = counted(
+        http,
+        "POST",
+        claim_url(peer.id),
+        AUTH_QUERY,
+        json={"device_ids": []},
+        headers=bearer(active_user, device),
+    )
+
+    assert response.json()["bundles"] == []
+
+
+@pytest.mark.parametrize("query", ["", "?after=10&limit=5", "?after=abc&limit=zzz"])
+def test_the_device_log_page_costs_two_queries_whatever_the_cursor(
+    http, active_user, device, bearer, peer, query
+):
+    """The page and its head, and nothing per record — including on the junk cursor
+    that falls back to the start of the log and therefore reads the most rows."""
+    DeviceLogRecord.objects.bulk_create(
+        [DeviceLogRecord(user=peer, seq=i, blob=b"r" * 256) for i in range(40)]
+    )
+
+    response = counted(
+        http,
+        "GET",
+        f"/api/v1/users/{peer.id}/devicelog{query}",
+        AUTH_QUERY + 2,
+        headers=bearer(active_user, device),
+    )
+
+    assert response.status_code == 200
+
+
+def test_an_unpublished_identity_costs_one_query(http, active_user, device, bearer, peer):
+    """The 404 path must not cost more than the hit: an existence probe followed by
+    a fetch would double the cost of the most common answer for a new account."""
+    response = counted(
+        http,
+        "GET",
+        f"/api/v1/users/{peer.id}/identity",
+        AUTH_QUERY + 1,
+        headers=bearer(active_user, device),
+    )
+
+    assert response.status_code == 404
+
+
+def test_pq_material_at_registration_adds_exactly_one_insert(
+    http, active_user, device, bearer
+):
+    """The PQ pool is a second bulk insert, not a second insert per key."""
+    from .test_pq_prekeys import pq_otpks, pq_spk
+
+    publish_identity(active_user)
+
+    # user lock, cap count, identity check, device insert, otpk bulk, pq otpk bulk
+    response = counted(
+        http,
+        "POST",
+        DEVICES_URL,
+        AUTH_QUERY + 6,
+        json=register_payload(otpks=50, pq_spk=pq_spk(), pq_otpks=pq_otpks(50)),
+        headers=bearer(active_user, device),
+    )
+
+    assert response.status_code == 201

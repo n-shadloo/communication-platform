@@ -134,3 +134,103 @@ def test_the_race_is_real_without_skip_locked(owner_device):
         "the unguarded read-then-delete did NOT double-spend, so these threads are "
         "not really contending and the single-consumption assertions prove nothing"
     )
+
+
+def all_otpks_of(body):
+    """Every (device, key) pair one claim was handed, as a hashable tuple."""
+    return tuple(
+        (bundle["device_id"], bundle["otpk"]["key_id"])
+        for bundle in body["bundles"]
+        if "otpk" in bundle
+    )
+
+
+def test_a_fan_out_claim_hands_each_devices_keys_out_exactly_once(
+    new_http, active_user, device, bearer, peer, owner_device
+):
+    """The multi-device shape: one claim locks a row per target inside a single
+    transaction, and the delete that follows names rows by primary key. Racing that
+    against itself must still hand every key of every device to one claimant only —
+    the cross-product delete this ordering exists to avoid would destroy keys that
+    were never served, which shows up here as a key nobody received."""
+    others = [make_device(peer, registration_id=900 + i) for i in range(2)]
+    pool = {}
+    for index, target in enumerate([owner_device, *others]):
+        stock_prekeys(target, 2, start=100 * index)
+        pool[str(target.id)] = {100 * index, 100 * index + 1}
+
+    harvested = storm(
+        new_http,
+        f"/api/v1/users/{peer.id}/keys/claim",
+        bearer(active_user, device),
+        all_otpks_of,
+    )
+
+    served = [pair for pairs in harvested for pair in pairs]
+    assert len(served) == len(set(served)), "a key was handed to two claimants"
+    by_device = {}
+    for device_id, key_id in served:
+        by_device.setdefault(device_id, set()).add(key_id)
+    assert by_device == pool
+    assert OneTimePrekey.objects.count() == 0
+
+
+def test_a_claim_racing_a_revocation_leaves_no_key_behind(
+    new_http, active_user, device, bearer, peer, owner_device
+):
+    """The revoke deletes the pool this claim is consuming from. Whichever order
+    the two land in, the account must end with the device revoked and nothing
+    claimable left of it — a key that survived the revocation is one a sender could
+    still be handed."""
+    stock_prekeys(owner_device, 4, start=300)
+    claimants = CONCURRENT_CLAIMS - 1
+    start = threading.Barrier(claimants + 1)
+    received, failures = [], []
+    lock = threading.Lock()
+
+    def claim():
+        try:
+            connect_then_wait(start)
+            response = new_http().post(
+                f"/api/v1/users/{peer.id}/keys/claim",
+                json={},
+                headers=bearer(active_user, device),
+            )
+            if response.status_code != 200:
+                with lock:
+                    failures.append(response.status_code)
+                return
+            with lock:
+                received.extend(all_otpks_of(response.json()))
+        except Exception as exc:  # noqa: BLE001 - surfaced through `failures`
+            with lock:
+                failures.append(repr(exc))
+        finally:
+            connections.close_all()
+
+    def revoke():
+        try:
+            connect_then_wait(start)
+            response = new_http().delete(
+                f"/api/v1/me/devices/{owner_device.id}",
+                headers=bearer(peer, owner_device),
+            )
+            with lock:
+                failures.extend(
+                    [] if response.status_code == 204 else [response.status_code]
+                )
+        finally:
+            connections.close_all()
+
+    threads = [threading.Thread(target=claim) for _ in range(claimants)]
+    threads.append(threading.Thread(target=revoke))
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(timeout=30)
+
+    assert failures == []
+    assert len(received) == len(set(received)), "a key was handed to two claimants"
+    owner_device.refresh_from_db()
+    assert owner_device.revoked_date is not None
+    assert OneTimePrekey.objects.filter(device=owner_device).count() == 0

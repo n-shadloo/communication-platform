@@ -7,12 +7,15 @@ verbatim and never fakes, fills in, or smooths over any of it.
 """
 
 import base64
+import threading
 
 import pytest
+from django.db import connections
 
 from devices.models import Device, UserIdentity
+from devices.schemas import MAX_KEY_INT, PUBKEY_MAX, PUBKEY_MIN
 
-from .conftest import DEVICES_URL, make_device, register_payload
+from .conftest import DEVICES_URL, connect_then_wait, make_device, register_payload
 
 pytestmark = pytest.mark.django_db(transaction=True)
 
@@ -296,3 +299,163 @@ def test_enrollment_can_cross_sign_the_device_id_the_server_assigned(
     stored = Device.objects.get(id=device_id)
     assert bytes(stored.cross_sig) == b"z" * 64
     assert stored.bundle_version == 1
+
+
+def publish_storm(new_http, headers, payloads):
+    """Fire one identity publish per payload at once, and collect the answers."""
+    start = threading.Barrier(len(payloads))
+    answers, failures = [], []
+    lock = threading.Lock()
+
+    def publish(payload):
+        try:
+            connect_then_wait(start)
+            response = new_http().put(IDENTITY_URL, json=payload, headers=headers)
+            code = response.json()["code"] if response.content else None
+            with lock:
+                answers.append((payload["version"], response.status_code, code))
+        except Exception as exc:  # noqa: BLE001 - surfaced through `failures`
+            with lock:
+                failures.append(repr(exc))
+        finally:
+            connections.close_all()
+
+    threads = [threading.Thread(target=publish, args=(p,)) for p in payloads]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(timeout=30)
+
+    assert failures == []
+    return answers
+
+
+def test_concurrent_first_publishes_settle_on_exactly_one_identity(
+    new_http, active_user, device, bearer
+):
+    """The first publish is the one the version check cannot protect on its own:
+    the identity row does not exist yet, so a lock on it would lock nothing and
+    every racer would pass the check. The unit of work locks the account row
+    instead, so exactly one of them wins and the losers are told the version they
+    sent is stale."""
+    seeds = [bytes([65 + i]) for i in range(6)]
+    payloads = [identity_payload(version=1, master=seed) for seed in seeds]
+
+    answers = publish_storm(new_http, bearer(active_user, device), payloads)
+
+    statuses = [status for _version, status, _code in answers]
+    assert statuses.count(200) == 1
+    assert statuses.count(409) == len(seeds) - 1
+    assert {code for _v, status, code in answers if status == 409} == {"stale_version"}
+    assert UserIdentity.objects.count() == 1
+    stored = UserIdentity.objects.get(user=active_user)
+    assert stored.version == 1
+    assert bytes(stored.master_pub) in {(seed * 32)[:32] for seed in seeds}
+
+
+def test_concurrent_publishes_at_different_versions_keep_the_highest_accepted(
+    new_http, active_user, device, bearer
+):
+    """Six racers, six versions. Whichever order they reach the lock in, the row
+    that survives carries the highest version that was ever accepted, and every
+    refusal is a stale one — never a lost update that leaves a lower version
+    stored than a client was told had landed."""
+    versions = [1, 2, 3, 4, 5, 6]
+    payloads = [
+        identity_payload(version=v, master=bytes([70 + v]), sig=bytes([80 + v]))
+        for v in versions
+    ]
+
+    answers = publish_storm(new_http, bearer(active_user, device), payloads)
+
+    accepted = [version for version, status, _code in answers if status == 200]
+    assert accepted, "every concurrent publish was refused"
+    assert {code for _v, status, code in answers if status == 409} <= {"stale_version"}
+    stored = UserIdentity.objects.get(user=active_user)
+    assert stored.version == max(accepted)
+    assert bytes(stored.master_pub) == (bytes([70 + max(accepted)]) * 32)[:32]
+
+
+def test_an_identity_first_published_at_version_zero_cannot_be_republished_there(
+    http, active_user, device, bearer
+):
+    """The boundary of the version check: a first publish has nothing to compare
+    against, so version 0 lands; the second one does, and `<=` refuses it. A client
+    that starts its counter at 0 must move off it to publish again."""
+    headers = bearer(active_user, device)
+
+    first = http.put(IDENTITY_URL, json=identity_payload(version=0), headers=headers)
+    again = http.put(
+        IDENTITY_URL, json=identity_payload(version=0, master=b"X"), headers=headers
+    )
+    moved_on = http.put(
+        IDENTITY_URL, json=identity_payload(version=1, master=b"Y"), headers=headers
+    )
+
+    assert first.status_code == 200
+    assert again.status_code == 409
+    assert moved_on.status_code == 200
+    stored = UserIdentity.objects.get(user=active_user)
+    assert stored.version == 1
+    assert bytes(stored.master_pub) == b"Y" * 32
+
+
+def test_the_version_column_takes_its_largest_value_and_refuses_one_past_it(
+    http, active_user, device, bearer
+):
+    """`version` is a 32-bit column, so the schema bounds it: without the bound the
+    larger integer reaches the column as a DataError, which is a 500 on input the
+    schema exists to filter."""
+    headers = bearer(active_user, device)
+
+    at_ceiling = http.put(
+        IDENTITY_URL, json=identity_payload(version=MAX_KEY_INT), headers=headers
+    )
+    past_it = http.put(
+        IDENTITY_URL, json=identity_payload(version=MAX_KEY_INT + 1), headers=headers
+    )
+
+    assert at_ceiling.status_code == 200
+    assert past_it.status_code == 400
+    assert past_it.json()["code"] == "invalid_request"
+    assert UserIdentity.objects.get(user=active_user).version == MAX_KEY_INT
+
+
+@pytest.mark.parametrize("nbytes", [PUBKEY_MIN - 1, PUBKEY_MAX + 1])
+def test_a_cross_signing_key_outside_the_sanity_bounds_is_refused(
+    http, active_user, device, bearer, nbytes
+):
+    """Malformed-input guard, not verification: the bounds keep a wrong-sized value
+    out of the column, and the bytes inside them are never parsed."""
+    outsized = base64.b64encode(b"k" * nbytes).decode()
+
+    response = http.put(
+        IDENTITY_URL,
+        json=identity_payload(master_pub=outsized),
+        headers=bearer(active_user, device),
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"]["master_pub"] == ["bad key length"]
+    assert not UserIdentity.objects.filter(user=active_user).exists()
+
+
+@pytest.mark.parametrize("nbytes", [PUBKEY_MIN, PUBKEY_MAX])
+def test_a_cross_signing_key_on_either_bound_is_stored_verbatim(
+    http, active_user, device, bearer, peer, peer_device, nbytes
+):
+    """The other side of the same boundary, so the guard is shown to be a bound and
+    not a rejection of everything."""
+    sized = base64.b64encode(b"k" * nbytes).decode()
+
+    response = http.put(
+        IDENTITY_URL,
+        json=identity_payload(master_pub=sized),
+        headers=bearer(active_user, device),
+    )
+
+    assert response.status_code == 200
+    served = http.get(
+        peer_identity_url(active_user.id), headers=bearer(peer, peer_device)
+    ).json()
+    assert served["master_pub"] == sized

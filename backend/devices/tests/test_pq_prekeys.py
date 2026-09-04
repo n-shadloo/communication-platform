@@ -223,3 +223,137 @@ def test_one_pq_prekey_is_handed_to_at_most_one_concurrent_claimant(
     assert failures == []
     assert received == [77], f"the single PQ OTPK went to {len(received)} claimants"
     assert PqOneTimePrekey.objects.filter(device=owner_device).count() == 0
+
+
+def prekeys_url(device_id):
+    return f"{DEVICES_URL}/{device_id}/prekeys"
+
+
+def pq_otpks(count, start=0):
+    return [
+        {"key_id": start + i, "pub": pq_pubkey(bytes([65 + (i % 26)]))}
+        for i in range(count)
+    ]
+
+
+def test_a_pq_batch_that_lands_exactly_on_the_cap_is_accepted(
+    http, active_user, device, bearer
+):
+    """The boundary either side of MAX_STORED_PQ_OTPKS. The cap is a storage budget
+    — 100 × 1184 B per device — so the batch that reaches it exactly is the largest
+    one that may go in."""
+    stock_pq_prekeys(device, MAX_STORED_PQ_OTPKS - 3, start=1000)
+    headers = bearer(active_user, device)
+
+    exact = http.put(
+        prekeys_url(device.id), json={"pq_otpks": pq_otpks(3)}, headers=headers
+    )
+    one_more = http.put(
+        prekeys_url(device.id),
+        json={"pq_otpks": pq_otpks(1, start=50)},
+        headers=headers,
+    )
+
+    assert exact.status_code == 200
+    assert one_more.status_code == 409
+    assert one_more.json()["code"] == "prekey_limit"
+    counts = http.get(f"{prekeys_url(device.id)}/count", headers=headers).json()
+    assert counts["pq_otpk_count"] == MAX_STORED_PQ_OTPKS
+
+
+def test_re_uploading_a_pq_key_id_is_an_idempotent_retry(
+    http, active_user, device, bearer
+):
+    """Same stance as the classical pool: a key_id the device already stores is
+    ignored rather than rejected, so a retry after a lost response stores nothing
+    twice."""
+    headers = bearer(active_user, device)
+    body = {"pq_otpks": pq_otpks(3, start=20)}
+    http.put(prekeys_url(device.id), json=body, headers=headers)
+
+    again = http.put(prekeys_url(device.id), json=body, headers=headers)
+
+    assert again.status_code == 200
+    assert PqOneTimePrekey.objects.filter(device=device).count() == 3
+
+
+def test_rotating_the_pq_signed_prekey_replaces_it_and_dates_it(
+    http, active_user, device, bearer, peer, peer_device
+):
+    """The rotation a client performs periodically: the stored bytes are replaced
+    whole, the date moves, and peers claim the new key with no step in between."""
+    headers = bearer(active_user, device)
+    http.put(
+        prekeys_url(device.id), json={"pq_spk": pq_spk(b"F", spk_id=1)}, headers=headers
+    )
+
+    rotated = http.put(
+        prekeys_url(device.id), json={"pq_spk": pq_spk(b"G", spk_id=2)}, headers=headers
+    )
+
+    assert rotated.status_code == 200
+    device.refresh_from_db()
+    assert device.pq_spk_id == 2
+    assert bytes(device.pq_spk_pub) == (b"G" * PQ_PUBKEY_LEN)
+    assert device.pq_spk_updated_date is not None
+    claimed = http.post(
+        claim_url(active_user.id),
+        json={"device_ids": [str(device.id)]},
+        headers=bearer(peer, peer_device),
+    ).json()["bundles"][0]
+    assert claimed["pq_spk_id"] == 2
+    assert claimed["pq_spk_pub"] == pq_pubkey(b"G")
+
+
+@pytest.mark.parametrize("nbytes", [63, 65, 0])
+def test_a_pq_signed_prekey_signature_of_the_wrong_length_is_refused(
+    http, active_user, device, bearer, nbytes
+):
+    """Ed25519 signatures are fixed-size, so an exact check rejects nothing a real
+    client would send. A malformed-input guard: the signature itself is stored and
+    relayed, never verified."""
+    body = {
+        "pq_spk": {
+            "spk_id": 3,
+            "pub": pq_pubkey(b"H"),
+            "sig": base64.b64encode(b"s" * nbytes).decode(),
+        }
+    }
+
+    response = http.put(
+        prekeys_url(device.id), json=body, headers=bearer(active_user, device)
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"]["pq_spk.sig"] == ["bad signature length"]
+    device.refresh_from_db()
+    assert device.pq_spk_id is None
+
+
+def test_a_device_that_uploads_pq_material_late_serves_a_hybrid_bundle_afterwards(
+    http, active_user, device, bearer, peer, peer_device
+):
+    """The upgrade path: a device registered classical-only becomes hybrid when it
+    replenishes, and nothing has to be re-registered for peers to see it."""
+    headers = bearer(active_user, device)
+    before = http.post(
+        claim_url(active_user.id),
+        json={"device_ids": [str(device.id)]},
+        headers=bearer(peer, peer_device),
+    ).json()["bundles"][0]
+
+    http.put(
+        prekeys_url(device.id),
+        json={"pq_spk": pq_spk(b"J", spk_id=7), "pq_otpks": pq_otpks(1, start=3)},
+        headers=headers,
+    )
+
+    after = http.post(
+        claim_url(active_user.id),
+        json={"device_ids": [str(device.id)]},
+        headers=bearer(peer, peer_device),
+    ).json()["bundles"][0]
+    assert "pq_spk_pub" not in before
+    assert after["pq_spk_id"] == 7
+    assert after["pq_otpk"]["key_id"] == 3
+    assert PqOneTimePrekey.objects.filter(device=device).count() == 0
