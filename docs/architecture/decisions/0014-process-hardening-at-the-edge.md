@@ -3,6 +3,9 @@
 - Status: Accepted
 - Phase: 2
 - Date: 2026-09-03
+- Landing: 2026-09-04, in the first run of phase 2. The trusted-host check, the
+  request deadline, the per-route body cap and the security headers are in place as
+  pure-ASGI middleware. The uvicorn flags arrive with uvicorn.
 
 ## Context
 

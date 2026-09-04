@@ -97,7 +97,6 @@ A full seizure of this server (disk + database) reveals, in total:
 - that **delivery happened, to which device, at hour granularity** — pending queue rows
   (at most 7 days deep) tie an opaque blob to a recipient device, never to a sender or
   a conversation; acked rows are deleted outright;
-- **token-issue ≈ login times** (refresh-token bookkeeping, pruned hourly on expiry);
 - that **rooms exist**, each an ID plus an encrypted name — no membership, no
   participant history;
 - per-user **attachment upload counts, bucketed sizes, and days** — no recipient data
@@ -190,11 +189,17 @@ None of these is ever described as one of the others.
   telemetry, no foreign STUN/TURN/SFU, no push relays — the system has no runtime
   dependency on any non-local network.
 - **Authentication vs encryption identity are never conflated.** The password authorizes
-  the account (Argon2id-hashed, device-bound short-lived JWTs, rotated+blacklisted
-  refresh); a device's cryptographic identity is created client-side and only its public
-  keys are uploaded. Owner activation gates every account; revoking a device bumps its
-  token generation (access dies ≤ 15 min, refresh immediately) and deletes its queue
-  and its classical and PQ prekeys in one transaction.
+  the account (Argon2id-hashed, device-bound short-lived JWTs with a rotating refresh);
+  a device's cryptographic identity is created client-side and only its public keys are
+  uploaded. Owner activation gates every account; revoking a device bumps its token
+  generation (access dies ≤ 15 min, refresh immediately) and deletes its queue and its
+  classical and PQ prekeys in one transaction.
+- **No token is stored, so no login history exists at rest.** Revocation is two integers
+  on the device row: `token_generation`, checked on every request, and
+  `refresh_generation`, checked on every rotation. A refresh presented after it was
+  already rotated is a replay: it advances the token generation and every token of that
+  device dies. A token table would have been a per-device login record — which is to say
+  a login history — and this design refuses to keep one.
 
 ## Verification
 

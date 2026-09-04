@@ -3,6 +3,10 @@
 - Status: Accepted
 - Phase: 2
 - Date: 2026-09-03
+- Landing: 2026-09-04, in the first run of phase 2. FastAPI is the root ASGI
+  application and the Django application answers what no route claims. daphne,
+  Channels and the mount at `ADMIN_PATH` are unchanged until the WebSocket gateway
+  moves.
 
 ## Context
 

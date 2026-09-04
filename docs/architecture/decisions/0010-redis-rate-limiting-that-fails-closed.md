@@ -3,6 +3,9 @@
 - Status: Accepted
 - Phase: 2
 - Date: 2026-09-03
+- Landing: 2026-09-04, in the first run of phase 2. The Redis limiter serves every
+  FastAPI route; the REST Framework throttle still counts the routes that have not
+  moved, so a scope both stacks serve counts once on each.
 
 ## Context
 

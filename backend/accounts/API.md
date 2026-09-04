@@ -1,15 +1,42 @@
 # accounts API
 
 Account lifecycle and identity: registration, login, token refresh and logout, the
-user directory, and encrypted profile blobs. All paths are under `/api/v1`. Requests
-and responses are JSON; binary values are base64 strings. Unless an endpoint says
-otherwise, it requires `Authorization: Bearer <access token>` with `full` scope, and
-errors use the `{"code": "...", "detail": ...}` envelope. Three responses can appear
-on any authenticated endpoint and are not repeated per section: `401
-{"detail": "Authentication credentials were not provided."}` for a missing token,
-`401 {"detail": "Given token not valid for any token type", "code": "token_not_valid",
-"messages": [...]}` for a malformed or expired token, and `401 {"code": "token_revoked"}`
-for a token whose device was revoked or rotated.
+user directory, and encrypted profile blobs. Every route here is served by FastAPI.
+
+All paths are under `/api/v1`. Requests and responses are JSON; binary values are
+base64 strings. Unless an endpoint says otherwise, it requires
+`Authorization: Bearer <access token>` with `full` scope. Errors use the envelope and
+the vocabulary that [`core/API.md`](../core/API.md) fixes; three responses can appear
+on any authenticated endpoint and are not repeated per section:
+
+- `401 {"code": "unauthenticated", …}` with `WWW-Authenticate: Bearer` when the
+  `Authorization` header is absent or malformed;
+- `401 {"code": "invalid_token", …}` when the token fails signature, expiry, type or
+  claim checks;
+- `401 {"code": "token_revoked", …}` when the device is revoked or deleted, a
+  generation is stale, or the account has been deactivated.
+
+Every request body rejects a field the endpoint does not declare, and every field is
+read strictly: a value of the wrong JSON type is refused rather than converted, so
+`"1"` and `true` are not accepted where an integer is declared.
+
+## Tokens
+
+The server stores no token. An access token carries `user_id`, `scope`, `typ`, `jti`,
+`iat`, `exp` and — at `full` scope — `device_id` and `tgen`. A refresh token carries
+those plus `rgen`. Two counters on the device row are the whole of revocation:
+
+- `tgen` is checked against the device's `token_generation` on every authenticated
+  request. Revoking the device, logging out, and detecting a replayed refresh each
+  advance it, and every outstanding token of that device dies at once.
+- `rgen` is checked on refresh against the device's `refresh_generation`. A rotation
+  advances it, and so does a login that names the device.
+
+**A refresh token is used exactly once.** Replaying one that was already rotated is
+reported as a replay: the server advances `token_generation`, so the newest pair —
+access and refresh alike — dies with the replayed token, and the account must log in
+again. Never retry a refresh with the same token, including after a timeout: on an
+unclear outcome, log in again rather than replaying.
 
 ## Register an account
 
@@ -52,7 +79,11 @@ activation is a human action.
 ```
 
 `username`: 3–32 chars of `[a-z0-9_]` (case-insensitive input, stored lowercase).
-`password`: ≥10 chars, not a common password, ≤256 chars. Unknown fields are rejected.
+`password`: ≥10 chars, not a common password, ≤256 chars.
+
+**Retry semantics.** A retry after an unclear outcome either creates the account or
+answers `409 username_taken`; the second is indistinguishable from someone else taking
+the name, so a client that means to own the name should log in to confirm.
 
 **Responses**
 
@@ -65,10 +96,10 @@ activation is a human action.
 ### Invalid request — `400 Bad Request`
 
 ```json
-{ "code": "invalid_request", "detail": { "password": ["This field is required."] } }
+{ "code": "invalid_request", "detail": { "password": ["Field required"] } }
 ```
 
-### Username taken — `400 Bad Request`
+### Username taken — `409 Conflict`
 
 ```json
 { "code": "username_taken", "detail": "That username is taken." }
@@ -79,10 +110,11 @@ Also returned when two concurrent registrations race on the same name.
 ### Rate limited — `429 Too Many Requests`
 
 ```json
-{ "detail": "Request was throttled." }
+{ "code": "throttled", "detail": "Request was throttled." }
 ```
 
-Scope `register`, default 10/hour per client.
+Scope `register`, default 10/hour per client address. `Retry-After` carries the
+seconds to wait.
 
 ## Log in
 
@@ -90,9 +122,11 @@ Scope `register`, default 10/hour per client.
 **Path:** `/api/v1/auth/login`
 
 Verifies the password and issues tokens. With a `device_id` naming a live device of
-this account, the response is a full-scope access/refresh pair bound to that device.
-Without one (first login, or a revoked/foreign device id), the response is a
-short-lived register-scope access token whose only power is `POST /api/v1/me/devices`.
+this account, the response is a full-scope access/refresh pair bound to that device,
+and the device's refresh generation advances — so any refresh token that device still
+held is retired by the login. Without one (first login, or a revoked/foreign device
+id), the response is a short-lived register-scope access token whose only power is
+`POST /api/v1/me/devices`.
 
 Unknown usernames and wrong passwords return the same body, and unknown usernames
 still pay for a real Argon2 verification, so the two cases are not distinguishable by
@@ -126,7 +160,11 @@ response or by timing. Activation state is only revealed after a correct passwor
 }
 ```
 
-`device_id` is optional.
+`device_id` is optional and must be a UUID string when present.
+
+**Retry semantics.** A retry issues a fresh pair and retires the pair the previous
+attempt issued, so a client that retried must use the newest response and discard the
+older tokens.
 
 **Responses**
 
@@ -155,7 +193,7 @@ response or by timing. Activation state is only revealed after a correct passwor
 ### Invalid request — `400 Bad Request`
 
 ```json
-{ "code": "invalid_request", "detail": { "device_id": ["Must be a valid UUID."] } }
+{ "code": "invalid_request", "detail": { "device_id": ["Input should be a valid UUID, invalid character: found `n` at 1"] } }
 ```
 
 ### Wrong credentials — `401 Unauthorized`
@@ -172,25 +210,22 @@ response or by timing. Activation state is only revealed after a correct passwor
 
 ### Rate limited — `429 Too Many Requests`
 
-```json
-{ "detail": "Request was throttled." }
-```
-
-Scope `login`, default 20/hour.
+Scope `login`, default 20/hour per client address.
 
 ## Refresh tokens
 
 **Method:** `POST`
 **Path:** `/api/v1/auth/refresh`
 
-Rotates a full-scope refresh token: the presented token is blacklisted and a new
+Rotates a full-scope refresh token: the device's refresh generation advances and a new
 access/refresh pair is issued for the same device. The device and account are
 re-checked, so revocation, a bumped token generation, or deactivation all end the
 session here even if the refresh token itself is still validly signed.
 
-Clients should refresh shortly before access expiry (default 15 minutes) and must
-replace the stored refresh token on every call; replaying an already-rotated token is
-a 401.
+Clients refresh shortly before access expiry (default 15 minutes) and **must replace
+the stored refresh token on every call**. Presenting a token that was already rotated
+is a replay: it answers `401 token_revoked` and, as described under Tokens, ends every
+token of that device.
 
 **Headers**
 
@@ -215,6 +250,11 @@ a 401.
 ```json
 { "refresh": "eyJhbGciOiJIUzI1NiIs…" }
 ```
+
+`refresh` is at most 4096 characters.
+
+**Retry semantics.** None. A refresh is never retried with the same token; a client
+that does not learn the outcome logs in again.
 
 **Responses**
 
@@ -227,10 +267,11 @@ a 401.
 ### Missing or malformed token — `401 Unauthorized`
 
 ```json
-{ "code": "invalid_token", "detail": "Refresh token is missing or malformed." }
+{ "code": "invalid_token", "detail": "Token is missing, malformed, or expired." }
 ```
 
-Also covers expired and already-blacklisted tokens.
+Covers an expired token, a token that is not a refresh token, and a register-scope
+token, all of which are rejected before any database read.
 
 ### Revoked — `401 Unauthorized`
 
@@ -238,34 +279,30 @@ Also covers expired and already-blacklisted tokens.
 { "code": "token_revoked", "detail": "Token is no longer valid." }
 ```
 
-Returned for a register-scope token, a revoked or deleted device, a stale token
-generation, or a deactivated account, without distinguishing them.
+Returned for a revoked or deleted device, a stale token generation, a deactivated
+account, and a replayed refresh token, without distinguishing them.
 
 ### Rate limited — `429 Too Many Requests`
 
-```json
-{ "detail": "Request was throttled." }
-```
-
-Scope `refresh`, default 120/hour.
+Scope `refresh`, default 120/hour per client address.
 
 ## Log out
 
 **Method:** `POST`
 **Path:** `/api/v1/auth/logout`
 
-Blacklists the presented refresh token if it belongs to the calling account.
-Idempotent: an already-expired or already-blacklisted token still yields `205`. A
-refresh token belonging to another account is silently ignored, so logout cannot be
-used cross-account. The access token stays valid until it expires; clients should
-discard both tokens locally.
+Ends the session of the device the access token names: `token_generation` advances, so
+the presented access token and every refresh token of that device die immediately, and
+the device's sockets are dropped.
+
+**The request takes no body.** A body, if sent, is ignored. The caller is identified by
+the access token it presents, so there is nothing to send and nothing to leak.
 
 **Headers**
 
 | Header | Required | Value |
 |---|---|---|
 | `Authorization` | yes | `Bearer <access token>`, full scope |
-| `Content-Type` | yes | `application/json` |
 
 **Path parameters**
 
@@ -281,21 +318,16 @@ discard both tokens locally.
 
 **Request body**
 
-```json
-{ "refresh": "eyJhbGciOiJIUzI1NiIs…" }
-```
+None.
+
+**Retry semantics.** A retry with the same access token answers `401 token_revoked`,
+because the first call killed that token. A client treats that as success.
 
 **Responses**
 
-### Logged out — `205 Reset Content`
+### Logged out — `204 No Content`
 
 Empty body.
-
-### Invalid request — `400 Bad Request`
-
-```json
-{ "code": "invalid_request", "detail": { "refresh": ["This field is required."] } }
-```
 
 ### Register-scope token — `403 Forbidden`
 
@@ -305,11 +337,7 @@ Empty body.
 
 ### Rate limited — `429 Too Many Requests`
 
-```json
-{ "detail": "Request was throttled." }
-```
-
-Scope `accounts`, default 120/min.
+Scope `accounts`, default 120/min per account.
 
 ## List users
 
@@ -318,7 +346,8 @@ Scope `accounts`, default 120/min.
 
 Returns every activated account, ordered by username: this is a small private server
 and the directory is how clients pick conversation partners. Entries carry only the id
-and username; nothing about devices or activity. Inactive accounts are absent.
+and username; nothing about devices or activity. Inactive accounts are absent. The list
+is not paginated, because the scale band caps it at fewer than 50 accounts.
 
 **Headers**
 
@@ -363,11 +392,7 @@ None.
 
 ### Rate limited — `429 Too Many Requests`
 
-```json
-{ "detail": "Request was throttled." }
-```
-
-Scope `accounts`, default 120/min.
+Scope `accounts`, default 120/min per account.
 
 ## Read a user's profile
 
@@ -409,6 +434,12 @@ None.
 { "blob": "q83vEjRWeJq83vEjRWeJ…", "version": 3 }
 ```
 
+### Malformed id — `400 Bad Request`
+
+```json
+{ "code": "invalid_request", "detail": { "user_id": ["Input should be a valid UUID, invalid character: found `n` at 1"] } }
+```
+
 ### No profile — `404 Not Found`
 
 ```json
@@ -425,11 +456,7 @@ Also returned when the user does not exist or is deactivated.
 
 ### Rate limited — `429 Too Many Requests`
 
-```json
-{ "detail": "Request was throttled." }
-```
-
-Scope `accounts`, default 120/min.
+Scope `accounts`, default 120/min per account.
 
 ## Read or write my profile
 
@@ -467,6 +494,12 @@ losing writer gets `409 stale_version`, refetches, and reapplies.
 { "blob": "q83vEjRWeJq83vEjRWeJ…", "version": 4 }
 ```
 
+`blob` is at most 8192 characters of base64; `version` is a non-negative integer.
+
+**Retry semantics.** A retry of the same `PUT` either applies it or answers `409
+stale_version` because the first attempt already stored that version. Both outcomes
+leave the stored blob correct; on `409` the client refetches and re-applies.
+
 **Responses**
 
 ### Read — `200 OK` (GET)
@@ -488,7 +521,7 @@ Empty body.
 ### Invalid request — `400 Bad Request` (PUT)
 
 ```json
-{ "code": "invalid_request", "detail": { "version": ["This field is required."] } }
+{ "code": "invalid_request", "detail": { "version": ["Field required"] } }
 ```
 
 ### Off-bucket blob — `400 Bad Request` (PUT)
@@ -497,7 +530,8 @@ Empty body.
 { "code": "bad_bucket", "detail": "Invalid payload." }
 ```
 
-The rejected payload is never echoed.
+The rejected payload is never echoed. Field validation runs first, so a body that is
+both malformed and off-bucket reports the field error.
 
 ### Stale version — `409 Conflict` (PUT)
 
@@ -513,8 +547,4 @@ The rejected payload is never echoed.
 
 ### Rate limited — `429 Too Many Requests`
 
-```json
-{ "detail": "Request was throttled." }
-```
-
-Scope `accounts`, default 120/min.
+Scope `accounts`, default 120/min per account.

@@ -55,7 +55,7 @@ flowchart LR
   C["Flutter client<br/>Android · Web"]
   N["nginx<br/>TLS 1.3"]
   D["Daphne<br/>ASGI"]
-  A["Django + DRF<br/>Channels"]
+  A["FastAPI + Django<br/>Channels"]
   P[("PostgreSQL 16")]
   R[("Redis 7")]
   L["LiveKit SFU"]
@@ -75,7 +75,7 @@ flowchart LR
 | Layer | Technology |
 |---|---|
 | Client | Flutter 3.44.7, Dart 3.12.2 — Android and Web targets only |
-| Server | Python 3.12, Django 6.0, Django REST Framework, Channels 4 on Daphne |
+| Server | Python 3.12, Django 6.0, FastAPI, Channels 4 on Daphne |
 | Database | PostgreSQL 16, loopback only |
 | Cache and channel layer | Redis 7, loopback only |
 | Voice | Self-hosted LiveKit SFU, self-hosted coturn |

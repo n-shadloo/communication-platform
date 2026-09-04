@@ -3,6 +3,10 @@
 - Status: Accepted
 - Phase: 2
 - Date: 2026-09-03
+- Landing: 2026-09-04, in the first run of phase 2. The envelope, the `400`
+  validation status, the logout change and the `username_taken` status hold on every
+  route FastAPI serves. A path no route serves at all still answers Django's own
+  `404` page.
 
 ## Context
 

@@ -3,6 +3,10 @@
 - Status: Accepted
 - Phase: 2
 - Date: 2026-09-03
+- Landing: 2026-09-04, in the first run of phase 2. `CONN_MAX_AGE` is 0 with the
+  psycopg pool, and every FastAPI unit of work runs through the bracket inside a
+  per-request `ThreadSensitiveContext`. The WebSocket path still runs on Channels'
+  own helper.
 
 ## Context
 

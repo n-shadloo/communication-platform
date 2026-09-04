@@ -6,7 +6,9 @@ contradict one without a reversal entry — a new ADR, plus a `Superseded by` li
 on the old one.
 
 Measured facts of the deployment live in [`GROUND-TRUTH.md`](GROUND-TRUTH.md) and
-never here. One ADR for each decision lives in [`decisions/`](decisions/).
+never here. One ADR for each decision lives in [`decisions/`](decisions/). A `Landed`
+entry of `landing` means the decision is in force for part of the surface and the ADR
+names what is left; the ADR carries the same note.
 
 **Scope.** The server, at `backend/`. The Flutter client at `frontend/` is out of
 scope for this record; the binding client half of every security property is
@@ -42,7 +44,7 @@ is incomplete, not merely terse.
 | Rate limiting ([0010](decisions/0010-redis-rate-limiting-that-fails-closed.md)) | Redis holds the counters. The scope names, the `THROTTLE_*` variables, their defaults and their `N/period` syntax are unchanged. An authenticated request counts per user id, an anonymous one per client address. `429` carries `throttled` and `Retry-After`. When Redis is unreachable a throttled route answers `503 unavailable` | A counter in process memory is per worker, and a counter on disk violates the volatile-data rule | 0 to 2 | A second application host appears and the client address stops identifying a caller | Redis becomes a hard dependency of every throttled route. Its loss is an outage, by choice | Failing closed is the standard posture for a control whose purpose is to refuse traffic (current). Redis is already a hard dependency of the gateway (current) |
 | Admin ([0011](decisions/0011-django-unfold-admin-panel.md)) | A django-unfold panel. Registered: `User`, `Device`, `Room`, `Attachment` and the admin `LogEntry` as a read-only audit log. Every key, blob, prekey, log-record, backup and queue model is hidden. Every administrative action writes a `LogEntry`. Lockout state lives only in Redis. Assets are served from the project | An operator needs a support surface, and the default admin would expose ciphertext, key bytes and the social graph | 0 to 1 | The staff workflow outgrows list-and-edit, or a second operator role needs permissions the admin cannot express | A dependency with its own template and asset surface. Every newly registered model must be re-audited for exposure | django-unfold is a maintained, widely used admin theme (current). The audit-log requirement is the operator half of the threat model — reasoned, not sourced |
 | Dependency policy ([0012](decisions/0012-pinned-hashed-and-untracked-wheel-cache.md)) | Every dependency is pinned and hashed. `backend/vendor/` is not tracked; the operator produces the wheel set on the VPS with `ops/vendor.sh` while online. CI proves that every dependency installs from wheels with `--no-index` and `--only-binary=:all:` | The system must install with no network, and a 26 MB binary cache in git is a cost paid by every clone forever | 0 to 4 | The VPS loses the ability to fetch wheels at all, and the cache must travel with the repository | The operator must run one command while online before the first offline install, and again after any version change | pip documents `--require-hashes`, `--no-index` and `--find-links` as the hash-verified offline install path (current) |
-| Testing ([0013](decisions/0013-pytest-and-ruff-as-the-test-and-lint-stack.md)) | pytest with pytest-django and pytest-asyncio, random order through pytest-randomly, `httpx` driving the API and `hypothesis` driving property-based tests. ruff is the only linter and formatter. No type checker. Phase 4 sets a 95 percent branch-coverage gate in CI | A fixed collection order hides an order dependency until the day it fails alone | 0 to 4 | The suite runtime stops fitting a pre-push gate, or a class of defect appears that only a type checker catches | A random order makes a failure harder to reproduce without its seed. A coverage gate can be satisfied by tests that assert nothing | ruff is a widely adopted linter and formatter (current). `httpx` and `hypothesis` are not yet installed; they arrive with the surface that needs them (current) |
+| Testing ([0013](decisions/0013-pytest-and-ruff-as-the-test-and-lint-stack.md)) | pytest with pytest-django and pytest-asyncio, random order through pytest-randomly, `httpx` over `ASGITransport` driving the API and `hypothesis` driving property-based tests. ruff is the only linter and formatter. No type checker. Phase 4 sets a 95 percent branch-coverage gate in CI | A fixed collection order hides an order dependency until the day it fails alone | 0 to 4 | The suite runtime stops fitting a pre-push gate, or a class of defect appears that only a type checker catches | A random order makes a failure harder to reproduce without its seed. A coverage gate can be satisfied by tests that assert nothing | ruff is a widely adopted linter and formatter (current). `hypothesis` is not yet installed; it arrives with the surface that needs it (current) |
 | Process hardening ([0014](decisions/0014-process-hardening-at-the-edge.md)) | uvicorn runs with `--proxy-headers`, `--forwarded-allow-ips 127.0.0.1` and `--no-access-log`. A pure-ASGI middleware sets a deadline on every HTTP request. Every route has an explicit body cap equal to the largest payload its contract admits. The trusted host list is `ALLOWED_HOSTS`. No CORS policy exists | One process on 1 GB of RAM has no headroom for an unbounded body or a request that never ends | 0 to 2 | A browser client is served from an origin other than the API origin, at which point a CORS policy becomes necessary | A deadline can cut a legitimate slow request. Each body cap is one more contract detail to keep true | Trusting forwarded headers only from the proxy address is uvicorn's documented posture (current). The single-origin argument against CORS is standard (current) |
 | Documents ([0015](decisions/0015-the-document-map.md)) | `backend/SECURITY.md` and `backend/CLIENT_CONTRACT.md` stay at their paths and are rewritten in place. New root documents: `API_CHANGES.md`, `ACCEPTED_RISKS.md`, `docs/architecture/` and `docs/admin/`. `backend/ops/RUNBOOK.md` becomes the operator runbook. A root document routes to a `backend/` document and never repeats it | `frontend/docs/` links to the three `backend/` document sets by path; moving one breaks the client's references | 0 to 4 | The client stops depending on the `backend/` paths | Two document roots to keep consistent, and one routing rule to enforce at review | Docs-as-code keeps the record in version control under review, next to the code (current) |
 | Voice media keys ([0016](decisions/0016-client-held-voice-media-keys.md)) | Each participant generates a per-sender media key and distributes it to every participant device over the pairwise session, carried in volatile `signal` frames. A `room_presence` leave rotates the key. The server, LiveKit and coturn never hold a media key | An SFU that can decrypt is a wiretap at the point the threat model assumes is hostile | 0 to 1 | A room needs a participant count at which per-sender key distribution over pairwise sessions stops being affordable | Key distribution is O(participants) for each sender, and it repeats on every leave | Per-participant keys distributed out of band, with rotation on membership change, is the end-to-end encryption model an SFU supports (current) |
@@ -69,13 +71,15 @@ Never mark a row resolved without the trigger it names.
 |---|---|
 | A second factor on the admin login | A second operator exists. Recorded in `ACCEPTED_RISKS.md` when that file lands |
 | The 95 percent branch-coverage gate in CI | Phase 4 |
-| `httpx` and `hypothesis` in `requirements/dev.txt` | The first test that drives the FastAPI surface, in phase 2 |
+| `hypothesis` in `requirements/dev.txt` | The first property-based test. `httpx` landed on 2026-09-04, with the first test that drives the FastAPI surface, and is no longer deferred |
 | `ACCEPTED_RISKS.md` | Lands with the admin in phase 3. `API_CHANGES.md` landed on 2026-09-03, in the second run of phase 1, and is no longer deferred |
 | `backend/ops/RUNBOOK.md` | Phase 5 |
 | `docs/admin/` | Phase 3 |
 | Regenerating every `0001_initial` and deleting the earlier migrations | The schema stops changing, at the end of phase 2 |
 | coturn still reads its certificate from a public-CA path (`/etc/letsencrypt/live/...`) while nginx now terminates with the private CA pair | The first end-to-end voice rehearsal on the VPS |
 | A `verified` date check in CI over `GROUND-TRUTH.md` | The first entry passes the 90-day window |
+| One rate-limit counter for a scope both runtimes serve. Until then a caller reaching `accounts` on both stacks gets one allowance on each | The remaining apps move off REST Framework, in phase 2 |
+| The envelope on `404` and `405` for a path no route serves, which still answers Django's own page | The remaining apps move off REST Framework, in phase 2 |
 | Any second application host, read replica, worker fleet or cache tier | Band 1 is reached and measured, not assumed |
 
 ## 4. Decision log
@@ -83,18 +87,18 @@ Never mark a row resolved without the trigger it names.
 | ADR | Title | Status | Phase | Landed | Supersedes / Superseded by |
 |---|---|---|---|---|---|
 | [0001](decisions/0001-pairwise-double-ratchet-group-fan-out.md) | Groups use pairwise Double Ratchet fan-out | Accepted | 1 | 2026-09-03 | — |
-| [0002](decisions/0002-fastapi-as-the-only-http-api-surface.md) | FastAPI is the only HTTP API surface | Accepted | 2 | — | — |
-| [0003](decisions/0003-one-asgi-process.md) | One ASGI process | Accepted | 2 | — | — |
+| [0002](decisions/0002-fastapi-as-the-only-http-api-surface.md) | FastAPI is the only HTTP API surface | Accepted | 2 | landing, 2026-09-04 | — |
+| [0003](decisions/0003-one-asgi-process.md) | One ASGI process | Accepted | 2 | landing, 2026-09-04 | — |
 | [0004](decisions/0004-websocket-gateway-on-redis-pubsub.md) | The WebSocket gateway fans out over Redis publish and subscribe | Accepted | 2 | — | — |
-| [0005](decisions/0005-django-orm-on-a-thread-sensitive-data-path.md) | The Django ORM is the only data access layer | Accepted | 2 | — | — |
-| [0006](decisions/0006-device-bound-tokens-on-pyjwt.md) | Device-bound tokens on PyJWT, with no token table | Accepted | 2 | — | — |
-| [0007](decisions/0007-contract-conventions.md) | Contract conventions | Accepted | 2 | — | — |
+| [0005](decisions/0005-django-orm-on-a-thread-sensitive-data-path.md) | The Django ORM is the only data access layer | Accepted | 2 | landing, 2026-09-04 | — |
+| [0006](decisions/0006-device-bound-tokens-on-pyjwt.md) | Device-bound tokens on PyJWT, with no token table | Accepted | 2 | 2026-09-04 | — |
+| [0007](decisions/0007-contract-conventions.md) | Contract conventions | Accepted | 2 | landing, 2026-09-04 | — |
 | [0008](decisions/0008-fastapi-generates-the-openapi-document.md) | FastAPI generates the OpenAPI document | Accepted | 2 | — | — |
 | [0009](decisions/0009-regenerate-the-initial-migrations.md) | Regenerate the initial migrations | Accepted | 2 | — | — |
-| [0010](decisions/0010-redis-rate-limiting-that-fails-closed.md) | Redis rate limiting that fails closed | Accepted | 2 | — | — |
+| [0010](decisions/0010-redis-rate-limiting-that-fails-closed.md) | Redis rate limiting that fails closed | Accepted | 2 | landing, 2026-09-04 | — |
 | [0011](decisions/0011-django-unfold-admin-panel.md) | A django-unfold admin panel that shows no secret | Accepted | 3 | — | — |
 | [0012](decisions/0012-pinned-hashed-and-untracked-wheel-cache.md) | Pinned, hashed dependencies and an untracked wheel cache | Accepted | 1 | — | — |
 | [0013](decisions/0013-pytest-and-ruff-as-the-test-and-lint-stack.md) | pytest and ruff as the test and lint stack | Accepted | 1 and 4 | — | — |
-| [0014](decisions/0014-process-hardening-at-the-edge.md) | Process hardening at the edge | Accepted | 2 | — | — |
+| [0014](decisions/0014-process-hardening-at-the-edge.md) | Process hardening at the edge | Accepted | 2 | landing, 2026-09-04 | — |
 | [0015](decisions/0015-the-document-map.md) | The document map | Accepted | 1 to 5 | — | — |
 | [0016](decisions/0016-client-held-voice-media-keys.md) | Client-held voice media keys | Accepted | 1 | 2026-09-03 | — |

@@ -6,6 +6,108 @@ field, the old behaviour, the new behaviour, and the client action. The current
 contract is `backend/CLIENT_CONTRACT.md` and the per-app `backend/*/API.md`
 references; this file records only what moved.
 
+## Phase 2 — platform
+
+The HTTP surface is moving from Django REST Framework to FastAPI, one app at a time
+([ADR-0002](docs/architecture/decisions/0002-fastapi-as-the-only-http-api-surface.md)),
+and authentication is reissued on PyJWT with no token table
+([ADR-0006](docs/architecture/decisions/0006-device-bound-tokens-on-pyjwt.md)). This
+run moves `GET /api/v1/health`, the four `/api/v1/auth/*` routes, `GET /api/v1/users`,
+`GET /api/v1/users/{user_id}/profile`, `GET` and `PUT /api/v1/me/profile`, and `GET`
+and `PUT /api/v1/me/keybackup`. The routes of `devices`, `messaging`, `attachments`
+and `voicerooms` still answer from REST Framework and are unchanged apart from the
+`401` bodies below, which both stacks now share.
+
+No path, method, or success body changed. What changed is the error shape, the status
+of two outcomes, the logout call, and the rules around refresh tokens.
+
+### The error envelope
+
+Every error the moved routes return is `{"code": ..., "detail": ...}`. `detail` is a
+string, except for `invalid_request`, where it maps a field path to the list of
+messages that failed. No error body echoes request input. The full vocabulary is the
+table in `backend/core/API.md`; branch on `code`, never on `detail`.
+
+| Item | Old behaviour | New behaviour | Client action |
+|---|---|---|---|
+| Validation failure on a `vault` route | The bare Django REST Framework field-error object, with no `code` key: `{"version": ["This field is required."]}` | `400 {"code": "invalid_request", "detail": {"version": ["Field required"]}}` | Parse the envelope on every route, not only on `accounts` |
+| Validation failure on an `accounts` route | `400 {"code": "invalid_request", "detail": {...}}` with REST Framework's messages | The same shape with Pydantic's messages, for example `["Field required"]` where REST Framework said `["This field is required."]` | Show `detail` values; never match on their text |
+| Missing profile or key backup | `404 {"code": "not_found"}` on the key backup, with no `detail` | `404 {"code": "not_found", "detail": "No key backup yet."}` | Compare `code`, not the whole body |
+| Stale version on the key backup | `409 {"code": "stale_version"}` | `409 {"code": "stale_version", "detail": "Version must increase."}` | Compare `code`, not the whole body |
+| Rate limited | `429 {"detail": "Request was throttled."}` | `429 {"code": "throttled", "detail": "Request was throttled."}` with a `Retry-After` header in seconds | Read `Retry-After` and back off; branch on `code` |
+| Wrong method on a moved route | `405 {"detail": "Method \"DELETE\" not allowed."}` | `405 {"code": "method_not_allowed", "detail": "That method is not allowed."}` with `Allow` | Branch on `code` |
+| Unhandled failure | Django's `500` page | `500 {"code": "server_error", "detail": "Internal error."}`, with no traceback and no detail | None |
+
+Three refusals are new, because the limits behind them are new. A body above the
+route's cap answers `413 {"code": "payload_too_large", ...}`, counted as the bytes
+arrive rather than read from `Content-Length`. A request that outlives its deadline,
+and a throttled route whose counter store is unreachable, both answer
+`503 {"code": "unavailable", ...}`; treat `503` as an outage and `429` as backoff. A
+request whose `Host` header the server does not list answers
+`400 {"code": "invalid_request", "detail": {"host": ["Unknown host."]}}`.
+
+Every response now carries `X-Content-Type-Options: nosniff`, `Cache-Control:
+no-store` and `Referrer-Policy: no-referrer`.
+
+### The `401` bodies
+
+These changed on **both** stacks, because both verify through one module now.
+
+| Condition | Old body | New body | Client action |
+|---|---|---|---|
+| No `Authorization` header, or one that is not `Bearer <token>` | `401 {"detail": "Authentication credentials were not provided."}` | `401 {"code": "unauthenticated", "detail": "Authentication credentials were not provided."}`, with `WWW-Authenticate: Bearer` | Branch on `code` |
+| Malformed, expired, or wrong-type token | `401 {"detail": "Given token not valid for any token type", "code": "token_not_valid", "messages": [...]}` | `401 {"code": "invalid_token", "detail": "Token is missing, malformed, or expired."}`. The `messages` array is gone | Replace the `token_not_valid` branch with `invalid_token`; drop any use of `messages` |
+| Revoked device, stale generation, or deactivated account | `401 {"code": "token_revoked"}` | `401 {"code": "token_revoked", "detail": "Token is no longer valid."}` | None beyond comparing `code` |
+
+### Validation is stricter
+
+| Item | Old behaviour | New behaviour | Client action |
+|---|---|---|---|
+| A JSON value of the wrong type in a request body | Coerced where possible: `"1"` and `true` both arrived as the integer `1` | `400 invalid_request`. A string is a string, an integer is an integer, and a boolean is a boolean | Send the declared JSON types |
+| An unknown field in a `vault` body | Rejected, with the bare field-error object | Rejected, with the envelope | None beyond the envelope change |
+| A non-UUID `{user_id}` in `GET /api/v1/users/{user_id}/profile` | `404`, from the URL resolver | `400 {"code": "invalid_request", "detail": {"user_id": [...]}}` | Treat a malformed id as a client bug, not a missing profile |
+| A trailing slash on a moved path | `404` | `404`, unchanged. The server never redirects a trailing-slash mismatch | None |
+
+### `username_taken` is a conflict
+
+| Item | Old behaviour | New behaviour | Client action |
+|---|---|---|---|
+| `POST /api/v1/auth/register` with a name that exists | `400 {"code": "username_taken", "detail": "That username is taken."}` | `409 {"code": "username_taken", "detail": "That username is taken."}` | Move the branch from `400` to `409`. The concurrent race answers `409` too |
+
+### Logout takes no body and answers `204`
+
+| Item | Old behaviour | New behaviour | Client action |
+|---|---|---|---|
+| `POST /api/v1/auth/logout` | Required `{"refresh": "..."}`, blacklisted that one token if it belonged to the caller, and answered `205 Reset Content`. The access token stayed valid until it expired | Takes **no body** (one sent is ignored) and answers `204 No Content`. It advances the calling device's `token_generation`, so the presented access token **and every refresh token of that device** die immediately, and the device's sockets are closed | Send no body. Treat `204` as success, and discard both tokens. A retry with the same access token answers `401 token_revoked`, which is also success |
+
+### Refresh tokens rotate against a generation, and reuse ends the family
+
+There is no token table and no blacklist. A refresh token carries an `rgen` claim that
+is compared with the device's `refresh_generation`.
+
+| Item | Old behaviour | New behaviour | Client action |
+|---|---|---|---|
+| Replaying a refresh token that was already rotated | `401`; the replayed token was blacklisted, and the newest pair kept working | `401 {"code": "token_revoked", ...}`, and `token_generation` advances: the newest access token and the newest refresh token die with it, and the device's sockets close. The account logs in again | **Never retry a refresh with the same token**, including after a timeout or a network error. On an unclear outcome, log in again |
+| A successful refresh | Returned a new pair; the old refresh was blacklisted | Returns a new pair; the old refresh is behind the generation and is now a replay | Replace the stored refresh token on every call, before any retry |
+| A register-scope token presented to `/auth/refresh` | `401 {"code": "token_revoked"}` | `401 {"code": "invalid_token", ...}`, refused before any database read | Branch on `invalid_token` as well |
+| `POST /api/v1/auth/login` with a `device_id` | Left outstanding refresh tokens alone | Advances that device's `refresh_generation`, so a refresh token the device still held becomes a replay | Discard the tokens of the previous session when a login returns a new pair |
+| Revoking a device, `DELETE /api/v1/me/devices/{id}` | Killed its tokens | Unchanged | None |
+
+### Unchanged
+
+Every path and method of the moved routes; every success body and status
+(`201` for register, `200` for login, refresh, the directory, both profile calls and
+both key-backup calls); the `register`/`full` scope split and what each scope reaches;
+the timing-equalised login and the `403 account_inactive` response; the bucket rules
+and `400 bad_bucket` with no echo; the `409 stale_version` rule on both versioned
+blobs; the throttle scope names, their environment variables and their defaults; and
+every route of `devices`, `messaging`, `attachments` and `voicerooms` apart from the
+`401` bodies above.
+
+A path that no route serves at all still answers Django's own `404` page
+(`text/html`), not the envelope. That is the last piece of the transition and it
+changes when the remaining apps move.
+
 ## Phase 1 — group protocol
 
 Groups moved from MLS to pairwise Double Ratchet fan-out

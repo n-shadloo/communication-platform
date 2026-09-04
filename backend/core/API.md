@@ -1,8 +1,70 @@
 # core API
 
-The core app owns shared plumbing (buckets, the opaque blob field, the error
-handler, log scrubbing) and exposes exactly one endpoint: an anonymous health probe.
-It is served under `/api/v1` like everything else and returns JSON.
+The core app owns shared plumbing (buckets, the opaque blob field, log scrubbing) and
+exposes exactly one endpoint: an anonymous health probe. It is served under `/api/v1`
+like everything else and returns JSON.
+
+## The error envelope
+
+Every error this API returns is
+
+```json
+{ "code": "…", "detail": "…" }
+```
+
+`detail` is a string, except for `invalid_request`, where it is an object mapping a
+field path to the list of messages that failed. No error body ever echoes request
+input, and a `500` body carries no traceback.
+
+The vocabulary is fixed. A client branches on `code`, never on `detail`.
+
+| Status | Code | Meaning |
+|---|---|---|
+| 400 | `invalid_request` | Request validation failed. `detail` maps field paths to messages. |
+| 400 | `bad_bucket` | A blob has an off-bucket length. `detail` is `"Invalid payload."`. |
+| 400 | `identity_required` | A second device registers before the identity is published. |
+| 401 | `unauthenticated` | The `Authorization` header is absent or malformed. `WWW-Authenticate: Bearer` is set. |
+| 401 | `invalid_token` | The token fails signature, expiry, type, or claim checks. |
+| 401 | `token_revoked` | The device is revoked, a generation is stale, or the account is inactive. |
+| 401 | `invalid_credentials` | Login username or password is wrong. |
+| 403 | `account_inactive` | Login succeeded but the owner has not activated the account. |
+| 403 | `scope_forbidden` | A register-scope token reached a full-scope route. |
+| 403 | `device_scope_required` | The route needs a device-bound token. |
+| 403 | `forbidden` | The token belongs to another device than the path names. |
+| 404 | `not_found` | No such route or resource. |
+| 405 | `method_not_allowed` | The route exists; the method does not. `Allow` lists the methods. |
+| 409 | `username_taken` | Registration name conflict, including the concurrent race. |
+| 409 | `stale_version` | A version did not increase. |
+| 409 | `device_limit` | The account holds `MAX_DEVICES_PER_USER` live devices. |
+| 409 | `prekey_limit` | A prekey pool cap is reached. |
+| 413 | `payload_too_large` | The body exceeds the route cap. |
+| 413 | `quota_exceeded` | The attachment quota is exhausted. |
+| 429 | `throttled` | Rate limit reached. `Retry-After` carries the seconds to wait. |
+| 500 | `server_error` | Unhandled failure. `detail` is `"Internal error."`. |
+| 503 | `unavailable` | The rate-limit store is unreachable, or the request exceeded its deadline. |
+| 503 | `voice_unconfigured` | LiveKit is not configured. |
+
+Two surfaces serve this API while the migration runs. `core`, `accounts` and `vault`
+are served by FastAPI and use the envelope everywhere, including for `404` and `405`
+on their own paths. The routes of `devices`, `messaging`, `attachments` and
+`voicerooms` are still served by Django REST Framework: they use the same
+authentication vocabulary, because both stacks verify through one module, but a path
+no route serves at all still answers Django's own `404` page (`text/html`).
+`API_CHANGES.md` records when that changes.
+
+## Request limits
+
+Every response carries `X-Content-Type-Options: nosniff`, `Cache-Control: no-store`
+and `Referrer-Policy: no-referrer`.
+
+A request whose `Host` header is not in `DJANGO_ALLOWED_HOSTS` is refused with
+`400 {"code": "invalid_request", "detail": {"host": ["Unknown host."]}}` before any
+route sees it. A body above the route's cap is `413 payload_too_large`, counted as the
+bytes arrive rather than read from `Content-Length`. A request that outlives its
+deadline is `503 unavailable`. The caps and deadlines are operator settings; the
+defaults are in `backend/README.md`.
+
+A trailing slash is never redirected: `/api/v1/health/` is a `404`, not a `307`.
 
 ## Padding buckets
 
@@ -31,7 +93,8 @@ length uniformity, and at this scale the wasted bytes are irrelevant.
 
 A reachability probe for clients (the app checks it on startup) and for the
 operator's monitoring. It requires no authentication, reads no state, and reveals
-nothing but liveness — no version, build, or component status.
+nothing but liveness — no version, build, or component status. It carries no rate
+limit, so it still answers while the rate-limit store is down.
 
 **Headers**
 
@@ -63,5 +126,5 @@ None.
 { "status": "ok" }
 ```
 
-There are no other responses; the endpoint has no throttle scope and no error paths
-of its own. If the service is down, the request fails at the transport level instead.
+There are no other responses of its own. If the service is down, the request fails at
+the transport level instead.
