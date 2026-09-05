@@ -280,3 +280,15 @@ forever rather than being trusted on the server's word.
   it already received.
 - `signal` frames are volatile and never touch disk. A distribution missed during a
   reconnect is gone; ask the sender again rather than wait for it.
+
+## O. The `/ws` handshake
+
+- The token goes on the upgrade request, as `Authorization: Bearer <access token>`.
+  There is one handshake path and this is it: the server refuses a handshake that
+  carries no header, and there is no in-band authentication frame to fall back on.
+- A refusal is decided **before** the accept, so it reaches you as a failed upgrade
+  (`403 Forbidden`) and never as a close code. Read one as "refresh the access token
+  and reconnect"; a handler that waits for a close code there will never fire.
+- Treat a socket as a wake-up hint and never as the delivery contract. The durable
+  queue is authoritative (§H), so reconnect with backoff and drain over REST rather
+  than trusting a frame to arrive.

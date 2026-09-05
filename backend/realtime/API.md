@@ -15,18 +15,13 @@ recovers it — which is why the queue, not this socket, is the contract for del
 
 ## Connection and authentication
 
-Two handshake paths:
-
-- **Native clients** send `Authorization: Bearer <access token>` on the upgrade
-  request. A valid full-scope, device-bound token accepts the connection; anything
-  else **refuses the handshake** — the server answers the upgrade request with
-  `403 Forbidden` and no WebSocket is ever established. There is no close code to
-  read, because there is no accepted socket to send one on. Treat a failed handshake
-  on this path as the 4001 case: refresh the access token and reconnect.
-- **Browsers** cannot set WebSocket headers: connect bare, then send an `auth` frame
-  as the first message. The server allows ten seconds; an unauthenticated socket that
-  sends any other frame, presents a bad token, or lets the deadline pass closes with
-  **4001**. This path is accepted first, so here the code does arrive.
+One handshake path. Send `Authorization: Bearer <access token>` on the upgrade
+request. A valid full-scope, device-bound token accepts the connection; anything
+else — a bad token, or no header at all — **refuses the handshake**: the server
+answers the upgrade request with `403 Forbidden` and no WebSocket is ever
+established. There is no close code to read, because the refusal is decided before
+the accept and there is no socket to send one on. Treat a failed handshake as
+"refresh the access token and reconnect".
 
 The token is validated with the same strength as REST: signature and expiry, `full`
 scope (a register-scope token opens no socket), a live device whose
@@ -34,22 +29,10 @@ scope (a register-scope token opens no socket), a live device whose
 to the device's delivery topic and the device's `last_active_date` is touched (day
 precision).
 
-If the server is configured with an Origin allowlist (`ALLOWED_WS_ORIGINS`, required
-in production), a handshake presenting an Origin header not on the list is refused.
-**4403** is the documented meaning of that refusal, and it is what the application
-sends, but the decision is taken before the accept — so, exactly as for a bad header
-token, what the client observes is a failed handshake answered `403 Forbidden`. A
-handshake with no Origin header at all is allowed: native clients send none, and the
-header is only a browser cross-site defense.
-
-### `auth` (client → server)
-
-```json
-{ "type": "auth", "access": "eyJhbGciOiJIUzI1NiIs…" }
-```
-
-Valid only as the first frame of a bare connection. Success is silent; the next
-frames are processed normally. Failure closes 4001.
+Every accepted socket is therefore already bound to a device: there is no
+unauthenticated state, no in-band authentication frame and no deadline to meet.
+`auth` is not a frame type, and one sent on a live socket is ignored like any other
+unknown type.
 
 ## Frame limits
 
@@ -197,15 +180,12 @@ Leave fires on explicit `room_leave` and on disconnect.
 
 | Code | Meaning | What the client does |
 |---|---|---|
-| 4001 | Authentication failed after the accept: bad/expired/register-scope token in an `auth` frame, revoked device, inactive account, missed auth deadline, or a frame sent before authentication | Refresh the access token and reconnect |
 | 4003 | The device was revoked or its account deactivated while connected | Stop reconnecting; the token is dead and a fresh login on another device is required |
 | 4008 | Protocol violation — binary frame, oversized frame, undecodable or non-object JSON, rate cap exceeded — or a slow consumer whose server-frame queue overflowed | Fix the frame, or read faster; reconnect and drain over REST |
-| 4403 | Origin header present but not on the server's allowlist | Correct the Origin; the server refuses the handshake rather than sending this code (see below) |
 | 1012 | The server is restarting and drained its sockets | Reconnect after a backoff; this is a deploy, not a fault |
 
-**4001 and 4403 before the accept.** Both refusals can be decided before the socket is
-accepted — 4403 always is, and 4001 is on the header-token path. A server has no
-accepted socket to send a close frame on at that point, so it answers the upgrade
-request with `403 Forbidden` instead and the code never reaches the client. A failed
-handshake therefore means "refused": check the Origin and the token, refresh, and
-retry. Once a socket has been accepted, every code above arrives as a close frame.
+**A refused handshake carries no code.** Authentication is decided before the accept,
+so a server has no socket to send a close frame on and answers the upgrade request
+with `403 Forbidden` instead. A failed handshake therefore means "refused": refresh
+the access token and retry. Once a socket has been accepted, every code above arrives
+as a close frame.

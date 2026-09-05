@@ -94,16 +94,16 @@ path, every method, every request and response shape, and every status of the ta
 above. It does not carry what these files exist for: the retry semantics of each
 mutating route, the bucket rules, and the WebSocket close codes.
 
-Under `DEBUG` the same document is served at `/openapi.json`, with the interactive
-views at `/docs` and `/redoc`. All three are closed outside `DEBUG` — a route map is
-reconnaissance on a server whose posture is to reveal nothing — and the two
-interactive views load their JavaScript from a public CDN, so the committed artefact
-is the reference that works offline.
+The server publishes no schema route and no interactive documentation, in any mode.
+A route map is reconnaissance on a server whose posture is to reveal nothing, and the
+interactive views render for a browser this product does not have. The committed
+artefact is the only reference, and it works offline.
 
 ## Request limits
 
-Every response carries `X-Content-Type-Options: nosniff`, `Cache-Control: no-store`
-and `Referrer-Policy: no-referrer`.
+Every response carries `Cache-Control: no-store`: each one holds either ciphertext
+or a token, and neither may be written to a cache. No browser-only header is set —
+the one client is a Flutter application and reads none of them.
 
 A request whose `Host` header is not in `DJANGO_ALLOWED_HOSTS` is refused with
 `400 {"code": "invalid_request", "detail": {"host": ["Unknown host."]}}` before any

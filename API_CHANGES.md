@@ -59,8 +59,8 @@ Four refusals are new, because the limits behind them are new.
 means the account's attachment quota is exhausted. Branch on `code`, not on the
 status.
 
-Every response now carries `X-Content-Type-Options: nosniff`, `Cache-Control:
-no-store` and `Referrer-Policy: no-referrer`.
+Every response now carries `Cache-Control: no-store`. It carried two browser-only
+headers beside it until "The web target is gone" below removed them.
 
 ## Authentication
 
@@ -152,16 +152,19 @@ body; the one success body that has moved since arrived later and is recorded un
 
 The `/ws` gateway is a WebSocket route of the same FastAPI application, with Redis
 publish and subscribe behind it. **The frame protocol did not change.** Every client
-frame (`auth`, `ack`, `signal`, `subscribe_presence`, `room_subscribe`, `room_leave`,
+frame (`ack`, `signal`, `subscribe_presence`, `room_subscribe`, `room_leave`,
 `room_signal`), every server frame (`envelope`, `signal`, `presence`, `room_signal`,
-`room_presence`), their exact shapes, the URL, the two handshake paths, the
-ten-second authentication deadline, the Origin policy, and every limit in
+`room_presence`), their exact shapes, the URL, and every limit in
 [`backend/realtime/API.md`](backend/realtime/API.md) are as they were.
+
+The rest of this section is superseded by "The web target is gone" below, which
+retired the second handshake path, the `auth` frame, the ten-second deadline, the
+Origin policy, and close codes 4001 and 4403.
 
 | Item | Old behaviour | New behaviour | Client action |
 |---|---|---|---|
-| An unlisted `Origin` header | Documented as close **4403**. The code never in fact reached the client, because the refusal was decided before the accept | The server answers the upgrade request `403 Forbidden` and no socket is established. 4403 remains the name of the refusal in the reference | Treat a failed handshake as a refusal |
-| A bad `Authorization: Bearer` token on the handshake | Documented as close **4001** "immediately after accept" | The same `403 Forbidden` failed handshake. 4001 still arrives on the browser path, where the socket is accepted first and the token comes in an `auth` frame | On the header path, read a failed handshake as "refresh the access token and reconnect". A handler waiting for 4001 there will never fire |
+| An unlisted `Origin` header | Documented as close **4403**. The code never in fact reached the client, because the refusal was decided before the accept | The server answers the upgrade request `403 Forbidden` and no socket is established | Treat a failed handshake as a refusal. The Origin policy itself is gone — see "The web target is gone" below |
+| A bad `Authorization: Bearer` token on the handshake | Documented as close **4001** "immediately after accept" | The same `403 Forbidden` failed handshake | Read a failed handshake as "refresh the access token and reconnect". A handler waiting for 4001 will never fire |
 | A server restart | The socket dropped with no code | Close **1012**, after every live socket is drained | Reconnect after a backoff. This is a deploy, not a fault, and must not count toward a failure budget that disables reconnection |
 | A socket that is not reading | Unbounded in practice; the process's memory grew | At most 256 undelivered server frames, then close **4008** — the same code as a protocol violation | Read continuously. A 4008 with no preceding protocol error means the client fell behind: reconnect and drain the durable queue over REST |
 
@@ -426,12 +429,55 @@ appends rather than replaces, so both arrived. nginx is now the single owner —
 no application at all, gained `X-Content-Type-Options: nosniff` beside it.
 
 The API surface is unchanged: `/api/` responses carried one HSTS header before and
-carry one now, and `x-content-type-options`, `cache-control: no-store` and
-`referrer-policy: no-referrer` are still set by the application on every response it
-produces.
+carry one now. The application still sets `cache-control: no-store` on every response
+it produces; the two browser-only headers it set beside it left in "The web target is
+gone" below.
 
 **Client action:** none. A client that counted on two identical HSTS headers was
 already reading only the first, which is what RFC 6797 requires of it.
+
+## The web target is gone
+
+The product is one Flutter application for Android, and every surface the server
+kept for a browser is removed
+([ADR-0020](docs/architecture/decisions/0020-one-android-client-and-no-browser-surface.md)).
+Nothing below affects a client that already authenticates the `/ws` upgrade with an
+`Authorization: Bearer` header and reads its responses as bytes rather than as a page.
+
+### The `/ws` handshake
+
+| Item | Old behaviour | New behaviour | Client action |
+|---|---|---|---|
+| The bare-connect path | A handshake with no `Authorization` header was **accepted**, and the socket then had ten seconds to authenticate in band | Refused before the accept, exactly as a bad token is: `403 Forbidden`, and no socket exists | Put the access token on the upgrade request. There is one handshake path |
+| The `auth` frame | `{"type": "auth", "access": "…"}` as the first frame of a bare connection bound the socket; failure closed **4001** | Not a frame type. On a live socket it is an unknown type and is ignored, like any other | Delete the frame and the code that waits for the silence after it |
+| The ten-second authentication deadline | An accepted socket that had not authenticated within `AUTH_DEADLINE_SECONDS` closed **4001** | Gone with the state it bounded: every accepted socket is already bound to a device | None |
+| Close code **4001** | Authentication failed after the accept | Retired. Authentication is decided before the accept, so there is no accepted socket to close | A handler waiting for 4001 will never fire. Read a failed handshake as "refresh the access token and reconnect" |
+| Close code **4403**, and the `Origin` allowlist | A handshake presenting an `Origin` not on `ALLOWED_WS_ORIGINS` was refused, documented as 4403 | Retired. There is no Origin policy: `Origin` is a browser cross-site defence, and a handshake with no header — which is every handshake this client makes — was always allowed | None. The header was never sent and the refusal never fired |
+
+### Response headers
+
+| Item | Old behaviour | New behaviour | Client action |
+|---|---|---|---|
+| `X-Content-Type-Options: nosniff` | On every API response | Not set. It instructs a rendering engine, and there is none | None, unless the client asserted on it |
+| `Referrer-Policy: no-referrer` | On every API response | Not set. It governs a `Referer` header a browser sends, and this client sends none | None, unless the client asserted on it |
+| `Cache-Control: no-store` | On every API response | Unchanged | None |
+| `Content-Disposition: attachment` on `GET /api/v1/attachments/{id}` | Set, to force a download rather than a render | Not set. `Cache-Control: private, no-store` and `X-Accel-Redirect` are unchanged | None. Name the file from your own metadata, as before — the header carried no filename |
+
+The admin panel is unaffected: it is served to an operator's browser and keeps every
+header Django's `SecurityMiddleware` sets, and the nginx `/static/` location keeps
+`nosniff`.
+
+### The documentation routes
+
+| Item | Old behaviour | New behaviour | Client action |
+|---|---|---|---|
+| `/openapi.json`, `/docs`, `/docs/oauth2-redirect`, `/redoc` | Registered under `DEBUG`, absent otherwise | Absent in every mode, `DEBUG` included. Each is this API's `404 not_found` envelope | Generate from [`backend/openapi.json`](backend/openapi.json). `python manage.py openapi` still writes it from the same generator and CI still fails a change that does not regenerate it |
+
+### The removed setting
+
+| Item | Old behaviour | New behaviour | Operator action |
+|---|---|---|---|
+| `ALLOWED_WS_ORIGINS` | An environment variable, required in production; an empty value failed `manage.py check --deploy` with `core.E003` | Gone, with the check. Remove the line from the environment file | Remove it. An unread variable in `.env` is a setting an operator believes they configured |
 
 ## What the client can build against now
 

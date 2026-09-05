@@ -17,11 +17,10 @@ panel and the settings.
 
 `openapi.json` is the generated contract of that surface: `python manage.py openapi`
 writes it and `--check` fails when the committed file is not what the routes produce,
-which CI runs as its own job. Under `DEBUG` the same document is served at
-`/openapi.json` with the interactive views at `/docs` and `/redoc`; all three are
-closed otherwise, because a route map is reconnaissance on a server whose posture is to
-reveal nothing, and the two interactive views load their JavaScript from a public CDN,
-so the committed file is the reference that works offline.
+which CI runs as its own job. The server publishes no schema route and no interactive
+documentation in any mode: a route map is reconnaissance on a server whose posture is
+to reveal nothing, and the interactive views render for a browser this product does
+not have. The committed file is the only reference, and it works offline.
 
 ## Protocol and transport
 
@@ -51,16 +50,15 @@ at `POST /api/v1/me/devices`. Both runtimes verify through the same module, so a
 one revokes is dead on the other.
 
 **WebSocket.** One gateway at `/ws`, a Starlette WebSocket route of the same FastAPI
-application. Native clients authenticate with an `Authorization: Bearer` header on the
-handshake; browsers, which cannot set WebSocket headers, connect bare and must send an
-in-band `{"type": "auth", "access": "..."}` frame within ten seconds. The gateway
-handles `ack`, `signal`, `subscribe_presence`, `room_subscribe`, `room_leave`, and
-`room_signal` frames from the client, and emits `envelope`, `signal`, `presence`,
-`room_signal`, and `room_presence` frames to it. Frames are JSON text only, size- and
-rate-limited; protocol violations and a slow consumer close the socket with code 4008,
-failed authentication after the accept with 4001, revocation with 4003, and a shutdown
-with 1012. A refusal decided before the accept — an unlisted Origin, or a bad header
-token — ends the handshake instead, which the client sees as an HTTP failure.
+application, with one handshake path: an `Authorization: Bearer` header on the upgrade
+request. A bad token or no header refuses the handshake before the accept, which the
+client sees as `403 Forbidden` rather than as a close code, so every accepted socket
+is already bound to a device. The gateway handles `ack`, `signal`,
+`subscribe_presence`, `room_subscribe`, `room_leave`, and `room_signal` frames from
+the client, and emits `envelope`, `signal`, `presence`, `room_signal`, and
+`room_presence` frames to it. Frames are JSON text only, size- and rate-limited;
+protocol violations and a slow consumer close the socket with code 4008, revocation
+with 4003, and a shutdown with 1012.
 
 **The fan-out bus.** A frame that has to reach a socket other than the one that sent it
 goes through `realtime/bus.py`: Redis publish and subscribe over the async client, one
@@ -216,7 +214,6 @@ Every environment variable the code reads, with its default:
 | `MAX_DEVICES_PER_USER` | `10` | Live-device cap per account |
 | `MAX_DEVICELOG_RECORDS` | `10000` | Ceiling on one account's device-list log; an append past it is `409 devicelog_limit` |
 | `WEB_CONCURRENCY` | `1` | uvicorn worker processes; each opens its own Redis subscription for the gateway bus |
-| `ALLOWED_WS_ORIGINS` | empty (dev: `http://localhost`) | WebSocket Origin allowlist; empty is a deploy-blocking error in prod |
 | `WS_MAX_FRAME` | `524288` | Maximum WebSocket frame, bytes |
 | `SIGNAL_MAX` | `16384` | Maximum volatile-signal blob, characters |
 | `LIVEKIT_URL` | empty | Client-facing LiveKit URL; voice is 503 when unset |
