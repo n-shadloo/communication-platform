@@ -159,20 +159,20 @@ async def lifespan(app):
 
 
 def create_app(django_app):
-    # ADR-0008: the schema and the two documentation routes describe every route
-    # and every payload of a server whose posture is to reveal nothing, so they
-    # exist in development only. `manage.py openapi` is how the document is
-    # produced everywhere else, and it reads the same generator the routes below
-    # would serve.
-    published = settings.DEBUG
+    # No schema route and no interactive documentation, in any mode (ADR-0020).
+    # They render for a browser, and the product has no browser client; the
+    # document itself describes every route and every payload of a server whose
+    # posture is to reveal nothing. `manage.py openapi` writes `openapi.json` from
+    # the generator `schema.install` puts on the application below, and the
+    # committed artefact is the only reference.
     app = FastAPI(
         title="communication platform",
         version="v1",
         lifespan=lifespan,
         generate_unique_id_function=schema.operation_id,
-        docs_url="/docs" if published else None,
-        redoc_url="/redoc" if published else None,
-        openapi_url="/openapi.json" if published else None,
+        docs_url=None,
+        redoc_url=None,
+        openapi_url=None,
     )
     errors.install(app)
     schema.install(app)
