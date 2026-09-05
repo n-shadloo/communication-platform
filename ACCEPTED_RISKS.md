@@ -123,13 +123,17 @@ in which the operator needed the panel and this rule is what kept them out.
 **What is exposed.** Four things any activated account can do without a bound beyond
 the rate limiter, none of which fills the disk:
 
-- flood another device's socket with volatile `signal` frames — 100 frames a second of
-  up to 16 KiB from each of its sockets, to any device id. A target whose socket
+- flood another device's socket with volatile `signal` frames — 100 frames a second
+  from each of its sockets, to any device id, each carrying a blob that is base64 of
+  at most 16 KiB and therefore 21 848 characters on the wire. A target whose socket
   cannot drain 256 queued frames is closed with `4008` and reconnects; its durable
   mailbox is untouched;
-- create voice rooms at the `accounts` rate, 120 a minute. A room row is an id and a
-  1 KiB name that nothing prunes, and the table has no owner column, so there is
-  nothing to count a room against;
+- mint relay credentials at the `relay` rate, 60 a minute. Nothing is stored — the
+  credential is an HMAC computed from the shared secret, with no row and no table
+  behind it — but each one carries a `user-quota` of twenty relay allocations of its
+  own at coturn, because every username is random and the relay cannot tell two of
+  them apart. An account that keeps minting is therefore bounded by the relay's
+  `total-quota` of 500 allocations rather than by anything counted against it;
 - register inactive accounts at 10 an hour for each address. Nothing prunes a pending
   account; the dashboard lists them for the operator;
 - upload at its attachment quota. The bytes reach the disk before the quota refuses
@@ -148,11 +152,13 @@ close, which costs the target a reconnect and nothing else; the dashboard's pend
 list; the quota, which holds the durable total.
 
 **If it were exploited.** A targeted member's socket drops and reconnects while the
-flood lasts; the room table grows by a kilobyte a row; the operator skims a longer
-pending list; the disk carries a transient spike bounded by concurrency.
+flood lasts; a member who mints credentials and allocates against them takes the relay
+towards `total-quota`, at which point calls that are not theirs fail to allocate; the
+operator skims a longer pending list; the disk carries a transient spike bounded by
+concurrency.
 
 **Trigger that ends the acceptance.** Open registration, a second operator, band 1, or
-the room table above 100 000 rows.
+a relay that reaches `total-quota` outside a real call load.
 
 ---
 
@@ -592,9 +598,12 @@ against a permanent record of every call.
 
 **What reduces it today.**
 
-- Nothing depends on it yet. Voice is not served by this revision, so the relay is
-  deployed and inert: no credential is issued and no allocation can be made until
-  phase 7 lands the route that mints one.
+- Voice is served from this release, so something depends on the relay now and this
+  row costs more than it did. What stands in for a log is the caller and the
+  credential route: a refused allocation is a call that does not connect, which the
+  client sees within its own ICE timeout, and `POST /api/v1/me/relay` mints under the
+  same secret coturn checks against, so a credential the relay rejected is told apart
+  from one the backend never issued by calling the route.
 - The failure modes that are configuration rather than traffic are pinned by
   `core/tests/test_settings_posture.py::CoturnPostureTests` and reviewed as a diff,
   which is where a wrong quota, a missing denial or a re-enabled listener is caught.
@@ -617,6 +626,112 @@ cannot be diagnosed from the client side within one working day. The answer then
 not a log file: it is a counter with no identifier in it — allocations refused,
 credentials rejected — or a bounded session with the level raised and lowered again,
 and whichever is chosen is recorded here in place of this row.
+
+---
+
+## AR-16 — The mesh participant ceiling is enforced by the client alone
+
+**What is exposed.** Voice is a full mesh, so a room of *n* participants costs each
+device *n*−1 encodes, *n*−1 uplinks and *n*−1 relay allocations, and the relay carries
+every one of those streams twice. Ten participants is the design point at band 0, and
+[`backend/SECURITY.md`](backend/SECURITY.md) claims nothing above it. The ceiling that
+holds a room there is a client obligation in
+[`backend/CLIENT_CONTRACT.md`](backend/CLIENT_CONTRACT.md) §N — the client refuses to
+admit more than ten participants and states the reason — and nothing on the server
+enforces it. The server holds no room, no membership and no participant count
+([ADR-0021](docs/architecture/decisions/0021-relayed-webrtc-mesh-and-no-server-room.md)),
+so it could not count participants if it wanted to, and a modified client simply admits
+more. Past the ceiling every device in the room encodes and uplinks once more for each
+further peer, so the room's cost at the relay grows with the square of its size and the
+degradation lands on everyone in the room rather than on the device that admitted the
+eleventh.
+
+**Why this is carried.** A server-side ceiling needs exactly the state ADR-0021 removed:
+a room object, its membership and a count of who is in it. That is the conversation graph
+the schema exists to exclude, and buying a comfort limit with it would trade a property
+the design keeps for a number the client can enforce itself. At band 0 every account is
+activated by hand by the operator, who knows the person behind it, and the only client
+in the deployment is the one the project ships.
+
+**What reduces it today.**
+
+- The client contract carries the ceiling as a binding obligation: rule 10 of §N
+  requires the client to refuse an eleventh participant and to say why.
+- coturn's `user-quota=20` bounds one credential to twenty relay allocations at once,
+  and a ten-participant mesh already uses nine of them for one device. A device in a
+  room of twenty-one needs the whole quota, so anything larger means minting a second
+  credential, which the `relay` throttle bounds at 60 a minute for each account.
+- `total-quota=500` bounds the whole relay, and the relay port range 50000-51000 is
+  wider than that ceiling, so the quota binds before the ports run out.
+- The backend cost is flat. The gateway relays the same bucketed `signal` frames and
+  stores nothing whatever the participant count, so a room past the ceiling costs this
+  server no more than one inside it.
+
+**If it were exploited.** This is degradation, not compromise: the audio of each
+connection is SRTP keyed by DTLS between its two endpoints whatever the room size, so no
+content is reached. What a large room spends is the participants' CPU and uplink and the
+relay's allocation budget. A room big enough to reach `total-quota` denies allocations to
+every other call on the host, and per AR-15 it does so with no log line saying why.
+
+**Trigger that ends the acceptance.** A room measured degrading at or below ten
+participants, which would mean the design point is wrong, or a demand for rooms above it.
+The answer in either case is ADR-0021's own flip trigger — an SFU, which costs the client
+an end-to-end media-encryption layer that does not exist for Dart today — and not a
+server-side count, which would cost the room object the decision removed.
+
+---
+
+## AR-17 — A leaked relay credential is valid until it expires, and nothing revokes it
+
+**What is exposed.** `POST /api/v1/me/relay` hands the calling device a coturn username
+and password good for `RELAY_CREDENTIAL_TTL_SECONDS`, six hours by default. Nothing
+revokes them. There is no row behind a credential — it is base64 of an HMAC over a random
+username, computed on demand under the secret this backend and coturn share — so there is
+nothing to delete, no list to check and no generation to bump, which is what a revoked
+device token has and this does not. Whoever holds the pair holds it until the expiry
+written into its own username passes. It leaks the way any bearer value on a client
+leaks: off a device whose storage or process an attacker reads, or off this host under
+the live root the threat model already accepts.
+
+**Why this is carried.** Revocation needs a record of what was issued — a list of live
+credentials, the device that took each one and the time it did, checked on every
+allocation. That is a call record by another name, the same class of thing the schema
+excludes at rest and invariant 4 refuses in a log line, and it would have to be durable
+enough to survive a restart. coturn under `use-auth-secret` keeps no account state at
+all, which is the property that lets the relay learn nothing about who holds a
+credential; a revocation list is exactly the state that property removes. The lifetime is
+the control instead, and six hours is where it sits because a credential shorter than a
+call makes a mid-call ICE restart routine rather than exceptional.
+
+**What reduces it today.**
+
+- The six-hour lifetime (`RELAY_CREDENTIAL_TTL_SECONDS`, 21600 seconds). It ends with
+  no action from anyone, and coturn refuses the pair from that second on.
+- The `relay` throttle, 60 a minute counted per account, which bounds how many live
+  credentials one account can be holding at a time.
+- coturn's `user-quota=20`, which bounds one credential to twenty relay allocations at
+  once, and `total-quota=500`, which bounds the host.
+- The denied peer ranges: loopback, link-local, the RFC 1918 and CGNAT blocks, and the
+  host's own public address. An allocation cannot be pointed at the loopback services of
+  the shared VPS, and cannot be turned into an on-host proxy into nginx — which is AR-6's
+  laundering problem reached from outside the host instead of from a neighbour on it.
+- The credential is not the secret. It is an HMAC over one username, so it neither
+  reveals `TURN_STATIC_AUTH_SECRET` nor lets its holder sign a second username.
+
+**If it were exploited.** The holder relays their own traffic through this host for the
+rest of that credential's lifetime, at twenty allocations at a time, to peers outside the
+denied ranges. The cost is bandwidth and a share of `total-quota` — a denial of service
+against other calls if it is large enough, and per AR-15 one with no log line behind it.
+No content, no key and no account is reached: it decrypts no media, because SRTP is keyed
+by DTLS between the two client endpoints and neither this server nor coturn holds a DTLS
+key; it joins no call, because a mesh connection is offered and answered inside a
+pairwise session over `signal` frames and the credential authenticates an allocation
+rather than a participant; and it authenticates nothing on the API.
+
+**Trigger that ends the acceptance.** Relay bandwidth that is billed or capped, so a
+stolen credential costs money rather than headroom, or the first observed misuse of one.
+The answer then is a shorter lifetime, paid for in more frequent ICE restarts, and not
+revocation — which needs the record of issued credentials this design refuses to keep.
 
 ---
 

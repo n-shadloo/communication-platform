@@ -2,9 +2,10 @@
 
 - Status: Accepted
 - Phase: 6 and 7
-- Landed: landing. Phase 6 removes the SFU, the room object, the join token and
-  the four room frames. Phase 7 lands the route that mints a coturn credential
-  and the client contract for the offer, the answer and the candidates.
+- Landed: 2026-09-05. Phase 6 removed the SFU, the room object, the join token
+  and the four room frames; phase 7 landed the route that mints a coturn
+  credential, `POST /api/v1/me/relay`, and the client contract for the offer,
+  the answer and the candidates.
 - Date: 2026-09-05
 
 ## Context
@@ -110,9 +111,10 @@ whose rooms hold ten people.
 
 ## Consequences
 
-- The server surface of voice is smaller than the server surface of text. There is
-  no voice route, no voice model and no voice frame: a call is `signal` frames
-  between devices, and the room itself is control events over ordinary envelopes.
+- The server surface of voice is smaller than the server surface of text. One
+  route mints a relay credential and there is no other: no voice model, and no
+  frame of the call's own — a call is `signal` frames between devices, and the
+  room itself is control events over ordinary envelopes.
 - The honest limit, which `backend/SECURITY.md` repeats: a mesh costs each
   participant one uplink for each peer. At ten participants that is nine encodes
   and nine uplinks on a phone, and the relay carries every one of them twice.
@@ -124,11 +126,20 @@ whose rooms hold ten people.
   behind when nginx moved to the private CA; a relay that carries SRTP it cannot
   open needs no TLS listener of its own, so the listener, the certificate paths
   and the deferral about them all go with it.
-- The join token is gone, and with it the second issuer of a token.
-  `backend/api/auth.py` is the only issuer and verifier again, which is invariant
-  8, and `core.E005` weighs one secret rather than two.
-- Phase 7 lands what this ADR defers: the route that mints a coturn credential
-  from `TURN_STATIC_AUTH_SECRET`, and the client contract for the offer, the
+- The join token is gone, and with it the second issuer of a token this API
+  accepts. `backend/api/auth.py` is the only issuer and verifier of one again,
+  which is invariant 8: the coturn credential phase 7 mints is presented to the
+  relay and never to this server. `core.E005` weighed one secret from phase 6
+  until phase 7 gave it the relay secret, which it weighs only where `TURN_URLS`
+  names a relay to mint for.
+- Phase 7 landed what this ADR deferred. `POST /api/v1/me/relay`
+  (`backend/realtime/routes.py` and `backend/realtime/relay.py`) mints a coturn
+  credential from `TURN_STATIC_AUTH_SECRET` — a username of a Unix expiry
+  timestamp, a colon and sixteen random bytes, and a password of base64 of
+  HMAC-SHA1 over that username — good for `RELAY_CREDENTIAL_TTL_SECONDS` and
+  carrying no account identifier and no device identifier.
+  `backend/realtime/API.md` publishes the route and
+  `backend/CLIENT_CONTRACT.md` §N is the client contract for the offer, the
   answer and the candidates.
 - Supersedes [0016](0016-client-held-voice-media-keys.md) in whole. Its per-sender
   media keys, its rotation on a `room_presence` leave and its `signal`-frame

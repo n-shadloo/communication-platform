@@ -268,31 +268,70 @@ unusable. That, and the `identity_required` check, are completeness checks —
 regardless, and a device that never reaches step 4 must stay unverified in your UI
 forever rather than being trusted on the server's word.
 
-## N. Voice — nothing to implement in this revision
+## N. Voice
 
-- **There is no voice surface on this server.** No route mints a token, no model holds
-  a room, no frame carries room traffic, and no credential for the relay is issued. A
-  client cannot start a call against this revision, and there is nothing here for one
-  to be compatible with.
-- The design that lands in phase 7 is
-  [ADR-0021](../docs/architecture/decisions/0021-relayed-webrtc-mesh-and-no-server-room.md),
-  and its shape binds what you build toward: audio only, a full mesh of WebRTC
-  connections between devices, every path across the self-hosted coturn under a
-  relay-only ICE policy, and each connection keyed by DTLS-SRTP between its two
-  endpoints. There is no application-level media key to distribute, so nothing of §F
-  is needed for the media itself.
-- What §F does carry is the signalling: the SDP offer, the SDP answer and the ICE
-  candidates go inside pairwise-session ciphertext, over the `signal` frames of §O's
-  socket. The server relays that ciphertext and cannot read or replace a DTLS
-  fingerprint — which is what makes the media path end to end even though the server
-  chose neither endpoint.
-- A room is client state, exactly as a group is: client-signed control events over
-  ordinary envelopes. Ephemeral room text and join and leave announcements are
-  `signal` frames the client fans out to each member device.
-- The obligations this leaves on the client — the media package, its Android
-  dependency set and its manifest permissions — are in
-  [`../CLIENT_WORK.md`](../CLIENT_WORK.md). The wire contract for the offer, the
-  answer and the candidates lands in phase 7 and is not written yet.
+Voice is served from this revision. A call is a full mesh of WebRTC audio between
+devices, every path across the self-hosted coturn, and each connection keyed by
+DTLS-SRTP between its two endpoints
+([ADR-0021](../docs/architecture/decisions/0021-relayed-webrtc-mesh-and-no-server-room.md)).
+There is no application-level media key to distribute, so nothing of §F applies to the
+media itself. What §F does carry is the signalling.
+
+**The server holds no room and no participant list.** It mints a relay credential
+(`POST /me/relay`, [`realtime/API.md`](realtime/API.md)) and relays `signal` frames,
+and that is the whole of its part. Everything below is therefore yours to build, and
+none of it is checked by anything upstream. The packaging each rule implies — the media
+package, its Android dependency set, the offline mirror and the manifest permissions —
+is [`../CLIENT_WORK.md`](../CLIENT_WORK.md); what follows is the protocol.
+
+1. **One connection per device pair.** Create one `RTCPeerConnection` between each of
+   your own devices and each member device present in the room — a room of ten
+   participants is nine connections on each device. One audio track; **no video track
+   and no data channel** in this version.
+2. **Relay-only ICE.** Configure `iceTransportPolicy: relay` with the `urls`,
+   `username` and `credential` of `POST /me/relay` as the only ICE server. Configure
+   **no STUN server and no foreign server**: a host or server-reflexive candidate would
+   put a participant's own address in front of every other participant, which is the
+   property the relay exists to remove.
+3. **Glare.** Of two devices, the one whose device id **string sorts lower** is the
+   polite peer of the perfect-negotiation pattern. Both ends compute this from the two
+   ids alone, so there is no round trip to agree on it and no server to ask.
+4. **Join and leave.** A joining device fans a join announcement out to every live
+   member device as `signal` frames. A participant that receives one sends an offer to
+   the joiner, and the joiner answers. A participant that receives a leave announcement,
+   or whose connection to a device closes, drops that device from the room.
+5. **Presence and room text are yours.** A device that needs the current participants
+   fans out a query announcement and the participants answer; ephemeral room text is
+   fanned out the same way. There is no presence frame and no room object on the server
+   — nothing about a room reaches it outside `signal` frames and ordinary envelopes.
+6. **Everything signalled is pairwise ciphertext.** Every offer, answer, candidate set
+   and announcement is encrypted to the pairwise session of §F, padded to 1024, 4096 or
+   16384 bytes on the same rule as §K, and sent as a `signal` blob. An off-bucket
+   blob is not refused the way an off-bucket upload is — the frame is dropped in
+   silence, so there is no error to read and nothing arrives. **Accept a remote
+   description from that channel only.** The DTLS fingerprint inside the SDP is
+   authenticated by the pairwise session and never by the server, which is what makes
+   the media path end to end even though the server chose neither endpoint.
+7. **A `signal` frame is volatile.** It is dropped if the target is not connected at
+   the instant it is published, and nothing recovers it. Re-send an unanswered offer or
+   announcement after a bounded timeout, a bounded number of times, and then report the
+   device as unreachable. Never wait forever for an answer that no one is holding.
+8. **Removal is immediate.** On applying a signed control event that removes a member,
+   close every connection to that member's devices at once, and from then on refuse
+   their offers and their announcements. A removed device closes its own connections.
+   The server takes no part: it will keep relaying their frames, so the refusal has to
+   be yours.
+9. **Credential lifetime.** Fetch a credential before joining, and fetch another once
+   less than an hour of `expires_in` remains. If one expires mid-call, perform an ICE
+   restart with the new credential rather than tearing the call down.
+10. **Ten participants.** Refuse to admit an eleventh participant to a room, and state
+    the reason to the user. A full mesh costs each participant one uplink per peer, and
+    ten is the design point of this deployment; the ceiling is enforced here and by
+    nothing on the server.
+11. **Microphone and foreground service.** Request the microphone at join and at no
+    other time, and run a microphone-type foreground service for as long as the call
+    lasts: a call outlives the moment the user looks at another screen, and the
+    foreground service is what keeps it capturing when it does.
 
 ## O. The `/ws` handshake
 

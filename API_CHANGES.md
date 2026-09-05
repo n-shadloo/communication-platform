@@ -212,10 +212,6 @@ reference for each is its app's `API.md`; the machine-readable form of all of th
 | `POST` | `/api/v1/me/envelopes/ack` | `200` | [messaging](backend/messaging/API.md) |
 | `POST` | `/api/v1/attachments` | `201` | [attachments](backend/attachments/API.md) |
 | `GET` | `/api/v1/attachments/{attachment_id}` | `200`, the bytes | [attachments](backend/attachments/API.md) |
-| `POST` | `/api/v1/rooms` | `201` | [voicerooms](backend/voicerooms/API.md) |
-| `GET` | `/api/v1/rooms/{room_id}` | `200` | [voicerooms](backend/voicerooms/API.md) |
-| `PUT` | `/api/v1/rooms/{room_id}` | `200`, empty body | [voicerooms](backend/voicerooms/API.md) |
-| `POST` | `/api/v1/rooms/{room_id}/token` | `200` | [voicerooms](backend/voicerooms/API.md) |
 | — | `/ws` | the accepted socket | [realtime](backend/realtime/API.md) |
 
 A trailing-slash mismatch is a `404` and was a `404` before. It is named here because
@@ -524,6 +520,61 @@ are every close code and every other frame limit.
 | `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`, `LIVEKIT_TOKEN_TTL_SECONDS` | Configured the SFU and its join tokens. An empty `LIVEKIT_URL` turned voice off, and `check --deploy` refused an API secret under 32 characters through `core.E005` | Gone, with the SFU. `core.E005` now weighs `JWT_SIGNING_KEY` alone | Remove the four lines from the environment file, and remove `livekit.service` and `/etc/chat/livekit.yaml` from the host. An unread variable in `.env` is a setting an operator believes they configured |
 | `THROTTLE_ROOMTOKEN` | The rate scope of the join-token route, `60/min` | Gone with the route it counted | Remove the line |
 | `TURN_REALM`, `TURN_STATIC_AUTH_SECRET` | Read by coturn only | Unchanged, and still read by coturn only. The backend route that mints a credential from the secret lands in phase 7 | None. Keep both filled; `backend/ops/RUNBOOK.md` §7 is the coturn posture that goes with them |
+
+## Voice comes back, as a relay credential
+
+Phase 6 removed the SFU, the room object and the four room frames and left the design
+to be built. Phase 7 builds the server half of it, and it is one route, four operator
+settings and one breaking change on the socket. The reference for the route and for
+every frame is [`backend/realtime/API.md`](backend/realtime/API.md); what the client
+must implement for a call to be end to end is
+[`backend/CLIENT_CONTRACT.md`](backend/CLIENT_CONTRACT.md) §N, which is binding and is
+not repeated here. The decisions are
+[ADR-0021](docs/architecture/decisions/0021-relayed-webrtc-mesh-and-no-server-room.md)
+and [ADR-0022](docs/architecture/decisions/0022-the-gateway-holds-no-presence.md).
+
+### The relay route
+
+| Item | Old behaviour | New behaviour | Client action |
+|---|---|---|---|
+| `POST /api/v1/me/relay` | No such path: `404 not_found`, like any other path no route serves. Voice's only route had been `POST /api/v1/rooms/{room_id}/token`, removed above | `200` with a coturn credential. A full-scope, device-bound token, no request body, no path and no query parameters. It reads no row and writes none — the credential is computed from a secret the backend shares with coturn, so there is nothing stored and nothing to revoke | Call it before joining a call. It is the whole of the ICE configuration a client gets, and the whole of what a call costs the server |
+| The `200` body | — | Four fields: `urls`, the configured `turn:` URLs in the order the operator wrote them; `username`, the Unix timestamp the credential expires at, a colon, and sixteen random bytes as URL-safe base64; `credential`, standard base64 of HMAC-SHA1 over that username; and `expires_in`, the seconds the pair is good for (`RELAY_CREDENTIAL_TTL_SECONDS`, default 21600) | Configure one ICE server per entry of `urls` with that username and credential, under a relay-only ICE policy and with no STUN server beside it. The username carries no account identifier and no device identifier, so do not read one out of it |
+| `503 voice_unconfigured` | Left the vocabulary with the join-token route, where it had meant an empty `LIVEKIT_URL` — recorded under "The room routes" above | Back in the vocabulary at `503`, on this route, meaning `TURN_URLS` is empty and the deployment serves no voice at all | Read it as "this server does not do voice" and offer no call. It is not a backoff: retrying will not make a relay appear |
+| A retried or timed-out call | — | Safe to repeat, because the route stores nothing for a retry to conflict with: every call mints a fresh username, and a credential already issued stays good until its own expiry | Retry freely. Holding two live credentials is the normal outcome of a timeout, and either one works |
+| The rate scope | `THROTTLE_ROOMTOKEN`, `60/min`, gone with the join-token route | Scope `relay`, `THROTTLE_RELAY`, default `60/min`, counted per account. A caller past it gets `429 throttled` with `Retry-After` | None in practice: one credential lasts six hours, so a client that refreshes on the hour-remaining rule of §N never approaches the limit |
+
+### The `/ws` frames
+
+| Item | Old behaviour | New behaviour | Client action |
+|---|---|---|---|
+| `subscribe_presence` (client → server) | Replaced the socket's presence-target set — up to 500 device UUIDs — and announced `online` to every target at once. The same targets were told `offline` when the socket closed | Not a frame type. On a live socket it is an unknown type and is ignored, like any other | Delete the frame. Presence is client protocol now: fan a query announcement out as `signal` frames and let the participants answer (`backend/CLIENT_CONTRACT.md` §N) |
+| `presence` (server → client) | Arrived carrying `device_id` and `state` — `online` or `offline` — for a device the socket had subscribed to | Never sent | Delete the handler. A peer that has gone is one your own timeout tells you about; the server no longer knows |
+| The presence-target cap | 500 device ids for one socket; a longer list dropped the frame | Gone with the frames it bounded | None |
+| The `signal` blob | Any string of at most `SIGNAL_MAX` characters (default 16384). The server never looked inside it | **Standard base64 that decodes to exactly 1024, 4096 or 16384 bytes** — one of `SIGNAL_BUCKETS`, the padding rule every stored ciphertext already obeys. A blob outside the rule drops the frame in silence: no close code, and no error frame to read | **Breaking, and silently so.** A client that sent an arbitrary string has every `signal` frame dropped with nothing to observe but the answer that never comes. Pad the plaintext to a bucket before encrypting, encode with the standard alphabet, and treat a blob that is not one of the three lengths as a client-side bug |
+
+`ack`, `envelope` and the relayed `signal` frame keep their shapes exactly — the
+relayed frame is still the type and the blob and no sender field — and so do every
+close code, the frame-size cap, the rate cap and the send-queue bound. The two size
+bounds stay independent: the longest legal blob is 21848 characters, well inside
+`WS_MAX_FRAME`. This section supersedes the line under "The `/ws` room frames" above
+that called `subscribe_presence` and `presence` unchanged.
+
+The bucket rule is a malformed-input guard and **never a security control**: a modified
+server would relay anything a client sent it. What it buys is length uniformity on the
+one ciphertext the server relays without storing, and nothing above that.
+
+### The settings
+
+| Item | Old behaviour | New behaviour | Operator action |
+|---|---|---|---|
+| `SIGNAL_MAX` | An environment variable capping a `signal` blob at 16384 characters | Gone, as a setting and as a variable. The cap now derives from the bucket set: a blob is at most the base64 of the largest bucket, 21848 characters | Remove the line from the environment file. An unread variable in `.env` is a setting an operator believes they configured |
+| `TURN_URLS` | Did not exist | The comma-separated `turn:` URLs the relay route hands a client. Empty by default, and empty serves no voice — the route answers `503 voice_unconfigured` | Fill it in to serve voice, and leave it empty not to. Voice is configured on rather than off |
+| `TURN_STATIC_AUTH_SECRET` | Read by coturn alone, as the row under "The removed settings" above records | Read by both: it is the HMAC key a relay credential is signed under, and one value in two places — here and `static-auth-secret` in `ops/coturn/turnserver.conf`. `check --deploy` refuses a value under 32 characters once `TURN_URLS` is set, under `core.E005` | Keep the two copies identical; a mismatch is a relay that refuses every credential the backend mints. This row supersedes the phase-6 one |
+| `RELAY_CREDENTIAL_TTL_SECONDS` | Did not exist | How long a minted credential stays good, in seconds. Default 21600, six hours | None, unless six hours is wrong for the deployment |
+| `THROTTLE_RELAY` | Did not exist | The rate scope of the relay route, default `60/min` per account | None |
+
+`TURN_REALM` is unchanged and still read by the coturn file alone; no Python module
+reads it.
 
 ## What the client can build against now
 

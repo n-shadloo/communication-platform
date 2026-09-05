@@ -84,16 +84,20 @@ server no longer serves.
 
 ## Voice
 
-The server surface for voice is gone and the replacement lands in phase 7
-([ADR-0021](docs/architecture/decisions/0021-relayed-webrtc-mesh-and-no-server-room.md)).
-Nothing under `frontend/` implements voice today, so none of this is a removal: it is
-what the client will need, recorded now because the decision that binds it has been
-made and the evidence behind it was gathered on 2026-09-05.
+The server half of the voice design is served
+([ADR-0021](docs/architecture/decisions/0021-relayed-webrtc-mesh-and-no-server-room.md)):
+phase 6 removed the SFU and the room object, and phase 7 added the one route that
+mints a coturn credential. Nothing under `frontend/` implements voice today, so none
+of this is a removal: it is what the client now owes, and the evidence behind the
+package facts below was gathered on 2026-09-05.
 
-**The client contract for voice is not written yet.** The wire shape of the offer, the
-answer and the candidates, and the route that mints a coturn credential, land in phase
-7 and will be `backend/CLIENT_CONTRACT.md` §N and the per-app `API.md` beside it. Build
-nothing against a shape guessed from this file.
+**The client contract for voice is written.**
+[`backend/CLIENT_CONTRACT.md`](backend/CLIENT_CONTRACT.md) §N is the binding text, the
+route is in [`backend/realtime/API.md`](backend/realtime/API.md) with
+[`backend/openapi.json`](backend/openapi.json) beside it, and
+[`API_CHANGES.md`](API_CHANGES.md) records what moved. Where this file and §N could
+differ, §N is authoritative: what follows is the work each of its rules lands under
+`frontend/`, not a second statement of the rule.
 
 ### The media package
 
@@ -135,18 +139,77 @@ what to keep and what to remove deliberately rather than by omission.
 | `audioswitch` | `MODIFY_AUDIO_SETTINGS` | Keep. Audio routing during a call needs it |
 
 `RECORD_AUDIO` is the client's own to declare, and it is the one a user is prompted
-for. Nothing in the dependency set declares it for you.
+for. Nothing in the dependency set declares it for you. The microphone
+foreground-service permission is the client's own as well: a call holds the
+microphone while the application is in the background, and the service that keeps it
+is a microphone-typed one.
 
-### What the design assumes of the client
+### What the client now owes
 
-- Audio only. One `RTCPeerConnection` for each peer, so a room of ten participants is
-  nine connections on each device.
-- `iceTransportPolicy: relay`, with the coturn credential phase 7 issues as the only
-  ICE server. No STUN, and no other TURN.
-- The SDP offer, the SDP answer and the ICE candidates travel inside pairwise-session
-  ciphertext over the `/ws` `signal` frames the client already has. The server relays
-  that ciphertext and cannot read or replace a DTLS fingerprint.
-- A room is client state: client-signed control events over ordinary envelopes,
-  exactly as a group is. Ephemeral room text and join and leave announcements are
-  `signal` frames the client fans out to each member device.
-- No media key to distribute, rotate or store. A connection's keys die with it.
+Eleven obligations, in the order §N states them. Each line says what has to be built
+under `frontend/`; the rule that binds it is the contract's.
+
+- **One connection for each device pair.** One `RTCPeerConnection` between one of your
+  own devices and one member device, carrying one audio track — no video track and no
+  data channel in this version. A room of ten participants is nine connections on each
+  device.
+- **A relay-only ICE configuration.** `iceTransportPolicy: relay`, with the `urls`,
+  `username` and `credential` of `POST /api/v1/me/relay` as the only ICE server. No
+  STUN, and no server this deployment does not run.
+- **The glare rule.** Of two devices, the one whose device id string sorts lower is the
+  polite peer of the perfect-negotiation pattern. Both ends decide it alone and never
+  agree it over the wire, so both must apply the same comparison to the same string.
+- **Join and leave over `signal` frames.** A joining device fans a join announcement
+  out to every live member device; a participant that receives one sends an offer and
+  the joiner answers. Drop a device on its leave announcement, and on a connection to
+  it closing.
+- **Presence, implemented by the client.** A device that needs the current participants
+  fans out a query announcement and participants answer; ephemeral room text goes the
+  same way. The gateway holds no presence
+  ([ADR-0022](docs/architecture/decisions/0022-the-gateway-holds-no-presence.md)), so
+  nothing about a room reaches the server outside `signal` frames and ordinary
+  envelopes.
+- **Bucketed ciphertext, and no description from anywhere else.** Every offer, answer,
+  candidate set and announcement is pairwise-session ciphertext padded to 1024, 4096
+  or 16384 bytes and sent as a `signal` blob; the gateway drops a blob of any other
+  length. Accept a remote description from that channel only — the DTLS fingerprint
+  inside the SDP is authenticated by the pairwise session and never by the server.
+- **A retry policy for a volatile frame.** A `signal` frame is delivered to a live
+  socket or discarded, so re-send an unanswered offer or announcement after a bounded
+  timeout, a bounded number of times, and then report the device as unreachable.
+- **Removal, applied at once.** When a signed control event removes a member, close
+  every connection to that member's devices immediately and refuse their offers and
+  announcements from then on. A removed device closes its own connections.
+- **Fetch the credential before joining, and refresh it.** Call the route before a
+  join, and again once less than an hour of `expires_in` remains; on an expiry during
+  a call, perform an ICE restart with the new credential. The call is safe to repeat —
+  each one mints a fresh username and the earlier credential stays good to its own
+  expiry — so a timed-out request is retried rather than reconciled.
+- **The ten-participant ceiling, enforced in the client.** Refuse to admit an eleventh
+  participant at band 0 and state the reason. A full mesh costs each participant one
+  uplink for each peer, ten is the design point, and nothing on the server enforces it
+  ([`ACCEPTED_RISKS.md`](ACCEPTED_RISKS.md) AR-16).
+- **The platform obligations.** Request the microphone at join and at no other moment,
+  and run a microphone-type foreground service for the duration of a call. The package
+  and manifest work that goes with it is the two subsections above.
+
+No media key is distributed, rotated or stored anywhere in that list: each connection
+is keyed by DTLS between its two endpoints and its keys die with it.
+
+### The gateway frames that left, and the one that changed shape
+
+The gateway now handles `ack` and `signal` and emits `envelope` and `signal`, and
+nothing else ([ADR-0022](docs/architecture/decisions/0022-the-gateway-holds-no-presence.md)).
+The client never sent `subscribe_presence`, so nothing it does today breaks — but the
+code and the documents that describe the old surface now describe a server that does
+not exist, and `API_CHANGES.md` § "Voice comes back, as a relay credential" is the
+full statement of what moved.
+
+| Path | What is there |
+|---|---|
+| `frontend/lib/features/networking/infrastructure/realtime/dio_websocket_gateway.dart` | The `'subscribe_presence'` arm of the outbound frame validator, and the `'presence'` arm of `_decodeEvent` with the `RealtimePresence` event behind it. Neither frame exists on the server. The `'signal'` arm's bound is the other half: it validates a blob against `maximumSignalCharacters`, and the rule is now a bucket rather than a ceiling — base64 of exactly 1024, 4096 or 16384 bytes, and anything else is dropped in silence |
+| `frontend/lib/features/networking/infrastructure/api/api_request.dart` | `maximumSignalCharacters = 16384` and `maximumPresenceTargets = 500`. The first is not the bound any more — the longest legal blob is 21848 characters, the base64 of the largest bucket — and the second bounds a frame that is gone |
+| `frontend/lib/app/dependencies/messaging_providers.dart` | `presenceProjectionProvider`, and the comment saying nothing should read it "until `subscribe_presence` is sent". It will not be sent: presence between conversation members is client protocol over `signal` frames now, per `backend/CLIENT_CONTRACT.md` §N rule 5 |
+| `frontend/lib/features/messaging/presentation/chat_conversation_view.dart` | The comment describing why presence is absent, which now has a different reason behind it |
+| `frontend/docs/design-handoff/voice-room-states.md` | The "Too large" row reads `Blob over SIGNAL_MAX, 16384 chars`. `SIGNAL_MAX` is gone as a setting and as an environment variable, and a blob is dropped for being off-bucket rather than for being over a maximum — a 1500-character blob is dropped too |
+| `frontend/docs/sync-engine.md`, `frontend/docs/decisions.md` | Both describe `subscribe_presence` as a frame the client has not implemented yet. It is not unimplemented now; it is not a frame |
