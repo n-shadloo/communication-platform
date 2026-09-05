@@ -27,7 +27,7 @@
         {% endcomponent %}
     {% else %}
     <div class="flex flex-col gap-8">
-        <div class="grid grid-cols-1 gap-6 lg:grid-cols-2 xl:grid-cols-4">
+        <div class="grid grid-cols-1 gap-6 lg:grid-cols-2 xl:grid-cols-3">
             {% component "unfold/components/card.html" with href=accounts_url icon="person" %}
                 {% component "unfold/components/text.html" %}{% translate "Active accounts" %}{% endcomponent %}
                 {% component "unfold/components/title.html" %}{{ active_accounts }}{% endcomponent %}
