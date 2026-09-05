@@ -217,9 +217,11 @@ working credentials rather than none, and either one works.
 
 **The username carries no account identifier and no device identifier**, and nothing
 derived from either. It travels in the clear on a control channel that carries no TLS,
-and it is the whole of what the relay learns about a caller: coturn cannot tell two
-calls of one device from two calls of two devices, and cannot join what it sees to
-anything the backend holds.
+and it is the whole of what the credential tells the relay about a caller: two
+credentials of one device look exactly like credentials of two devices, and nothing in
+one joins to anything the backend holds. The relay still sees the source address of
+each allocation, as every server sees its caller's address; `SECURITY.md` § "Voice"
+states that visibility beside the rest.
 
 ### No relay configured — `503 Service Unavailable`
 

@@ -175,8 +175,11 @@ mints an ephemeral coturn credential under the secret the two processes share. I
 no row and writes none: a credential is computed rather than stored, and no table stands
 behind it. The username it mints is a Unix expiry timestamp, a colon and sixteen random
 bytes — no account identifier, no device identifier, and nothing derived from either —
-so coturn cannot tell two calls of one device from two calls of two devices, and cannot
-join what it sees to anything this server holds.
+so the credential itself tells coturn nothing about who holds it: two credentials of one
+device look exactly like credentials of two devices, and nothing in one joins to anything
+this server holds. What coturn does learn about a caller it learns from the traffic and
+not from the credential — the source address of each allocation, and the pairs, sizes
+and timing below — and the threat model above places addresses out of scope.
 
 **The honest limits of that design.** A mesh costs each participant one uplink for each
 peer, so the design point is at most ten participants in one room at this scale band,

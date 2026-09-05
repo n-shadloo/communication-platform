@@ -134,11 +134,11 @@ def test_the_expiry_is_exactly_one_lifetime_past_the_moment_of_minting(settings)
 def test_the_username_carries_no_account_or_device_identifier(
     http, active_user, device, bearer
 ):
-    """The username is the whole of what coturn learns about a caller, and it
-    travels in the clear on a control channel with no TLS. An account or device id
-    in it would let the relay tell two calls of one device from two calls of two
-    devices, and let anyone holding both the relay's view and the backend's join
-    them."""
+    """The username is the whole of what the credential tells coturn about a
+    caller, and it travels in the clear on a control channel with no TLS. An account
+    or device id in it would hand the relay a stable name for the device behind each
+    call, and let anyone holding both the relay's view and the backend's join them
+    by that name rather than by address and timing."""
     body = http.post(RELAY_URL, headers=bearer(active_user, device)).json()
 
     for label, identifier in (("account", active_user.id), ("device", device.id)):

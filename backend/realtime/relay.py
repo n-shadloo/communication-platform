@@ -8,12 +8,14 @@ two processes share. So this module *mints* a credential rather than storing
 one. There is no row, no table and no migration behind it, and nothing to revoke
 — a credential dies of its own expiry.
 
-The username is the whole of what coturn learns about a caller, and it travels
-in the clear on a control channel that carries no TLS. This one carries an
-expiry and sixteen random bytes: no account id, no device id, and nothing
-derived from either. The relay therefore cannot tell two calls of one device
-from two calls of two devices, and it cannot join what it sees to anything the
-backend holds.
+The username is the whole of what the credential tells coturn about a caller,
+and it travels in the clear on a control channel that carries no TLS. This one
+carries an expiry and sixteen random bytes: no account id, no device id, and
+nothing derived from either. Two credentials of one device therefore look
+exactly like credentials of two devices, and nothing in a credential joins to
+anything the backend holds. What the relay learns beyond that — the source
+address of each allocation, the peer pairs, the sizes and the timing — it
+learns from the traffic, and `SECURITY.md` states it.
 """
 
 import base64
