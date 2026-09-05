@@ -468,6 +468,111 @@ because the refusal comes from PostgreSQL and not from a clock in the process.
 
 ---
 
+## AR-13 — The rollback has never been executed
+
+**What is exposed.** [`backend/ops/RUNBOOK.md`](backend/ops/RUNBOOK.md) §9 gives the
+rollback as a stop, a `git checkout` of the previous release, an offline reinstall,
+a `collectstatic`, and a start. Every command in it is ordinary and every one of
+them is untried: no VPS serves this system yet, so the procedure has never been run
+end to end, and its first execution will be during the incident that needs it. A
+rollback path that has not been exercised is an assumption written in the
+imperative.
+
+**Why this is carried.** There is nothing to rehearse it against. A rehearsal needs
+a host that serves, with the release it would roll back from and the release it
+would roll back to, and this repository has neither — the deployment is pre-launch
+and every row of
+[`docs/architecture/GROUND-TRUTH.md`](docs/architecture/GROUND-TRUTH.md) that names
+the VPS says "configured" rather than "observed". Building a staging VPS to rehearse
+a procedure for a production VPS that does not exist yet would rehearse the wrong
+host. The honest move is to write the procedure now, while the reasoning is fresh,
+and to record that it is unexercised rather than to imply otherwise.
+
+**What reduces it today.**
+
+- The procedure is short, and every command in it is one an operator runs on an
+  ordinary day: `systemctl stop`, `git checkout`, `bash ops/offline_install.sh`,
+  `manage.py collectstatic`, `systemctl start`.
+- No step of it needs the network. The wheel cache is already on the host, which is
+  the whole point of [ADR-0012](docs/architecture/decisions/0012-pinned-hashed-and-untracked-wheel-cache.md),
+  so a rollback during a shutdown is the same rollback.
+- The schema is not in the path. From this release the history is append-only and
+  every change ships as expand and contract, so the previous release serves against
+  the new schema and the rollback moves code alone.
+- The verification the rollback is judged by is the same eight checks the deploy is
+  judged by (§8), so nothing new is authored under pressure.
+- There is no data to lose: zero production accounts, and no production database.
+
+**If it were exploited.** This is an operational risk and not an attacker-facing
+one. A rollback that fails leaves the host serving nothing while the operator
+debugs, on a system whose users have no other channel. The band bounds it — one
+operator, fewer than 50 accounts — and the durable mailbox means an outage delays
+delivery rather than losing it.
+
+**Trigger that ends the acceptance.** The first deploy to a serving host. The
+rollback is executed once, deliberately, immediately after that deploy succeeds and
+while nothing depends on it — and its measured duration and outcome become a row in
+[`GROUND-TRUTH.md`](docs/architecture/GROUND-TRUTH.md) §4, which today records the
+absence of that row rather than a number.
+
+---
+
+## AR-14 — Every infrastructure secret reaches the process as an environment variable
+
+**What is exposed.** `chat.service` and `livekit.service` load
+`/srv/chat/backend/.env.production` with `EnvironmentFile=`, so
+`DJANGO_SECRET_KEY`, `JWT_SIGNING_KEY`, `POSTGRES_PASSWORD`, the Redis password
+inside `REDIS_URL` and `LIVEKIT_API_SECRET` all live in the process environment.
+systemd's own documentation says environment variables do not suit secrets: they
+propagate down the process tree, across `setuid` boundaries included, and any child
+this process spawns inherits every one of them. `LoadCredential=` is the directive
+that exists for this, and it hands the value to the named service alone.
+
+**Why this is carried.** `LoadCredential=` delivers a secret as a *file* under
+`$CREDENTIALS_DIRECTORY`, so taking it means `core/env.py`, `config/settings/`,
+`.env.example`, the whole configuration table of
+[`backend/README.md`](backend/README.md) and the development workflow all change
+shape — a settings-layer rewrite, in a run whose decisions fix the units to the
+shape they have. It is also not the binding constraint here: the threat model
+already accepts an attacker with live root on the VPS
+([`backend/SECURITY.md`](backend/SECURITY.md)), and root reads the credential
+directory as easily as the environment. What `LoadCredential=` would actually buy
+is defence against an unprivileged neighbour on this shared host, which is the same
+adversary AR-6 names.
+
+**What reduces it today.**
+
+- The file is `root:deploy` and `0640`, so no other account on the shared host reads
+  it, and systemd reads it as root in PID 1 rather than as the service.
+- `/proc/<pid>/environ` is readable only by the process's own user and by root, so
+  the inherited environment is not visible to a neighbouring project running as a
+  different account.
+- No secret is in `Environment=`, which is the directive systemd publishes as a unit
+  property; only `DJANGO_SETTINGS_MODULE` is, and it is not a secret.
+- The serving process spawns nothing: no shell-out and no subprocess on any request
+  path, so the propagation systemd warns about has nowhere to go. `livekit.service`
+  does start through `/bin/sh`, which composes `LIVEKIT_KEYS` from its own
+  environment and then `exec`s the server — systemd passes `$${…}` as a literal, so
+  the secret never reaches `/proc/*/cmdline` and no extra process survives the
+  `exec`.
+- None of these secrets can decrypt a message. They are infrastructure: content keys
+  never reach this server, which is the property
+  [`backend/SECURITY.md`](backend/SECURITY.md) is built on.
+
+**If it were exploited.** A reader of the environment mints tokens for any account
+(`JWT_SIGNING_KEY`), join tokens for any room (`LIVEKIT_API_SECRET`), and reads the
+database and Redis directly. That is full compromise of the relay — and it is
+already what live root yields, so the row is about the unprivileged local reader
+alone.
+
+**Trigger that ends the acceptance.** The first service account on this host that
+the operator does not control — the same trigger AR-6 carries, because both are the
+hostile-neighbour case — or the next change that already opens `core/env.py` and the
+settings modules, at which point `LoadCredential=` costs the difference rather than
+the rewrite.
+
+---
+
 ## Appendix A — The security audit
 
 The security audit of phase 4 ran on 2026-09-04 over the tree at the merge of phase 3

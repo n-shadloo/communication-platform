@@ -376,6 +376,63 @@ has always been `400 invalid_request` there — so the two surfaces now agree: a
 that could never be registered is wrong credentials at login, and a malformed name is
 a refusal at registration.
 
+## What the edge answers, and when it stops waiting
+
+Three of these change what a client reads on a slow request or during a restart.
+None of them changes a path, a body, a field or a status a route declares, so
+`openapi.json` is unmoved — the document describes the application, and these are the
+two layers around it.
+
+### A request past 60 seconds now gets this API's answer, not nginx's
+
+`ops/nginx/chat.nimashadloo.dev.conf` set no `proxy_read_timeout` on `/api/`, so
+nginx used its own default of 60 seconds. The application's deadline on the
+attachment upload and the batch routes is `UPLOAD_DEADLINE_SECONDS`, 120 seconds. A
+request between the two therefore reached nginx's limit first and the client read
+nginx's HTML `504 Gateway Time-out` — not `{"code": "unavailable", …}`, not any
+envelope at all, and with none of the security headers the application sets.
+
+nginx now waits 150 seconds on that location, above the deadline below it.
+
+**Client action:** none, but a 64 MiB upload over a slow link can now legitimately
+run to two minutes, and the answer to a request that outlives its deadline is the
+`503 unavailable` envelope your error handling already covers. Treat an HTML body
+from this host as a bug report, not a status to parse.
+
+### A restart no longer turns an in-flight request into a `500`
+
+`ops/systemd/chat.service` set `--timeout-graceful-shutdown 10`. On `SIGTERM`
+uvicorn stops accepting, closes every live WebSocket with `1012`, and waits that long
+for the requests still in flight — so a request still arriving after ten seconds was
+cut, and the client read `HTTP/1.1 500 Internal Server Error`. Measured on this
+application, with a body that completed six seconds after the signal: at a
+ten-second window the send failed and the answer was that `500`; at a window above
+the request the same probe completed and read its real status.
+
+The window is 130 seconds now, above the longest deadline any route carries, with
+`TimeoutStopSec=150` above that so systemd does not `SIGKILL` in the middle of the
+drain it was asked to take.
+
+**Client action:** none. A restart that catches an upload now completes it. Sockets
+are unaffected and still close with `1012` at once — that has never been part of the
+drain, and the reconnect it triggers is unchanged.
+
+### One `Strict-Transport-Security` header, and `nosniff` on the static path
+
+An admin-path response carried the header twice: nginx added it for the whole host
+and Django's `SecurityMiddleware` set it on the responses Django serves. `add_header`
+appends rather than replaces, so both arrived. nginx is now the single owner —
+`snippets/proxy-headers.conf` hides the upstream copy — and `/static/`, which reaches
+no application at all, gained `X-Content-Type-Options: nosniff` beside it.
+
+The API surface is unchanged: `/api/` responses carried one HSTS header before and
+carry one now, and `x-content-type-options`, `cache-control: no-store` and
+`referrer-policy: no-referrer` are still set by the application on every response it
+produces.
+
+**Client action:** none. A client that counted on two identical HSTS headers was
+already reading only the first, which is what RFC 6797 requires of it.
+
 ## What the client can build against now
 
 **The surface is frozen at `v1` from this merge.** It is published two ways and they

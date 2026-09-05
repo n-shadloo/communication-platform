@@ -86,11 +86,25 @@ through a pool of one, with a one-second acquisition timeout, all returned `200`
 Where it does run out, the caller now gets `503 unavailable` rather than a `500`,
 because a pool with nothing free is saturation and not a defect.
 
-**One knob bounds two things.** `--limit-concurrency 512` counts connections, and
-a live WebSocket is a connection, so the number is sized for the device ceiling
-of the band rather than for HTTP concurrency. uvicorn offers no second knob.
+**One knob bounds two things.** `--limit-concurrency 1024` counts connections,
+and a live WebSocket is a connection, so the number is sized for the device
+ceiling of the band — 500 sockets, plus a keep-alive HTTP connection for each of
+those devices — rather than for HTTP concurrency. uvicorn offers no second knob.
 Lowering it to the HTTP knee would refuse sockets the band expects to hold, so it
-stays at 512 and the knee is recorded here instead.
+stays at 1024 and the knee is recorded here instead. (This paragraph and the seam
+table of `GROUND-TRUTH.md` §6 both read 512 until 2026-09-05; the unit was raised
+in phase 4 and neither was re-read.)
+
+**A deploy is a stop, and three windows nest around it.** The longest request the
+surface admits is `UPLOAD_DEADLINE_SECONDS`, 120 s. uvicorn's drain window is
+130 s, above it. systemd's `TimeoutStopSec` is 150 s, above that. Measured on
+2026-09-05 with the drain below the request instead: the request was cut and the
+client read `HTTP/1.1 500 Internal Server Error`, so a deploy that caught a slow
+upload reported itself as a fault of the API. The window is a ceiling and not a
+wait — with nothing in flight the process exits at once — so the nesting costs a
+deploy nothing except when it interrupts real work, which is the case it exists
+for. A live WebSocket obeys none of it: uvicorn closes every socket with `1012`
+at the signal.
 
 **The flip trigger for a second worker is a second vCPU.** On one core a second
 worker splits the core rather than adding one, and it doubles the connection
@@ -129,7 +143,9 @@ Never mark a row resolved without the trigger it names.
 | The 95 percent branch-coverage gate in CI | Resolved on 2026-09-04: run 13 set `--cov-fail-under=95` in `backend/pytest.ini` and in the CI test job, over the exclusions [0013](decisions/0013-pytest-and-ruff-as-the-test-and-lint-stack.md) names |
 | `hypothesis` in `requirements/dev.txt` | The first property-based test. `httpx` landed on 2026-09-04, with the first test that drives the FastAPI surface, and is no longer deferred |
 | `ACCEPTED_RISKS.md` | Resolved on 2026-09-04: it landed with the admin in phase 3, carrying the absent second factor, the attachment capability in the panel's page source, and the fail-closed lockout. `API_CHANGES.md` landed on 2026-09-03, in the second run of phase 1, and is no longer deferred |
-| `backend/ops/RUNBOOK.md` | Phase 5 |
+| `backend/ops/RUNBOOK.md` | Resolved on 2026-09-05: the operator runbook landed in phase 5 run 14, covering host setup, the offline install, the database and the recreation rule of this version, `migrate` and `collectstatic`, the environment file, the units, nginx and TLS, LiveKit and coturn, the post-deploy checks, the rollback and the maintenance timer |
+| The rollback rehearsal | The first deploy to a serving host. Recorded on 2026-09-05 as AR-13 in `ACCEPTED_RISKS.md`: the procedure is written and has never been executed |
+| Infrastructure secrets delivered by `LoadCredential=` rather than the process environment | The first service account on this host the operator does not control, or the next change that already opens `core/env.py` and the settings modules. Recorded on 2026-09-05 as AR-14 |
 | `docs/admin/` | Resolved on 2026-09-04: `docs/admin/PANEL-RECORD.md` is the system of record for the panel from phase 3 |
 | Regenerating every `0001_initial` and deleting the earlier migrations | Resolved on 2026-09-04: the trigger fired at the end of phase 2, sixteen files became six, and from phase 3 the history is append-only |
 | coturn still reads its certificate from a public-CA path (`/etc/letsencrypt/live/...`) while nginx now terminates with the private CA pair | The first end-to-end voice rehearsal on the VPS |
@@ -154,6 +170,7 @@ trigger, and the ADR stands.
 | 2026-09-04 | Seam (`fastapi-alongside-django`) | Qualification verdict against [0002](decisions/0002-fastapi-as-the-only-http-api-surface.md): the long-lived connection qualifies the surface, and the note in §5 records the clause that cannot be measured. Seam facts in [`GROUND-TRUTH.md`](GROUND-TRUTH.md) §6 re-read against the tree and unchanged. Fixed: a socket's bind no longer queues behind the row lock a send holds — measured at 1.007 s before and 0.0005 s after — which mattered because a websocket scope enters no `ThreadSensitiveContext` and that wait was every socket's. The panel's login is now driven through the middleware stack in front of it, which no suite did |
 | 2026-09-04 | Architecture (`backend-system-design`) | Nineteen positions, eight assumptions and ten deferrals checked for their fields: all complete, every date inside the 90-day window. One position was missing entirely and is now [0019](decisions/0019-the-system-emits-no-request-scoped-telemetry.md): the system emits no request-scoped telemetry. That was the design's most consequential decision and existed only as an invariant and a set of configuration deviations, with no forcing function, no cost and no flip trigger a reader could find |
 | 2026-09-04 | Panel (`django-unfold-expert`) | Recorded in [`../admin/PANEL-RECORD.md`](../admin/PANEL-RECORD.md) §2 |
+| 2026-09-05 | Release readiness (`django-release-readiness`) | Verdict: **ready with stated accepted risk**, against the declared topology — one VPS, in-place deploy, a maintenance window available. Fixed: the drain window was below the longest request the surface admits, so a deploy cut an in-flight upload into a `500` (measured, both directions); nginx waited 60 s on `/api/` against the application's 120 s deadline, so a slow request became a `504` with no envelope; the site included a `snippets/proxy-headers.conf` this repository never shipped, and that file carries the `X-Forwarded-Proto` `SECURE_PROXY_SSL_HEADER` trusts; `Strict-Transport-Security` had two owners on the admin path; no location capped its own body; `ops/gen_sbom.sh` could neither produce a document nor fail; `ops/vendor.sh` did not refuse a source distribution; the deploy check sat behind pytest in one CI job. Accepted: AR-13, the unexercised rollback, and AR-14, secrets in the process environment. Unchanged by decision: no readiness endpoint and no telemetry (AR-9), one host with no rotation to gate |
 
 ## 7. Decision log
 
@@ -168,12 +185,12 @@ trigger, and the ADR stands.
 | [0007](decisions/0007-contract-conventions.md) | Contract conventions | Accepted | 2 | 2026-09-04 | — |
 | [0008](decisions/0008-fastapi-generates-the-openapi-document.md) | FastAPI generates the OpenAPI document | Accepted | 2 | 2026-09-04 | — |
 | [0009](decisions/0009-regenerate-the-initial-migrations.md) | Regenerate the initial migrations | Accepted | 2 | 2026-09-04 | — |
-| [0010](decisions/0010-redis-rate-limiting-that-fails-closed.md) | Redis rate limiting that fails closed | Accepted | 2 | landing, 2026-09-04 | — |
+| [0010](decisions/0010-redis-rate-limiting-that-fails-closed.md) | Redis rate limiting that fails closed | Accepted | 2 | 2026-09-04 | — |
 | [0011](decisions/0011-django-unfold-admin-panel.md) | A django-unfold admin panel that shows no secret | Accepted | 3 | 2026-09-04 | — |
-| [0012](decisions/0012-pinned-hashed-and-untracked-wheel-cache.md) | Pinned, hashed dependencies and an untracked wheel cache | Accepted | 1 | — | — |
-| [0013](decisions/0013-pytest-and-ruff-as-the-test-and-lint-stack.md) | pytest and ruff as the test and lint stack | Accepted | 1 and 4 | — | — |
+| [0012](decisions/0012-pinned-hashed-and-untracked-wheel-cache.md) | Pinned, hashed dependencies and an untracked wheel cache | Accepted | 1 | 2026-09-03 | — |
+| [0013](decisions/0013-pytest-and-ruff-as-the-test-and-lint-stack.md) | pytest and ruff as the test and lint stack | Accepted | 1 and 4 | 2026-09-04 | — |
 | [0014](decisions/0014-process-hardening-at-the-edge.md) | Process hardening at the edge | Accepted | 2 | 2026-09-04 | — |
-| [0015](decisions/0015-the-document-map.md) | The document map | Accepted | 1 to 5 | — | — |
+| [0015](decisions/0015-the-document-map.md) | The document map | Accepted | 1 to 5 | 2026-09-05 | — |
 | [0016](decisions/0016-client-held-voice-media-keys.md) | Client-held voice media keys | Accepted | 1 | 2026-09-03 | — |
 | [0017](decisions/0017-one-request-is-one-transaction-on-the-multi-row-writes.md) | One request is one transaction on the multi-row writes | Accepted | 2 | 2026-09-04 | — |
 | [0018](decisions/0018-redis-is-authenticated-and-never-deserialized.md) | Redis is authenticated, and nothing deserializes what it holds | Accepted | 4 | 2026-09-04 | — |
