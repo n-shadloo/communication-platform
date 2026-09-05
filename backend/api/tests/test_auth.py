@@ -36,7 +36,7 @@ from api.auth import (
 )
 from api.errors import ApiError
 from config.asgi import api_application
-from core.tests.test_route_table import DOCUMENTATION, EXPECTED
+from core.tests.test_route_table import EXPECTED
 from core.tests.test_route_table import FULL_DEVICE as RECORDED_FULL_DEVICE
 from devices.models import Device, UserIdentity
 
@@ -437,8 +437,8 @@ def full_scope_routes():
     is covered by it without anybody remembering to add a line.
     """
     for context in iter_route_contexts(api_application.routes):
-        if context.methods is None or context.path in DOCUMENTATION:
-            continue  # the `/ws` gateway, and the documentation routes FastAPI adds
+        if context.methods is None:
+            continue  # the `/ws` gateway
         names = [
             dependency.call.__name__ for dependency in context.dependant.dependencies
         ]

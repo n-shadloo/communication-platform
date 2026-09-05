@@ -203,9 +203,7 @@ async def download_attachment(attachment_id: str):
         status_code=status.HTTP_200_OK,
         media_type="application/octet-stream",
         headers={
-            # Opaque ciphertext is never something a browser should render or a
-            # cache should keep: forced download, no shared caching.
-            "Content-Disposition": "attachment",
+            # Opaque ciphertext is never something a cache should keep.
             "Cache-Control": "private, no-store",
             "X-Accel-Redirect": f"/_protected_attachments/{stored[:2]}/{stored}",
         },

@@ -49,13 +49,11 @@ from core.buckets import (
     DEVICELOG_BUCKETS,
     ENVELOPE_BUCKETS,
     LABEL_BUCKETS,
-    NAME_BUCKETS,
     PROFILE_BUCKETS,
 )
 from core.tests import artefact
 from devices.models import Device, UserIdentity
 from vault.models import KeyBackup
-from voicerooms.models import Room
 
 # `transaction=True` because `api.orm.run_unit` closes the connection around every
 # unit of work, which under a wrapping test transaction would sever the connection
@@ -243,17 +241,8 @@ class Stage:
         )
 
     @functools.cached_property
-    def room(self):
-        return Room.objects.create(name_blob=b"n" * min(NAME_BUCKETS))
-
-    @functools.cached_property
     def attachment(self):
         return Attachment.objects.create(uploader=self.user, size=min(ATTACHMENT_BUCKETS))
-
-    def voice_configured(self):
-        self.settings.LIVEKIT_URL = "wss://voice.invalid"
-        self.settings.LIVEKIT_API_KEY = "livekit-key"
-        self.settings.LIVEKIT_API_SECRET = "livekit-secret-of-at-least-32-bytes"
 
 
 @pytest.fixture
@@ -508,37 +497,6 @@ def _download(stage):
     return Call("GET", f"{PREFIX}/attachments/{stage.attachment.id}", stage.auth)
 
 
-@sample("POST", f"{PREFIX}/rooms", "201")
-def _create_room(stage):
-    return Call(
-        "POST",
-        f"{PREFIX}/rooms",
-        stage.auth,
-        {"json": {"name_blob": blob(min(NAME_BUCKETS))}},
-    )
-
-
-@sample("GET", PREFIX + "/rooms/{room_id}", "200")
-def _read_room(stage):
-    return Call("GET", f"{PREFIX}/rooms/{stage.room.id}", stage.auth)
-
-
-@sample("PUT", PREFIX + "/rooms/{room_id}", "200")
-def _rename_room(stage):
-    return Call(
-        "PUT",
-        f"{PREFIX}/rooms/{stage.room.id}",
-        stage.auth,
-        {"json": {"name_blob": blob(min(NAME_BUCKETS))}},
-    )
-
-
-@sample("POST", PREFIX + "/rooms/{room_id}/token", "200")
-def _room_token(stage):
-    stage.voice_configured()
-    return Call("POST", f"{PREFIX}/rooms/{stage.room.id}/token", stage.auth)
-
-
 # --- The reads that find nothing -------------------------------------------------
 
 MISSING_UUID = "00000000-0000-4000-8000-000000000000"
@@ -576,26 +534,6 @@ def _no_backup_yet(stage):
 @drives("GET", f"{PREFIX}/me/profile", "404")
 def _no_profile_yet(stage):
     return stage.http.get(f"{PREFIX}/me/profile", headers=stage.auth)
-
-
-@drives("GET", PREFIX + "/rooms/{room_id}", "404")
-def _no_such_room(stage):
-    return stage.http.get(f"{PREFIX}/rooms/{MISSING_UUID}", headers=stage.auth)
-
-
-@drives("PUT", PREFIX + "/rooms/{room_id}", "404")
-def _no_such_room_to_rename(stage):
-    return stage.http.put(
-        f"{PREFIX}/rooms/{MISSING_UUID}",
-        headers=stage.auth,
-        json={"name_blob": blob(min(NAME_BUCKETS))},
-    )
-
-
-@drives("POST", PREFIX + "/rooms/{room_id}/token", "404")
-def _no_such_room_to_join(stage):
-    stage.voice_configured()
-    return stage.http.post(f"{PREFIX}/rooms/{MISSING_UUID}/token", headers=stage.auth)
 
 
 @drives("GET", PREFIX + "/users/{user_id}/identity", "404")

@@ -1,7 +1,7 @@
 # Chat backend
 
 The Django backend of a self-hosted, end-to-end encrypted chat platform: direct
-messages, group chats, and standalone voice rooms. The server relays and stores opaque
+messages and group chats. The server relays and stores opaque
 ciphertext and public keys; all cryptography runs in the client. The server never
 holds a private key, a content key, or a plaintext message, and its schema stores no
 conversation graph — an envelope knows its recipient device and nothing else.
@@ -17,11 +17,10 @@ panel and the settings.
 
 `openapi.json` is the generated contract of that surface: `python manage.py openapi`
 writes it and `--check` fails when the committed file is not what the routes produce,
-which CI runs as its own job. Under `DEBUG` the same document is served at
-`/openapi.json` with the interactive views at `/docs` and `/redoc`; all three are
-closed otherwise, because a route map is reconnaissance on a server whose posture is to
-reveal nothing, and the two interactive views load their JavaScript from a public CDN,
-so the committed file is the reference that works offline.
+which CI runs as its own job. The server publishes no schema route and no interactive
+documentation in any mode: a route map is reconnaissance on a server whose posture is
+to reveal nothing, and the interactive views render for a browser this product does
+not have. The committed file is the only reference, and it works offline.
 
 ## Protocol and transport
 
@@ -51,23 +50,21 @@ at `POST /api/v1/me/devices`. Both runtimes verify through the same module, so a
 one revokes is dead on the other.
 
 **WebSocket.** One gateway at `/ws`, a Starlette WebSocket route of the same FastAPI
-application. Native clients authenticate with an `Authorization: Bearer` header on the
-handshake; browsers, which cannot set WebSocket headers, connect bare and must send an
-in-band `{"type": "auth", "access": "..."}` frame within ten seconds. The gateway
-handles `ack`, `signal`, `subscribe_presence`, `room_subscribe`, `room_leave`, and
-`room_signal` frames from the client, and emits `envelope`, `signal`, `presence`,
-`room_signal`, and `room_presence` frames to it. Frames are JSON text only, size- and
-rate-limited; protocol violations and a slow consumer close the socket with code 4008,
-failed authentication after the accept with 4001, revocation with 4003, and a shutdown
-with 1012. A refusal decided before the accept — an unlisted Origin, or a bad header
-token — ends the handshake instead, which the client sees as an HTTP failure.
+application, with one handshake path: an `Authorization: Bearer` header on the upgrade
+request. A bad token or no header refuses the handshake before the accept, which the
+client sees as `403 Forbidden` rather than as a close code, so every accepted socket
+is already bound to a device. The gateway handles `ack`, `signal` and
+`subscribe_presence` frames from the client, and emits `envelope`, `signal` and
+`presence` frames to it. Frames are JSON text only, size- and rate-limited;
+protocol violations and a slow consumer close the socket with code 4008, revocation
+with 4003, and a shutdown with 1012.
 
 **The fan-out bus.** A frame that has to reach a socket other than the one that sent it
 goes through `realtime/bus.py`: Redis publish and subscribe over the async client, one
-subscription connection for each worker process, with a topic per device
-(`ws:dev:<device id>`) and per room (`ws:room:<room id>`). The gateway subscribes to a
-topic on bind or on a room join and unsubscribes on the way out, so Redis drops a
-publish nobody holds rather than carrying it to a worker that would discard it. Every
+subscription connection for each worker process, with one topic per device
+(`ws:dev:<device id>`). The gateway subscribes to that topic on bind and
+unsubscribes on the way out, so Redis drops a publish nobody holds rather than
+carrying it to a worker that would discard it. Every
 publisher — the send push, the revocation and deactivation closes, presence, and both
 relays — publishes after its transaction has committed, and a publish that fails never
 fails the request that caused it.
@@ -76,16 +73,20 @@ fails the request that caused it.
 ciphertext row per recipient device, held until that device drains and acks it (or the
 TTL prunes it). A group message is the same fan-out over every member device, each copy
 under its own pairwise session; the server holds no group object, roster, or group key.
-Everything else — presence, typing-style signals, ephemeral room text —
-is relayed between live sockets over the fan-out bus and never touches the database or
-disk. If no socket is listening, a volatile signal is dropped.
+Everything else — presence and typing-style signals — is relayed between live
+sockets over the fan-out bus and never touches the database or disk. If no socket is
+listening, a volatile signal is dropped.
 
-**Voice.** Standalone voice rooms use a self-hosted LiveKit SFU, reverse-proxied at
-`/rtc`. The backend mints short-lived LiveKit join tokens server-side
-(`POST /api/v1/rooms/{id}/token`): audio-only grants scoped to one room and one
-device, signed with the LiveKit API secret. Each sender's media key is generated
-client-side and distributed to the other participants over pairwise sessions; no key
-reaches the server or the SFU. A self-hosted coturn instance provides the TURN relay.
+**Voice.** Not served by this revision. The design is a full mesh of WebRTC audio
+between client devices, keyed by DTLS-SRTP between the two endpoints of each
+connection and relayed by the self-hosted coturn instance under a relay-only ICE
+policy; the offers, answers and candidates ride the `signal` frames above, and no
+room record, join token or media key exists on the server
+([ADR-0021](../docs/architecture/decisions/0021-relayed-webrtc-mesh-and-no-server-room.md)).
+Phase 7 lands the route that mints a coturn credential and the client contract that
+goes with it. `ops/coturn/turnserver.conf` is the relay's configuration and is
+deployed today; nothing in this backend reads `TURN_REALM` or
+`TURN_STATIC_AUTH_SECRET` yet.
 
 **Attachments.** Uploads are opaque encrypted blobs in fixed size buckets, stored on
 disk under a 43-character unguessable capability id. Download responses carry an
@@ -93,7 +94,7 @@ disk under a 43-character unguessable capability id. Download responses carry an
 Django never serves file contents.
 
 **Padding buckets.** Every stored ciphertext — envelopes, profiles, device labels,
-room names, key backups, device-log records, attachments — must be
+key backups, device-log records, attachments — must be
 exactly one of a fixed set of sizes for its type. Off-bucket payloads are rejected
 (`400 {"code": "bad_bucket"}`) without being echoed. Size-within-a-bucket is therefore
 the only content-derived signal the server can observe.
@@ -107,8 +108,8 @@ online to transfer it. There is no server history API.
 ## Runtime dependencies
 
 - PostgreSQL 16, on loopback.
-- Redis 7, on loopback (cache, rate counters, the gateway's fan-out bus, and live room
-  membership; configured non-persistent).
+- Redis 7, on loopback (rate counters, the login lockout, and the gateway's fan-out
+  bus; configured non-persistent).
 - uvicorn serving ASGI behind nginx, supervised by systemd, with uvloop, httptools and
   the `websockets` sans-io implementation; nginx terminates TLS and serves attachment
   bytes. `WEB_CONCURRENCY` sets the worker count and defaults to 1; each worker opens
@@ -130,12 +131,12 @@ online to transfer it. There is no server history API.
 | `vault` | Recovery key backup (cross-signing private key material, opaque to the server) |
 | `messaging` | Durable envelope queue: fan-out send, per-device drain, ack |
 | `attachments` | Bucketed encrypted blob store with capability-id access |
-| `voicerooms` | Persistent room records, LiveKit join tokens, live participant counts |
+| `voicerooms` | A migrations package and nothing else: `0002_delete_room` drops the table ADR-0021 removed. It leaves the tree once every environment has applied it |
 | `realtime` | The `/ws` gateway, the Redis publish-and-subscribe bus behind it, and its socket-side auth |
 | `core` | Size buckets, opaque blob field, env helpers, log scrubbing, health endpoint, deploy checks |
 | `config` | Settings (`base`/`dev`/`prod`), the ASGI entry point, root URLconf |
 | `openapi.json` | The generated OpenAPI document of the whole surface, committed so a contract change is a diff in review. `manage.py openapi` writes it; `--check` gates it |
-| `ops` | Deployment units, nginx/coturn/LiveKit/redis config, offline-install and audit tooling |
+| `ops` | Deployment units, nginx/coturn/redis config, offline-install and audit tooling |
 | `requirements` | Pinned, hashed dependencies. `vendor/` holds the offline wheel cache that `ops/vendor.sh` builds; it is not tracked in git |
 
 ## Local development
@@ -188,7 +189,7 @@ Every environment variable the code reads, with its default:
 | `DB_POOL_MIN_SIZE` | `1` | psycopg connection pool, minimum size |
 | `DB_POOL_MAX_SIZE` | `16` | psycopg connection pool, maximum size; the ceiling on what one process takes from `max_connections` |
 | `DB_POOL_TIMEOUT` | `10` | Seconds to wait for a pooled connection |
-| `REDIS_URL` | `redis://127.0.0.1:6379/0` | Redis URL for the rate counters, the login lockout, the gateway bus, and room presence. Production carries the `requirepass` value as `redis://:<password>@127.0.0.1:6379/0`; `check --deploy` refuses a URL without one (`core.E004`) |
+| `REDIS_URL` | `redis://127.0.0.1:6379/0` | Redis URL for the rate counters, the login lockout and the gateway bus. Production carries the `requirepass` value as `redis://:<password>@127.0.0.1:6379/0`; `check --deploy` refuses a URL without one (`core.E004`) |
 | `REDIS_COMMAND_TIMEOUT_SECONDS` | `2` | Connect and per-command timeout, seconds, for every Redis client of the process; a store that accepts the connection and then stops answering fails the command instead of holding its caller. The blocking pub/sub read of the gateway bus opts out of it |
 | `JWT_SIGNING_KEY` | — (required) | HS256 signing key for all JWTs; at least 32 characters and never equal to `DJANGO_SECRET_KEY`, or `check --deploy` refuses it (`core.E005`) |
 | `ACCESS_MIN` | `15` | Access-token lifetime, minutes |
@@ -203,11 +204,10 @@ Every environment variable the code reads, with its default:
 | `THROTTLE_REGISTER` | `10/hour` | Rate limit: account registration |
 | `THROTTLE_LOGIN` | `20/hour` | Rate limit: login |
 | `THROTTLE_REFRESH` | `120/hour` | Rate limit: token refresh |
-| `THROTTLE_ACCOUNTS` | `120/min` | Rate limit: general account/device/room endpoints |
+| `THROTTLE_ACCOUNTS` | `120/min` | Rate limit: general account and device endpoints |
 | `THROTTLE_CLAIM` | `120/min` | Rate limit: prekey-bundle claims |
 | `THROTTLE_ENVELOPES` | `600/min` | Rate limit: send/drain/ack |
 | `THROTTLE_ATTACHMENTS` | `60/min` | Rate limit: attachment upload/download |
-| `THROTTLE_ROOMTOKEN` | `60/min` | Rate limit: LiveKit join-token minting |
 | `ATTACHMENTS_ROOT` | `<repo>/media_root` | Directory for attachment bytes |
 | `ATTACH_USER_QUOTA_BYTES` | `2147483648` | Per-user attachment quota (2 GiB) |
 | `ATTACH_TTL_DAYS` | `30` | Attachment retention, days |
@@ -216,24 +216,21 @@ Every environment variable the code reads, with its default:
 | `MAX_DEVICES_PER_USER` | `10` | Live-device cap per account |
 | `MAX_DEVICELOG_RECORDS` | `10000` | Ceiling on one account's device-list log; an append past it is `409 devicelog_limit` |
 | `WEB_CONCURRENCY` | `1` | uvicorn worker processes; each opens its own Redis subscription for the gateway bus |
-| `ALLOWED_WS_ORIGINS` | empty (dev: `http://localhost`) | WebSocket Origin allowlist; empty is a deploy-blocking error in prod |
 | `WS_MAX_FRAME` | `524288` | Maximum WebSocket frame, bytes |
 | `SIGNAL_MAX` | `16384` | Maximum volatile-signal blob, characters |
-| `LIVEKIT_URL` | empty | Client-facing LiveKit URL; voice is 503 when unset |
-| `LIVEKIT_API_KEY` | empty | LiveKit API key |
-| `LIVEKIT_API_SECRET` | empty | LiveKit API secret (infrastructure secret, not a media key); at least 32 characters when voice is configured, or `check --deploy` refuses it (`core.E005`) |
-| `LIVEKIT_TOKEN_TTL_SECONDS` | `300` | LiveKit join-token lifetime, seconds |
 
 `.env.example` lists all of these plus `DJANGO_SETTINGS_MODULE` and the two coturn
 values (`TURN_REALM`, `TURN_STATIC_AUTH_SECRET`) consumed by `ops/coturn/turnserver.conf`.
+No Python module reads those two yet: the relay is deployed and the route that mints
+a credential from the secret lands in phase 7 (ADR-0021).
 
 ## The admin panel
 
 The back office runs on [django-unfold](https://unfoldadmin.com/) at `ADMIN_PATH`,
-served by the same uvicorn process as the API. It registers five things and hides
-everything else: accounts, devices, voice rooms, attachments, and a read-only audit
-log. It renders no ciphertext, no key or signature bytes, no password hash and no
-token — a device label and a room name are ciphertext, so neither is shown.
+served by the same uvicorn process as the API. It registers four things and hides
+everything else: accounts, devices, attachments, and a read-only audit log. It
+renders no ciphertext, no key or signature bytes, no password hash and no token — a
+device label is ciphertext, so it is not shown.
 
 There is one role, the superuser owner; a staff account that is not the owner gets an
 empty panel. Every administrative act writes an audit row, bulk actions included, and
@@ -256,12 +253,12 @@ changing the panel.
 [`ops/RUNBOOK.md`](ops/RUNBOOK.md) is the authoritative sequence: host setup, the
 wheel vendoring and the offline install, the database and the recreation rule of this
 version, `migrate` and `collectstatic`, the environment file and its permissions, the
-units, nginx and TLS under the private CA, LiveKit and coturn, the checks that verify
+units, nginx and TLS under the private CA, coturn, the checks that verify
 a deploy, the rollback, and the maintenance timer. This README does not duplicate it.
 
 The rest of `ops/` is what the runbook routes to: the systemd units for uvicorn and
-the maintenance timer, the nginx site and the proxy snippet it includes, coturn and
-LiveKit configuration, PostgreSQL setup notes, the TLS scripts, and the offline
+the maintenance timer, the nginx site and the proxy snippet it includes, the coturn
+configuration, PostgreSQL setup notes, the TLS scripts, and the offline
 tooling (`ops/vendor.sh`, `ops/offline_install.sh`, `ops/gen_sbom.sh`,
 `ops/audit/offline_rehearsal.sh`).
 

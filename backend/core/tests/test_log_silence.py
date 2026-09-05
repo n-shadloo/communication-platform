@@ -1,7 +1,7 @@
 """System-wide log-silence audit, driving ops/audit/log_silence.py.
 
 The per-app suites spot-check their own paths; this pass runs one scripted sequence
-across auth, devices, messaging, attachments, realtime, and voice, and asserts none
+across auth, devices, messaging, attachments and realtime, and asserts none
 of the identifiers/blobs/tokens it generated reached any log line. The second test
 proves the audit itself still has teeth, including against loggers that do not
 propagate to root, the blind spot that would let a leak grade its own homework. The
@@ -26,13 +26,9 @@ pytestmark = pytest.mark.django_db(transaction=True)
 
 @pytest.fixture(autouse=True)
 async def _isolated_runtime(settings, tmp_path):
-    """Uploads stay out of the repo, LiveKit minting gets fake infrastructure
-    credentials (signing is local PyJWT), and the bus the socket half opens is
-    released with the loop it was opened on."""
+    """Uploads stay out of the repo, and the bus the socket half opens is released
+    with the loop it was opened on."""
     settings.ATTACHMENTS_ROOT = tmp_path
-    settings.LIVEKIT_URL = "wss://livekit.audit.test"
-    settings.LIVEKIT_API_KEY = "lk-audit-key"
-    settings.LIVEKIT_API_SECRET = "lk-audit-secret-0123456789abcdef0123456789abcdef"
     yield
     await stop_subscriber()
     await close_client()
@@ -78,8 +74,6 @@ async def test_scripted_traffic_across_every_surface_leaks_nothing():
         "envelope blob",
         "queued envelope id",
         "attachment id",
-        "room id",
-        "livekit join token",
         "signal blob",
         "profile blob",
         "key backup blob",
@@ -127,7 +121,6 @@ async def test_the_pass_drives_every_route_of_the_table():
         "access token",
         "refresh token",
         "attachment id",
-        "livekit join token",
         "queued envelope id",
     ],
 )

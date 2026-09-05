@@ -1,11 +1,11 @@
 # Interop vectors for the client signature encodings
 
-`vectors.json` pins the exact bytes every client must sign and verify. Android, Web and
-any future client must reproduce each `signed_bytes_hex` **byte for byte** and verify
-each `signature_hex` against the stated public key. Two clients that each "follow the
-documentation" but disagree here cannot talk to each other, and the disagreement shows
-up as unverifiable devices rather than as an error anyone can debug — which is why these
-vectors exist rather than prose alone.
+`vectors.json` pins the exact bytes every client must sign and verify. The Android
+client and any future client must reproduce each `signed_bytes_hex` **byte for byte**
+and verify each `signature_hex` against the stated public key. Two clients that each
+"follow the documentation" but disagree here cannot talk to each other, and the
+disagreement shows up as unverifiable devices rather than as an error anyone can debug
+— which is why these vectors exist rather than prose alone.
 
 **The server verifies none of this.** It stores and relays these signatures as opaque
 bytes and has no opinion on whether they are valid (SECURITY.md § "Residual risk").

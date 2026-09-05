@@ -26,7 +26,6 @@ known-first-party = [
     "ops",
     "realtime",
     "vault",
-    "voicerooms",
 ]
 
 [tool.ruff.lint.per-file-ignores]

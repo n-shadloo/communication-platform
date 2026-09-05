@@ -5,7 +5,7 @@ from django.core.checks import Tags, run_checks
 from django.test import SimpleTestCase, override_settings
 
 from config.settings import prod
-from core.checks import no_foreign_or_telemetry, ws_origin_allowlist_set
+from core.checks import no_foreign_or_telemetry
 
 # The band's ceiling on concurrent WebSocket connections: fewer than 50 accounts
 # at `MAX_DEVICES_PER_USER` devices each, recorded as A1 in
@@ -190,8 +190,8 @@ class BasePostureTests(SimpleTestCase):
 
     def test_datastores_are_localhost_only(self):
         self.assertIn(settings.DATABASES["default"]["HOST"], {"127.0.0.1", "localhost"})
-        # One Redis URL: the rate counters, the lockout, the room presence sets and
-        # the gateway's fan-out bus all read `REDIS_URL`.
+        # One Redis URL: the rate counters, the lockout and the gateway's fan-out
+        # bus all read `REDIS_URL`.
         self.assertRegex(
             settings.REDIS_URL, r"^redis://(:[^@]+@)?(127\.0\.0\.1|localhost):"
         )
@@ -507,22 +507,13 @@ class BasePostureTests(SimpleTestCase):
     def test_core_deploy_check_reports_nothing(self):
         self.assertEqual(no_foreign_or_telemetry(None), [])
 
-    def test_ws_origin_check_passes_when_the_allowlist_is_set(self):
-        self.assertEqual(ws_origin_allowlist_set(None), [])
-
-    def test_ws_origin_check_fails_on_an_empty_allowlist(self):
-        # Empty means allow-any-Origin in the consumer (dev behaviour); prod must set it.
-        with override_settings(ALLOWED_WS_ORIGINS=[]):
-            errors = ws_origin_allowlist_set(None)
-        self.assertEqual([e.id for e in errors], ["core.E003"])
-
     def test_no_django_cache_backend_reads_redis(self):
         """Every built-in Django cache backend unpickles what it reads, and Redis
         is a store another process on the host can write to. Nothing in this
-        process may turn Redis bytes back into Python objects: the counters, the
-        lockout state and the presence sets are read as strings through the redis
-        client, and the Django cache framework is left on its process-local
-        default that no other software reaches."""
+        process may turn Redis bytes back into Python objects: the counters and
+        the lockout state are read as strings through the redis client, and the
+        Django cache framework is left on its process-local default that no other
+        software reaches."""
         backend = settings.CACHES["default"]["BACKEND"]
 
         self.assertNotIn("redis", backend.lower())
@@ -531,7 +522,7 @@ class BasePostureTests(SimpleTestCase):
     def test_the_deploy_checks_refuse_a_redis_url_without_a_password(self):
         """Redis listens on loopback of a host shared with other projects. Without
         `requirepass` every local process can flush the rate counters and the
-        lockout, inject frames on the fan-out bus, and read the presence sets."""
+        lockout and inject frames on the fan-out bus."""
         with override_settings(REDIS_URL="redis://127.0.0.1:6379/0"):
             failing = deploy_check_ids()
         with override_settings(REDIS_URL="redis://:generated-secret@127.0.0.1:6379/0"):
@@ -541,9 +532,8 @@ class BasePostureTests(SimpleTestCase):
         self.assertNotIn("core.E004", passing)
 
     def test_the_deploy_checks_refuse_a_weak_infrastructure_secret(self):
-        """The signing key mints a token for any account, and the LiveKit secret
-        mints a join token for any room. Django checks its own SECRET_KEY's
-        strength and nothing checked these two, so a short value or the
+        """The signing key mints a token for any account. Django checks its own
+        SECRET_KEY's strength and nothing checked this one, so a short value or the
         development fallback reached production in silence."""
         strong = "s" * 32
         cases = {
@@ -553,29 +543,155 @@ class BasePostureTests(SimpleTestCase):
                 "JWT_SIGNING_KEY": strong,
                 "SECRET_KEY": strong,
             },
-            "short LiveKit secret with voice configured": {
-                "LIVEKIT_URL": "wss://chat.example",
-                "LIVEKIT_API_KEY": "key",
-                "LIVEKIT_API_SECRET": "s" * 31,
-            },
         }
         for label, overrides in cases.items():
             with self.subTest(label), override_settings(**overrides):
                 self.assertIn("core.E005", deploy_check_ids(), label)
 
-        with override_settings(
-            JWT_SIGNING_KEY=strong,
-            SECRET_KEY="k" * 50,
-            LIVEKIT_URL="wss://chat.example",
-            LIVEKIT_API_KEY="key",
-            LIVEKIT_API_SECRET="l" * 32,
-        ):
+        with override_settings(JWT_SIGNING_KEY=strong, SECRET_KEY="k" * 50):
             self.assertNotIn("core.E005", deploy_check_ids())
-        # Voice off: the LiveKit secret is not read at all, so an empty one passes.
-        with override_settings(
-            JWT_SIGNING_KEY=strong, LIVEKIT_URL="", LIVEKIT_API_SECRET=""
+
+
+class CoturnPostureTests(SimpleTestCase):
+    """The only media service of this deployment, read from the file that runs it.
+
+    No Python module reads coturn's configuration, so nothing else in this suite
+    would notice a posture that drifted. ADR-0021 is what these assert: a relay
+    that carries SRTP it cannot open, answers no discovery, reaches nothing on
+    this host, and writes nothing down.
+    """
+
+    @staticmethod
+    def relay():
+        return (settings.BASE_DIR / "ops" / "coturn" / "turnserver.conf").read_text()
+
+    @staticmethod
+    def directives(conf):
+        """Every directive the file actually sets, as (key, value) pairs.
+
+        A `#` starts a comment wherever it appears, so a whole-line comment
+        disappears — which is what keeps a commented-out `cert=` from reading as a
+        certificate this relay serves — and a trailing one is cut off the value it
+        follows.
+        """
+        return [
+            (line.split("=", 1) + [""])[:2]
+            for line in (raw.split("#", 1)[0].strip() for raw in conf.splitlines())
+            if line
+        ]
+
+    def test_the_relay_carries_no_tls_listener_and_no_certificate(self):
+        """The hop between a client and this relay already carries SRTP keyed by
+        DTLS between two client devices, so a TLS or DTLS listener of coturn's own
+        would encrypt what is already encrypted and put a certificate, a private
+        key and a renewal on the host. The previous release read
+        `/etc/letsencrypt/live/`, a public-CA path the rest of the deployment left
+        behind when nginx moved to the private CA."""
+        keys = {key for key, _value in self.directives(self.relay())}
+
+        self.assertIn("no-tls", keys)
+        self.assertIn("no-dtls", keys)
+        for absent in ("tls-listening-port", "cert", "pkey"):
+            self.assertNotIn(absent, keys)
+
+    def test_the_relay_answers_no_discovery(self):
+        """A relay-only client never asks for its own address, and a STUN
+        responder is a reflector any host on the internet can point somewhere
+        else."""
+        keys = {key for key, _value in self.directives(self.relay())}
+
+        for directive in (
+            "no-stun",
+            "no-rfc5780",
+            "no-stun-backward-compatibility",
+            "no-multicast-peers",
+            "no-software-attribute",
+            "no-cli",
         ):
-            self.assertNotIn("core.E005", deploy_check_ids())
+            self.assertIn(directive, keys)
+
+    def test_the_relay_reaches_nothing_on_this_host_or_its_network(self):
+        """A TURN server that relays to loopback is an SSRF pivot into every
+        service of a shared VPS: PostgreSQL, Redis, uvicorn and the panel all
+        listen there. coturn denies loopback by default, and the default is not
+        what a reader can check — so every range is written out, and this is what
+        holds them there."""
+        denied = {
+            value
+            for key, value in self.directives(self.relay())
+            if key == "denied-peer-ip"
+        }
+
+        self.assertNotIn(
+            "allow-loopback-peers", {k for k, _v in self.directives(self.relay())}
+        )
+        # The host itself, filled with `listening-ip` at deploy time. An allocation
+        # that may name this box relays into nginx from the relay's own address,
+        # which is the caller's address laundered past the anonymous rate limiter.
+        self.assertIn(dict(self.directives(self.relay()))["listening-ip"], denied)
+        for required in (
+            "10.0.0.0-10.255.255.255",
+            "100.64.0.0-100.127.255.255",
+            "127.0.0.0-127.255.255.255",
+            "169.254.0.0-169.254.255.255",
+            "172.16.0.0-172.31.255.255",
+            "192.168.0.0-192.168.255.255",
+            "::1",
+            "fc00::-fdff:ffff:ffff:ffff:ffff:ffff:ffff:ffff",
+            "fe80::-febf:ffff:ffff:ffff:ffff:ffff:ffff:ffff",
+        ):
+            self.assertIn(required, denied)
+
+    def test_the_relay_writes_no_log_anywhere(self):
+        """Invariant 4 at the one layer no Python touches. A TURN log line names
+        the relay peer pair, which is two devices in one call — the same record as
+        an access log, one hop further out. `simple-log` is load-bearing: without
+        it coturn appends a date to the file name and writes a real file beside
+        the sink."""
+        directives = dict(self.directives(self.relay()))
+
+        self.assertEqual(directives.get("log-file"), "/dev/null")
+        self.assertIn("no-stdout-log", directives)
+        self.assertIn("simple-log", directives)
+        self.assertNotIn("syslog", directives)
+        self.assertNotIn("verbose", directives)
+
+    def test_the_quotas_bound_the_band_and_the_ports_bound_the_quotas(self):
+        """The band is fewer than 50 accounts, at most 500 devices and at most ten
+        participants in one room, and every number here comes off it: nine relay
+        allocations for one device in a full mesh, five such rooms at once for the
+        host. One allocation takes one relay port, so a port range narrower than
+        `total-quota` would make the range the limit and the quota a decoration —
+        which is the state a later widening of the quota alone would restore."""
+        directives = dict(self.directives(self.relay()))
+        user, total = int(directives["user-quota"]), int(directives["total-quota"])
+        ports = int(directives["max-port"]) - int(directives["min-port"]) + 1
+
+        self.assertGreaterEqual(user, 9)
+        self.assertGreaterEqual(total, 10 * user)
+        self.assertGreater(ports, total)
+
+    def test_the_relay_listens_on_one_port_of_its_own_address(self):
+        """UDP and TCP 3478, and the firewall list of `ops/RUNBOOK.md` §1 is the
+        same three numbers. A wildcard listener on a host shared with two other
+        projects would answer on every address the box holds."""
+        directives = dict(self.directives(self.relay()))
+
+        self.assertEqual(directives["listening-port"], "3478")
+        self.assertNotIn("no-tcp-relay", directives)
+        for key in ("listening-ip", "relay-ip"):
+            self.assertNotIn("0.0.0.0", directives[key])
+
+    def test_the_credentials_are_the_shared_secret_form_and_no_value_is_committed(self):
+        """`use-auth-secret` is the TURN REST API form: the username is an expiry
+        timestamp and the password is an HMAC over it, so no per-user account
+        state is stored on the relay. The realm and the secret are filled inline at
+        deploy time, and a value committed here would be a credential in git."""
+        directives = dict(self.directives(self.relay()))
+
+        self.assertIn("use-auth-secret", directives)
+        for absent in ("realm", "static-auth-secret", "user", "userdb"):
+            self.assertNotIn(absent, directives)
 
 
 class ProdPostureTests(SimpleTestCase):

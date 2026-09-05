@@ -54,7 +54,6 @@ class CoreConfigTests(SimpleTestCase):
             checks.no_foreign_or_telemetry,
             checks.redis_requires_a_password,
             checks.infrastructure_secrets_are_strong,
-            checks.ws_origin_allowlist_set,
         }
 
         self.assertLessEqual(declared, registry.deployment_checks)

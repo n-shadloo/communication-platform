@@ -3,9 +3,8 @@
 Every frame that reaches a socket from outside its own connection arrives here.
 A publisher names a topic and a JSON payload; the subscriber of each worker
 process hands that payload to the sockets registered for the topic. Topics are
-per device (`ws:dev:<device id>`) and per room (`ws:room:<room id>`), and a
-payload's `type` names either a server frame of `realtime/API.md` or a control
-event this module owns.
+per device (`ws:dev:<device id>`), and a payload's `type` names either a server
+frame of `realtime/API.md` or a control event this module owns.
 
 **Per-topic subscribe and unsubscribe, not one pattern subscription.** A pattern
 would cost one command for the life of the process, at the price of delivering
@@ -14,13 +13,13 @@ for. The common case makes that expensive: a live push to a device that is
 offline is a whole envelope blob — up to a base64 bucket — carried across the
 loopback socket only to be discarded. Per-topic instead: Redis drops the publish
 server-side when nobody holds the topic, and the process pays one subscribe or
-unsubscribe round trip on each bind, room join and room leave, which is
-connection-lifecycle rate rather than frame rate.
+unsubscribe round trip on each bind, which is connection-lifecycle rate rather
+than frame rate.
 
 **Every publish is best-effort and silent.** The durable mailbox is the source of
-truth for an envelope, and presence, signals and room traffic are volatile by
-design, so a publish that fails must never fail the request that caused it. It is
-never logged either: the message would carry a topic, and a topic names a device.
+truth for an envelope, and presence and signals are volatile by design, so a
+publish that fails must never fail the request that caused it. It is never logged
+either: the message would carry a topic, and a topic names a device.
 """
 
 import asyncio
@@ -79,10 +78,6 @@ async def _keep(response):
 
 def device_topic(device_id):
     return f"ws:dev:{device_id}"
-
-
-def room_topic(room_id):
-    return f"ws:room:{room_id}"
 
 
 async def publish(topic, payload):
@@ -165,24 +160,6 @@ async def announce_presence(device_ids, subject_id, state):
             {"type": "presence", "device_id": subject_id, "state": state},
         )
         for device_id in device_ids
-    )
-
-
-async def relay_room(room_id, blob):
-    await publish(
-        room_topic(room_id), {"type": "room_signal", "room_id": room_id, "blob": blob}
-    )
-
-
-async def announce_room_presence(room_id, device_id, state):
-    await publish(
-        room_topic(room_id),
-        {
-            "type": "room_presence",
-            "room_id": room_id,
-            "device_id": device_id,
-            "state": state,
-        },
     )
 
 

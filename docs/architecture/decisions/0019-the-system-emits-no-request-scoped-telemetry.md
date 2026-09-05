@@ -30,7 +30,7 @@ worse than the data it describes, because it is durable, it is copied into
 backups, and it survives the row it names.
 
 The phase-4 reviews found the last place this had not been applied. uvicorn ran
-with `--no-access-log`, coturn with `no-stdout-log`, LiveKit at `warn` — and
+with `--no-access-log` and each media process had a posture of its own — and
 nginx, which sees every one of those requests one hop earlier, carried no logging
 directive at all and inherited one from the packaged configuration.
 

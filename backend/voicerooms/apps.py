@@ -1,10 +1,13 @@
 from django.apps import AppConfig
-from django.utils.translation import gettext_lazy as _
 
 
 class VoiceroomsConfig(AppConfig):
-    default_auto_field = "django.db.models.BigAutoField"
+    """A migrations package and nothing else.
+
+    ADR-0021 removed the room object, and `0002_delete_room` is what carries that
+    removal to a database that already holds the table. The app stays installed
+    until every environment has applied it, and declares no `verbose_name`
+    because it registers no model and reaches no page of the panel.
+    """
+
     name = "voicerooms"
-    # Declared, never derived: Django titles the label when an app omits
-    # this, and the breadcrumb of every page of this app is what shows it.
-    verbose_name = _("Voice rooms")

@@ -110,9 +110,9 @@ class AsgiClient:
 
 
 def flush_redis():
-    """Empty the shared Redis database: the rate counters, the lockout state and
-    the presence sets. Through the redis client rather than Django's cache
-    framework, which this project keeps off Redis (ADR-0018)."""
+    """Empty the shared Redis database: the rate counters and the lockout state.
+    Through the redis client rather than Django's cache framework, which this
+    project keeps off Redis (ADR-0018)."""
     store = redis.Redis.from_url(settings.REDIS_URL)
     try:
         store.flushdb()

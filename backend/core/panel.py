@@ -158,7 +158,6 @@ def dashboard(request, context):
     from accounts.models import User
     from attachments.models import Attachment
     from devices.models import Device
-    from voicerooms.models import Room
 
     # `AdminSite.index_title` is "Site administration", which names the software
     # rather than the job. The callback runs after `index()` sets it, so this is the
@@ -175,7 +174,6 @@ def dashboard(request, context):
     pending = list(User.objects.filter(is_active=False).order_by("created_date", "id"))
     active_accounts = User.objects.filter(is_active=True).count()
     live_devices = Device.objects.filter(revoked_date__isnull=True).count()
-    rooms = Room.objects.count()
     stored = Attachment.objects.aggregate(total=Sum("size"))["total"] or 0
 
     # The quota is per account, so the ceiling this deployment has sold is the
@@ -192,10 +190,8 @@ def dashboard(request, context):
             # the one place the action and its audit row live.
             "accounts_url": reverse("admin:accounts_user_changelist"),
             "devices_url": reverse("admin:devices_device_changelist"),
-            "rooms_url": reverse("admin:voicerooms_room_changelist"),
             "attachments_url": reverse("admin:attachments_attachment_changelist"),
             "live_devices": live_devices,
-            "room_count": rooms,
             "storage_used": storage_label(stored),
             "storage_ceiling": storage_label(ceiling),
             "storage_percent": round(stored * 100 / ceiling, 1) if ceiling else 0,

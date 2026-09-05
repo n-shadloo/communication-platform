@@ -128,9 +128,8 @@ class WebSocketCommunicator:
     async def disconnect(self, code=1000, timeout=2):
         """Drop the socket and wait for the gateway's cleanup to finish.
 
-        Waiting is what makes `room_live_count` and the presence-offline
-        assertions deterministic: both are effects of the cleanup, not of the
-        disconnect frame.
+        Waiting is what makes the presence-offline assertions deterministic: the
+        announcement is an effect of the cleanup, not of the disconnect frame.
         """
         await self._inbound.put({"type": "websocket.disconnect", "code": code})
         if self.task is not None and not self.task.done():

@@ -28,7 +28,6 @@ from core.panel import (
     storage_label,
 )
 from devices.models import Device
-from voicerooms.models import Room
 
 pytestmark = pytest.mark.django_db
 
@@ -160,10 +159,8 @@ class TestAudit:
     def test_a_long_name_is_truncated_to_the_column(self, owner):
         """`object_repr` is 200 characters wide, and a name longer than that is a
         database error in the middle of an action that already ran."""
-        room = Room.objects.create(name_blob=b"\x00" * 256)
-
         audit(
-            request_for(owner), [room], DELETION, "Deleted.", repr_of=lambda _: "x" * 500
+            request_for(owner), [owner], DELETION, "Deleted.", repr_of=lambda _: "x" * 500
         )
 
         assert len(LogEntry.objects.get().object_repr) == 200
@@ -229,10 +226,14 @@ class TestPanelModelAdminDefaults:
         """Django's own delete paths write `str(obj)` for the label. Overriding
         `log_deletions` covers the bulk action, the single-object delete view and
         anything either grows into."""
-        rooms = [Room.objects.create(name_blob=b"\x00" * 256) for _ in range(2)]
+        stored = [
+            Attachment.objects.create(uploader=owner, size=min(ATTACHMENT_BUCKETS))
+            for _ in range(2)
+        ]
 
         written = panel_admin.log_deletions(
-            request_for(owner), Room.objects.filter(pk__in=[room.pk for room in rooms])
+            request_for(owner),
+            Attachment.objects.filter(pk__in=[item.pk for item in stored]),
         )
 
         assert written == 2
@@ -275,7 +276,6 @@ class TestDashboard:
             registration_id=2,
             revoked_date="2026-01-01",
         )
-        Room.objects.create(name_blob=b"\x00" * 256)
 
         context = dashboard(request_for(owner), {})
 
@@ -284,7 +284,6 @@ class TestDashboard:
         assert [account.pk for account in context["pending_accounts"]] == [waiting.pk]
         assert context["active_accounts"] == 1
         assert context["live_devices"] == 1  # the revoked one is not live
-        assert context["room_count"] == 1
 
     @override_settings(ATTACH_USER_QUOTA_BYTES=1000)
     def test_the_ceiling_is_the_quota_times_every_account_that_could_fill_one(
@@ -314,7 +313,7 @@ class TestDashboard:
     def test_every_number_is_a_link_to_the_list_behind_it(self, owner):
         context = dashboard(request_for(owner), {})
 
-        for key in ("accounts_url", "devices_url", "rooms_url", "attachments_url"):
+        for key in ("accounts_url", "devices_url", "attachments_url"):
             assert context[key].endswith("/"), key
         assert context["accounts_url"] != context["devices_url"]
 

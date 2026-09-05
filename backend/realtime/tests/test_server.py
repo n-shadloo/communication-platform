@@ -5,10 +5,9 @@ close codes live and where the frame protocol is decided. Two lines of
 `realtime/API.md` are not the application's to keep, though, and only a server
 can settle them:
 
-- A refusal sent before the accept — an unlisted Origin, or a bad header token —
-  is a `websocket.close` at the ASGI layer, but a server has no accepted socket
-  to send a close frame on. It answers the handshake with an HTTP failure
-  instead, and the code never reaches the client. The documentation says so
+- Every refusal is decided before the accept, so it is a `websocket.close` at the
+  ASGI layer — but a server has no accepted socket to send a close frame on. It
+  answers the handshake with `403 Forbidden` instead. The documentation says so
   because of this test.
 - `1012` on shutdown is uvicorn's, not this application's: uvicorn closes each
   live socket itself before the lifespan shutdown runs, so `gateway.drain` never
@@ -19,7 +18,6 @@ either implementation is caught here rather than on the VPS.
 """
 
 import asyncio
-import json
 import socket
 import threading
 
@@ -89,34 +87,11 @@ async def server():
         await running.stop()
 
 
-async def test_a_refused_origin_is_a_failed_handshake_not_a_close_code(
-    server, active_user, device, settings
-):
-    """4403 is the documented meaning; 403 is what the client observes.
-
-    The application closes with 4403 before accepting, and a server with no
-    accepted socket can only answer the upgrade request. A client sees a failed
-    handshake, so it must read one as an Origin refusal rather than wait for a
-    code that never arrives.
-    """
-    settings.ALLOWED_WS_ORIGINS = ["https://chat.example"]
-    access = await mint_access(active_user, device)
-
-    with pytest.raises(InvalidStatus) as refusal:
-        await websockets.connect(
-            server.url,
-            additional_headers={
-                "authorization": f"Bearer {access}",
-                "origin": "https://evil.example",
-            },
-        )
-
-    assert refusal.value.response.status_code == 403
-
-
-async def test_a_refused_token_is_a_failed_handshake_too(server, db):
-    """Same shape as the Origin refusal, and for the same reason: the header path
-    binds before the accept, so a token that fails ends the handshake."""
+async def test_a_refused_token_is_a_failed_handshake(server, db):
+    """The gateway binds before the accept, so a token that fails ends the
+    handshake: there is no accepted socket to carry a close code, and a client
+    must read a failed upgrade as "refresh the access token and reconnect"
+    rather than wait for one."""
     with pytest.raises(InvalidStatus) as refusal:
         await websockets.connect(
             server.url, additional_headers={"authorization": "Bearer not-a-jwt"}
@@ -125,13 +100,20 @@ async def test_a_refused_token_is_a_failed_handshake_too(server, db):
     assert refusal.value.response.status_code == 403
 
 
-async def test_a_shutdown_closes_a_live_socket_with_1012(
-    server, active_user, device, settings
-):
+async def test_a_handshake_with_no_token_is_refused_the_same_way(server, db):
+    """The one handshake path carries the token on the upgrade request. Without
+    the header there is nothing to authenticate, and the refusal is the same
+    `403` — not an accepted socket waiting for the client to say something."""
+    with pytest.raises(InvalidStatus) as refusal:
+        await websockets.connect(server.url)
+
+    assert refusal.value.response.status_code == 403
+
+
+async def test_a_shutdown_closes_a_live_socket_with_1012(server, active_user, device):
     """The drain window of `ops/systemd/chat.service`, exercised end to end: a
     deploy has to reach the client as a reconnect signal, not as a dropped
     connection it will retry blindly."""
-    settings.ALLOWED_WS_ORIGINS = []
     access = await mint_access(active_user, device)
 
     async with websockets.connect(
@@ -144,27 +126,6 @@ async def test_a_shutdown_closes_a_live_socket_with_1012(
 
     assert closed.value.rcvd is not None, "the socket dropped without a close frame"
     assert closed.value.rcvd.code == 1012
-
-
-async def test_the_bare_handshake_and_its_auth_frame_work_through_a_real_server(
-    server, active_user, device
-):
-    """The browser path end to end. Every other test of it drives the ASGI
-    application directly, where the accept is a message rather than an HTTP 101 —
-    so this is the one place that shows a socket with no `Authorization` header
-    surviving a real upgrade and then authenticating in band."""
-    access = await mint_access(active_user, device)
-
-    async with websockets.connect(server.url) as client:
-        await client.send(json.dumps({"type": "auth", "access": access}))
-        await client.send(
-            json.dumps({"type": "signal", "to_device": str(device.id), "blob": "probe"})
-        )
-
-        async with asyncio.timeout(STARTUP_TIMEOUT_SECONDS):
-            frame = json.loads(await client.recv())
-
-    assert frame == {"type": "signal", "blob": "probe"}
 
 
 async def test_a_protocol_violation_after_the_accept_arrives_as_a_close_frame(

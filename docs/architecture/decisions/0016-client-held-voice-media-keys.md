@@ -1,9 +1,12 @@
 # 0016. Client-held voice media keys
 
-- Status: Accepted
+- Status: Superseded
 - Phase: 1
 - Date: 2026-09-03
 - Landed: 2026-09-03, in the second run of phase 1
+- Superseded by [0021](0021-relayed-webrtc-mesh-and-no-server-room.md) on
+  2026-09-05: the SFU, the room object and the per-sender media key are gone, and
+  a voice connection is keyed by DTLS between its two endpoints.
 
 ## Context
 

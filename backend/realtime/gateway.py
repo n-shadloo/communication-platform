@@ -1,16 +1,16 @@
 """The `/ws` gateway: one Starlette WebSocket route on the FastAPI application.
 
-One socket carries envelope delivery, volatile device-to-device signals, presence
-and ephemeral room traffic. The wire contract is `realtime/API.md` and this module
-is the whole of its server half; `realtime/bus.py` carries a frame between two
-sockets, wherever in the process set they are.
+One socket carries envelope delivery, volatile device-to-device signals and
+presence. The wire contract is `realtime/API.md` and this module is the whole of
+its server half; `realtime/bus.py` carries a frame between two sockets, wherever
+in the process set they are.
 
-A connection is a receive loop and a send loop in one task group, plus the
-deadline that bounds an unauthenticated socket and the watch that turns an
-out-of-band stop — a revocation, a slow consumer — into a close code. Every task
-of the group dies with the first one that raises, and the cleanup that follows
-runs on every exit path alike: presence offline to the devices the socket named,
-a room leave for every room it held, and the unsubscription of every topic.
+A connection authenticates before it is accepted, so every accepted socket is
+already bound to a device. It is then a receive loop and a send loop in one task
+group, plus the watch that turns an out-of-band stop — a revocation, a slow
+consumer — into a close code. Every task of the group dies with the first one that
+raises, and the cleanup that follows runs on every exit path alike: presence
+offline to the devices the socket named, and the unsubscription of its topic.
 
 Nothing here is persisted and nothing here is logged. The database is reached only
 through `api/orm.py`, on the thread the ORM owns, and Redis only through the async
@@ -26,12 +26,9 @@ from django.conf import settings
 from fastapi import WebSocket
 
 from realtime import auth, bus
-from voicerooms.presence import room_join, room_leave
 
-AUTH_DEADLINE_SECONDS = 10
 RATE_WINDOW_SECONDS = 1.0
 RATE_MAX_IN_WINDOW = 100
-ROOM_SUBSCRIPTIONS_MAX = 100  # bounded like presence_targets
 PRESENCE_TARGETS_MAX = 500
 ACK_IDS_MAX = 200
 
@@ -59,12 +56,6 @@ class _Stop(Exception):
 
 
 async def gateway(websocket: WebSocket):
-    if not _origin_allowed(websocket):
-        # Before accept, so this is a refused handshake rather than a close frame:
-        # a server answers it with an HTTP failure and the code below never
-        # reaches the client. `realtime/API.md` documents both halves.
-        await websocket.close(code=4403)
-        return
     await Connection(websocket).serve(_header_token(websocket))
 
 
@@ -96,9 +87,7 @@ class Connection:
         self.user = None
         self.device = None
         self.device_topic = None
-        self.authed = False
         self.presence_targets = set()
-        self.rooms = set()
         self._msg_times = []
         self._outbox = asyncio.Queue(maxsize=SEND_QUEUE_MAX)
         self._stop = asyncio.Event()
@@ -107,11 +96,14 @@ class Connection:
 
     # ---- lifecycle -------------------------------------------------------
     async def serve(self, token):
+        if token is None or not await self._bind(token):
+            # Decided before the accept, so this is a refused handshake rather
+            # than a close frame: a server answers the upgrade request with an
+            # HTTP failure and there is no socket to carry a code on.
+            # `realtime/API.md` documents both halves.
+            await self.websocket.close()
+            return
         try:
-            if token is not None and not await self._bind(token):
-                # Before accept, like the Origin refusal above.
-                self._close_code = 4001
-                return
             await self.websocket.accept()
             LIVE.add(self)
             await self._loops()
@@ -130,8 +122,6 @@ class Connection:
                 group.create_task(self._receive_loop())
                 group.create_task(self._send_loop())
                 group.create_task(self._stop_watch())
-                if not self.authed:
-                    group.create_task(self._auth_deadline())
         except* _Stop:
             pass
 
@@ -149,19 +139,9 @@ class Connection:
         await self._stop.wait()
         raise _Stop
 
-    async def _auth_deadline(self):
-        await asyncio.sleep(AUTH_DEADLINE_SECONDS)
-        if not self.authed:
-            self.stop(4001)
-
     async def _cleanup(self):
-        if self.authed:
-            await self._emit_presence("offline")
-            for room_id in tuple(self.rooms):
-                await self._leave_room(room_id)
-        if self.device_topic is not None:
-            await bus.get_subscriber().unsubscribe(self.device_topic, self.deliver)
-            self.device_topic = None
+        await self._emit_presence("offline")
+        await bus.get_subscriber().unsubscribe(self.device_topic, self.deliver)
 
     async def _close(self):
         if self._close_code is None:
@@ -227,24 +207,12 @@ class Connection:
 
     async def _handle(self, content):
         message_type = content.get("type")
-        if not self.authed:
-            if message_type == "auth" and await self._bind(content.get("access") or ""):
-                return
-            self.stop(4001)
-            raise _Stop
-
         if message_type == "ack":
             await self._handle_ack(content)
         elif message_type == "signal":
             await self._handle_signal(content)
         elif message_type == "subscribe_presence":
             await self._handle_subscribe_presence(content)
-        elif message_type == "room_subscribe":
-            await self._handle_room_subscribe(content)
-        elif message_type == "room_leave":
-            await self._handle_room_leave(content)
-        elif message_type == "room_signal":
-            await self._handle_room_signal(content)
         # Unknown types are ignored (but counted by the rate limiter above).
 
     async def _handle_ack(self, content):
@@ -290,51 +258,7 @@ class Connection:
         self.presence_targets = valid
         await self._emit_presence("online")
 
-    async def _handle_room_subscribe(self, content):
-        raw_id = content.get("room_id")
-        if not raw_id:
-            return
-        try:
-            # Normalized like _handle_signal: raw client input into the UUID pk
-            # lookup raises ValidationError, a crash whose traceback embeds the
-            # value, and alternate spellings would split the topic namespace.
-            room_id = str(uuid.UUID(str(raw_id)))
-        except (ValueError, TypeError):
-            return
-        if room_id not in self.rooms and len(self.rooms) >= ROOM_SUBSCRIPTIONS_MAX:
-            return
-        if not await auth.room_exists(room_id):
-            return
-
-        self.rooms.add(room_id)
-        await bus.get_subscriber().subscribe(bus.room_topic(room_id), self.deliver)
-        await bus.announce_room_presence(room_id, str(self.device.id), "join")
-        await room_join(room_id, self.device.id)
-
-    async def _handle_room_leave(self, content):
-        room_id = str(content.get("room_id") or "")
-        if room_id in self.rooms:
-            await self._leave_room(room_id)
-
-    async def _handle_room_signal(self, content):
-        room_id = str(content.get("room_id") or "")
-        blob = content.get("blob")
-        # Ephemeral room text and state: relayed to the room's subscribers, never
-        # persisted or logged.
-        if (
-            room_id in self.rooms
-            and isinstance(blob, str)
-            and len(blob) <= settings.SIGNAL_MAX
-        ):
-            await bus.relay_room(room_id, blob)
-
     # ---- helpers ---------------------------------------------------------
-    async def _leave_room(self, room_id):
-        self.rooms.discard(room_id)
-        await bus.announce_room_presence(room_id, str(self.device.id), "leave")
-        await room_leave(room_id, self.device.id)
-        await bus.get_subscriber().unsubscribe(bus.room_topic(room_id), self.deliver)
-
     async def _bind(self, token_str):
         result = await auth.authenticate_access(token_str)
         if result is None:
@@ -342,7 +266,6 @@ class Connection:
         self.user, self.device = result
         self.device_topic = bus.device_topic(self.device.id)
         await bus.get_subscriber().subscribe(self.device_topic, self.deliver)
-        self.authed = True
         await auth.touch_active(self.device.id)
         return True
 
@@ -352,8 +275,6 @@ class Connection:
         # told. No content is involved. One round trip for the whole set, because
         # the set holds up to PRESENCE_TARGETS_MAX and this runs on the receive
         # loop and again on every disconnect.
-        if not self.device:
-            return
         await bus.announce_presence(self.presence_targets, str(self.device.id), state)
 
     def _rate_ok(self):
@@ -361,21 +282,6 @@ class Connection:
         self._msg_times = [t for t in self._msg_times if now - t < RATE_WINDOW_SECONDS]
         self._msg_times.append(now)
         return len(self._msg_times) <= RATE_MAX_IN_WINDOW
-
-
-def _origin_allowed(websocket):
-    allowed = set(settings.ALLOWED_WS_ORIGINS or [])
-    if not allowed:
-        return True  # unset allowlist = allow (dev); core.E003 keeps it out of prod
-    origin = websocket.headers.get("origin")
-    if origin is None:
-        # Native clients (the Flutter app) send no Origin header at all. Origin is
-        # a browser-only CSWSH defense: a browser always attaches its real origin
-        # and cannot suppress it, while a native attacker can forge any value, so
-        # rejecting the absent header locks out the primary client and stops
-        # nobody. Present-but-unlisted origins (including "null") are refused.
-        return True
-    return origin in allowed
 
 
 def _header_token(websocket):

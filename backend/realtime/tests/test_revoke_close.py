@@ -15,10 +15,10 @@ from .conftest import (
     bearer,
     connect_ok,
     expect_close,
+    expect_refused,
     http_request,
     mint_access,
     probe,
-    ws,
 )
 
 pytestmark = pytest.mark.django_db(transaction=True)
@@ -57,9 +57,7 @@ async def test_rest_revocation_closes_the_live_socket_and_bars_reconnect(
 
     await expect_close(comm, 4003)
 
-    retry = ws(bearer(doomed_access))
-    connected, code = await retry.connect(timeout=2)
-    assert (connected, code) == (False, 4001)
+    await expect_refused(bearer(doomed_access))
 
 
 async def test_admin_deactivation_closes_the_users_live_sockets(active_user, device):
@@ -112,9 +110,7 @@ async def test_the_logout_route_closes_every_socket_of_the_device(active_user, d
     await expect_close(first, 4003)
     await expect_close(second, 4003)
 
-    retry = ws(bearer(access))
-    connected, code = await retry.connect(timeout=2)
-    assert (connected, code) == (False, 4001)
+    await expect_refused(bearer(access))
 
 
 async def test_a_close_event_for_another_device_leaves_this_socket_alone(

@@ -21,7 +21,7 @@ from api.middleware import (
     BodyCap,
     Limits,
     RequestDeadline,
-    SecurityHeaders,
+    ResponseHeaders,
     ThreadSensitive,
     TrustedHost,
 )
@@ -35,7 +35,6 @@ from devices.routes import registration as devices_registration
 from messaging.routes import router as messaging_router
 from realtime import bus, gateway
 from vault.routes import router as vault_router
-from voicerooms.routes import router as voicerooms_router
 
 API_PREFIX = "/api/v1"
 
@@ -91,9 +90,6 @@ def route_limits():
         f"{API_PREFIX}/me/envelopes/ack": batch_class,
         f"{API_PREFIX}/attachments": attachment_class,
         f"{API_PREFIX}/attachments/{{attachment_id}}": json_class,
-        f"{API_PREFIX}/rooms": json_class,
-        f"{API_PREFIX}/rooms/{{room_id}}": json_class,
-        f"{API_PREFIX}/rooms/{{room_id}}/token": json_class,
     }
 
     return per_route, json_class
@@ -159,20 +155,20 @@ async def lifespan(app):
 
 
 def create_app(django_app):
-    # ADR-0008: the schema and the two documentation routes describe every route
-    # and every payload of a server whose posture is to reveal nothing, so they
-    # exist in development only. `manage.py openapi` is how the document is
-    # produced everywhere else, and it reads the same generator the routes below
-    # would serve.
-    published = settings.DEBUG
+    # No schema route and no interactive documentation, in any mode (ADR-0020).
+    # They render for a browser, and the product has no browser client; the
+    # document itself describes every route and every payload of a server whose
+    # posture is to reveal nothing. `manage.py openapi` writes `openapi.json` from
+    # the generator `schema.install` puts on the application below, and the
+    # committed artefact is the only reference.
     app = FastAPI(
         title="communication platform",
         version="v1",
         lifespan=lifespan,
         generate_unique_id_function=schema.operation_id,
-        docs_url="/docs" if published else None,
-        redoc_url="/redoc" if published else None,
-        openapi_url="/openapi.json" if published else None,
+        docs_url=None,
+        redoc_url=None,
+        openapi_url=None,
     )
     errors.install(app)
     schema.install(app)
@@ -184,7 +180,6 @@ def create_app(django_app):
     app.include_router(devices_authenticated, prefix=API_PREFIX)
     app.include_router(messaging_router, prefix=API_PREFIX)
     app.include_router(attachments_router, prefix=API_PREFIX)
-    app.include_router(voicerooms_router, prefix=API_PREFIX)
     # The gateway is at the root, not under the version prefix: `/ws` is the path
     # `realtime/API.md` publishes and the client already opens. Added to the
     # application rather than included as a router, because a websocket route
@@ -208,7 +203,7 @@ def wrap(app):
     """The middleware stack, from the outside in."""
     limits_for = build_limits()
     stack = ThreadSensitive(app)
-    stack = SecurityHeaders(stack)
+    stack = ResponseHeaders(stack)
     stack = BodyCap(stack, limits_for)
     stack = RequestDeadline(stack, limits_for)
     return TrustedHost(stack, settings.ALLOWED_HOSTS)

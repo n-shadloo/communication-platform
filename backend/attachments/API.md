@@ -167,7 +167,6 @@ Empty body with:
 
 ```
 Content-Type: application/octet-stream
-Content-Disposition: attachment
 Cache-Control: private, no-store
 X-Accel-Redirect: /_protected_attachments/Xk/Xk3vT9qLm2WnPzR8sYb4cJdF6hA1gE5uV7iO0wQtN_M
 ```

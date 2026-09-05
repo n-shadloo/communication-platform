@@ -14,7 +14,6 @@ own, and asserts on the close code and the frames that transport received.
 
 import asyncio
 import json
-import uuid
 
 import pytest
 from hypothesis import given
@@ -152,23 +151,22 @@ async def test_the_outbox_takes_its_bound_and_closes_the_socket_on_the_frame_pas
     assert past_the_bound.websocket.closes == [4008]
 
 
-async def test_a_connection_that_never_bound_announces_no_presence():
-    """The cleanup runs on every exit path, including one where the bind never
-    completed. Unguarded, the announcement reads the device it does not have and
-    raises out of the `finally` that the rest of the cleanup lives in."""
-    watched = str(uuid.uuid4())
-    received = []
-    await bus.get_subscriber().subscribe(bus.device_topic(watched), received.append)
-    connection = gateway.Connection(_Transport())
-    connection.presence_targets = {watched}
+async def test_a_refused_handshake_runs_no_cleanup_and_joins_nothing(db):
+    """The cleanup is what the bind pays for, so it runs only inside the accept.
 
-    assert await connection._emit_presence("online") is None
+    A refusal returns before it: nothing to announce offline and no topic to give
+    back, because none was ever taken. Were the refusal inside the
+    `finally` instead, the cleanup would read the device the connection does not
+    have and raise on the way out of a handshake that had already been answered.
+    """
+    transport = _Transport()
+    connection = gateway.Connection(transport)
 
-    # The barrier publish is what makes the silence observable: a topic that
-    # delivers this proves it would have delivered an announcement.
-    await bus.publish(bus.device_topic(watched), {"type": "barrier"})
-    await wait_for(lambda: received)
-    assert received == [{"type": "barrier"}]
+    await connection.serve(None)
+
+    assert transport.closes == [None]  # refused with no code; the server answers 403
+    assert connection not in gateway.LIVE
+    assert bus.get_subscriber()._sinks == {}
 
 
 async def test_a_client_that_went_away_first_is_answered_with_no_close_frame(
@@ -222,17 +220,12 @@ CLIENT_FRAMES = st.one_of(
             "device_ids": st.one_of(st.lists(IDENTIFIERS, max_size=4), IDENTIFIERS),
         }
     ),
-    st.fixed_dictionaries({"type": st.just("room_subscribe"), "room_id": IDENTIFIERS}),
-    st.fixed_dictionaries({"type": st.just("room_leave"), "room_id": IDENTIFIERS}),
-    st.fixed_dictionaries(
-        {"type": st.just("room_signal"), "room_id": IDENTIFIERS, "blob": BLOBS}
-    ),
     st.fixed_dictionaries({"type": st.text(max_size=8)}),
     st.dictionaries(st.text(max_size=6), st.integers(), max_size=3),
 )
 
-# The only codes `realtime/API.md` lets a frame produce. 4001 is not among them:
-# every socket below is authenticated before it sends anything.
+# The only codes `realtime/API.md` lets a frame produce. Every socket below is
+# authenticated, because the handshake is the only place a socket can be.
 DOCUMENTED = (None, 4008)
 
 

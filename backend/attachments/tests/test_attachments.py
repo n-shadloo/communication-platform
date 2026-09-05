@@ -150,11 +150,12 @@ def test_a_download_hands_the_bytes_to_nginx(http, active_user, device, bearer):
 
     assert resp.status_code == 200
     assert resp.headers["X-Accel-Redirect"] == f"/_protected_attachments/{cap[:2]}/{cap}"
-    # Opaque bytes: fixed type, never sniffed, never rendered, never cached.
+    # Opaque bytes: fixed type, never cached. `Content-Disposition` left with the
+    # web target (ADR-0020) — it steered a browser's download and the one client
+    # writes the bytes to its own store.
     assert resp.headers["Content-Type"] == "application/octet-stream"
-    assert resp.headers["X-Content-Type-Options"] == "nosniff"
-    assert resp.headers["Content-Disposition"] == "attachment"
     assert resp.headers["Cache-Control"] == "private, no-store"
+    assert "Content-Disposition" not in resp.headers
     # This process hands the path over; it never streams the bytes itself.
     assert resp.content == b""
 

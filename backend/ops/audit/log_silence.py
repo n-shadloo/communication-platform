@@ -1,5 +1,5 @@
 """Log-silence audit: one scripted pass over every traffic surface (auth, devices,
-messaging, attachments, realtime, voice), captured at DEBUG, then scanned for every
+messaging, attachments, realtime), captured at DEBUG, then scanned for every
 identifier, blob, and token the pass generated. Returns a list of leaks; the system
 is honest only when it is empty.
 
@@ -23,8 +23,7 @@ request it makes, which is a request path in a log line — the suite's
 server.
 
 Driven by core/tests/test_log_silence.py; needs the test DB, a running Redis for
-the fan-out bus, a temp ATTACHMENTS_ROOT, and fake LIVEKIT_* settings (token
-minting is local PyJWT; no network is ever touched).
+the fan-out bus, and a temp ATTACHMENTS_ROOT. No network is ever touched.
 """
 
 import base64
@@ -243,11 +242,9 @@ async def _scripted_device_traffic(client, s):
 
 
 async def _scripted_blob_traffic(client, s):
-    """The attachment store and the voice rooms: a multipart upload, the redirect
-    that serves it back, a room, and a LiveKit join token. The upload is the one
-    body of this API that is bytes rather than JSON, and the join token is the one
-    thing this server signs with an infrastructure secret."""
-    from core.buckets import ATTACHMENT_BUCKETS, NAME_BUCKETS
+    """The attachment store: a multipart upload and the redirect that serves it
+    back. The upload is the one body of this API that is bytes rather than JSON."""
+    from core.buckets import ATTACHMENT_BUCKETS
 
     auth = {"Authorization": f"Bearer {s['access token']}"}
 
@@ -260,26 +257,6 @@ async def _scripted_blob_traffic(client, s):
     s["attachment id"] = r.json()["attachment_id"]
     r = await client.get(f"/api/v1/attachments/{s['attachment id']}", headers=auth)
     assert r.status_code == 200, f"download: {r.status_code}"
-
-    # Create a room and mint a LiveKit join token (local HS256 signing).
-    s["room name blob"] = _b64_filled(min(NAME_BUCKETS), 0xB6)
-    r = await client.post(
-        "/api/v1/rooms", json={"name_blob": s["room name blob"]}, headers=auth
-    )
-    assert r.status_code == 201, f"room create: {r.status_code}"
-    s["room id"] = r.json()["room_id"]
-    r = await client.get(f"/api/v1/rooms/{s['room id']}", headers=auth)
-    assert r.status_code == 200, f"room read: {r.status_code}"
-    s["room rename blob"] = _b64_filled(min(NAME_BUCKETS), 0xB7)
-    r = await client.put(
-        f"/api/v1/rooms/{s['room id']}",
-        json={"name_blob": s["room rename blob"]},
-        headers=auth,
-    )
-    assert r.status_code == 200, f"room rename: {r.status_code}"
-    r = await client.post(f"/api/v1/rooms/{s['room id']}/token", headers=auth)
-    assert r.status_code == 200, f"room token: {r.status_code}"
-    s["livekit join token"] = r.json()["token"]
     return s
 
 

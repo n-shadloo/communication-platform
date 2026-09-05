@@ -44,7 +44,7 @@ def test_no_history_model_or_table_exists():
 def test_no_registered_model_stores_message_content_past_the_queue():
     """The queue (delete-on-ack, TTL-capped) is the only place envelope-shaped
     ciphertext may rest. Every other blob column holds non-message state: profile,
-    label, key backup, device-log records, room names."""
+    label, key backup, device-log records."""
     from core.fields import OpaqueBlobField
     from messaging.models import QueuedEnvelope
 
@@ -54,7 +54,6 @@ def test_no_registered_model_stores_message_content_past_the_queue():
         "devices.DeviceLogRecord.blob",
         "vault.KeyBackup.blob",
         "messaging.QueuedEnvelope.blob",
-        "voicerooms.Room.name_blob",
     }
     found = {
         f"{model._meta.app_label}.{model.__name__}.{field.name}"

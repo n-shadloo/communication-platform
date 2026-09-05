@@ -30,9 +30,14 @@ Fan-out between processes uses Redis publish and subscribe through
 `redis.asyncio`, with one subscription connection for each worker process.
 Channels and its Redis layer leave.
 
-The frame protocol, the frame limits and the close codes `4001`, `4003`, `4008`
-and `4403` stay exactly as `backend/realtime/API.md` states them. A shutdown
-closes every socket with `1012`.
+The frame protocol, the frame limits and the close codes stay exactly as
+`backend/realtime/API.md` states them. A shutdown closes every socket with `1012`.
+
+**Superseded in part by [0020](0020-one-android-client-and-no-browser-surface.md).**
+This decision named `4001` and `4403` among those codes. Both left with the browser
+surface: the gateway authenticates the upgrade request and has no unauthenticated
+state to close, and there is no Origin policy to refuse against. `4003`, `4008` and
+`1012` are unchanged.
 
 ## Position fields
 

@@ -59,12 +59,6 @@ def _touch_active(device_id):
     )
 
 
-def _room_exists(room_id):
-    from voicerooms.models import Room
-
-    return Room.objects.filter(id=room_id).exists()
-
-
 async def authenticate_access(token_str):
     return await run_unit(_authenticate_access, token_str)
 
@@ -75,7 +69,3 @@ async def delete_envelopes(device_id, ids):
 
 async def touch_active(device_id):
     return await run_unit(_touch_active, device_id)
-
-
-async def room_exists(room_id):
-    return await run_unit(_room_exists, room_id)

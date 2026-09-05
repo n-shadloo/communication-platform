@@ -1,8 +1,8 @@
 """The Redis client of the process.
 
 One client, shared by everything that speaks to Redis on the async side: the rate
-limiter's counters, the live-room presence sets, and the gateway's fan-out bus,
-whose subscription connection is borrowed from this pool. Sharing matters because
+limiter's counters and the gateway's fan-out bus, whose subscription connection is
+borrowed from this pool. Sharing matters because
 a client owns a connection pool, and a second client would double the pool
 against an instance that also carries the Django cache.
 

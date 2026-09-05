@@ -143,12 +143,11 @@ jobs:
       - name: Install the pinned toolchain
         run: python -m pip install --require-hashes -r requirements/dev.txt
       - name: Deploy checks against the production settings
-        # The stub is the deployment's shape, not a minimum that passes: voice is
-        # configured, so `core.E005` weighs LIVEKIT_API_SECRET as well as
-        # JWT_SIGNING_KEY, and REDIS_URL carries a password because `core.E004`
-        # refuses one that does not. Every secret is generated inside the step and
-        # exists only for its length — a literal would drift into a real value's
-        # place and would not exercise security.W009's strength test honestly.
+        # The stub is the deployment's shape, not a minimum that passes:
+        # REDIS_URL carries a password because `core.E004` refuses one that does
+        # not. Every secret is generated inside the step and exists only for its
+        # length — a literal would drift into a real value's place and would not
+        # exercise security.W009's strength test honestly.
         # Assumption A7 of the design record owns the gap this stub leaves.
         #
         # --fail-level WARNING is what makes this a gate: without it the command
@@ -157,16 +156,12 @@ jobs:
         env:
           DJANGO_SETTINGS_MODULE: config.settings.prod
           DJANGO_ALLOWED_HOSTS: ci.invalid
-          ALLOWED_WS_ORIGINS: https://ci.invalid
           POSTGRES_DB: chatapp
           POSTGRES_USER: chatapp
-          LIVEKIT_URL: wss://ci.invalid
-          LIVEKIT_API_KEY: ci-stub-key
         run: |
           generate() { python -c 'import secrets; print(secrets.token_urlsafe(64))'; }
           export DJANGO_SECRET_KEY="$(generate)"
           export JWT_SIGNING_KEY="$(generate)"
-          export LIVEKIT_API_SECRET="$(generate)"
           export POSTGRES_PASSWORD="$(generate)"
           export REDIS_URL="redis://:$(generate)@127.0.0.1:6379/0"
           python manage.py check --deploy --fail-level WARNING

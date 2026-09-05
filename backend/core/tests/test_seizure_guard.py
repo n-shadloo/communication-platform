@@ -35,8 +35,9 @@ FORBIDDEN_FIELD_NAMES = frozenset(
         "secret_key",
         "session_key",
         "media_key",
-        "sframe_key",
         "room_key",
+        "dtls_key",
+        "srtp_key",
         "sender",
         "sender_id",
         "recipient_id",
@@ -246,7 +247,6 @@ class SeizureGuardTests(SimpleTestCase):
                 "vault.KeyBackup",
                 "messaging.QueuedEnvelope",
                 "attachments.Attachment",
-                "voicerooms.Room",
             },
             seen,
         )
@@ -263,7 +263,6 @@ class SeizureGuardTests(SimpleTestCase):
                 "devices.DeviceLogRecord.blob",
                 "vault.KeyBackup.blob",
                 "messaging.QueuedEnvelope.blob",
-                "voicerooms.Room.name_blob",
             },
             blob_names,
         )
@@ -305,9 +304,9 @@ def volatile_state_offenders():
 
 class VolatileStateGuardTests(SimpleTestCase):
     def test_no_table_holds_lockout_presence_or_rate_state(self):
-        """The lockout counts in Redis, the room presence sets live in Redis, and
-        the rate counters live in Redis — because a table of any of them is a
-        record of who was where and when, kept past the moment it mattered."""
+        """The lockout counts in Redis and the rate counters live in Redis —
+        because a table of either is a record of who was where and when, kept past
+        the moment it mattered."""
         self.assertEqual(
             volatile_state_offenders(),
             [],

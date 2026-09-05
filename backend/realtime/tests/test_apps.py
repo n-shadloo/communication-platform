@@ -1,9 +1,9 @@
 """The realtime `AppConfig`, and the design statement it carries.
 
 Four lines of configuration, and what matters about them is what is absent. The
-app that carries every live frame declares no model at all: presence, signals and
-room text are volatile by construction, so there is no table for them to be
-written into and no migration that could add one without this file noticing. The
+app that carries every live frame declares no model at all: presence and signals
+are volatile by construction, so there is no table for them to be written into
+and no migration that could add one without this file noticing. The
 label is what `config/settings/base.py` lists and what every `get_app_config`
 call in the project spells.
 """
@@ -29,8 +29,8 @@ def test_the_app_is_installed():
 
 def test_the_app_declares_no_model_and_owns_no_migration():
     """A model here would be a table for volatile traffic, which is the whole of
-    what this app refuses to keep. `voicerooms` owns the one room row; the live
-    membership of that room is a Redis set, and the socket state is memory."""
+    what this app refuses to keep: an envelope is `messaging`'s row, and a
+    signal, a presence state and the socket itself are never written down."""
     assert list(apps.get_app_config("realtime").get_models()) == []
     assert not (settings.BASE_DIR / "realtime" / "migrations").exists()
 

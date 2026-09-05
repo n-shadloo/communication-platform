@@ -3,7 +3,7 @@
 **This is not server-side signature verification.** The server neither computes nor
 checks any encoding here, and no view imports this module or `devices/vectors/` (see
 SECURITY.md). What these tests do is lock the *specification artifact*: if the vectors
-and the documented encoding rule ever disagree, Android and Web would each "follow the
+and the documented encoding rule ever disagree, two clients would each "follow the
 documentation" and produce incompatible signatures — the exact failure the vectors
 exist to prevent. Re-deriving the bytes here also means the vectors cannot be edited by
 hand into something the rule does not produce.

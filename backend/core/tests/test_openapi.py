@@ -30,7 +30,6 @@ from api.schema import (
 )
 from config.asgi import api_application, django_asgi_app
 from core.management.commands.openapi import ARTEFACT, rendered
-from core.tests.test_route_table import DOCUMENTATION
 from devices.routes import require_own_device
 
 ENVELOPE = "#/components/schemas/ErrorOut"
@@ -57,7 +56,7 @@ OPERATIONS = {
 ROUTES = {
     context.name: context
     for context in iter_route_contexts(api_application.routes)
-    if context.methods is not None and context.path not in DOCUMENTATION
+    if context.methods is not None
 }
 
 WITH_BODY = sorted(
@@ -192,8 +191,8 @@ def test_an_operation_that_takes_a_body_declares_the_two_refusals_of_one(
 def test_an_operation_with_a_typed_path_parameter_declares_the_validation_refusal(
     operation_id,
 ):
-    """A path segment that must parse — every `{user_id}`, `{device_id}` and
-    `{room_id}` is a UUID — is a `400 invalid_request` on a value that does not."""
+    """A path segment that must parse — `{user_id}` and `{device_id}` are both
+    UUIDs — is a `400 invalid_request` on a value that does not."""
     assert "400" in statuses(OPERATIONS[operation_id]), operation_id
 
 

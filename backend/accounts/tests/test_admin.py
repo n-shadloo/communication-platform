@@ -32,18 +32,16 @@ from accounts.models import User
 from attachments.models import Attachment
 from core.fields import OpaqueBlobField
 from devices.models import Device
-from voicerooms.models import Room
 
 pytestmark = pytest.mark.django_db
 
 PASSWORD = "correct-horse-battery-staple"
 
-# The five the operator works with (ADR-0011, decision 2). Anything else on the
+# The four the operator works with (ADR-0011, decision 2). Anything else on the
 # site is an exposure nobody decided on.
 REGISTERED = {
     "accounts.User",
     "devices.Device",
-    "voicerooms.Room",
     "attachments.Attachment",
     "admin.LogEntry",
 }
@@ -64,7 +62,6 @@ HIDDEN = {
 CHANGELISTS = [
     "admin:accounts_user_changelist",
     "admin:devices_device_changelist",
-    "admin:voicerooms_room_changelist",
     "admin:attachments_attachment_changelist",
     "admin:admin_logentry_changelist",
 ]
@@ -110,11 +107,6 @@ def device(alice):
 
 
 @pytest.fixture
-def room():
-    return Room.objects.create(name_blob=b"n" * 256)
-
-
-@pytest.fixture
 def attachment(alice):
     return Attachment.objects.create(uploader=alice, size=65536)
 
@@ -130,7 +122,6 @@ def _seed(count, prefix="user"):
             spk_sig=b"s" * 64,
             registration_id=index,
         )
-        Room.objects.create(name_blob=b"n" * 256)
         Attachment.objects.create(uploader=person, size=65536)
 
 
@@ -147,8 +138,8 @@ def test_the_site_is_an_unfold_site_and_nothing_else():
 
 def test_every_registered_project_app_names_itself_in_operator_words():
     """The breadcrumb of every page reads the app's `verbose_name`, and Django
-    derives one from the label when the app declares none — `voicerooms` became
-    `Voicerooms`, a word that is in no language, on every voice-room page.
+    derives one from the label when the app declares none. The pass of phase 3
+    found one app rendering a run-together label on every page it served.
 
     Declared rather than derived, on every project app the panel registers a model
     from, so the next app cannot ship a run-together label by omission. This is the
@@ -172,7 +163,7 @@ def test_every_registered_project_app_names_itself_in_operator_words():
     assert derived == {}, derived
 
 
-def test_exactly_the_five_decided_models_are_registered():
+def test_exactly_the_four_decided_models_are_registered():
     registered = {model._meta.label for model in django_admin.site._registry}
 
     assert registered == REGISTERED
@@ -265,13 +256,6 @@ def test_the_device_page_shows_no_key_material(client, owner, device):
         assert device.ik_pub.hex() not in body
 
 
-def test_the_room_page_shows_no_encrypted_name(client, owner, room):
-    body = client.get(reverse("admin:voicerooms_room_changelist")).content.decode()
-
-    assert "name_blob" not in body
-    assert str(room.pk) in body  # the id is how a room is named (ADR-0011)
-
-
 def test_the_account_change_form_carries_no_password_widget(client, owner, alice):
     body = client.get(
         reverse("admin:accounts_user_change", args=[alice.pk])
@@ -357,7 +341,7 @@ def test_the_page_renders_and_its_query_count_does_not_grow_with_the_rows(
     assert len(few) == len(many), (name, len(few), len(many))
 
 
-def test_every_change_form_the_panel_keeps_renders(client, owner, alice, device, room):
+def test_every_change_form_the_panel_keeps_renders(client, owner, alice, device):
     """`Attachment` is absent by design and has its own test above; every other
     registered model answers 200 for the owner."""
     entry = LogEntry.objects.create(
@@ -367,14 +351,13 @@ def test_every_change_form_the_panel_keeps_renders(client, owner, alice, device,
     for name, pk in (
         ("admin:accounts_user_change", alice.pk),
         ("admin:devices_device_change", device.pk),
-        ("admin:voicerooms_room_change", room.pk),
         ("admin:admin_logentry_change", entry.pk),
     ):
         assert client.get(reverse(name, args=[pk])).status_code == 200, name
 
 
 def test_the_dashboard_counts_what_the_operator_needs(
-    client, owner, alice, device, room, attachment
+    client, owner, alice, device, attachment
 ):
     body = client.get(reverse("admin:index")).content.decode()
     text = strip_tags(body)
@@ -531,20 +514,6 @@ def test_a_change_form_save_writes_djangos_own_audit_row(client, owner, alice):
     assert LogEntry.objects.filter(object_id=str(alice.pk), action_flag=CHANGE).exists()
 
 
-def test_deleting_a_room_audits_it_without_naming_its_encrypted_name(client, owner, room):
-    _post_action(
-        client,
-        "admin:voicerooms_room_changelist",
-        "delete_selected",
-        [room.pk],
-        post="yes",
-    )
-
-    assert Room.objects.count() == 0
-    row = LogEntry.objects.get(action_flag=DELETION)
-    assert row.object_repr == f"room {room.pk}"
-
-
 def test_purging_an_attachment_deletes_the_file_and_audits_without_the_capability(
     client, owner, attachment, tmp_path, settings
 ):
@@ -649,7 +618,7 @@ def test_revocation_publishes_the_socket_close_after_the_commit(
 
 
 def test_a_staff_account_that_is_not_the_owner_sees_an_empty_panel(
-    client, alice, device, room, attachment
+    client, alice, device, attachment
 ):
     """Two mechanisms have to hold, so both are checked. The sidebar is a static tree
     that renders whatever it holds until each item carries a `permission`, and the
@@ -674,7 +643,7 @@ def test_a_staff_account_that_is_not_the_owner_sees_an_empty_panel(
 
 
 def test_the_dashboard_reads_nothing_for_an_account_that_is_not_the_owner(
-    client, alice, device, room, attachment
+    client, alice, device, attachment
 ):
     """The context, not just the page. A template guard alone would leave the counts
     and the pending usernames sitting in the context of a page the wrong person is
@@ -691,7 +660,6 @@ def test_the_dashboard_reads_nothing_for_an_account_that_is_not_the_owner(
         "pending_accounts",
         "active_accounts",
         "live_devices",
-        "room_count",
         "storage_used",
     ):
         assert leaked not in context, leaked

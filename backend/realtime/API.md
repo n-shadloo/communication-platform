@@ -1,10 +1,10 @@
 # realtime API — the `/ws` gateway
 
 One WebSocket endpoint carries everything live: instant envelope delivery, volatile
-device-to-device signals, presence, and ephemeral room traffic. Frames are JSON text
-objects in both directions — binary frames are a protocol violation. Nothing relayed
-here is persisted or logged; the durable message queue (see `messaging/API.md`) is
-the source of truth, and this socket only makes it fast.
+device-to-device signals, and presence. Frames are JSON text objects in both
+directions — binary frames are a protocol violation. Nothing relayed here is
+persisted or logged; the durable message queue (see `messaging/API.md`) is the
+source of truth, and this socket only makes it fast.
 
 Delivery between sockets is Redis publish and subscribe, which holds a message only
 for the instant it takes to hand it to whoever is connected. A frame published for a
@@ -15,18 +15,13 @@ recovers it — which is why the queue, not this socket, is the contract for del
 
 ## Connection and authentication
 
-Two handshake paths:
-
-- **Native clients** send `Authorization: Bearer <access token>` on the upgrade
-  request. A valid full-scope, device-bound token accepts the connection; anything
-  else **refuses the handshake** — the server answers the upgrade request with
-  `403 Forbidden` and no WebSocket is ever established. There is no close code to
-  read, because there is no accepted socket to send one on. Treat a failed handshake
-  on this path as the 4001 case: refresh the access token and reconnect.
-- **Browsers** cannot set WebSocket headers: connect bare, then send an `auth` frame
-  as the first message. The server allows ten seconds; an unauthenticated socket that
-  sends any other frame, presents a bad token, or lets the deadline pass closes with
-  **4001**. This path is accepted first, so here the code does arrive.
+One handshake path. Send `Authorization: Bearer <access token>` on the upgrade
+request. A valid full-scope, device-bound token accepts the connection; anything
+else — a bad token, or no header at all — **refuses the handshake**: the server
+answers the upgrade request with `403 Forbidden` and no WebSocket is ever
+established. There is no close code to read, because the refusal is decided before
+the accept and there is no socket to send one on. Treat a failed handshake as
+"refresh the access token and reconnect".
 
 The token is validated with the same strength as REST: signature and expiry, `full`
 scope (a register-scope token opens no socket), a live device whose
@@ -34,22 +29,10 @@ scope (a register-scope token opens no socket), a live device whose
 to the device's delivery topic and the device's `last_active_date` is touched (day
 precision).
 
-If the server is configured with an Origin allowlist (`ALLOWED_WS_ORIGINS`, required
-in production), a handshake presenting an Origin header not on the list is refused.
-**4403** is the documented meaning of that refusal, and it is what the application
-sends, but the decision is taken before the accept — so, exactly as for a bad header
-token, what the client observes is a failed handshake answered `403 Forbidden`. A
-handshake with no Origin header at all is allowed: native clients send none, and the
-header is only a browser cross-site defense.
-
-### `auth` (client → server)
-
-```json
-{ "type": "auth", "access": "eyJhbGciOiJIUzI1NiIs…" }
-```
-
-Valid only as the first frame of a bare connection. Success is silent; the next
-frames are processed normally. Failure closes 4001.
+Every accepted socket is therefore already bound to a device: there is no
+unauthenticated state, no in-band authentication frame and no deadline to meet.
+`auth` is not a frame type, and one sent on a live socket is ignored like any other
+unknown type.
 
 ## Frame limits
 
@@ -58,10 +41,9 @@ frames are processed normally. Failure closes 4001.
 | Frame encoding | JSON text object | close 4008 |
 | Frame size | `WS_MAX_FRAME` (default 524288 bytes) | close 4008 |
 | Message rate | 100 frames per rolling second | close 4008 |
-| `signal` / `room_signal` blob | `SIGNAL_MAX` (default 16384 chars) | frame dropped |
+| `signal` blob | `SIGNAL_MAX` (default 16384 chars) | frame dropped |
 | `ack` ids | ≤ 200 | frame dropped |
 | `subscribe_presence` targets | ≤ 500 | frame dropped |
-| Room subscriptions per socket | 100 | subscribe dropped |
 | Undelivered server frames queued for one socket | 256 | close 4008 |
 
 Undecodable JSON, non-object JSON, and binary frames close 4008. Frames with an
@@ -108,39 +90,6 @@ skipped) and immediately announces `online` to every target. The same targets ar
 told `offline` when this socket disconnects. Presence flows only toward devices the
 client explicitly listed; an empty list means nobody is told anything.
 
-### `room_subscribe`
-
-```json
-{ "type": "room_subscribe", "room_id": "7c1d2e3f-4a5b-6c7d-8e9f-0a1b2c3d4e5f" }
-```
-
-Joins the live session of an existing room: the socket subscribes to the room's
-relay topic, every subscriber (including this one) receives a `room_presence` join, and the
-device is added to the room's live-count set. Subscribing to a nonexistent room or
-past the 100-room cap is silently ignored; re-subscribing to a held room re-announces
-join and stays allowed.
-
-### `room_leave`
-
-```json
-{ "type": "room_leave", "room_id": "7c1d2e3f-4a5b-6c7d-8e9f-0a1b2c3d4e5f" }
-```
-
-Leaves the live session: subscribers receive a `room_presence` leave and the live
-count drops. Disconnecting leaves every subscribed room the same way without an
-explicit frame.
-
-### `room_signal`
-
-```json
-{ "type": "room_signal", "room_id": "7c1d2e3f-4a5b-6c7d-8e9f-0a1b2c3d4e5f", "blob": "cmFuZG9t…" }
-```
-
-Relays an opaque blob (ephemeral room text or state, encrypted client-side) to every
-subscriber of a room this socket has itself subscribed to — knowing a room id is not
-enough. `blob` ≤ `SIGNAL_MAX` characters. Never persisted; a device that was offline
-never sees it.
-
 ## Server → client messages
 
 ### `envelope`
@@ -170,42 +119,16 @@ A volatile signal relayed from some device. Carries no sender field.
 A device this socket was named in a `subscribe_presence` list came online
 (`"online"`) or its socket closed (`"offline"`).
 
-### `room_signal`
-
-```json
-{ "type": "room_signal", "room_id": "7c1d2e3f-4a5b-6c7d-8e9f-0a1b2c3d4e5f", "blob": "cmFuZG9t…" }
-```
-
-An ephemeral room blob relayed to every subscriber, the sender included. Carries the
-room id and blob only.
-
-### `room_presence`
-
-```json
-{
-  "type": "room_presence",
-  "room_id": "7c1d2e3f-4a5b-6c7d-8e9f-0a1b2c3d4e5f",
-  "device_id": "9f1c6a2e-3b7d-4e0f-8c15-2a77d4b9e611",
-  "state": "join"
-}
-```
-
-A device joined (`"join"`) or left (`"leave"`) a room this socket subscribes to.
-Leave fires on explicit `room_leave` and on disconnect.
-
 ## Close codes
 
 | Code | Meaning | What the client does |
 |---|---|---|
-| 4001 | Authentication failed after the accept: bad/expired/register-scope token in an `auth` frame, revoked device, inactive account, missed auth deadline, or a frame sent before authentication | Refresh the access token and reconnect |
 | 4003 | The device was revoked or its account deactivated while connected | Stop reconnecting; the token is dead and a fresh login on another device is required |
 | 4008 | Protocol violation — binary frame, oversized frame, undecodable or non-object JSON, rate cap exceeded — or a slow consumer whose server-frame queue overflowed | Fix the frame, or read faster; reconnect and drain over REST |
-| 4403 | Origin header present but not on the server's allowlist | Correct the Origin; the server refuses the handshake rather than sending this code (see below) |
 | 1012 | The server is restarting and drained its sockets | Reconnect after a backoff; this is a deploy, not a fault |
 
-**4001 and 4403 before the accept.** Both refusals can be decided before the socket is
-accepted — 4403 always is, and 4001 is on the header-token path. A server has no
-accepted socket to send a close frame on at that point, so it answers the upgrade
-request with `403 Forbidden` instead and the code never reaches the client. A failed
-handshake therefore means "refused": check the Origin and the token, refresh, and
-retry. Once a socket has been accepted, every code above arrives as a close frame.
+**A refused handshake carries no code.** Authentication is decided before the accept,
+so a server has no socket to send a close frame on and answers the upgrade request
+with `403 Forbidden` instead. A failed handshake therefore means "refused": refresh
+the access token and retry. Once a socket has been accepted, every code above arrives
+as a close frame.

@@ -20,7 +20,6 @@ from django.conf import settings
 from api.redis import close_client, get_client, timeouts
 from core import lockout
 from realtime import bus
-from voicerooms.presence import live_counts
 
 KEY = "api-tests:redis-client"
 
@@ -83,7 +82,7 @@ def build_and_release_on_a_loop_of_its_own():
 
 async def test_one_loop_holds_one_client(released_client):
     """A second client would double the connection pool against an instance that
-    also carries the presence sets and the fan-out bus."""
+    also carries the lockout state and the fan-out bus."""
     assert get_client() is get_client()
 
 
@@ -199,22 +198,4 @@ class TestCommandTimeouts:
         bus.close_device_sockets(uuid.uuid4())
         waited = time.monotonic() - started
 
-        assert configured <= waited < configured + PATIENCE
-
-    @pytest.mark.parametrize("configured", [0.15, 0.4])
-    def test_the_live_room_counts_of_the_panel_come_back_as_zero(
-        self, settings, black_hole, configured
-    ):
-        """The changelist reads one count per row on the page; a silent store
-        would hang the panel rather than render it with the counts it cannot
-        have."""
-        settings.REDIS_URL = black_hole
-        settings.REDIS_COMMAND_TIMEOUT_SECONDS = configured
-        room_id = uuid.uuid4()
-
-        started = time.monotonic()
-        counts = live_counts([room_id])
-        waited = time.monotonic() - started
-
-        assert counts == {str(room_id): 0}
         assert configured <= waited < configured + PATIENCE

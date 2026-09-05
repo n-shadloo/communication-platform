@@ -17,9 +17,8 @@ The shape it reads is the shape the files already use.
 Four statuses are not required per route, because a route inherits them from the
 requirement it declares, from the request deadline and from the unhandled-failure
 handler rather than from anything of its own: `core/API.md` carries their bodies
-once for the whole surface. A route may still name one — `403 forbidden` and
-`503 voice_unconfigured` are route-specific — but may never name a status the
-code cannot answer.
+once for the whole surface. A route may still name one — `403 forbidden` is
+route-specific — but may never name a status the code cannot answer.
 """
 
 import json
@@ -51,7 +50,6 @@ BUCKET_SETS = {
     "ENVELOPE_BUCKETS": buckets.ENVELOPE_BUCKETS,
     "PROFILE_BUCKETS": buckets.PROFILE_BUCKETS,
     "LABEL_BUCKETS": buckets.LABEL_BUCKETS,
-    "NAME_BUCKETS": buckets.NAME_BUCKETS,
     "DEVICELOG_BUCKETS": buckets.DEVICELOG_BUCKETS,
     "BACKUP_BUCKETS": buckets.BACKUP_BUCKETS,
     "ATTACHMENT_BUCKETS": buckets.ATTACHMENT_BUCKETS,
@@ -154,9 +152,8 @@ def test_every_route_documents_what_a_retry_does(route):
 
     Every route, not only the mutating ones the ADR names. A client writing a
     retry policy reads one paragraph per route or it reads none, and "this route
-    is a read" is a fact about the route that only the route can state — the
-    method does not carry it, as `POST /api/v1/rooms/{room_id}/token` shows by
-    writing nothing.
+    is a read" is a fact about the route that only the route can state: the method
+    does not carry it.
     """
     body = next(body for method, path, body in sections() if (method, path) == route)
 

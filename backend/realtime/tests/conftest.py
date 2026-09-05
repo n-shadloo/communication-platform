@@ -26,7 +26,7 @@ PASSWORD = "correct-horse-battery-staple"
 
 @pytest.fixture(autouse=True)
 async def release_the_loops_redis():
-    """The bus and the room-presence sets build their Redis objects on the loop that
+    """The bus builds its Redis objects on the loop that
     first asks for one, and pytest-asyncio gives each test a loop of its own.
     Without this each test leaves a subscriber — with its reader task — and a
     client, both bound to a loop that is already gone. Same order as the lifespan
@@ -111,6 +111,20 @@ async def connect_ok(headers, outbound_max=0):
     connected, _ = await comm.connect(timeout=2)
     assert connected, "expected the handshake to be accepted"
     return comm
+
+
+async def expect_refused(headers):
+    """Drive a handshake that must not be accepted.
+
+    Every refusal is decided before the accept, so a real server answers the
+    upgrade request with `403 Forbidden` and the close carries nothing a client
+    can read. `realtime/tests/test_server.py` proves that half; here the point is
+    only that no socket exists.
+    """
+    comm = ws(headers)
+    connected, _code = await comm.connect(timeout=2)
+
+    assert not connected, "expected the handshake to be refused"
 
 
 async def expect_close(comm, code, timeout=2):

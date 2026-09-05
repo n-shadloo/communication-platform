@@ -37,11 +37,12 @@ HISTORY = {
     "devices": [INITIAL],
     "messaging": [INITIAL, "0002_index_the_retention_filter"],
     "vault": [INITIAL],
-    "voicerooms": [INITIAL],
+    "voicerooms": [INITIAL, "0002_delete_room"],
 }
 
 # The apps of this project that own a table. `core` and `realtime` declare no
-# model, so they carry no migrations directory at all.
+# model, and `voicerooms` stopped declaring one when ADR-0021 removed the room
+# object.
 PROJECT_APPS = sorted(
     config.label
     for config in apps.get_app_configs()
@@ -49,10 +50,24 @@ PROJECT_APPS = sorted(
     if not config.name.startswith("django.") and any(config.get_models())
 )
 
+# The apps of this project that own a migrations package. That is the apps above
+# plus `voicerooms`, which owns no table any more and keeps its package only to
+# carry `0002_delete_room` to a database that still has the table.
+MIGRATION_APPS = sorted(
+    config.label
+    for config in apps.get_app_configs()
+    if not config.name.startswith(("django.", "unfold"))
+    and (settings.BASE_DIR / config.label / "migrations").exists()
+)
+
+# The apps that own a migrations package and no table. One, and it is temporary:
+# `voicerooms` leaves the tree once every environment has applied the delete.
+MIGRATIONS_WITHOUT_A_TABLE = {"voicerooms"}
+
 # What each `0001_initial` depends on inside this project. `accounts` holds
 # `AUTH_USER_MODEL`, so every app with a foreign key to a user waits for it;
-# `messaging` queues to a device, so it waits for `devices`. `voicerooms` holds
-# no foreign key at all — a room is a capability id and an encrypted name.
+# `messaging` queues to a device, so it waits for `devices`. `voicerooms` held no
+# foreign key at all, so its history depends on nothing outside itself.
 DEPENDENCIES = {
     "accounts": set(),
     "attachments": {"accounts"},
@@ -142,10 +157,10 @@ def test_every_app_owns_the_migrations_recorded_here():
     what it grew to: a file nobody wrote down fails here, which is what puts every
     new migration through the classification below."""
     loader = MigrationLoader(None, ignore_no_migrations=True)
-    ours = {(app, name) for app, name in loader.disk_migrations if app in PROJECT_APPS}
+    ours = {(app, name) for app, name in loader.disk_migrations if app in MIGRATION_APPS}
 
     assert ours == {(app, name) for app, names in HISTORY.items() for name in names}
-    assert set(HISTORY) == set(PROJECT_APPS)
+    assert set(HISTORY) == set(MIGRATION_APPS)
 
 
 def test_each_initial_declares_the_dependencies_recorded_here():
@@ -156,9 +171,9 @@ def test_each_initial_declares_the_dependencies_recorded_here():
         app: {
             dependency
             for dependency, _name in loader.disk_migrations[(app, INITIAL)].dependencies
-            if dependency in PROJECT_APPS and dependency != app
+            if dependency in MIGRATION_APPS and dependency != app
         }
-        for app in PROJECT_APPS
+        for app in MIGRATION_APPS
     }
 
     assert declared == DEPENDENCIES
@@ -168,7 +183,7 @@ def test_the_graph_has_one_leaf_for_each_app():
     """Two leaves in one app is the conflicting-history state `migrate` refuses to
     run, and it reaches the tree as a merge nobody asked for."""
     loader = MigrationLoader(None, ignore_no_migrations=True)
-    leaves = {node for node in loader.graph.leaf_nodes() if node[0] in PROJECT_APPS}
+    leaves = {node for node in loader.graph.leaf_nodes() if node[0] in MIGRATION_APPS}
 
     assert leaves == {(app, names[-1]) for app, names in HISTORY.items()}
 
@@ -207,22 +222,22 @@ def test_the_history_applies_to_an_empty_database(empty_database):
 @pytest.mark.parametrize("app", teardown_order())
 def test_every_app_unapplies_to_zero(empty_database, app):
     """Reversibility of the whole history, app by app. Every operation in it is a
-    `CreateModel`, so the reverse is a `DROP TABLE` and nothing has to be
-    recovered — but an app that cannot reach zero is one whose `0001_initial`
-    carries an operation that lies about its own reverse."""
+    `CreateModel` or the `DeleteModel` that reverses one, so nothing has to be
+    recovered — but an app that cannot reach zero is one whose history carries an
+    operation that lies about its own reverse.
+
+    The ledger is asserted beside the catalogue, because an app that owns no table
+    would otherwise be checked against an empty set: `voicerooms` reaches zero by
+    re-creating the room table and dropping it again, and only the ledger shows it
+    happened.
+    """
     call_command("migrate", database=empty_database, verbosity=0)
 
     call_command("migrate", app, "zero", database=empty_database, verbosity=0)
 
-    assert (
-        tables_in(empty_database)
-        & {
-            model._meta.db_table
-            for model in apps.get_models()
-            if model._meta.app_label == app
-        }
-        == set()
-    )
+    applied = MigrationRecorder(connections[empty_database]).applied_migrations()
+    assert tables_in(empty_database) & tables_of(app) == set()
+    assert {name for recorded, name in applied if recorded == app} == set()
 
 
 @pytest.mark.django_db(transaction=True)
@@ -244,10 +259,14 @@ def test_the_whole_history_unapplies_in_reverse_dependency_order(empty_database)
 #
 # `CreateModel` takes ACCESS EXCLUSIVE, which blocks reads and writes — but only on
 # a relation the same migration is creating, so no other session can name it yet.
+# `DeleteModel` takes the same lock on a relation that already exists, which is the
+# one operation here that can block another session; it is a catalogue change and
+# not a scan, so the hold is milliseconds rather than a function of the row count.
 # `AddIndexConcurrently` takes SHARE UPDATE EXCLUSIVE and blocks neither, at the
 # price of two table scans and a migration that cannot be atomic.
 LOCK_CLASSES = {
     "CreateModel": "ACCESS EXCLUSIVE on a relation this migration creates",
+    "DeleteModel": "ACCESS EXCLUSIVE on a relation this migration drops",
     "AddIndexConcurrently": "SHARE UPDATE EXCLUSIVE",
 }
 
@@ -263,6 +282,7 @@ ALLOWED_STATEMENTS = (
     "CREATE INDEX CONCURRENTLY",
     "CREATE INDEX",
     "CREATE UNIQUE INDEX",
+    "DROP TABLE",
     "ALTER TABLE",  # narrowed below: ADD CONSTRAINT only
 )
 
@@ -374,7 +394,13 @@ def test_the_apps_that_own_no_table_own_no_migrations_either():
     """`core` and `realtime` are plumbing: one holds the bucket sets, the opaque
     blob field and the panel's base classes, the other holds the socket gateway
     and its Redis bus. Neither declares a model, so a migrations directory under
-    either is a table somebody added without deciding to."""
+    either is a table somebody added without deciding to.
+
+    `voicerooms` is the one exemption and it is temporary. ADR-0021 removed the
+    room object, and the package stays only to carry `0002_delete_room` to a
+    database that still holds the table; it leaves once every environment has
+    applied it, and then this exemption goes with it.
+    """
     tableless = sorted(
         config.label
         for config in apps.get_app_configs()
@@ -383,16 +409,16 @@ def test_the_apps_that_own_no_table_own_no_migrations_either():
         and not any(config.get_models())
     )
 
-    assert tableless == ["core", "realtime"]
-    for label in tableless:
+    assert tableless == ["core", "realtime", "voicerooms"]
+    for label in set(tableless) - MIGRATIONS_WITHOUT_A_TABLE:
         assert not (settings.BASE_DIR / label / "migrations").exists(), label
 
 
-def test_the_recorded_history_covers_every_app_that_owns_a_table():
+def test_the_recorded_history_covers_every_app_that_owns_migrations():
     """The other direction of `HISTORY`: an app that grew a model and a migration
     directory, and was never added to the record, would be replayed by nothing
     here."""
-    assert sorted(HISTORY) == PROJECT_APPS
+    assert sorted(HISTORY) == MIGRATION_APPS
 
 
 @pytest.mark.django_db(transaction=True)
@@ -429,7 +455,9 @@ def test_the_whole_history_returns_to_head_after_a_full_unapply(empty_database):
 
     applied = MigrationRecorder(connections[empty_database]).applied_migrations()
     assert project_tables() <= tables_in(empty_database)
-    assert {node for node in applied if node[0] in PROJECT_APPS} == set(migration_nodes())
+    assert {node for node in applied if node[0] in MIGRATION_APPS} == set(
+        migration_nodes()
+    )
 
 
 # --- The locks each migration actually takes ---------------------------------------
@@ -452,20 +480,23 @@ LOCK_STRENGTH = [
     "AccessExclusiveLock",
 ]
 
-# The tables that already exist when each migration runs, and the strongest lock it
-# takes on each. A table this migration creates is absent from the map however hard
-# it is locked: no other session can name a relation that does not exist yet.
+# The relations that already exist when each migration runs, and the strongest lock
+# it takes on each. A relation this migration creates is absent from the map however
+# hard it is locked: no other session can name a relation that does not exist yet.
 #
-# Every entry is SHARE ROW EXCLUSIVE and every one comes from the same statement
-# shape — `ALTER TABLE ... ADD CONSTRAINT ... FOREIGN KEY ... REFERENCES <other
-# table>`, which locks the referenced side. It blocks writes to that table, not
-# reads. ADR-0009 is what makes it free here: the deployment creates the database
-# and migrates once, so nothing is populated and nothing is being written. On a
-# database with rows in it, each of these would be a write outage on the named
-# table for as long as the migration runs.
+# Every SHARE ROW EXCLUSIVE entry comes from the same statement shape — `ALTER TABLE
+# ... ADD CONSTRAINT ... FOREIGN KEY ... REFERENCES <other table>`, which locks the
+# referenced side. It blocks writes to that table, not reads. ADR-0009 is what makes
+# it free here: the deployment creates the database and migrates once, so nothing is
+# populated and nothing is being written. On a database with rows in it, each of
+# these would be a write outage on the named table for as long as the migration runs.
 #
-# `voicerooms` holds no foreign key at all — a room is a capability id and an
-# encrypted name — so it locks nothing that exists.
+# `voicerooms.0001_initial` held no foreign key at all — a room was a capability id
+# and an encrypted name — so it locks nothing that exists. Its `0002_delete_room` is
+# the one entry in this map that blocks reads as well as writes: `DROP TABLE` takes
+# ACCESS EXCLUSIVE on a table that is already there. It costs nothing on this
+# deployment because the same release removed every reader of it and because the
+# service is stopped before `migrate` runs.
 BLOCKING_LOCKS = {
     ("accounts", INITIAL): {
         "auth_group": "ShareRowExclusiveLock",
@@ -476,24 +507,26 @@ BLOCKING_LOCKS = {
     ("messaging", INITIAL): {"devices_device": "ShareRowExclusiveLock"},
     ("vault", INITIAL): {"accounts_user": "ShareRowExclusiveLock"},
     ("voicerooms", INITIAL): {},
+    ("voicerooms", "0002_delete_room"): {"voicerooms_room": "AccessExclusiveLock"},
 }
 
 RELATIONS_IN_SCHEMA = """
-SELECT c.relname
+SELECT c.oid, c.relname, c.relkind
 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
 WHERE n.nspname = current_schema()
 """
 
-# Relation locks this backend holds right now, catalogue relations excluded: the
-# `pg_class` and `pg_namespace` reads of the query itself take locks of their own.
+# Relation locks this backend holds right now, by oid rather than through a join to
+# `pg_class`. The join would be simpler and would silently lose the one lock that
+# matters most: a relation this migration dropped has no catalogue row left inside
+# the transaction that dropped it, so its ACCESS EXCLUSIVE would vanish from the
+# result and a `DeleteModel` would measure as taking no lock at all. The schema read
+# before the statements and the one after them are what name the oids instead, and
+# an oid in neither is the catalogue read of the query itself.
 LOCKS_HELD = """
-SELECT l.mode, c.relname, c.relkind
+SELECT l.mode, l.relation
 FROM pg_locks l
-JOIN pg_class c ON c.oid = l.relation
-JOIN pg_namespace n ON n.oid = c.relnamespace
-WHERE l.pid = pg_backend_pid()
-  AND l.locktype = 'relation'
-  AND n.nspname = current_schema()
+WHERE l.pid = pg_backend_pid() AND l.locktype = 'relation'
 """
 
 
@@ -530,21 +563,29 @@ def run_and_read_the_locks(alias, statements):
 
     One transaction, because a lock is released at commit and this has to read it
     while it is held. The rollback is what keeps the probe from being a migration:
-    nothing it created survives the call.
+    nothing it created or dropped survives the call.
+
+    Returns the locks as (mode, relname, relkind) — resolved from the schema read on
+    either side of the statements, so a relation the migration dropped is still
+    named — plus the relations it created and the relations it dropped.
     """
     with connections[alias].cursor() as cursor:
         cursor.execute(RELATIONS_IN_SCHEMA)
-        before = {row[0] for row in cursor.fetchall()}
+        before = {oid: (name, kind) for oid, name, kind in cursor.fetchall()}
     with transaction.atomic(using=alias):
         with connections[alias].cursor() as cursor:
             for statement in statements:
                 cursor.execute(statement)
             cursor.execute(LOCKS_HELD)
-            locks = cursor.fetchall()
+            held = cursor.fetchall()
             cursor.execute(RELATIONS_IN_SCHEMA)
-            created = {row[0] for row in cursor.fetchall()} - before
+            after = {oid: (name, kind) for oid, name, kind in cursor.fetchall()}
         transaction.set_rollback(True, using=alias)
-    return locks, created
+    known = {**before, **after}
+    locks = [(mode, *known[oid]) for mode, oid in held if oid in known]
+    created = {name for name, _kind in (after[oid] for oid in after.keys() - before)}
+    dropped = {name for name, _kind in (before[oid] for oid in before.keys() - after)}
+    return locks, created, dropped
 
 
 def strongest(modes):
@@ -562,7 +603,7 @@ def test_each_migration_takes_only_the_locks_recorded_against_it(
     that precedes it, and `pg_locks` is read while the transaction still holds
     everything it took. Two things are asserted: no relation that already existed
     is locked harder than `BLOCKING_LOCKS` records, and nothing outside the set of
-    relations this migration created is held at ACCESS EXCLUSIVE.
+    relations this migration created or dropped is held at ACCESS EXCLUSIVE.
 
     What this catches in a migration somebody adds later: an `ALTER TABLE` that
     rewrites a populated table or sets a column NOT NULL without a validated
@@ -574,15 +615,20 @@ def test_each_migration_takes_only_the_locks_recorded_against_it(
     What it does not catch: how long any of them is held. A lock class is not a
     duration, and an ACCESS EXCLUSIVE on a table this migration created is free
     only because no other session can name that relation yet — the same statement
-    against a populated table would be an outage. It also measures nothing about
-    migrations that cannot run inside a transaction; the one this project has is
-    held by the test below.
+    against a populated table would be an outage. A drop is the case where the lock
+    class alone decides nothing: `voicerooms.0002_delete_room` takes the strongest
+    lock in the list on a relation every other session can name, and what makes it
+    free is the release that removed every reader, not this measurement. It also
+    measures nothing about migrations that cannot run inside a transaction; the one
+    this project has is held by the test below.
     """
     apply_the_state_before((app, name), empty_database)
     out = StringIO()
     call_command("sqlmigrate", app, name, database=empty_database, stdout=out)
 
-    locks, created = run_and_read_the_locks(empty_database, statements_of(out.getvalue()))
+    locks, created, dropped = run_and_read_the_locks(
+        empty_database, statements_of(out.getvalue())
+    )
 
     pre_existing = {
         relname: strongest([mode for mode, name_, _kind in locks if name_ == relname])
@@ -595,9 +641,9 @@ def test_each_migration_takes_only_the_locks_recorded_against_it(
         if mode in ("AccessExclusiveLock", "ExclusiveLock")
     }
 
-    assert created, "the migration created no relation at all"
+    assert created or dropped, "the migration changed no relation at all"
     assert pre_existing == BLOCKING_LOCKS[(app, name)]
-    assert exclusive <= created, sorted(exclusive - created)
+    assert exclusive <= created | dropped, sorted(exclusive - created - dropped)
 
 
 @pytest.mark.django_db(transaction=True)

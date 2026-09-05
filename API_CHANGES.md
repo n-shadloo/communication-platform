@@ -59,8 +59,8 @@ Four refusals are new, because the limits behind them are new.
 means the account's attachment quota is exhausted. Branch on `code`, not on the
 status.
 
-Every response now carries `X-Content-Type-Options: nosniff`, `Cache-Control:
-no-store` and `Referrer-Policy: no-referrer`.
+Every response now carries `Cache-Control: no-store`. It carried two browser-only
+headers beside it until "The web target is gone" below removed them.
 
 ## Authentication
 
@@ -152,16 +152,19 @@ body; the one success body that has moved since arrived later and is recorded un
 
 The `/ws` gateway is a WebSocket route of the same FastAPI application, with Redis
 publish and subscribe behind it. **The frame protocol did not change.** Every client
-frame (`auth`, `ack`, `signal`, `subscribe_presence`, `room_subscribe`, `room_leave`,
+frame (`ack`, `signal`, `subscribe_presence`, `room_subscribe`, `room_leave`,
 `room_signal`), every server frame (`envelope`, `signal`, `presence`, `room_signal`,
-`room_presence`), their exact shapes, the URL, the two handshake paths, the
-ten-second authentication deadline, the Origin policy, and every limit in
+`room_presence`), their exact shapes, the URL, and every limit in
 [`backend/realtime/API.md`](backend/realtime/API.md) are as they were.
+
+The rest of this section is superseded by "The web target is gone" below, which
+retired the second handshake path, the `auth` frame, the ten-second deadline, the
+Origin policy, and close codes 4001 and 4403.
 
 | Item | Old behaviour | New behaviour | Client action |
 |---|---|---|---|
-| An unlisted `Origin` header | Documented as close **4403**. The code never in fact reached the client, because the refusal was decided before the accept | The server answers the upgrade request `403 Forbidden` and no socket is established. 4403 remains the name of the refusal in the reference | Treat a failed handshake as a refusal |
-| A bad `Authorization: Bearer` token on the handshake | Documented as close **4001** "immediately after accept" | The same `403 Forbidden` failed handshake. 4001 still arrives on the browser path, where the socket is accepted first and the token comes in an `auth` frame | On the header path, read a failed handshake as "refresh the access token and reconnect". A handler waiting for 4001 there will never fire |
+| An unlisted `Origin` header | Documented as close **4403**. The code never in fact reached the client, because the refusal was decided before the accept | The server answers the upgrade request `403 Forbidden` and no socket is established | Treat a failed handshake as a refusal. The Origin policy itself is gone — see "The web target is gone" below |
+| A bad `Authorization: Bearer` token on the handshake | Documented as close **4001** "immediately after accept" | The same `403 Forbidden` failed handshake | Read a failed handshake as "refresh the access token and reconnect". A handler waiting for 4001 will never fire |
 | A server restart | The socket dropped with no code | Close **1012**, after every live socket is drained | Reconnect after a backoff. This is a deploy, not a fault, and must not count toward a failure budget that disables reconnection |
 | A socket that is not reading | Unbounded in practice; the process's memory grew | At most 256 undelivered server frames, then close **4008** — the same code as a protocol violation | Read continuously. A 4008 with no preceding protocol error means the client fell behind: reconnect and drain the durable queue over REST |
 
@@ -426,12 +429,101 @@ appends rather than replaces, so both arrived. nginx is now the single owner —
 no application at all, gained `X-Content-Type-Options: nosniff` beside it.
 
 The API surface is unchanged: `/api/` responses carried one HSTS header before and
-carry one now, and `x-content-type-options`, `cache-control: no-store` and
-`referrer-policy: no-referrer` are still set by the application on every response it
-produces.
+carry one now. The application still sets `cache-control: no-store` on every response
+it produces; the two browser-only headers it set beside it left in "The web target is
+gone" below.
 
 **Client action:** none. A client that counted on two identical HSTS headers was
 already reading only the first, which is what RFC 6797 requires of it.
+
+## The web target is gone
+
+The product is one Flutter application for Android, and every surface the server
+kept for a browser is removed
+([ADR-0020](docs/architecture/decisions/0020-one-android-client-and-no-browser-surface.md)).
+Nothing below affects a client that already authenticates the `/ws` upgrade with an
+`Authorization: Bearer` header and reads its responses as bytes rather than as a page.
+
+### The `/ws` handshake
+
+| Item | Old behaviour | New behaviour | Client action |
+|---|---|---|---|
+| The bare-connect path | A handshake with no `Authorization` header was **accepted**, and the socket then had ten seconds to authenticate in band | Refused before the accept, exactly as a bad token is: `403 Forbidden`, and no socket exists | Put the access token on the upgrade request. There is one handshake path |
+| The `auth` frame | `{"type": "auth", "access": "…"}` as the first frame of a bare connection bound the socket; failure closed **4001** | Not a frame type. On a live socket it is an unknown type and is ignored, like any other | Delete the frame and the code that waits for the silence after it |
+| The ten-second authentication deadline | An accepted socket that had not authenticated within `AUTH_DEADLINE_SECONDS` closed **4001** | Gone with the state it bounded: every accepted socket is already bound to a device | None |
+| Close code **4001** | Authentication failed after the accept | Retired. Authentication is decided before the accept, so there is no accepted socket to close | A handler waiting for 4001 will never fire. Read a failed handshake as "refresh the access token and reconnect" |
+| Close code **4403**, and the `Origin` allowlist | A handshake presenting an `Origin` not on `ALLOWED_WS_ORIGINS` was refused, documented as 4403 | Retired. There is no Origin policy: `Origin` is a browser cross-site defence, and a handshake with no header — which is every handshake this client makes — was always allowed | None. The header was never sent and the refusal never fired |
+
+### Response headers
+
+| Item | Old behaviour | New behaviour | Client action |
+|---|---|---|---|
+| `X-Content-Type-Options: nosniff` | On every API response | Not set. It instructs a rendering engine, and there is none | None, unless the client asserted on it |
+| `Referrer-Policy: no-referrer` | On every API response | Not set. It governs a `Referer` header a browser sends, and this client sends none | None, unless the client asserted on it |
+| `Cache-Control: no-store` | On every API response | Unchanged | None |
+| `Content-Disposition: attachment` on `GET /api/v1/attachments/{id}` | Set, to force a download rather than a render | Not set. `Cache-Control: private, no-store` and `X-Accel-Redirect` are unchanged | None. Name the file from your own metadata, as before — the header carried no filename |
+
+The admin panel is unaffected: it is served to an operator's browser and keeps every
+header Django's `SecurityMiddleware` sets, and the nginx `/static/` location keeps
+`nosniff`.
+
+### The documentation routes
+
+| Item | Old behaviour | New behaviour | Client action |
+|---|---|---|---|
+| `/openapi.json`, `/docs`, `/docs/oauth2-redirect`, `/redoc` | Registered under `DEBUG`, absent otherwise | Absent in every mode, `DEBUG` included. Each is this API's `404 not_found` envelope | Generate from [`backend/openapi.json`](backend/openapi.json). `python manage.py openapi` still writes it from the same generator and CI still fails a change that does not regenerate it |
+
+### The removed setting
+
+| Item | Old behaviour | New behaviour | Operator action |
+|---|---|---|---|
+| `ALLOWED_WS_ORIGINS` | An environment variable, required in production; an empty value failed `manage.py check --deploy` with `core.E003` | Gone, with the check. Remove the line from the environment file | Remove it. An unread variable in `.env` is a setting an operator believes they configured |
+
+## Voice leaves the server
+
+The server carried a LiveKit SFU, a persistent room record and four room frames, and
+none of it was ever built on the client. The design that replaces it is a full mesh of
+WebRTC audio between devices, keyed by DTLS-SRTP between the two endpoints of each
+connection and relayed by the self-hosted coturn
+([ADR-0021](docs/architecture/decisions/0021-relayed-webrtc-mesh-and-no-server-room.md)),
+and it lands in phase 7. **Nothing below affects messaging, attachments, devices or
+enrollment.** A client that never called a room route and never sent a room frame is
+unaffected in full.
+
+### The room routes
+
+| Item | Old behaviour | New behaviour | Client action |
+|---|---|---|---|
+| `POST /api/v1/rooms` | Created a room from a bucketed `name_blob` and returned `room_id`, the capability anyone with an encrypted invite could use | `404 not_found`, like any other path no route serves | Delete the call. A room is client state from here: carry it as client-signed control events over ordinary envelopes, exactly as a group is carried |
+| `GET /api/v1/rooms/{room_id}` | Returned `room_id`, `name_blob`, `updated_date` and `live_count` — the last read live from Redis | `404 not_found` | Delete the call. `live_count` has no replacement: the server holds no live membership, and a room's participants are known to its members and to nobody else |
+| `PUT /api/v1/rooms/{room_id}` | Replaced the encrypted room name and bumped `updated_date` so peers noticed a rename | `404 not_found` | Delete the call. A rename is a control event to the members, over envelopes |
+| `POST /api/v1/rooms/{room_id}/token` | Minted a short-lived LiveKit join token for the calling device: `{url, token, expires_in}`, audio-only, scoped to one room. Answered `503 voice_unconfigured` when `LIVEKIT_URL` was empty | `404 not_found` | Delete the call, and the LiveKit client SDK with it. Phase 7 replaces it with a route that mints a coturn relay credential — a TURN username and password, not a join token, and it authorizes a relay allocation rather than admission to a conference |
+
+`503 voice_unconfigured` leaves the error vocabulary with the route that raised it. It
+was the only route-specific `503`; `503 unavailable` is unchanged and still answers a
+missed deadline, an unreachable rate-limit store and an exhausted connection pool.
+
+### The `/ws` room frames
+
+| Item | Old behaviour | New behaviour | Client action |
+|---|---|---|---|
+| `room_subscribe` | Joined a room's live session: subscribed the socket to `ws:room:<id>`, announced a `room_presence` join to every subscriber, and added the device to the room's live-count set. Capped at 100 rooms for one socket | Not a frame type. On a live socket it is an unknown type and is ignored, like any other | Delete the frame. There is no live session to join, and no server-side room to subscribe to |
+| `room_leave` | Left the live session: announced a `room_presence` leave and dropped the live count. Disconnecting did the same for every held room | Not a frame type; ignored | Delete the frame |
+| `room_signal` (client → server) | Relayed an opaque blob to every subscriber of a room the socket held — knowing the id was not enough | Not a frame type; ignored | Send ephemeral room text as `signal` frames, one to each member device. The client owns the fan-out, because the server no longer knows who is in a room |
+| `room_signal` (server → client) | Arrived carrying `room_id` and `blob` | Never sent | Delete the handler |
+| `room_presence` | Arrived carrying `room_id`, `device_id` and `state` — `join` or `leave` — on explicit leave and on disconnect | Never sent | Delete the handler. Announce a join or a leave as a `signal` frame to each member device |
+| The room-subscription cap | 100 rooms for one socket; a subscribe past it was silently dropped | Gone with the frames | None |
+
+`ack`, `signal`, `subscribe_presence`, `envelope` and `presence` are unchanged, and so
+are every close code and every other frame limit.
+
+### The removed settings
+
+| Item | Old behaviour | New behaviour | Operator action |
+|---|---|---|---|
+| `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`, `LIVEKIT_TOKEN_TTL_SECONDS` | Configured the SFU and its join tokens. An empty `LIVEKIT_URL` turned voice off, and `check --deploy` refused an API secret under 32 characters through `core.E005` | Gone, with the SFU. `core.E005` now weighs `JWT_SIGNING_KEY` alone | Remove the four lines from the environment file, and remove `livekit.service` and `/etc/chat/livekit.yaml` from the host. An unread variable in `.env` is a setting an operator believes they configured |
+| `THROTTLE_ROOMTOKEN` | The rate scope of the join-token route, `60/min` | Gone with the route it counted | Remove the line |
+| `TURN_REALM`, `TURN_STATIC_AUTH_SECRET` | Read by coturn only | Unchanged, and still read by coturn only. The backend route that mints a credential from the secret lands in phase 7 | None. Keep both filled; `backend/ops/RUNBOOK.md` §7 is the coturn posture that goes with them |
 
 ## What the client can build against now
 
