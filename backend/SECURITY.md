@@ -72,6 +72,7 @@ holds *infrastructure* secrets:
 | Recovery secret | content | user-held only | never | can unwrap the key backup → cross-signing private keys |
 | TLS private key | infrastructure | server (nginx) | yes (by definition) | impersonate transport (mitigated by client SPKI pinning); no message content |
 | JWT signing key | infrastructure | server env, at least 32 generated characters (`check --deploy` refuses less) | yes | mint tokens → account access; cannot decrypt any message |
+| coturn shared secret (`TURN_STATIC_AUTH_SECRET`) | infrastructure | server env, and `static-auth-secret` in the coturn configuration — one value in two places, at least 32 characters once `TURN_URLS` names a relay (`check --deploy` refuses less) | yes | mint relay credentials → relay bandwidth for each credential's lifetime (AR-17); cannot decrypt any audio, which is keyed by DTLS between the two client devices |
 | Django `SECRET_KEY`, Argon2 params | infrastructure | server env | yes | session/signing integrity; no message content |
 | Password hashes (Argon2id) | auth (not a key) | DB | yes (hash only) | offline guessing per account; no message content |
 
