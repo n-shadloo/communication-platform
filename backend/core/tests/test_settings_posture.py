@@ -625,6 +625,10 @@ class CoturnPostureTests(SimpleTestCase):
         self.assertNotIn(
             "allow-loopback-peers", {k for k, _v in self.directives(self.relay())}
         )
+        # The host itself, filled with `listening-ip` at deploy time. An allocation
+        # that may name this box relays into nginx from the relay's own address,
+        # which is the caller's address laundered past the anonymous rate limiter.
+        self.assertIn(dict(self.directives(self.relay()))["listening-ip"], denied)
         for required in (
             "10.0.0.0-10.255.255.255",
             "100.64.0.0-100.127.255.255",
