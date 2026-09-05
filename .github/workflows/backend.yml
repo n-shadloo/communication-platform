@@ -1,8 +1,9 @@
 name: backend
 
-# Every push, and every pull request that targets main. The four jobs are
-# independent: a lint failure must not hide a test failure, and the offline
-# install is the one gate that proves the no-foreign-dependency rule still holds.
+# Every push, and every pull request that targets main. The five jobs are
+# independent: a lint failure must not hide a test failure, a failing test must
+# not hide a failing deploy check, and the offline install is the one gate that
+# proves the no-foreign-dependency rule still holds.
 on:
   push:
   pull_request:
@@ -124,19 +125,50 @@ jobs:
         run: pytest --cov --cov-branch --cov-fail-under=95
       - name: No model change is missing its migration
         run: python manage.py makemigrations --check --dry-run
+
+  deploy-check:
+    name: deploy-check
+    runs-on: ubuntu-latest
+    # A job of its own, and not a step after pytest: a failing test would
+    # otherwise end the job before the deploy gate ever ran, which is the same
+    # rule the jobs above already follow. It needs no service container —
+    # `check --deploy` opens neither PostgreSQL nor Redis.
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements/*.txt
+      - name: Install the pinned toolchain
+        run: python -m pip install --require-hashes -r requirements/dev.txt
       - name: Deploy checks against the production settings
-        # A fresh strong secret keeps security.W009 from firing on a value that
-        # exists only for the length of this step. --fail-level WARNING makes
-        # every other deploy warning a build failure rather than a note.
+        # The stub is the deployment's shape, not a minimum that passes: voice is
+        # configured, so `core.E005` weighs LIVEKIT_API_SECRET as well as
+        # JWT_SIGNING_KEY, and REDIS_URL carries a password because `core.E004`
+        # refuses one that does not. Every secret is generated inside the step and
+        # exists only for its length — a literal would drift into a real value's
+        # place and would not exercise security.W009's strength test honestly.
+        # Assumption A7 of the design record owns the gap this stub leaves.
+        #
+        # --fail-level WARNING is what makes this a gate: without it the command
+        # prints its findings and exits 0, and a `core.E`, a `core.W` or any of
+        # Django's own `security.W###` would reach a release as a note in a log.
         env:
           DJANGO_SETTINGS_MODULE: config.settings.prod
           DJANGO_ALLOWED_HOSTS: ci.invalid
           ALLOWED_WS_ORIGINS: https://ci.invalid
-          # The check refuses a URL without a password (core.E004) and opens no
-          # connection, so the value only has to carry one.
-          REDIS_URL: redis://:ci-test-redis-password-not-used-outside-this-runner@127.0.0.1:6379/0
+          POSTGRES_DB: chatapp
+          POSTGRES_USER: chatapp
+          LIVEKIT_URL: wss://ci.invalid
+          LIVEKIT_API_KEY: ci-stub-key
         run: |
-          export DJANGO_SECRET_KEY="$(python -c 'import secrets; print(secrets.token_urlsafe(64))')"
+          generate() { python -c 'import secrets; print(secrets.token_urlsafe(64))'; }
+          export DJANGO_SECRET_KEY="$(generate)"
+          export JWT_SIGNING_KEY="$(generate)"
+          export LIVEKIT_API_SECRET="$(generate)"
+          export POSTGRES_PASSWORD="$(generate)"
+          export REDIS_URL="redis://:$(generate)@127.0.0.1:6379/0"
           python manage.py check --deploy --fail-level WARNING
 
   offline-install:
@@ -147,6 +179,14 @@ jobs:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.12"
+      - name: The runner is the platform the VPS installs on
+        # The wheel set this job proves is per-platform, so the claim is only
+        # about Linux x86-64 if the runner is one. `ubuntu-latest` is x86-64
+        # today; an arm64 runner would make this job pass over a different set
+        # of wheels than the VPS installs, and say nothing about the VPS.
+        run: |
+          test "$(uname -s)-$(uname -m)" = "Linux-x86_64" \
+            || { echo "unexpected runner: $(uname -s)-$(uname -m)"; exit 1; }
       - name: Collect every dependency as a hash-verified wheel
         # --only-binary=:all: refuses a source distribution, because the VPS has
         # no compiler and no network when it installs. This is the same set that
