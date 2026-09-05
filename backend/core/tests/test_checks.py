@@ -147,7 +147,7 @@ class TestInfrastructureSecrets:
 
     def test_a_signing_key_at_the_key_size_passes(self):
         """The boundary: thirty-two characters is the first acceptable length."""
-        with override_settings(JWT_SIGNING_KEY="s" * 32, LIVEKIT_URL=""):
+        with override_settings(JWT_SIGNING_KEY="s" * 32):
             assert infrastructure_secrets_are_strong(None) == []
 
     def test_the_development_fallback_signing_key_is_refused_at_any_length(self):
@@ -161,40 +161,13 @@ class TestInfrastructureSecrets:
         with override_settings(JWT_SIGNING_KEY=STRONG, SECRET_KEY=STRONG):
             assert ids(infrastructure_secrets_are_strong(None)) == ["core.E005"]
 
-    def test_a_weak_livekit_secret_is_refused_when_voice_is_configured(self):
-        with override_settings(
-            JWT_SIGNING_KEY=STRONG,
-            SECRET_KEY="k" * 50,
-            LIVEKIT_URL="wss://chat.example",
-            LIVEKIT_API_SECRET="l" * 31,
-        ):
-            assert ids(infrastructure_secrets_are_strong(None)) == ["core.E005"]
+    def test_the_error_names_the_setting_the_operator_has_to_rotate(self):
+        """The message is what an operator acts on, and a `check --deploy` run
+        that says only "a secret is weak" names nothing to fix."""
+        with override_settings(JWT_SIGNING_KEY="dev-insecure-jwt-key"):
+            (error,) = infrastructure_secrets_are_strong(None)
 
-    def test_the_livekit_secret_is_not_read_at_all_when_voice_is_off(self):
-        """An empty `LIVEKIT_URL` is how a deployment turns voice off, and an
-        unused secret is not a weak one."""
-        with override_settings(
-            JWT_SIGNING_KEY=STRONG,
-            SECRET_KEY="k" * 50,
-            LIVEKIT_URL="",
-            LIVEKIT_API_SECRET="",
-        ):
-            assert infrastructure_secrets_are_strong(None) == []
-
-    def test_both_weak_secrets_are_reported_together(self):
-        """One `check --deploy` run has to name everything the operator must
-        rotate, not the first thing it found."""
-        with override_settings(
-            JWT_SIGNING_KEY="dev-insecure-jwt-key",
-            LIVEKIT_URL="wss://chat.example",
-            LIVEKIT_API_SECRET="l" * 4,
-        ):
-            errors = infrastructure_secrets_are_strong(None)
-
-        assert ids(errors) == ["core.E005", "core.E005"]
-        named = " ".join(error.msg for error in errors)
-        assert "JWT_SIGNING_KEY" in named
-        assert "LIVEKIT_API_SECRET" in named
+        assert "JWT_SIGNING_KEY" in error.msg
 
     def test_no_error_message_carries_a_secret_value(self):
         """The message is what lands in a deploy log. It names the setting, never

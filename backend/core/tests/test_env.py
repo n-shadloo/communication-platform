@@ -43,8 +43,8 @@ class TestEnv:
         assert env(KEY, default=None) is None
 
     def test_the_empty_string_is_a_value_and_not_a_missing_variable(self, monkeypatch):
-        """A key an operator left blank is set, and `LIVEKIT_URL=` is how voice is
-        turned off — reading it as absent would substitute the default instead."""
+        """A key an operator left blank is set, not missing: reading it as absent
+        would substitute the default and ignore what the operator wrote."""
         monkeypatch.setenv(KEY, "")
 
         assert env(KEY, default="fallback") == ""

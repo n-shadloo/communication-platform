@@ -56,10 +56,6 @@ EXPECTED = {
     ("POST", "/api/v1/me/envelopes/ack"): (FULL_DEVICE, "envelopes"),
     ("POST", "/api/v1/attachments"): (FULL_DEVICE, "attachments"),
     ("GET", "/api/v1/attachments/{attachment_id}"): (FULL_DEVICE, "attachments"),
-    ("POST", "/api/v1/rooms"): (FULL_DEVICE, "accounts"),
-    ("GET", "/api/v1/rooms/{room_id}"): (FULL_DEVICE, "accounts"),
-    ("PUT", "/api/v1/rooms/{room_id}"): (FULL_DEVICE, "accounts"),
-    ("POST", "/api/v1/rooms/{room_id}/token"): (FULL_DEVICE, "roomtoken"),
 }
 
 # The routes whose path names a device the token itself must be. Recorded here

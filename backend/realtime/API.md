@@ -1,10 +1,10 @@
 # realtime API — the `/ws` gateway
 
 One WebSocket endpoint carries everything live: instant envelope delivery, volatile
-device-to-device signals, presence, and ephemeral room traffic. Frames are JSON text
-objects in both directions — binary frames are a protocol violation. Nothing relayed
-here is persisted or logged; the durable message queue (see `messaging/API.md`) is
-the source of truth, and this socket only makes it fast.
+device-to-device signals, and presence. Frames are JSON text objects in both
+directions — binary frames are a protocol violation. Nothing relayed here is
+persisted or logged; the durable message queue (see `messaging/API.md`) is the
+source of truth, and this socket only makes it fast.
 
 Delivery between sockets is Redis publish and subscribe, which holds a message only
 for the instant it takes to hand it to whoever is connected. A frame published for a
@@ -41,10 +41,9 @@ unknown type.
 | Frame encoding | JSON text object | close 4008 |
 | Frame size | `WS_MAX_FRAME` (default 524288 bytes) | close 4008 |
 | Message rate | 100 frames per rolling second | close 4008 |
-| `signal` / `room_signal` blob | `SIGNAL_MAX` (default 16384 chars) | frame dropped |
+| `signal` blob | `SIGNAL_MAX` (default 16384 chars) | frame dropped |
 | `ack` ids | ≤ 200 | frame dropped |
 | `subscribe_presence` targets | ≤ 500 | frame dropped |
-| Room subscriptions per socket | 100 | subscribe dropped |
 | Undelivered server frames queued for one socket | 256 | close 4008 |
 
 Undecodable JSON, non-object JSON, and binary frames close 4008. Frames with an
@@ -91,39 +90,6 @@ skipped) and immediately announces `online` to every target. The same targets ar
 told `offline` when this socket disconnects. Presence flows only toward devices the
 client explicitly listed; an empty list means nobody is told anything.
 
-### `room_subscribe`
-
-```json
-{ "type": "room_subscribe", "room_id": "7c1d2e3f-4a5b-6c7d-8e9f-0a1b2c3d4e5f" }
-```
-
-Joins the live session of an existing room: the socket subscribes to the room's
-relay topic, every subscriber (including this one) receives a `room_presence` join, and the
-device is added to the room's live-count set. Subscribing to a nonexistent room or
-past the 100-room cap is silently ignored; re-subscribing to a held room re-announces
-join and stays allowed.
-
-### `room_leave`
-
-```json
-{ "type": "room_leave", "room_id": "7c1d2e3f-4a5b-6c7d-8e9f-0a1b2c3d4e5f" }
-```
-
-Leaves the live session: subscribers receive a `room_presence` leave and the live
-count drops. Disconnecting leaves every subscribed room the same way without an
-explicit frame.
-
-### `room_signal`
-
-```json
-{ "type": "room_signal", "room_id": "7c1d2e3f-4a5b-6c7d-8e9f-0a1b2c3d4e5f", "blob": "cmFuZG9t…" }
-```
-
-Relays an opaque blob (ephemeral room text or state, encrypted client-side) to every
-subscriber of a room this socket has itself subscribed to — knowing a room id is not
-enough. `blob` ≤ `SIGNAL_MAX` characters. Never persisted; a device that was offline
-never sees it.
-
 ## Server → client messages
 
 ### `envelope`
@@ -152,29 +118,6 @@ A volatile signal relayed from some device. Carries no sender field.
 
 A device this socket was named in a `subscribe_presence` list came online
 (`"online"`) or its socket closed (`"offline"`).
-
-### `room_signal`
-
-```json
-{ "type": "room_signal", "room_id": "7c1d2e3f-4a5b-6c7d-8e9f-0a1b2c3d4e5f", "blob": "cmFuZG9t…" }
-```
-
-An ephemeral room blob relayed to every subscriber, the sender included. Carries the
-room id and blob only.
-
-### `room_presence`
-
-```json
-{
-  "type": "room_presence",
-  "room_id": "7c1d2e3f-4a5b-6c7d-8e9f-0a1b2c3d4e5f",
-  "device_id": "9f1c6a2e-3b7d-4e0f-8c15-2a77d4b9e611",
-  "state": "join"
-}
-```
-
-A device joined (`"join"`) or left (`"leave"`) a room this socket subscribes to.
-Leave fires on explicit `room_leave` and on disconnect.
 
 ## Close codes
 

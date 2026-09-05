@@ -19,6 +19,7 @@ from django.test import override_settings
 from fastapi.routing import iter_route_contexts
 from psycopg_pool import PoolTimeout
 
+from accounts import routes as accounts_routes
 from api.app import create_app, route_limits, wrap
 from api.middleware import (
     RESPONSE_HEADERS,
@@ -31,11 +32,9 @@ from api.middleware import (
 )
 from config.asgi import api_application, application, django_asgi_app
 from conftest import AsgiClient
-from core.buckets import ATTACHMENT_BUCKETS, NAME_BUCKETS
+from core.buckets import ATTACHMENT_BUCKETS
 from devices.models import Device
 from messaging import services
-from voicerooms import routes as voicerooms_routes
-from voicerooms.models import Room
 
 CAP = Limits(body_bytes=16, deadline_seconds=0.05)
 
@@ -402,15 +401,12 @@ def test_a_route_waiting_on_the_loop_is_refused_at_the_deadline_the_settings_car
         await anyio.sleep(deadline * 4)
         raise AssertionError("the deadline should have cut this request off")
 
-    monkeypatch.setattr(voicerooms_routes, "room_live_count", crawl)
-    room = Room.objects.create(name_blob=b"n" * min(NAME_BUCKETS))
+    monkeypatch.setattr(accounts_routes, "run_unit", crawl)
     with override_settings(REQUEST_DEADLINE_SECONDS=deadline):
         fresh = create_app(django_asgi_app)
         client = AsgiClient(wrap(fresh), fresh, reraise=False)
         started = time.monotonic()
-        response = client.get(
-            f"/api/v1/rooms/{room.id}", headers=bearer(active_user, device)
-        )
+        response = client.get("/api/v1/users", headers=bearer(active_user, device))
         waited = time.monotonic() - started
 
     assert response.status_code == 503

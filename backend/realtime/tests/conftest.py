@@ -26,7 +26,7 @@ PASSWORD = "correct-horse-battery-staple"
 
 @pytest.fixture(autouse=True)
 async def release_the_loops_redis():
-    """The bus and the room-presence sets build their Redis objects on the loop that
+    """The bus builds its Redis objects on the loop that
     first asks for one, and pytest-asyncio gives each test a loop of its own.
     Without this each test leaves a subscriber — with its reader task — and a
     client, both bound to a loop that is already gone. Same order as the lifespan

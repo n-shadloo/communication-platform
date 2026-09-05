@@ -15,7 +15,6 @@ from django.test import RequestFactory
 from accounts.models import User
 from core.admin import AuditAdmin
 from core.panel import audit
-from voicerooms.models import Room
 
 pytestmark = pytest.mark.django_db
 
@@ -123,10 +122,11 @@ def test_the_operator_column_is_the_username(page, owner):
 def test_what_was_touched_is_the_name_the_panel_wrote(page, owner):
     """Never `str(obj)`: the panel writes every one of these itself, in the
     operator's language."""
-    room = Room.objects.create(name_blob=b"\x00" * 256)
-    audit(request_for(owner), [room], DELETION, "Deleted.", repr_of=lambda _: "a room")
+    audit(
+        request_for(owner), [owner], DELETION, "Deleted.", repr_of=lambda _: "an account"
+    )
 
-    assert page.touched(LogEntry.objects.latest("id")) == "a room"
+    assert page.touched(LogEntry.objects.latest("id")) == "an account"
 
 
 def test_what_happened_is_the_summary_of_the_action(page, owner):

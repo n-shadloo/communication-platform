@@ -131,9 +131,6 @@ class TestTheAuditRefusesToPassOnANonWindow:
     @pytest.fixture(autouse=True)
     async def _isolated_runtime(self, settings, tmp_path):
         settings.ATTACHMENTS_ROOT = tmp_path
-        settings.LIVEKIT_URL = "wss://livekit.audit.test"
-        settings.LIVEKIT_API_KEY = "lk-audit-key"
-        settings.LIVEKIT_API_SECRET = "lk-audit-secret-0123456789abcdef0123456789abcdef"
         yield
         await stop_subscriber()
         await close_client()

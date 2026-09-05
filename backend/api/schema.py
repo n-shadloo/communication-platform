@@ -49,7 +49,6 @@ VOCABULARY = {
     "throttled": 429,
     "server_error": 500,
     "unavailable": 503,
-    "voice_unconfigured": 503,
 }
 
 # Every route answers these two whatever it declares: an unhandled failure, and

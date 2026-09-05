@@ -190,8 +190,8 @@ class BasePostureTests(SimpleTestCase):
 
     def test_datastores_are_localhost_only(self):
         self.assertIn(settings.DATABASES["default"]["HOST"], {"127.0.0.1", "localhost"})
-        # One Redis URL: the rate counters, the lockout, the room presence sets and
-        # the gateway's fan-out bus all read `REDIS_URL`.
+        # One Redis URL: the rate counters, the lockout and the gateway's fan-out
+        # bus all read `REDIS_URL`.
         self.assertRegex(
             settings.REDIS_URL, r"^redis://(:[^@]+@)?(127\.0\.0\.1|localhost):"
         )
@@ -510,10 +510,10 @@ class BasePostureTests(SimpleTestCase):
     def test_no_django_cache_backend_reads_redis(self):
         """Every built-in Django cache backend unpickles what it reads, and Redis
         is a store another process on the host can write to. Nothing in this
-        process may turn Redis bytes back into Python objects: the counters, the
-        lockout state and the presence sets are read as strings through the redis
-        client, and the Django cache framework is left on its process-local
-        default that no other software reaches."""
+        process may turn Redis bytes back into Python objects: the counters and
+        the lockout state are read as strings through the redis client, and the
+        Django cache framework is left on its process-local default that no other
+        software reaches."""
         backend = settings.CACHES["default"]["BACKEND"]
 
         self.assertNotIn("redis", backend.lower())
@@ -522,7 +522,7 @@ class BasePostureTests(SimpleTestCase):
     def test_the_deploy_checks_refuse_a_redis_url_without_a_password(self):
         """Redis listens on loopback of a host shared with other projects. Without
         `requirepass` every local process can flush the rate counters and the
-        lockout, inject frames on the fan-out bus, and read the presence sets."""
+        lockout and inject frames on the fan-out bus."""
         with override_settings(REDIS_URL="redis://127.0.0.1:6379/0"):
             failing = deploy_check_ids()
         with override_settings(REDIS_URL="redis://:generated-secret@127.0.0.1:6379/0"):
@@ -532,9 +532,8 @@ class BasePostureTests(SimpleTestCase):
         self.assertNotIn("core.E004", passing)
 
     def test_the_deploy_checks_refuse_a_weak_infrastructure_secret(self):
-        """The signing key mints a token for any account, and the LiveKit secret
-        mints a join token for any room. Django checks its own SECRET_KEY's
-        strength and nothing checked these two, so a short value or the
+        """The signing key mints a token for any account. Django checks its own
+        SECRET_KEY's strength and nothing checked this one, so a short value or the
         development fallback reached production in silence."""
         strong = "s" * 32
         cases = {
@@ -544,28 +543,12 @@ class BasePostureTests(SimpleTestCase):
                 "JWT_SIGNING_KEY": strong,
                 "SECRET_KEY": strong,
             },
-            "short LiveKit secret with voice configured": {
-                "LIVEKIT_URL": "wss://chat.example",
-                "LIVEKIT_API_KEY": "key",
-                "LIVEKIT_API_SECRET": "s" * 31,
-            },
         }
         for label, overrides in cases.items():
             with self.subTest(label), override_settings(**overrides):
                 self.assertIn("core.E005", deploy_check_ids(), label)
 
-        with override_settings(
-            JWT_SIGNING_KEY=strong,
-            SECRET_KEY="k" * 50,
-            LIVEKIT_URL="wss://chat.example",
-            LIVEKIT_API_KEY="key",
-            LIVEKIT_API_SECRET="l" * 32,
-        ):
-            self.assertNotIn("core.E005", deploy_check_ids())
-        # Voice off: the LiveKit secret is not read at all, so an empty one passes.
-        with override_settings(
-            JWT_SIGNING_KEY=strong, LIVEKIT_URL="", LIVEKIT_API_SECRET=""
-        ):
+        with override_settings(JWT_SIGNING_KEY=strong, SECRET_KEY="k" * 50):
             self.assertNotIn("core.E005", deploy_check_ids())
 
 

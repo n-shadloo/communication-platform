@@ -63,7 +63,6 @@ NUMERIC = {
     "DB_POOL_MIN_SIZE": "DATABASES.default.OPTIONS.pool.min_size",
     "DB_POOL_TIMEOUT": "DATABASES.default.OPTIONS.pool.timeout",
     "ENVELOPE_TTL_DAYS": "ENVELOPE_TTL_DAYS",
-    "LIVEKIT_TOKEN_TTL_SECONDS": "LIVEKIT_TOKEN_TTL_SECONDS",
     "MAILBOX_MAX_BYTES": "MAILBOX_MAX_BYTES",
     "MAX_DEVICELOG_RECORDS": "MAX_DEVICELOG_RECORDS",
     "MAX_DEVICES_PER_USER": "MAX_DEVICES_PER_USER",
@@ -94,7 +93,6 @@ NUMERIC_DEFAULTS = {
     "DATABASES.default.OPTIONS.pool.min_size": 1,
     "DATABASES.default.OPTIONS.pool.timeout": 10,
     "ENVELOPE_TTL_DAYS": 7,
-    "LIVEKIT_TOKEN_TTL_SECONDS": 300,
     "MAILBOX_MAX_BYTES": 32 * 1024 * 1024,
     "MAX_DEVICELOG_RECORDS": 10000,
     "MAX_DEVICES_PER_USER": 10,
@@ -117,7 +115,6 @@ THROTTLE_VARIABLES = {
     "login": "THROTTLE_LOGIN",
     "refresh": "THROTTLE_REFRESH",
     "register": "THROTTLE_REGISTER",
-    "roomtoken": "THROTTLE_ROOMTOKEN",
 }
 
 
@@ -225,15 +222,6 @@ class TestWhatAnOperatorGetsBySettingNothing:
 
         assert module.ALLOWED_HOSTS == []
         assert module.DEBUG is False
-
-    def test_voice_is_off_until_a_livekit_endpoint_is_configured(self, monkeypatch):
-        """The empty string is the off switch, and it has to survive being read as
-        a value rather than as an absent variable."""
-        module = load_base(monkeypatch)
-
-        assert module.LIVEKIT_URL == ""
-        assert module.LIVEKIT_API_KEY == ""
-        assert module.LIVEKIT_API_SECRET == ""
 
     def test_the_datastores_default_to_loopback(self, monkeypatch):
         module = load_base(monkeypatch)

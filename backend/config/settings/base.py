@@ -94,7 +94,7 @@ REDIS_URL = env("REDIS_URL", default="redis://127.0.0.1:6379/0")
 # answering — a blocked instance, or a half-open socket after the network moved
 # under it — holds its caller for ever. On the HTTP surface the request deadline
 # would eventually answer `503`; the WebSocket gateway has no deadline at all, so
-# a presence announcement or a room join would wait until the client gave up.
+# a presence announcement would wait until the client gave up.
 # Loopback commands on this host are sub-millisecond, so two seconds is a hang and
 # never a slow answer, and the throttled routes fail closed on it exactly as they
 # already do when Redis refuses the connection (ADR-0010).
@@ -148,7 +148,6 @@ THROTTLE_RATES = {
     "claim": env("THROTTLE_CLAIM", default="120/min"),
     "envelopes": env("THROTTLE_ENVELOPES", default="600/min"),
     "attachments": env("THROTTLE_ATTACHMENTS", default="60/min"),
-    "roomtoken": env("THROTTLE_ROOMTOKEN", default="60/min"),
 }
 
 # --- Request limits (ADR-0014) --------------------------------------------------
@@ -191,12 +190,6 @@ MAX_DEVICELOG_RECORDS = env_int("MAX_DEVICELOG_RECORDS", default=10000)
 # Realtime gateway bounds.
 WS_MAX_FRAME = env_int("WS_MAX_FRAME", default=512 * 1024)
 SIGNAL_MAX = env_int("SIGNAL_MAX", default=16 * 1024)
-
-# Voice. The API secret is infrastructure, never a media key.
-LIVEKIT_URL = env("LIVEKIT_URL", default="")
-LIVEKIT_API_KEY = env("LIVEKIT_API_KEY", default="")
-LIVEKIT_API_SECRET = env("LIVEKIT_API_SECRET", default="")
-LIVEKIT_TOKEN_TTL_SECONDS = env_int("LIVEKIT_TOKEN_TTL_SECONDS", default=300)
 
 # Security headers (prod tightens further).
 SECURE_CONTENT_TYPE_NOSNIFF = True
@@ -284,19 +277,13 @@ UNFOLD = {
                 ],
             },
             {
-                "title": _("Storage and voice"),
+                "title": _("Storage"),
                 "items": [
                     {
                         "title": _("Attachments"),
                         "icon": "attach_file",
                         "permission": "core.panel.is_owner",
                         "link": reverse_lazy("admin:attachments_attachment_changelist"),
-                    },
-                    {
-                        "title": _("Voice rooms"),
-                        "icon": "graphic_eq",
-                        "permission": "core.panel.is_owner",
-                        "link": reverse_lazy("admin:voicerooms_room_changelist"),
                     },
                 ],
             },

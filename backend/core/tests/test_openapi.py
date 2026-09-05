@@ -191,8 +191,8 @@ def test_an_operation_that_takes_a_body_declares_the_two_refusals_of_one(
 def test_an_operation_with_a_typed_path_parameter_declares_the_validation_refusal(
     operation_id,
 ):
-    """A path segment that must parse — every `{user_id}`, `{device_id}` and
-    `{room_id}` is a UUID — is a `400 invalid_request` on a value that does not."""
+    """A path segment that must parse — `{user_id}` and `{device_id}` are both
+    UUIDs — is a `400 invalid_request` on a value that does not."""
     assert "400" in statuses(OPERATIONS[operation_id]), operation_id
 
 

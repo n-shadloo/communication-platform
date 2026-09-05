@@ -38,11 +38,6 @@
                 {% component "unfold/components/title.html" %}{{ live_devices }}{% endcomponent %}
             {% endcomponent %}
 
-            {% component "unfold/components/card.html" with href=rooms_url icon="graphic_eq" %}
-                {% component "unfold/components/text.html" %}{% translate "Voice rooms" %}{% endcomponent %}
-                {% component "unfold/components/title.html" %}{{ room_count }}{% endcomponent %}
-            {% endcomponent %}
-
             {% component "unfold/components/card.html" with href=attachments_url icon="attach_file" %}
                 {% component "unfold/components/text.html" %}{% translate "Attachment storage" %}{% endcomponent %}
                 {% component "unfold/components/title.html" %}{{ storage_used }}{% endcomponent %}

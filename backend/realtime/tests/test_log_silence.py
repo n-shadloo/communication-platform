@@ -139,7 +139,6 @@ async def test_the_whole_malformed_frame_class_emits_no_identifier_or_payload(
     for the parse.
     """
     access = await mint_access(active_user, device)
-    room_id = str(uuid.uuid4())
 
     with raw_root_capture() as lines:
         logging.getLogger("test.canary").debug("canary")
@@ -154,10 +153,6 @@ async def test_the_whole_malformed_frame_class_emits_no_identifier_or_payload(
             {"type": "signal", "to_device": CONTROL_BLOB, "blob": "x"},
             {"type": "subscribe_presence", "device_ids": [CONTROL_BLOB]},
             {"type": "subscribe_presence", "device_ids": "not-a-list"},
-            {"type": "room_subscribe", "room_id": room_id},
-            {"type": "room_subscribe", "room_id": CONTROL_BLOB},
-            {"type": "room_leave", "room_id": room_id},
-            {"type": "room_signal", "room_id": room_id, "blob": CONTROL_BLOB},
             {"type": CONTROL_BLOB},
         ):
             await comm.send_json_to(frame)
@@ -178,7 +173,6 @@ async def test_the_whole_malformed_frame_class_emits_no_identifier_or_payload(
     forbidden = {
         "device id": str(device.id),
         "peer device id": str(peer_device.id),
-        "room id": room_id,
         "control payload": CONTROL_BLOB,
         "access token": access,
         "user id": str(active_user.id),

@@ -49,7 +49,6 @@ The vocabulary is fixed. A client branches on `code`, never on `detail`.
 | 429 | `throttled` | Rate limit reached, or a login name in its cool-off. `Retry-After` carries the seconds to wait. |
 | 500 | `server_error` | Unhandled failure. `detail` is `"Internal error."`. |
 | 503 | `unavailable` | The server is saturated or a store it needs is gone: the rate-limit store is unreachable, the request exceeded its deadline, or the database connection pool had nothing free. Retry with backoff; the request itself is not at fault. |
-| 503 | `voice_unconfigured` | LiveKit is not configured. |
 
 One surface serves this API. Every route of every app answers through FastAPI and
 uses the envelope everywhere, including for a `404` on a path no route serves and a
@@ -79,7 +78,7 @@ A route with no authentication requirement — `GET /api/v1/health`, and the thr
 `/auth` routes a client reaches before it holds a token — answers neither `401
 unauthenticated` nor `403 scope_forbidden` for that reason. Where one of these
 statuses carries a code of its own, the route does list it: `403 forbidden` on the
-two prekey routes, `503 voice_unconfigured` on the join-token route.
+two prekey routes.
 
 Three refusals belong to no route at all, because the surface answers them before it
 has chosen one: `400 invalid_request` for a `Host` that `DJANGO_ALLOWED_HOSTS` does
@@ -125,7 +124,6 @@ payload being echoed. Current sets, in bytes:
 | `ENVELOPE_BUCKETS` | 1024, 4096, 16384, 65536, 262144 | queued envelopes |
 | `PROFILE_BUCKETS` | 1024, 4096 | profile blobs |
 | `LABEL_BUCKETS` | 256, 1024 | device labels |
-| `NAME_BUCKETS` | 256, 1024 | room names |
 | `DEVICELOG_BUCKETS` | 256, 1024 | device-list log records |
 | `BACKUP_BUCKETS` | 4096, 16384, 65536, 262144, 1048576 | key backup |
 | `ATTACHMENT_BUCKETS` | 65536, 262144, 1048576, 4194304, 16777216, 67108864 | attachments |

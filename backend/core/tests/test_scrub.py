@@ -159,7 +159,7 @@ class ScrubFilterPropertyTests(SimpleTestCase):
     @given(value=st.uuids(), position=st.sampled_from(POSITIONS))
     def test_no_uuid_survives_in_the_message(self, value, position):
         """Every identifier this system hands a client is one of these: an account,
-        a device, a room, a queued envelope."""
+        a device, a queued envelope."""
         secret = str(value)
 
         self.assertScrubbed(self.through_the_filter(position.format(secret)), secret)

@@ -376,7 +376,7 @@ async def test_the_push_handler_returns_the_response_and_writes_no_log_line():
 async def test_the_worker_holds_one_subscriber_for_its_loop():
     """One subscription connection for the process, which is what makes per-topic
     subscribe and unsubscribe affordable: a second subscriber would double the
-    round trips of every bind and every room join."""
+    round trips of every bind."""
     assert bus.get_subscriber() is bus.get_subscriber()
 
 

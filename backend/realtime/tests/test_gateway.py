@@ -154,8 +154,8 @@ async def test_the_outbox_takes_its_bound_and_closes_the_socket_on_the_frame_pas
 async def test_a_refused_handshake_runs_no_cleanup_and_joins_nothing(db):
     """The cleanup is what the bind pays for, so it runs only inside the accept.
 
-    A refusal returns before it: nothing to announce offline, no room to leave and
-    no topic to give back, because none was ever taken. Were the refusal inside the
+    A refusal returns before it: nothing to announce offline and no topic to give
+    back, because none was ever taken. Were the refusal inside the
     `finally` instead, the cleanup would read the device the connection does not
     have and raise on the way out of a handshake that had already been answered.
     """
@@ -219,11 +219,6 @@ CLIENT_FRAMES = st.one_of(
             "type": st.just("subscribe_presence"),
             "device_ids": st.one_of(st.lists(IDENTIFIERS, max_size=4), IDENTIFIERS),
         }
-    ),
-    st.fixed_dictionaries({"type": st.just("room_subscribe"), "room_id": IDENTIFIERS}),
-    st.fixed_dictionaries({"type": st.just("room_leave"), "room_id": IDENTIFIERS}),
-    st.fixed_dictionaries(
-        {"type": st.just("room_signal"), "room_id": IDENTIFIERS, "blob": BLOBS}
     ),
     st.fixed_dictionaries({"type": st.text(max_size=8)}),
     st.dictionaries(st.text(max_size=6), st.integers(), max_size=3),
