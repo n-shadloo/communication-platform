@@ -321,7 +321,8 @@ systemctl show coturn.service -p ExecStart | grep -c /etc/chat/turnserver.conf  
   `static-auth-secret=` are filled inline in `/etc/chat/turnserver.conf`, from
   the `TURN_REALM` and `TURN_STATIC_AUTH_SECRET` values of the environment file,
   and the file is given the same trust boundary as `.env.production`. Set
-  `listening-ip` and `relay-ip` to the VPS address; never a wildcard.
+  `listening-ip`, `relay-ip` and the `denied-peer-ip=YOUR_VPS_IP` entry to the VPS
+  address; never a wildcard.
 - **coturn has no TLS listener and no certificate.** The hop it carries is
   already SRTP that the relay cannot open, so a TLS or DTLS listener would buy
   nothing and would put a certificate and a renewal on a box whose posture is to
