@@ -291,8 +291,8 @@ def test_an_unreachable_redis_leaves_the_room_untouched(
 def test_every_room_response_forbids_a_cache_from_keeping_it(
     http, active_user, device, bearer, room, voice_settings
 ):
-    """A room answer carries an encrypted name or a join grant, so no shared cache
-    may hold one and no referrer may carry the capability out of the page."""
+    """A room answer carries an encrypted name or a join grant, so no cache may
+    hold one."""
     headers = bearer(active_user, device)
 
     for resp in (
@@ -301,5 +301,3 @@ def test_every_room_response_forbids_a_cache_from_keeping_it(
         http.post(ROOMS_URL, json={"name_blob": name_blob_b64()}, headers=headers),
     ):
         assert resp.headers["cache-control"] == "no-store"
-        assert resp.headers["referrer-policy"] == "no-referrer"
-        assert resp.headers["x-content-type-options"] == "nosniff"

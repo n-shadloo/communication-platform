@@ -258,7 +258,7 @@ def test_authentication_is_settled_before_the_body_is_parsed(http):
 
 
 @pytest.mark.parametrize("method", ["GET", "PUT"])
-def test_every_answer_carries_the_security_headers(
+def test_every_answer_forbids_a_cache_from_keeping_it(
     http, active_user, device, bearer, method
 ):
     """`no-store` above all: the read carries the account's wrapped private keys,
@@ -271,8 +271,6 @@ def test_every_answer_carries_the_security_headers(
     )
 
     assert response.headers["cache-control"] == "no-store"
-    assert response.headers["x-content-type-options"] == "nosniff"
-    assert response.headers["referrer-policy"] == "no-referrer"
 
 
 def test_the_read_and_the_write_share_one_rate_limit_counter(

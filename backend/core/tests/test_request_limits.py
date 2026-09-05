@@ -21,18 +21,17 @@ from psycopg_pool import PoolTimeout
 
 from api.app import create_app, route_limits, wrap
 from api.middleware import (
-    SECURITY_HEADERS,
+    RESPONSE_HEADERS,
     BodyCap,
     Limits,
     RequestDeadline,
-    SecurityHeaders,
+    ResponseHeaders,
     ThreadSensitive,
     TrustedHost,
 )
 from config.asgi import api_application, application, django_asgi_app
 from conftest import AsgiClient
 from core.buckets import ATTACHMENT_BUCKETS, NAME_BUCKETS
-from core.tests.test_route_table import DOCUMENTATION
 from devices.models import Device
 from messaging import services
 from voicerooms import routes as voicerooms_routes
@@ -196,25 +195,36 @@ class TestBodyCap:
         assert json.loads(body)["code"] == "payload_too_large"
 
 
-class TestSecurityHeaders:
+class TestResponseHeaders:
     async def test_every_header_is_added(self):
-        app = SecurityHeaders(reader())
+        app = ResponseHeaders(reader())
 
         _status, headers, _body = await drive(app, http_scope(), one_body(b""))
 
-        for name, value in SECURITY_HEADERS:
+        for name, value in RESPONSE_HEADERS:
             assert headers[name] == value
 
     async def test_a_header_the_response_already_carries_is_left_alone(self):
         """One owner per header: the Django application behind the catch-all sets
-        some of these itself, and a browser reads a duplicated header as two
-        policies."""
-        app = SecurityHeaders(reader(headers=[(b"cache-control", b"max-age=60")]))
+        `Cache-Control` on the admin views it decorates with `never_cache`, and a
+        response carrying two of them states two policies."""
+        app = ResponseHeaders(reader(headers=[(b"cache-control", b"max-age=60")]))
 
         _status, headers, _body = await drive(app, http_scope(), one_body(b""))
 
         assert headers[b"cache-control"] == b"max-age=60"
-        assert headers[b"x-content-type-options"] == b"nosniff"
+
+    async def test_no_browser_only_header_is_set(self):
+        """`X-Content-Type-Options` and `Referrer-Policy` left with the web target
+        (ADR-0020): the one client is a Flutter application that reads neither, and
+        a header this API states is a header it owes a client. The admin path is
+        not affected — Django's `SecurityMiddleware` sets both there."""
+        app = ResponseHeaders(reader())
+
+        _status, headers, _body = await drive(app, http_scope(), one_body(b""))
+
+        assert b"x-content-type-options" not in headers
+        assert b"referrer-policy" not in headers
 
 
 class TestThreadSensitiveContext:
@@ -239,12 +249,12 @@ class TestThreadSensitiveContext:
 
 @pytest.mark.django_db(transaction=True)
 class TestThroughTheWholeStack:
-    def test_every_response_carries_the_security_headers(self, http):
+    def test_every_response_carries_the_response_headers(self, http):
         response = http.get("/api/v1/health")
 
-        assert response.headers["x-content-type-options"] == "nosniff"
         assert response.headers["cache-control"] == "no-store"
-        assert response.headers["referrer-policy"] == "no-referrer"
+        assert "x-content-type-options" not in response.headers
+        assert "referrer-policy" not in response.headers
 
     def test_an_unlisted_host_never_reaches_a_route(self, http):
         response = http.get("/api/v1/health", headers={"Host": "evil.example"})
@@ -260,31 +270,21 @@ class TestTheRouteLimitTable:
 
     def test_every_route_the_api_serves_names_a_class(self):
         """A route missing from the table takes the fallback in silence, and the
-        fallback is 16 KiB — small enough to refuse a legal prekey batch.
-
-        The documentation routes are the exception the table records rather than
-        carries: they read no body, they exist only under `DEBUG`, and the
-        fallback is the right class for a GET that takes none.
-        """
+        fallback is 16 KiB — small enough to refuse a legal prekey batch."""
         per_route, _fallback = route_limits()
         served = {
             context.path
             for context in iter_route_contexts(api_application.routes)
-            if context.methods is not None and context.path not in DOCUMENTATION
+            if context.methods is not None
         }
 
         assert served == set(per_route)
-
-    def test_no_documentation_route_names_a_class_of_its_own(self):
-        per_route, _fallback = route_limits()
-
-        assert DOCUMENTATION & set(per_route) == set()
 
     def test_the_gateway_is_the_one_route_outside_the_table(self):
         """A body cap counts a request body and a deadline bounds a request; a
         socket has neither, and both middlewares pass a websocket scope through
         untouched. What bounds the socket instead is the gateway's own frame cap,
-        rate cap, send-queue bound and authentication deadline."""
+        rate cap and send-queue bound."""
         per_route, _fallback = route_limits()
         outside = {
             context.path
@@ -376,7 +376,7 @@ def test_an_unhandled_failure_renders_the_envelope_and_leaks_nothing(
     assert response.json() == {"code": "server_error", "detail": "Internal error."}
     assert secret not in response.text
     assert response.headers["content-type"].startswith("application/json")
-    for header, value in SECURITY_HEADERS:
+    for header, value in RESPONSE_HEADERS:
         assert response.headers[header.decode()] == value.decode()
 
 
@@ -419,7 +419,7 @@ def test_a_route_waiting_on_the_loop_is_refused_at_the_deadline_the_settings_car
         "detail": "The request exceeded its deadline.",
     }
     assert deadline <= waited < deadline * 4
-    for header, value in SECURITY_HEADERS:
+    for header, value in RESPONSE_HEADERS:
         assert response.headers[header.decode()] == value.decode()
 
 
@@ -440,14 +440,14 @@ def test_a_wrong_method_renders_the_envelope_with_the_methods_of_one_route(http)
         "detail": "That method is not allowed.",
     }
     assert response.headers["allow"] == "GET"
-    for header, value in SECURITY_HEADERS:
+    for header, value in RESPONSE_HEADERS:
         assert response.headers[header.decode()] == value.decode()
 
 
 class TestEveryMiddlewareRefusalIsAWholeResponse:
     """`_send_envelope` is what answers before a route is reached: the unknown
     host, the oversized body and the missed deadline. Each of those responses is
-    written by the middleware and by nothing else — `SecurityHeaders` sits *below*
+    written by the middleware and by nothing else — `ResponseHeaders` sits *below*
     `TrustedHost` and `RequestDeadline`, so it never sees them — which is why each
     one carries the headers itself.
     """
@@ -472,7 +472,7 @@ class TestEveryMiddlewareRefusalIsAWholeResponse:
 
     async def test_each_refusal_carries_the_security_headers_of_this_surface(self):
         for label, (_status, headers, _body) in (await self.refusals()).items():
-            for name, value in SECURITY_HEADERS:
+            for name, value in RESPONSE_HEADERS:
                 assert headers.get(name) == value, (label, name)
 
     async def test_each_refusal_is_json_with_a_content_length(self):
@@ -497,7 +497,7 @@ class TestEveryMiddlewareRefusalIsAWholeResponse:
 
         await BodyCap(app, limits_for)({"type": "websocket"}, None, None)
         await TrustedHost(app, ["testserver"])({"type": "websocket"}, None, None)
-        await SecurityHeaders(app)({"type": "websocket"}, None, None)
+        await ResponseHeaders(app)({"type": "websocket"}, None, None)
 
         assert seen == ["websocket"] * 3
 

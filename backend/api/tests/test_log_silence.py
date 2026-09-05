@@ -17,7 +17,7 @@ import logging
 import pytest
 
 from api.auth import issue_full, issue_register_scope
-from api.middleware import SECURITY_HEADERS
+from api.middleware import RESPONSE_HEADERS
 from config.asgi import api_application, application
 from conftest import PASSWORD, AsgiClient
 from devices.models import Device
@@ -153,7 +153,7 @@ def test_an_unhandled_failure_is_rendered_without_logging_what_it_carried(
 
     assert response.status_code == 500
     assert response.json() == {"code": "server_error", "detail": "Internal error."}
-    for header, value in SECURITY_HEADERS:
+    for header, value in RESPONSE_HEADERS:
         assert response.headers[header.decode()] == value.decode()
     assert scan(lines, {"exception message": secret}) == []
 

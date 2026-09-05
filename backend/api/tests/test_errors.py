@@ -21,7 +21,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from api import errors
 from api.errors import ApiError, locator, validation_detail
-from api.middleware import SECURITY_HEADERS
+from api.middleware import RESPONSE_HEADERS
 from conftest import AsgiClient
 from core.fields import BadBucket
 from devices.models import Device
@@ -300,7 +300,7 @@ class TestTheEnvelopeOnTheRealSurface:
         assert set(body) == {"code", "detail"}
         assert body["code"] == code
         assert response.headers["content-type"].startswith("application/json")
-        for name, value in SECURITY_HEADERS:
+        for name, value in RESPONSE_HEADERS:
             assert response.headers[name.decode()] == value.decode()
 
     @pytest.mark.parametrize("code", sorted(FAILURES))

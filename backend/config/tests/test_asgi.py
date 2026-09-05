@@ -25,7 +25,7 @@ from fastapi import FastAPI
 from api.middleware import (
     BodyCap,
     RequestDeadline,
-    SecurityHeaders,
+    ResponseHeaders,
     ThreadSensitive,
     TrustedHost,
 )
@@ -35,7 +35,7 @@ from config.asgi import api_application, application, django_asgi_app
 # the host check refuses before a body is read, the deadline starts before the
 # body cap counts against it, and the ORM's thread-sensitive context is innermost
 # so that it wraps only what the routes do.
-STACK = [TrustedHost, RequestDeadline, BodyCap, SecurityHeaders, ThreadSensitive]
+STACK = [TrustedHost, RequestDeadline, BodyCap, ResponseHeaders, ThreadSensitive]
 
 # The two variables `base` requires and `dev` supplies a fallback for.
 SECRETS = ("DJANGO_SECRET_KEY", "JWT_SIGNING_KEY")

@@ -22,7 +22,6 @@ import pytest
 from django.conf import settings
 
 from accounts.models import User
-from api.middleware import SECURITY_HEADERS
 from config.urls import ADMIN_PATH
 
 pytestmark = pytest.mark.django_db(transaction=True)
@@ -78,14 +77,16 @@ def test_a_wrong_password_is_refused_and_sets_no_session(http, operator):
     assert "sessionid" not in "".join(answer.headers.get_list("set-cookie"))
 
 
-def test_the_login_page_carries_the_security_headers_of_this_surface(http):
-    """`SecurityHeaders` adds each header the response does not already carry, and
-    the Django half of the surface is the half where "already carry" is not
-    hypothetical — the admin sets its own `Cache-Control`."""
+def test_the_login_page_keeps_the_headers_a_browser_reads(http):
+    """The operator opens this page in a browser, so the panel keeps every header
+    Django's `SecurityMiddleware` sets even though the API no longer states them
+    (ADR-0020). `Cache-Control` is the one the admin sets itself, and
+    `ResponseHeaders` adds a header only when the response does not carry it —
+    so what reaches the browser here is Django's value, not `no-store`."""
     form = http.get(LOGIN_URL)
 
-    for header, _value in SECURITY_HEADERS:
-        assert header.decode() in form.headers, header
+    assert form.headers["x-content-type-options"] == "nosniff"
+    assert form.headers["referrer-policy"] == "same-origin"
     assert "no-store" in form.headers["cache-control"]
 
 

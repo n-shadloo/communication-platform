@@ -14,11 +14,11 @@ import anyio
 import pytest
 
 from api.middleware import (
-    SECURITY_HEADERS,
+    RESPONSE_HEADERS,
     BodyCap,
     Limits,
     RequestDeadline,
-    SecurityHeaders,
+    ResponseHeaders,
     ThreadSensitive,
     TrustedHost,
 )
@@ -116,7 +116,7 @@ class TestTheRefusalsTheStackWritesItself:
         assert json.loads(body)["code"] == code
         assert headers[b"content-type"] == b"application/json"
         assert int(headers[b"content-length"]) == len(body)
-        for name, value in SECURITY_HEADERS:
+        for name, value in RESPONSE_HEADERS:
             assert headers[name] == value
 
     async def test_the_refusal_bodies_never_echo_what_was_refused(self):
@@ -256,7 +256,7 @@ class TestBodyCap:
         assert seen[0] == {"type": "http.disconnect"}
 
 
-class TestSecurityHeaders:
+class TestResponseHeaders:
     async def test_a_response_that_carries_no_headers_at_all_still_gets_them(self):
         """`headers` is optional in the ASGI response message, and a `204` is the
         response most likely to omit it."""
@@ -265,10 +265,10 @@ class TestSecurityHeaders:
             await send({"type": "http.response.start", "status": 204})
             await send({"type": "http.response.body", "body": b""})
 
-        sent = await drive(SecurityHeaders(no_headers), http_scope(), [])
+        sent = await drive(ResponseHeaders(no_headers), http_scope(), [])
 
         _status, headers, _body = answer_of(sent)
-        for name, value in SECURITY_HEADERS:
+        for name, value in RESPONSE_HEADERS:
             assert headers[name] == value
 
 
@@ -278,10 +278,10 @@ class TestSecurityHeaders:
         lambda app: TrustedHost(app, ["testserver"]),
         lambda app: RequestDeadline(app, limits_for),
         lambda app: BodyCap(app, limits_for),
-        lambda app: SecurityHeaders(app),
+        lambda app: ResponseHeaders(app),
         lambda app: ThreadSensitive(app),
     ],
-    ids=["trusted host", "deadline", "body cap", "security headers", "thread sensitive"],
+    ids=["trusted host", "deadline", "body cap", "response headers", "thread sensitive"],
 )
 async def test_a_websocket_scope_reaches_the_gateway_untouched(build):
     """Every one of these bounds a request, and a socket is not one: a cap
@@ -337,7 +337,7 @@ class TestThroughTheWholeStack:
             "code": "payload_too_large",
             "detail": "Request body is too large.",
         }
-        for name, value in SECURITY_HEADERS:
+        for name, value in RESPONSE_HEADERS:
             assert response.headers[name.decode()] == value.decode()
 
     def test_an_oversized_body_never_reaches_the_route(self, http):

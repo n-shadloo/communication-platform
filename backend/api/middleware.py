@@ -4,7 +4,7 @@ Pure ASGI rather than `BaseHTTPMiddleware`: that class runs the rest of the
 application in a task of its own, which breaks the cancellation a deadline
 depends on and breaks context propagation for everything below it.
 
-The order is trusted host, request deadline, body cap, security headers, then
+The order is trusted host, request deadline, body cap, response headers, then
 the thread-sensitive context that every ORM unit of work runs inside.
 """
 
@@ -14,15 +14,13 @@ from collections import namedtuple
 import anyio
 from asgiref.sync import ThreadSensitiveContext
 
-# Set on every response this surface produces. `nosniff` because a client must
-# never re-interpret an opaque body, `no-store` because every response carries
-# either ciphertext or a token, and `no-referrer` because a request path is an
-# identifier this system refuses to leak.
-SECURITY_HEADERS = (
-    (b"x-content-type-options", b"nosniff"),
-    (b"cache-control", b"no-store"),
-    (b"referrer-policy", b"no-referrer"),
-)
+# Set on every response this surface produces: every one of them carries either
+# ciphertext or a token, and neither may be written to a cache. The headers a
+# browser reads and a native client ignores — `X-Content-Type-Options` and
+# `Referrer-Policy` — left with the web target (ADR-0020); Django's own
+# `SecurityMiddleware` still sets them on the admin path, which an operator does
+# open in a browser.
+RESPONSE_HEADERS = ((b"cache-control", b"no-store"),)
 
 Limits = namedtuple("Limits", "body_bytes deadline_seconds")
 
@@ -32,7 +30,7 @@ async def _send_envelope(send, status, code, detail):
     headers = [
         (b"content-type", b"application/json"),
         (b"content-length", str(len(body)).encode()),
-        *SECURITY_HEADERS,
+        *RESPONSE_HEADERS,
     ]
     await send({"type": "http.response.start", "status": status, "headers": headers})
     await send({"type": "http.response.body", "body": body})
@@ -145,7 +143,7 @@ class BodyCap:
             )
 
 
-class SecurityHeaders:
+class ResponseHeaders:
     """Add each header the response does not already carry. Only-if-absent
     keeps one owner per header while the Django catch-all still answers for
     half the surface and sets some of them itself."""
@@ -164,7 +162,7 @@ class SecurityHeaders:
                 present = {name.lower() for name, _value in headers}
                 headers.extend(
                     (name, value)
-                    for name, value in SECURITY_HEADERS
+                    for name, value in RESPONSE_HEADERS
                     if name not in present
                 )
             await send(message)

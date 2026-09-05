@@ -21,7 +21,7 @@ from api.middleware import (
     BodyCap,
     Limits,
     RequestDeadline,
-    SecurityHeaders,
+    ResponseHeaders,
     ThreadSensitive,
     TrustedHost,
 )
@@ -208,7 +208,7 @@ def wrap(app):
     """The middleware stack, from the outside in."""
     limits_for = build_limits()
     stack = ThreadSensitive(app)
-    stack = SecurityHeaders(stack)
+    stack = ResponseHeaders(stack)
     stack = BodyCap(stack, limits_for)
     stack = RequestDeadline(stack, limits_for)
     return TrustedHost(stack, settings.ALLOWED_HOSTS)
