@@ -81,16 +81,17 @@ members of a conversation — is relayed between live sockets over the fan-out b
 never touches the database or disk. If no socket is listening, a volatile signal is
 dropped.
 
-**Voice.** Not served by this revision. The design is a full mesh of WebRTC audio
-between client devices, keyed by DTLS-SRTP between the two endpoints of each
-connection and relayed by the self-hosted coturn instance under a relay-only ICE
-policy; the offers, answers and candidates ride the `signal` frames above, and no
-room record, join token or media key exists on the server
+**Voice.** The server half is served by this revision, and no client places a call
+against it yet. The design is a full mesh of WebRTC audio between client devices, keyed
+by DTLS-SRTP between the two endpoints of each connection and relayed by the self-hosted
+coturn instance under a relay-only ICE policy; the offers, answers and candidates ride
+the `signal` frames above, and no room record, join token or media key exists on the
+server
 ([ADR-0021](../docs/architecture/decisions/0021-relayed-webrtc-mesh-and-no-server-room.md)).
-Phase 7 lands the route that mints a coturn credential and the client contract that
-goes with it. `ops/coturn/turnserver.conf` is the relay's configuration and is
-deployed today; nothing in this backend reads `TURN_REALM` or
-`TURN_STATIC_AUTH_SECRET` yet.
+`POST /api/v1/me/relay` is the whole of the server's part: it mints an ephemeral coturn
+credential under `TURN_STATIC_AUTH_SECRET`, the one value this backend and
+`ops/coturn/turnserver.conf` share, and stores nothing behind it
+([realtime/API.md](realtime/API.md)). `TURN_REALM` is read by the coturn file alone.
 
 **Attachments.** Uploads are opaque encrypted blobs in fixed size buckets, stored on
 disk under a 43-character unguessable capability id. Download responses carry an
