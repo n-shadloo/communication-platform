@@ -642,6 +642,39 @@ class CoturnPostureTests(SimpleTestCase):
         ):
             self.assertIn(required, denied)
 
+    def test_no_denied_peer_range_ends_at_the_all_zero_any_address(self):
+        """The one directive in this file whose plain reading is the opposite of
+        what it does.
+
+        coturn stores a single address as a range whose min and max are that
+        address, and `ioa_addr_in_range` returns a match whenever the range's max
+        is the all-zero "any" address — so `denied-peer-ip=::` denies every peer of
+        every family, IPv4 included, and no call ever connects. Measured against a
+        real coturn 4.17.2 on 2026-09-05: with the line present, a relay bind to an
+        IPv4 peer was refused `403` and the relay logged
+        `A peer IP 192.168.0.102 denied in the range: ::`; with the line removed the
+        same bind succeeded; and with the host's own address denied instead, only
+        that address was refused. The 4.6.1 that Debian bookworm and Ubuntu noble
+        install carries the identical matcher in `ns_turn_ioaddr.c`.
+
+        None of that is in the coturn documentation, and the relay writes no log
+        (AR-15) — so a deployment that grew the line back would fail silently, with
+        voice simply never connecting. The upper bound of every range is what is
+        asserted: `0.0.0.0-0.255.255.255` is a real range ending at
+        `0.255.255.255` and stays, while `::`, `0.0.0.0` and any range written to
+        end at one of them is the whole-internet deny this test refuses.
+        """
+        any_address = {"0.0.0.0", "::", "0:0:0:0:0:0:0:0"}
+        denied = [
+            value
+            for key, value in self.directives(self.relay())
+            if key == "denied-peer-ip"
+        ]
+
+        self.assertTrue(denied)
+        for entry in denied:
+            self.assertNotIn(entry.split("-")[-1].strip(), any_address, entry)
+
     def test_the_relay_writes_no_log_anywhere(self):
         """Invariant 4 at the one layer no Python touches. A TURN log line names
         the relay peer pair, which is two devices in one call — the same record as
