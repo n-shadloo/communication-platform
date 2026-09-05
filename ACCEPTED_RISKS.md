@@ -519,10 +519,9 @@ absence of that row rather than a number.
 
 ## AR-14 — Every infrastructure secret reaches the process as an environment variable
 
-**What is exposed.** `chat.service` and `livekit.service` load
-`/srv/chat/backend/.env.production` with `EnvironmentFile=`, so
-`DJANGO_SECRET_KEY`, `JWT_SIGNING_KEY`, `POSTGRES_PASSWORD`, the Redis password
-inside `REDIS_URL` and `LIVEKIT_API_SECRET` all live in the process environment.
+**What is exposed.** `chat.service` loads `/srv/chat/backend/.env.production` with
+`EnvironmentFile=`, so `DJANGO_SECRET_KEY`, `JWT_SIGNING_KEY`, `POSTGRES_PASSWORD`
+and the Redis password inside `REDIS_URL` all live in the process environment.
 systemd's own documentation says environment variables do not suit secrets: they
 propagate down the process tree, across `setuid` boundaries included, and any child
 this process spawns inherits every one of them. `LoadCredential=` is the directive
@@ -550,18 +549,16 @@ adversary AR-6 names.
 - No secret is in `Environment=`, which is the directive systemd publishes as a unit
   property; only `DJANGO_SETTINGS_MODULE` is, and it is not a secret.
 - The serving process spawns nothing: no shell-out and no subprocess on any request
-  path, so the propagation systemd warns about has nowhere to go. `livekit.service`
-  does start through `/bin/sh`, which composes `LIVEKIT_KEYS` from its own
-  environment and then `exec`s the server — systemd passes `$${…}` as a literal, so
-  the secret never reaches `/proc/*/cmdline` and no extra process survives the
-  `exec`.
+  path, so the propagation systemd warns about has nowhere to go. It is also the only
+  unit that reads the file: `TURN_STATIC_AUTH_SECRET` is copied into
+  `/etc/chat/turnserver.conf` at deploy time and coturn reads it from there, under the
+  same ownership and mode.
 - None of these secrets can decrypt a message. They are infrastructure: content keys
   never reach this server, which is the property
   [`backend/SECURITY.md`](backend/SECURITY.md) is built on.
 
 **If it were exploited.** A reader of the environment mints tokens for any account
-(`JWT_SIGNING_KEY`), join tokens for any room (`LIVEKIT_API_SECRET`), and reads the
-database and Redis directly. That is full compromise of the relay — and it is
+(`JWT_SIGNING_KEY`) and reads the database and Redis directly. That is full compromise of the relay — and it is
 already what live root yields, so the row is about the unprivileged local reader
 alone.
 
@@ -570,6 +567,56 @@ the operator does not control — the same trigger AR-6 carries, because both ar
 hostile-neighbour case — or the next change that already opens `core/env.py` and the
 settings modules, at which point `LoadCredential=` costs the difference rather than
 the rewrite.
+
+---
+
+## AR-15 — coturn writes no log, so a relay failure has no record
+
+**What is exposed.** `backend/ops/coturn/turnserver.conf` sets `no-stdout-log`,
+`simple-log` and `log-file=/dev/null`, so the relay writes nothing to disk and
+nothing to the journal. An allocation refused by a quota, a credential rejected as
+expired, a peer refused by `denied-peer-ip`, and a relay that is simply not running
+all look the same from outside: a call that does not connect. There is no counter to
+read either, because
+[ADR-0019](docs/architecture/decisions/0019-the-system-emits-no-request-scoped-telemetry.md)
+gives the system no metrics endpoint.
+
+**Why this is carried.** A TURN log line names the relay peer pair — two devices in
+one call, with a timestamp and a byte count. That is the conversation graph the
+schema exists to exclude, one hop further out than the access log invariant 4 already
+refuses at nginx and at uvicorn; and a log is worse than the data it describes,
+because it is durable, it is copied into backups, and it outlives the call it names.
+A relay that logs at a level low enough to be useful for debugging is a relay that
+records who spoke to whom. The trade is deliberate: the diagnosis of a rare failure
+against a permanent record of every call.
+
+**What reduces it today.**
+
+- Nothing depends on it yet. Voice is not served by this revision, so the relay is
+  deployed and inert: no credential is issued and no allocation can be made until
+  phase 7 lands the route that mints one.
+- The failure modes that are configuration rather than traffic are pinned by
+  `core/tests/test_settings_posture.py::CoturnPostureTests` and reviewed as a diff,
+  which is where a wrong quota, a missing denial or a re-enabled listener is caught.
+- `systemctl is-active coturn.service` and `systemctl show coturn.service -p
+  ExecStart` answer the two questions that are not about a particular call: whether
+  it is running, and whether it read the right file. `backend/ops/RUNBOOK.md` §7 and
+  §8 carry both.
+- Raising the level is one line and a restart. It is available for a bounded,
+  deliberate debugging session, and the runbook says so — and says to lower it again.
+
+**If it were exploited.** This is an operational risk rather than an attacker-facing
+one, and it is the mirror of AR-9: a failure is noticed by a person. The specific
+loss is time — a voice failure that a log would localise in one line has to be
+narrowed by bisection instead — and the specific hazard is the temptation to leave
+the level raised after the session that needed it, which puts peer pairs on disk for
+as long as it lasts.
+
+**Trigger that ends the acceptance.** The first voice failure on a serving host that
+cannot be diagnosed from the client side within one working day. The answer then is
+not a log file: it is a counter with no identifier in it — allocations refused,
+credentials rejected — or a bounded session with the level raised and lowered again,
+and whichever is chosen is recorded here in place of this row.
 
 ---
 

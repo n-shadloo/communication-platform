@@ -479,6 +479,52 @@ header Django's `SecurityMiddleware` sets, and the nginx `/static/` location kee
 |---|---|---|---|
 | `ALLOWED_WS_ORIGINS` | An environment variable, required in production; an empty value failed `manage.py check --deploy` with `core.E003` | Gone, with the check. Remove the line from the environment file | Remove it. An unread variable in `.env` is a setting an operator believes they configured |
 
+## Voice leaves the server
+
+The server carried a LiveKit SFU, a persistent room record and four room frames, and
+none of it was ever built on the client. The design that replaces it is a full mesh of
+WebRTC audio between devices, keyed by DTLS-SRTP between the two endpoints of each
+connection and relayed by the self-hosted coturn
+([ADR-0021](docs/architecture/decisions/0021-relayed-webrtc-mesh-and-no-server-room.md)),
+and it lands in phase 7. **Nothing below affects messaging, attachments, devices or
+enrollment.** A client that never called a room route and never sent a room frame is
+unaffected in full.
+
+### The room routes
+
+| Item | Old behaviour | New behaviour | Client action |
+|---|---|---|---|
+| `POST /api/v1/rooms` | Created a room from a bucketed `name_blob` and returned `room_id`, the capability anyone with an encrypted invite could use | `404 not_found`, like any other path no route serves | Delete the call. A room is client state from here: carry it as client-signed control events over ordinary envelopes, exactly as a group is carried |
+| `GET /api/v1/rooms/{room_id}` | Returned `room_id`, `name_blob`, `updated_date` and `live_count` — the last read live from Redis | `404 not_found` | Delete the call. `live_count` has no replacement: the server holds no live membership, and a room's participants are known to its members and to nobody else |
+| `PUT /api/v1/rooms/{room_id}` | Replaced the encrypted room name and bumped `updated_date` so peers noticed a rename | `404 not_found` | Delete the call. A rename is a control event to the members, over envelopes |
+| `POST /api/v1/rooms/{room_id}/token` | Minted a short-lived LiveKit join token for the calling device: `{url, token, expires_in}`, audio-only, scoped to one room. Answered `503 voice_unconfigured` when `LIVEKIT_URL` was empty | `404 not_found` | Delete the call, and the LiveKit client SDK with it. Phase 7 replaces it with a route that mints a coturn relay credential — a TURN username and password, not a join token, and it authorizes a relay allocation rather than admission to a conference |
+
+`503 voice_unconfigured` leaves the error vocabulary with the route that raised it. It
+was the only route-specific `503`; `503 unavailable` is unchanged and still answers a
+missed deadline, an unreachable rate-limit store and an exhausted connection pool.
+
+### The `/ws` room frames
+
+| Item | Old behaviour | New behaviour | Client action |
+|---|---|---|---|
+| `room_subscribe` | Joined a room's live session: subscribed the socket to `ws:room:<id>`, announced a `room_presence` join to every subscriber, and added the device to the room's live-count set. Capped at 100 rooms for one socket | Not a frame type. On a live socket it is an unknown type and is ignored, like any other | Delete the frame. There is no live session to join, and no server-side room to subscribe to |
+| `room_leave` | Left the live session: announced a `room_presence` leave and dropped the live count. Disconnecting did the same for every held room | Not a frame type; ignored | Delete the frame |
+| `room_signal` (client → server) | Relayed an opaque blob to every subscriber of a room the socket held — knowing the id was not enough | Not a frame type; ignored | Send ephemeral room text as `signal` frames, one to each member device. The client owns the fan-out, because the server no longer knows who is in a room |
+| `room_signal` (server → client) | Arrived carrying `room_id` and `blob` | Never sent | Delete the handler |
+| `room_presence` | Arrived carrying `room_id`, `device_id` and `state` — `join` or `leave` — on explicit leave and on disconnect | Never sent | Delete the handler. Announce a join or a leave as a `signal` frame to each member device |
+| The room-subscription cap | 100 rooms for one socket; a subscribe past it was silently dropped | Gone with the frames | None |
+
+`ack`, `signal`, `subscribe_presence`, `envelope` and `presence` are unchanged, and so
+are every close code and every other frame limit.
+
+### The removed settings
+
+| Item | Old behaviour | New behaviour | Operator action |
+|---|---|---|---|
+| `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`, `LIVEKIT_TOKEN_TTL_SECONDS` | Configured the SFU and its join tokens. An empty `LIVEKIT_URL` turned voice off, and `check --deploy` refused an API secret under 32 characters through `core.E005` | Gone, with the SFU. `core.E005` now weighs `JWT_SIGNING_KEY` alone | Remove the four lines from the environment file, and remove `livekit.service` and `/etc/chat/livekit.yaml` from the host. An unread variable in `.env` is a setting an operator believes they configured |
+| `THROTTLE_ROOMTOKEN` | The rate scope of the join-token route, `60/min` | Gone with the route it counted | Remove the line |
+| `TURN_REALM`, `TURN_STATIC_AUTH_SECRET` | Read by coturn only | Unchanged, and still read by coturn only. The backend route that mints a credential from the secret lands in phase 7 | None. Keep both filled; `backend/ops/RUNBOOK.md` §7 is the coturn posture that goes with them |
+
 ## What the client can build against now
 
 **The surface is frozen at `v1` from this merge.** It is published two ways and they

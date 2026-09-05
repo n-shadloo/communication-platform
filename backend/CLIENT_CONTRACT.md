@@ -268,18 +268,31 @@ unusable. That, and the `identity_required` check, are completeness checks —
 regardless, and a device that never reaches step 4 must stay unverified in your UI
 forever rather than being trusted on the server's word.
 
-## N. Voice media keys
+## N. Voice — nothing to implement in this revision
 
-- Each participant generates its own **per-sender media key** and sends it to every
-  other participant device over the pairwise session (§F), carried in volatile
-  `signal` frames on `/ws`. The server, LiveKit, and coturn never hold a media key:
-  the join token carries none, and the SFU forwards frames it cannot read.
-- Drive distribution from the `room_presence` frames: a `join` names a device that
-  needs every current sender's key before it hears anything, and a `leave` (explicit,
-  or on disconnect) triggers rotation, so a participant who left keeps only the audio
-  it already received.
-- `signal` frames are volatile and never touch disk. A distribution missed during a
-  reconnect is gone; ask the sender again rather than wait for it.
+- **There is no voice surface on this server.** No route mints a token, no model holds
+  a room, no frame carries room traffic, and no credential for the relay is issued. A
+  client cannot start a call against this revision, and there is nothing here for one
+  to be compatible with.
+- The design that lands in phase 7 is
+  [ADR-0021](../docs/architecture/decisions/0021-relayed-webrtc-mesh-and-no-server-room.md),
+  and its shape binds what you build toward: audio only, a full mesh of WebRTC
+  connections between devices, every path across the self-hosted coturn under a
+  relay-only ICE policy, and each connection keyed by DTLS-SRTP between its two
+  endpoints. There is no application-level media key to distribute, so nothing of §F
+  is needed for the media itself.
+- What §F does carry is the signalling: the SDP offer, the SDP answer and the ICE
+  candidates go inside pairwise-session ciphertext, over the `signal` frames of §O's
+  socket. The server relays that ciphertext and cannot read or replace a DTLS
+  fingerprint — which is what makes the media path end to end even though the server
+  chose neither endpoint.
+- A room is client state, exactly as a group is: client-signed control events over
+  ordinary envelopes. Ephemeral room text and join and leave announcements are
+  `signal` frames the client fans out to each member device.
+- The obligations this leaves on the client — the media package, its Android
+  dependency set and its manifest permissions — are in
+  [`../CLIENT_WORK.md`](../CLIENT_WORK.md). The wire contract for the offer, the
+  answer and the candidates lands in phase 7 and is not written yet.
 
 ## O. The `/ws` handshake
 
