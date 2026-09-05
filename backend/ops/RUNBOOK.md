@@ -235,10 +235,16 @@ install -m 0644 ops/systemd/chat-maintenance.service /etc/systemd/system/
 install -m 0644 ops/systemd/chat-maintenance.timer /etc/systemd/system/
 install -m 0644 ops/systemd/livekit.service /etc/systemd/system/
 systemctl daemon-reload
-systemctl enable --now chat.service livekit.service chat-maintenance.timer
+systemctl enable --now chat.service chat-maintenance.timer
+systemctl enable livekit.service
 ```
 
-`chat-maintenance.service` is not enabled: the timer starts it. See step 10.
+`livekit.service` is enabled but not started here: it reads
+`/etc/chat/livekit.yaml`, which step 7 installs, and starting it first is a unit
+that fails on a file that does not exist yet.
+
+`chat-maintenance.service` is never enabled at all: the timer starts it. See
+step 10.
 
 **nginx.** The site and the snippet it includes both ship here, and the snippet
 is not optional — it carries `X-Forwarded-Proto`, which is the header
@@ -284,7 +290,23 @@ generated on the client and distributed over the pairwise sessions
 ```sh
 install -d -m 0755 /etc/chat
 install -m 0644 ops/livekit/livekit.yaml /etc/chat/livekit.yaml
+systemctl start livekit.service
+
 install -o root -g turnserver -m 0640 ops/coturn/turnserver.conf /etc/chat/turnserver.conf
+# The packaged coturn unit reads /etc/turnserver.conf. Point it at the file
+# above rather than editing the packaged unit, which a package upgrade replaces.
+mkdir -p /etc/systemd/system/coturn.service.d
+printf '[Service]\nExecStart=\nExecStart=/usr/bin/turnserver -c /etc/chat/turnserver.conf\n' \
+    > /etc/systemd/system/coturn.service.d/config-path.conf
+systemctl daemon-reload && systemctl enable --now coturn.service
+```
+
+Check that the drop-in took before trusting it — a coturn reading the packaged
+default answers with the wrong realm and no shared secret, and it fails at the
+first client rather than at start:
+
+```sh
+systemctl show coturn.service -p ExecStart | grep -c /etc/chat/turnserver.conf   # 1
 ```
 
 - **LiveKit** reads no secret from its file. `livekit.service` composes
@@ -315,8 +337,10 @@ back; none of them is satisfied by an absence of errors.
 
 ```sh
 # 1. The process is up and stayed up.
-systemctl is-active chat.service livekit.service
+systemctl is-active chat.service livekit.service    # active, active
 systemctl show chat.service -p NRestarts
+# Unchanged since before the deploy. A number that climbs while you watch is a
+# process that boots and dies; `journalctl -u chat.service -n 50` says why.
 
 # 2. Posture, under the settings the process actually runs.
 as_deploy .venv/bin/python manage.py check --deploy
@@ -342,7 +366,8 @@ curl -sSI https://chat.nimashadloo.dev/static/admin/css/base.css | grep -ci stri
 # inheritance rule biting.
 
 # 7. The panel renders styled — collectstatic ran and nginx serves the result.
-curl -sSI "https://chat.nimashadloo.dev/${ADMIN_PATH}" | head -1
+#    ADMIN_PATH is in .env.production, so read it from there rather than typing it.
+as_deploy sh -c 'curl -sSI "https://chat.nimashadloo.dev/${ADMIN_PATH}" | head -1'
 curl -sS -o /dev/null -w '%{http_code}\n' https://chat.nimashadloo.dev/static/unfold/css/styles.css
 # 200 for the stylesheet. A 404 is an empty static_root.
 
