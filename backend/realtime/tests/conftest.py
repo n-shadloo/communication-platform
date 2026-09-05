@@ -113,6 +113,20 @@ async def connect_ok(headers, outbound_max=0):
     return comm
 
 
+async def expect_refused(headers):
+    """Drive a handshake that must not be accepted.
+
+    Every refusal is decided before the accept, so a real server answers the
+    upgrade request with `403 Forbidden` and the close carries nothing a client
+    can read. `realtime/tests/test_server.py` proves that half; here the point is
+    only that no socket exists.
+    """
+    comm = ws(headers)
+    connected, _code = await comm.connect(timeout=2)
+
+    assert not connected, "expected the handshake to be refused"
+
+
 async def expect_close(comm, code, timeout=2):
     out = await comm.receive_output(timeout)
     assert out["type"] == "websocket.close"

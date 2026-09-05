@@ -154,14 +154,3 @@ async def test_an_empty_ack_list_is_dropped_rather_than_deleting_a_mailbox(
 
     await probe(comm, device.id)
     await comm.disconnect()
-
-
-async def test_a_binary_frame_before_authentication_closes_4008_not_4001(db):
-    """The frame is refused on its encoding before anything looks at its contents,
-    so an unauthenticated socket learns nothing from the code it is given: 4008
-    here says the frame was unreadable, not that a token was missing."""
-    comm = await connect_ok([])
-
-    await comm.send_to(bytes_data=b"\x00\x01")
-
-    await expect_close(comm, 4008)

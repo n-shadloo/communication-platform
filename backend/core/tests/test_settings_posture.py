@@ -5,7 +5,7 @@ from django.core.checks import Tags, run_checks
 from django.test import SimpleTestCase, override_settings
 
 from config.settings import prod
-from core.checks import no_foreign_or_telemetry, ws_origin_allowlist_set
+from core.checks import no_foreign_or_telemetry
 
 # The band's ceiling on concurrent WebSocket connections: fewer than 50 accounts
 # at `MAX_DEVICES_PER_USER` devices each, recorded as A1 in
@@ -506,15 +506,6 @@ class BasePostureTests(SimpleTestCase):
 
     def test_core_deploy_check_reports_nothing(self):
         self.assertEqual(no_foreign_or_telemetry(None), [])
-
-    def test_ws_origin_check_passes_when_the_allowlist_is_set(self):
-        self.assertEqual(ws_origin_allowlist_set(None), [])
-
-    def test_ws_origin_check_fails_on_an_empty_allowlist(self):
-        # Empty means allow-any-Origin in the consumer (dev behaviour); prod must set it.
-        with override_settings(ALLOWED_WS_ORIGINS=[]):
-            errors = ws_origin_allowlist_set(None)
-        self.assertEqual([e.id for e in errors], ["core.E003"])
 
     def test_no_django_cache_backend_reads_redis(self):
         """Every built-in Django cache backend unpickles what it reads, and Redis

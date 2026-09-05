@@ -1,4 +1,4 @@
-"""The four deploy checks of `core/checks.py`, each driven onto both branches.
+"""The three deploy checks of `core/checks.py`, each driven onto both branches.
 
 `core/tests/test_settings_posture.py` asks what `manage.py check --deploy` reports
 under the settings this deployment actually runs; that is the posture. This file
@@ -24,14 +24,12 @@ from core.checks import (
     infrastructure_secrets_are_strong,
     no_foreign_or_telemetry,
     redis_requires_a_password,
-    ws_origin_allowlist_set,
 )
 
 CHECKS = (
     no_foreign_or_telemetry,
     redis_requires_a_password,
     infrastructure_secrets_are_strong,
-    ws_origin_allowlist_set,
 )
 BANNED = ("sentry_sdk", "ddtrace", "newrelic", "elasticapm")
 STRONG = "g" * 32
@@ -45,14 +43,14 @@ class TestRegistration:
     def test_every_core_check_is_a_deployment_check_tagged_security(self):
         """A check registered without `deploy=True` runs on every management
         command and never as part of the deploy gate, which is the one place
-        these four are read."""
+        these three are read."""
         for check in CHECKS:
             assert check in registry.deployment_checks, check.__name__
             assert check not in registry.registered_checks, check.__name__
             assert Tags.security in check.tags, check.__name__
 
     def test_each_check_reports_an_error_id_of_its_own(self):
-        """Five ids, five distinct failures. A duplicated id is two problems an
+        """Four ids, four distinct failures. A duplicated id is two problems an
         operator reads as one."""
         raised = set()
         with mock.patch.object(settings, "INSTALLED_APPS", list(BANNED)):
@@ -64,10 +62,8 @@ class TestRegistration:
             raised |= set(ids(redis_requires_a_password(None)))
         with override_settings(JWT_SIGNING_KEY="short"):
             raised |= set(ids(infrastructure_secrets_are_strong(None)))
-        with override_settings(ALLOWED_WS_ORIGINS=[]):
-            raised |= set(ids(ws_origin_allowlist_set(None)))
 
-        assert raised == {"core.E001", "core.E002", "core.E003", "core.E004", "core.E005"}
+        assert raised == {"core.E001", "core.E002", "core.E004", "core.E005"}
 
 
 class TestTelemetryAndEmail:
@@ -207,15 +203,3 @@ class TestInfrastructureSecrets:
             errors = infrastructure_secrets_are_strong(None)
 
         assert "s3cr3t-but-far-too-short" not in " ".join(error.msg for error in errors)
-
-
-class TestWebSocketOrigins:
-    def test_an_empty_allowlist_is_refused(self):
-        """The consumer reads an empty list as allow-any-Origin, which is the
-        browser CSWSH defence turned off."""
-        with override_settings(ALLOWED_WS_ORIGINS=[]):
-            assert ids(ws_origin_allowlist_set(None)) == ["core.E003"]
-
-    def test_a_single_origin_is_enough(self):
-        with override_settings(ALLOWED_WS_ORIGINS=["https://chat.example"]):
-            assert ws_origin_allowlist_set(None) == []

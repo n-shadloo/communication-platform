@@ -20,9 +20,9 @@ from .conftest import (
     connect_ok,
     envelope_blob,
     expect_close,
+    expect_refused,
     mint_access,
     probe,
-    ws,
 )
 
 # A string no client should ever send: a NUL, two more control characters, and
@@ -67,10 +67,9 @@ async def test_every_socket_scenario_emits_no_identifier_or_payload(
     with raw_root_capture() as lines:
         logging.getLogger("test.canary").debug("canary")
 
-        # Header-auth connect (A), frame-auth connect (B).
+        # Two authenticated sockets, one for each account.
         comm_a = await connect_ok(bearer(access_a))
-        comm_b = await connect_ok([])
-        await comm_b.send_json_to({"type": "auth", "access": access_b})
+        comm_b = await connect_ok(bearer(access_b))
 
         # Durable push and ack, including a malformed ack.
         await bus.push_envelopes([(device.id, str(uuid.uuid4()), 1, push_blob)])
@@ -102,13 +101,10 @@ async def test_every_socket_scenario_emits_no_identifier_or_payload(
         await comm_b.receive_json_from(timeout=2)  # A offline
         await comm_b.disconnect()
 
-        # Rejected handshakes: bad token, unlisted origin, and a
+        # A refused handshake — with a bad token, and with none at all — and a
         # protocol-violation close.
-        bad = ws(bearer("garbage-token"))
-        assert (await bad.connect(timeout=2))[0] is False
-        rejected = ws([(b"origin", b"https://evil.example")])
-        assert (await rejected.connect(timeout=2))[1] == 4403
-        await rejected.disconnect()
+        await expect_refused(bearer("garbage-token"))
+        await expect_refused([])
         binary = await connect_ok(bearer(access_a))
         await binary.send_to(bytes_data=b"\x00")
         await expect_close(binary, 4008)

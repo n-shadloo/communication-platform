@@ -218,16 +218,12 @@ class TestTheRequiredEnvironment:
 
 
 class TestWhatAnOperatorGetsBySettingNothing:
-    def test_no_host_and_no_socket_origin_is_admitted_until_one_is_named(
-        self, monkeypatch
-    ):
-        """Closed by default, in the two places a default of "everything" would be
-        invisible: `ALLOWED_HOSTS` is what `TrustedHost` refuses on, and an empty
-        `ALLOWED_WS_ORIGINS` is what `core.E003` refuses to deploy with."""
+    def test_no_host_is_admitted_until_one_is_named(self, monkeypatch):
+        """Closed by default, in the place a default of "everything" would be
+        invisible: `ALLOWED_HOSTS` is what `TrustedHost` refuses on."""
         module = load_base(monkeypatch)
 
         assert module.ALLOWED_HOSTS == []
-        assert module.ALLOWED_WS_ORIGINS == []
         assert module.DEBUG is False
 
     def test_voice_is_off_until_a_livekit_endpoint_is_configured(self, monkeypatch):
@@ -316,11 +312,6 @@ class TestTheStringAndListBoundary:
 
         assert module.ALLOWED_HOSTS == ["chat.example", "10.0.0.1"]
 
-    def test_the_socket_origins_are_split_the_same_way(self, monkeypatch):
-        module = load_base(monkeypatch, ALLOWED_WS_ORIGINS="https://a.example,")
-
-        assert module.ALLOWED_WS_ORIGINS == ["https://a.example"]
-
     @pytest.mark.parametrize(("scope", "variable"), sorted(THROTTLE_VARIABLES.items()))
     def test_each_throttle_scope_reads_its_own_variable(
         self, monkeypatch, scope, variable
@@ -369,9 +360,8 @@ class TestTheLayering:
         "USE_X_FORWARDED_HOST",
     }
     # And everything `config/settings/dev.py` assigns. `DEBUG` is what opens the
-    # documentation routes and the static files; the other two widen what the base
-    # closes.
-    DEV_OVERRIDES = {"DEBUG", "ALLOWED_HOSTS", "ALLOWED_WS_ORIGINS"}
+    # static files; `ALLOWED_HOSTS` widens what the base closes.
+    DEV_OVERRIDES = {"DEBUG", "ALLOWED_HOSTS"}
 
     def test_prod_assigns_only_the_names_recorded_here(self):
         from config.settings import prod
@@ -395,14 +385,12 @@ class TestTheLayering:
         assert defined <= {name for name in dir(prod) if name.isupper()}
 
     def test_prod_widens_nothing_the_base_closed(self):
-        """`prod` tightens transport and cookies and touches neither allowlist:
-        a production host names its own `DJANGO_ALLOWED_HOSTS` and
-        `ALLOWED_WS_ORIGINS`, and a fallback here would be one that every
-        deployment silently inherits."""
+        """`prod` tightens transport and cookies and touches the host allowlist
+        not at all: a production host names its own `DJANGO_ALLOWED_HOSTS`, and a
+        fallback here would be one that every deployment silently inherits."""
         assigned = assigned_names(SETTINGS / "prod.py")
 
         assert "ALLOWED_HOSTS" not in assigned
-        assert "ALLOWED_WS_ORIGINS" not in assigned
 
     def test_dev_is_reachable_over_loopback_and_by_the_test_client(self):
         """`testserver` is the host `httpx` sends through the composed stack, so

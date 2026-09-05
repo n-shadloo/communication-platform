@@ -189,7 +189,6 @@ MAX_DEVICES_PER_USER = env_int("MAX_DEVICES_PER_USER", default=10)
 MAX_DEVICELOG_RECORDS = env_int("MAX_DEVICELOG_RECORDS", default=10000)
 
 # Realtime gateway bounds.
-ALLOWED_WS_ORIGINS = env_list("ALLOWED_WS_ORIGINS", default=[])
 WS_MAX_FRAME = env_int("WS_MAX_FRAME", default=512 * 1024)
 SIGNAL_MAX = env_int("SIGNAL_MAX", default=16 * 1024)
 

@@ -65,21 +65,3 @@ def infrastructure_secrets_are_strong(app_configs, **kwargs):
         )
         for name in weak
     ]
-
-
-@register(Tags.security, deploy=True)
-def ws_origin_allowlist_set(app_configs, **kwargs):
-    from django.conf import settings
-
-    # The consumer treats an empty allowlist as allow-any-Origin, a dev convenience
-    # that must never reach production, where it would disable the browser CSWSH
-    # defense. dev.py defaults the list, so only a prod env can trip this.
-    if settings.ALLOWED_WS_ORIGINS:
-        return []
-    return [
-        Error(
-            "ALLOWED_WS_ORIGINS is empty: an empty allowlist accepts any "
-            "WebSocket Origin. Set the real origin(s) in the environment.",
-            id="core.E003",
-        )
-    ]

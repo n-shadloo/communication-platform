@@ -157,7 +157,6 @@ jobs:
         env:
           DJANGO_SETTINGS_MODULE: config.settings.prod
           DJANGO_ALLOWED_HOSTS: ci.invalid
-          ALLOWED_WS_ORIGINS: https://ci.invalid
           POSTGRES_DB: chatapp
           POSTGRES_USER: chatapp
           LIVEKIT_URL: wss://ci.invalid
