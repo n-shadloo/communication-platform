@@ -367,6 +367,37 @@ class BasePostureTests(SimpleTestCase):
                 (settings.BASE_DIR / "ops" / "nginx" / included).is_file(), included
             )
 
+    def test_the_three_windows_of_a_stop_nest(self):
+        """A deploy is a stop, and three windows have to nest around it: the
+        longest request the surface admits, the drain uvicorn takes, and the time
+        systemd waits before SIGKILL. Measured on this application with the drain
+        below the request: the request was cut and the client read
+        `HTTP/1.1 500 Internal Server Error`, so a deploy that caught a slow upload
+        reported itself as a fault of the API. With the drain above it the same
+        probe completed and read its real status.
+
+        systemd's own `DefaultTimeoutStopSec` is 90 s, so the outermost window is
+        stated rather than inherited: an unset value would be below the drain and
+        would kill the process in the middle of it.
+        """
+        unit = (settings.BASE_DIR / "ops" / "systemd" / "chat.service").read_text()
+        drain = int(re.search(r"--timeout-graceful-shutdown (\d+)", unit).group(1))
+        stop = int(re.search(r"TimeoutStopSec=(\d+)", unit).group(1))
+
+        self.assertGreater(drain, settings.UPLOAD_DEADLINE_SECONDS)
+        self.assertGreater(stop, drain)
+
+    def test_the_maintenance_run_is_bounded_rather_than_left_to_a_default(self):
+        """systemd will not start a second instance of the unit while one is
+        active, so a sweep that never returns holds the timer's every later fire
+        behind it. The distribution default would instead kill a large sweep at
+        90 s and mark the unit failed. The bound is stated so it is neither."""
+        unit = (
+            settings.BASE_DIR / "ops" / "systemd" / "chat-maintenance.service"
+        ).read_text()
+
+        self.assertIsNotNone(re.search(r"^TimeoutStartSec=\S+$", unit, re.M))
+
     def test_the_concurrency_limit_leaves_room_for_http_beside_the_sockets(self):
         """uvicorn's `--limit-concurrency` counts *connections*, and a live
         WebSocket is one: both protocols share `server_state.connections`, and the

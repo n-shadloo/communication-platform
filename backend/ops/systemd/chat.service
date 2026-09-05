@@ -59,6 +59,21 @@ Environment=DJANGO_SETTINGS_MODULE=config.settings.prod
 # The graceful-shutdown timeout is the drain window: on SIGTERM uvicorn stops
 # accepting, closes every live WebSocket with 1012, and waits this long for the
 # in-flight requests before it stops regardless.
+#
+# Three windows have to nest, innermost first, and the number below is the middle
+# one: the longest request the surface admits < this drain window <
+# TimeoutStopSec. The innermost is UPLOAD_DEADLINE_SECONDS, 120 s, which the
+# attachment upload and the batch routes take; past it the application answers
+# its own `503 unavailable`. So the drain window is 130 s — above that deadline,
+# with ten seconds for the answer to reach the client.
+#
+# It was 10 s, which inverted the order. Measured on this application: a request
+# whose body was still arriving when SIGTERM landed was cut at the window and the
+# client read `HTTP/1.1 500 Internal Server Error`, so a deploy that caught a
+# slow upload reported itself as a fault of the API. With the window above the
+# request the same probe completed and read its real status. The window is a
+# ceiling and not a wait: with nothing in flight the process exits at once, so
+# the cost is paid only by the deploy that interrupts a real upload.
 ExecStart=/srv/chat/backend/.venv/bin/uvicorn \
     --host 127.0.0.1 --port 8000 \
     --proxy-headers --forwarded-allow-ips 127.0.0.1 \
@@ -66,11 +81,16 @@ ExecStart=/srv/chat/backend/.venv/bin/uvicorn \
     --loop uvloop --http httptools --ws websockets-sansio \
     --workers ${WEB_CONCURRENCY} \
     --limit-concurrency 1024 \
-    --timeout-graceful-shutdown 10 \
+    --timeout-graceful-shutdown 130 \
     config.asgi:application
 Restart=on-failure
 RestartSec=5s
 LimitNOFILE=4096
+# The outermost of the three windows. systemd's own DefaultTimeoutStopSec is
+# 90 s, which is below the 130 s drain above it: leaving it unset would have
+# systemd SIGKILL the process in the middle of the drain it was asked to take,
+# and the request the drain exists to protect would die anyway.
+TimeoutStopSec=150
 
 # Hardening. This process holds infrastructure secrets and nothing else.
 NoNewPrivileges=true

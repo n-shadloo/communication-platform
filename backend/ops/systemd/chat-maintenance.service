@@ -21,6 +21,18 @@ Environment=DJANGO_SETTINGS_MODULE=config.settings.prod
 # operator started by hand.
 ExecStart=/srv/chat/backend/.venv/bin/python manage.py prune
 
+# The other half of that guard, and the reason it is stated rather than left to
+# `DefaultTimeoutStartSec`: systemd will not start a second instance of this unit
+# while one is active, so a run that never returns holds the timer's every later
+# fire behind it, and the distribution default of 90 s would instead kill a large
+# sweep partway and mark the unit failed. Fifteen minutes is neither: the largest
+# sweep ever measured — 99 962 expired envelopes of 200 000, in batches of a
+# thousand — took 5.95 s, so this is two orders of magnitude of headroom, and a
+# run that reaches it is blocked rather than busy. A kill costs nothing: every
+# batch commits on its own, the advisory lock dies with the backend, and the next
+# fire resumes from what is left.
+TimeoutStartSec=15min
+
 NoNewPrivileges=true
 PrivateTmp=true
 PrivateDevices=true
