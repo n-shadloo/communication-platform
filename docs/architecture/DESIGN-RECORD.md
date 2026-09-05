@@ -128,7 +128,7 @@ Never delete or soften a row here to make the design look decided.
 |---|---|---|---|
 | A1 | The whole population fits one process on one small VPS | Fewer than 50 accounts, at most 10 devices for each, at most 500 concurrent sockets | Sustained concurrent sockets above 200, or the first `503` that is not a Redis outage |
 | A2 | Pairwise fan-out is affordable at the stated group ceiling | At most 500 envelope rows for one message to a 50-member group | p95 send latency above 1 s, or the first request for a group larger than 50 |
-| A3 | One uvicorn worker, PostgreSQL, Redis and LiveKit coexist in 1 GB of RAM | `WEB_CONCURRENCY=1` | Resident set above 700 MB, or the first OOM kill on the VPS |
+| A3 | One uvicorn worker, PostgreSQL, Redis and coturn coexist in 1 GB of RAM | `WEB_CONCURRENCY=1` | Resident set above 700 MB, or the first OOM kill on the VPS |
 | A4 | The ORM thread hop is not the constraint at this band | Default `sync_to_async` executor sizing | A profile that names thread-pool waiting as the top cost |
 | A5 | Attachment bytes fit the VPS disk under the retention windows | `ATTACH_TTL_DAYS` and the per-user quota as configured | Disk usage above 70 percent, or the first quota rejection a user reports |
 | A6 | The retention windows are longer than a realistic offline period during a shutdown | `ENVELOPE_TTL_DAYS` as configured | A user reports a message that expired before delivery |
@@ -145,12 +145,11 @@ Never mark a row resolved without the trigger it names.
 | The 95 percent branch-coverage gate in CI | Resolved on 2026-09-04: run 13 set `--cov-fail-under=95` in `backend/pytest.ini` and in the CI test job, over the exclusions [0013](decisions/0013-pytest-and-ruff-as-the-test-and-lint-stack.md) names |
 | `hypothesis` in `requirements/dev.txt` | The first property-based test. `httpx` landed on 2026-09-04, with the first test that drives the FastAPI surface, and is no longer deferred |
 | `ACCEPTED_RISKS.md` | Resolved on 2026-09-04: it landed with the admin in phase 3, carrying the absent second factor, the attachment capability in the panel's page source, and the fail-closed lockout. `API_CHANGES.md` landed on 2026-09-03, in the second run of phase 1, and is no longer deferred |
-| `backend/ops/RUNBOOK.md` | Resolved on 2026-09-05: the operator runbook landed in phase 5 run 14, covering host setup, the offline install, the database and the recreation rule of this version, `migrate` and `collectstatic`, the environment file, the units, nginx and TLS, LiveKit and coturn, the post-deploy checks, the rollback and the maintenance timer |
+| `backend/ops/RUNBOOK.md` | Resolved on 2026-09-05: the operator runbook landed in phase 5 run 14, covering host setup, the offline install, the database and the recreation rule of this version, `migrate` and `collectstatic`, the environment file, the units, nginx and TLS, coturn, the post-deploy checks, the rollback and the maintenance timer |
 | The rollback rehearsal | The first deploy to a serving host. Recorded on 2026-09-05 as AR-13 in `ACCEPTED_RISKS.md`: the procedure is written and has never been executed |
 | Infrastructure secrets delivered by `LoadCredential=` rather than the process environment | The first service account on this host the operator does not control, or the next change that already opens `core/env.py` and the settings modules. Recorded on 2026-09-05 as AR-14 |
 | `docs/admin/` | Resolved on 2026-09-04: `docs/admin/PANEL-RECORD.md` is the system of record for the panel from phase 3 |
 | Regenerating every `0001_initial` and deleting the earlier migrations | Resolved on 2026-09-04: the trigger fired at the end of phase 2, sixteen files became six, and from phase 3 the history is append-only |
-| coturn still reads its certificate from a public-CA path (`/etc/letsencrypt/live/...`) while nginx now terminates with the private CA pair | The first end-to-end voice rehearsal on the VPS |
 | A `verified` date check in CI over `GROUND-TRUTH.md` | The first entry passes the 90-day window |
 | Any second application host, read replica, worker fleet or cache tier | Band 1 is reached and measured, not assumed |
 

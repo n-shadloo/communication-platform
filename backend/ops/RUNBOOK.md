@@ -15,7 +15,7 @@ detail, and the note is authoritative wherever the two could differ. The notes:
 | Redis posture | [`redis/redis-chatapp.conf`](redis/redis-chatapp.conf) |
 | The units, their hardening, and every uvicorn flag | [`systemd/`](systemd/) |
 | The nginx site, its per-location caps and its header ownership | [`nginx/`](nginx/) |
-| LiveKit and coturn | [`livekit/livekit.yaml`](livekit/livekit.yaml), [`coturn/turnserver.conf`](coturn/turnserver.conf) |
+| The coturn relay: its listener, its quotas, its denied peers and its silence | [`coturn/turnserver.conf`](coturn/turnserver.conf) |
 | Every environment variable and what it does | [`../README.md`](../README.md) §Configuration, [`../.env.example`](../.env.example) |
 | The threat model these steps serve | [`../SECURITY.md`](../SECURITY.md) |
 
@@ -52,14 +52,12 @@ what lets it read the environment file of step 5.
 ## 1. One-time host setup
 
 The host is one VPS with 1 vCPU and 1 GB of RAM, shared with two other projects
-of the same operator. Everything below listens on loopback except nginx, coturn,
-and LiveKit's media ports.
+of the same operator. Everything below listens on loopback except nginx and
+coturn.
 
 1. **Packages.** `python3.12` with `python3.12-venv`, `postgresql-16`, `redis`
-   (7.x), `nginx`, `coturn`, and the `livekit-server` binary at
-   `/usr/local/bin/livekit-server`, version 1.4 or later — the audio-only token
-   grant relies on `canPublishSources`, which an older binary ignores in silence
-   ([`livekit/livekit.yaml`](livekit/livekit.yaml)).
+   (7.x), `nginx` and `coturn`. coturn is the only media service on this host
+   ([ADR-0021](../../docs/architecture/decisions/0021-relayed-webrtc-mesh-and-no-server-room.md)).
 2. **The service account.** A `deploy` user with a group of its own, additionally
    a member of `www-data`, with no login shell. Every unit runs as that user with
    `Group=www-data`, so files the process creates are group-readable by nginx.
@@ -76,10 +74,11 @@ and LiveKit's media ports.
    is deliberately not among them: `collectstatic` is the operator's command and
    nginx serves the result, so a compromised process cannot replace the panel's
    own JavaScript ([`systemd/chat.service`](systemd/chat.service)).
-4. **The firewall.** Inbound: 80 and 443 (nginx), 3478 and 5349 (coturn),
-   50300–50400/udp (coturn relay), 7881/tcp and 50100–50200/udp (LiveKit media).
-   Nothing else. PostgreSQL, Redis, and uvicorn are loopback-only and must not be
-   reachable from outside the host.
+4. **The firewall.** Inbound: 80 and 443/tcp (nginx), 3478/udp and 3478/tcp
+   (coturn), and 50000–51000/udp (the coturn relay range). Nothing else — there
+   is no TLS listener on coturn and no SFU, so 5349 and the LiveKit ports of the
+   previous release are closed. PostgreSQL, Redis, and uvicorn are loopback-only
+   and must not be reachable from outside the host.
 5. **Redis.** Copy [`redis/redis-chatapp.conf`](redis/redis-chatapp.conf) into
    the host's Redis configuration and uncomment `requirepass` with a generated
    value. The same value goes into `REDIS_URL` in step 5. It is not optional:
@@ -181,11 +180,12 @@ on the host, one at a time:
 .venv/bin/python -c "import secrets; print(secrets.token_urlsafe(64))"
 ```
 
-Six values are generated that way and shared with nothing else:
+Five values are generated that way and shared with nothing else:
 `DJANGO_SECRET_KEY`, `JWT_SIGNING_KEY`, `POSTGRES_PASSWORD`, the password inside
-`REDIS_URL`, `LIVEKIT_API_SECRET`, and `TURN_STATIC_AUTH_SECRET`. Each is an
-infrastructure secret; none of them can decrypt a message, because no content key
-ever reaches this server.
+`REDIS_URL`, and `TURN_STATIC_AUTH_SECRET`. Each is an infrastructure secret;
+none of them can decrypt a message, because no content key ever reaches this
+server. `TURN_STATIC_AUTH_SECRET` is read by coturn alone in this release: the
+backend route that mints a relay credential from it lands in phase 7.
 
 Then:
 
@@ -233,15 +233,9 @@ locks every device out permanently — read that file before generating anything
 install -m 0644 ops/systemd/chat.service /etc/systemd/system/
 install -m 0644 ops/systemd/chat-maintenance.service /etc/systemd/system/
 install -m 0644 ops/systemd/chat-maintenance.timer /etc/systemd/system/
-install -m 0644 ops/systemd/livekit.service /etc/systemd/system/
 systemctl daemon-reload
 systemctl enable --now chat.service chat-maintenance.timer
-systemctl enable livekit.service
 ```
-
-`livekit.service` is enabled but not started here: it reads
-`/etc/chat/livekit.yaml`, which step 7 installs, and starting it first is a unit
-that fails on a file that does not exist yet.
 
 `chat-maintenance.service` is never enabled at all: the timer starts it. See
 step 10.
@@ -281,17 +275,20 @@ fail silently:
 
 ---
 
-## 7. LiveKit and coturn
+## 7. coturn
 
-Both carry media only, and neither ever holds a media key: each sender's key is
-generated on the client and distributed over the pairwise sessions
-([ADR-0016](../../docs/architecture/decisions/0016-client-held-voice-media-keys.md)).
+coturn is the only media service on this host. It relays SRTP between two client
+devices and cannot open a packet: the keys of a voice connection are established
+by DTLS between its two endpoints and exist nowhere else
+([ADR-0021](../../docs/architecture/decisions/0021-relayed-webrtc-mesh-and-no-server-room.md)).
+
+Install it now even though voice is not served by this revision. The relay is
+inert until a client is issued a credential, and the route that mints one lands
+in phase 7; installing it here means the phase-7 deploy is a code deploy and not
+a new service.
 
 ```sh
 install -d -m 0755 /etc/chat
-install -m 0644 ops/livekit/livekit.yaml /etc/chat/livekit.yaml
-systemctl start livekit.service
-
 install -o root -g turnserver -m 0640 ops/coturn/turnserver.conf /etc/chat/turnserver.conf
 # The packaged coturn unit reads /etc/turnserver.conf. Point it at the file
 # above rather than editing the packaged unit, which a package upgrade replaces.
@@ -309,24 +306,28 @@ first client rather than at start:
 systemctl show coturn.service -p ExecStart | grep -c /etc/chat/turnserver.conf   # 1
 ```
 
-- **LiveKit** reads no secret from its file. `livekit.service` composes
-  `LIVEKIT_KEYS` from `LIVEKIT_API_KEY` and `LIVEKIT_API_SECRET` in the
-  environment file, so the pair lives in exactly one place on the host.
 - **coturn cannot read environment variables, and a command-line flag would put
   the secret in world-readable `/proc/*/cmdline`.** So `realm=` and
   `static-auth-secret=` are filled inline in `/etc/chat/turnserver.conf`, from
   the `TURN_REALM` and `TURN_STATIC_AUTH_SECRET` values of the environment file,
   and the file is given the same trust boundary as `.env.production`. Set
   `listening-ip` and `relay-ip` to the VPS address; never a wildcard.
-- **coturn still points at `/etc/letsencrypt/live/` for its own TLS**, while
-  nginx has moved to the private CA. That is a known and recorded gap: the
-  deferral list of
-  [`DESIGN-RECORD.md`](../../docs/architecture/DESIGN-RECORD.md) §4 owns it, and
-  the trigger is the first end-to-end voice rehearsal on the VPS.
-
-`LIVEKIT_URL` is `wss://chat.nimashadloo.dev` — the client SDK appends `/rtc`,
-which nginx proxies to loopback:7880. Leaving `LIVEKIT_URL` empty disables voice,
-and the token route answers `503`.
+- **coturn has no TLS listener and no certificate.** The hop it carries is
+  already SRTP that the relay cannot open, so a TLS or DTLS listener would buy
+  nothing and would put a certificate and a renewal on a box whose posture is to
+  hold neither. `no-tls` and `no-dtls` are set and there is no
+  `tls-listening-port`, which is why the firewall list of step 1 has no 5349.
+- **coturn writes no log, on disk or in the journal.** A TURN log line names the
+  relay peer pair, which is two devices in one call, and invariant 4 refuses that
+  record at every layer. The file sets `no-stdout-log`, `simple-log` and
+  `log-file=/dev/null`. That is deliberate: a relay problem is diagnosed by
+  raising the level temporarily and lowering it again, never by leaving it raised.
+- **The quotas are the ceiling on this band, not a tuning knob.** `user-quota=20`
+  is one device in a ten-participant mesh with headroom for an ICE restart;
+  `total-quota=500` is five such rooms at once; the relay port range 50000–51000
+  is wider than the total so the quota is what binds. Raising either without
+  widening the range gives a relay that runs out of ports instead of refusing an
+  allocation.
 
 ---
 
@@ -337,7 +338,7 @@ back; none of them is satisfied by an absence of errors.
 
 ```sh
 # 1. The process is up and stayed up.
-systemctl is-active chat.service livekit.service    # active, active
+systemctl is-active chat.service coturn.service     # active, active
 systemctl show chat.service -p NRestarts
 # Unchanged since before the deploy. A number that climbs while you watch is a
 # process that boots and dies; `journalctl -u chat.service -n 50` says why.

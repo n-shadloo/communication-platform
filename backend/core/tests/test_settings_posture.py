@@ -552,6 +552,144 @@ class BasePostureTests(SimpleTestCase):
             self.assertNotIn("core.E005", deploy_check_ids())
 
 
+class CoturnPostureTests(SimpleTestCase):
+    """The only media service of this deployment, read from the file that runs it.
+
+    No Python module reads coturn's configuration, so nothing else in this suite
+    would notice a posture that drifted. ADR-0021 is what these assert: a relay
+    that carries SRTP it cannot open, answers no discovery, reaches nothing on
+    this host, and writes nothing down.
+    """
+
+    @staticmethod
+    def relay():
+        return (settings.BASE_DIR / "ops" / "coturn" / "turnserver.conf").read_text()
+
+    @staticmethod
+    def directives(conf):
+        """Every directive the file actually sets, as (key, value) pairs.
+
+        A `#` starts a comment wherever it appears, so a whole-line comment
+        disappears — which is what keeps a commented-out `cert=` from reading as a
+        certificate this relay serves — and a trailing one is cut off the value it
+        follows.
+        """
+        return [
+            (line.split("=", 1) + [""])[:2]
+            for line in (raw.split("#", 1)[0].strip() for raw in conf.splitlines())
+            if line
+        ]
+
+    def test_the_relay_carries_no_tls_listener_and_no_certificate(self):
+        """The hop between a client and this relay already carries SRTP keyed by
+        DTLS between two client devices, so a TLS or DTLS listener of coturn's own
+        would encrypt what is already encrypted and put a certificate, a private
+        key and a renewal on the host. The previous release read
+        `/etc/letsencrypt/live/`, a public-CA path the rest of the deployment left
+        behind when nginx moved to the private CA."""
+        keys = {key for key, _value in self.directives(self.relay())}
+
+        self.assertIn("no-tls", keys)
+        self.assertIn("no-dtls", keys)
+        for absent in ("tls-listening-port", "cert", "pkey"):
+            self.assertNotIn(absent, keys)
+
+    def test_the_relay_answers_no_discovery(self):
+        """A relay-only client never asks for its own address, and a STUN
+        responder is a reflector any host on the internet can point somewhere
+        else."""
+        keys = {key for key, _value in self.directives(self.relay())}
+
+        for directive in (
+            "no-stun",
+            "no-rfc5780",
+            "no-stun-backward-compatibility",
+            "no-multicast-peers",
+            "no-software-attribute",
+            "no-cli",
+        ):
+            self.assertIn(directive, keys)
+
+    def test_the_relay_reaches_nothing_on_this_host_or_its_network(self):
+        """A TURN server that relays to loopback is an SSRF pivot into every
+        service of a shared VPS: PostgreSQL, Redis, uvicorn and the panel all
+        listen there. coturn denies loopback by default, and the default is not
+        what a reader can check — so every range is written out, and this is what
+        holds them there."""
+        denied = {
+            value
+            for key, value in self.directives(self.relay())
+            if key == "denied-peer-ip"
+        }
+
+        self.assertNotIn(
+            "allow-loopback-peers", {k for k, _v in self.directives(self.relay())}
+        )
+        for required in (
+            "10.0.0.0-10.255.255.255",
+            "100.64.0.0-100.127.255.255",
+            "127.0.0.0-127.255.255.255",
+            "169.254.0.0-169.254.255.255",
+            "172.16.0.0-172.31.255.255",
+            "192.168.0.0-192.168.255.255",
+            "::1",
+            "fc00::-fdff:ffff:ffff:ffff:ffff:ffff:ffff:ffff",
+            "fe80::-febf:ffff:ffff:ffff:ffff:ffff:ffff:ffff",
+        ):
+            self.assertIn(required, denied)
+
+    def test_the_relay_writes_no_log_anywhere(self):
+        """Invariant 4 at the one layer no Python touches. A TURN log line names
+        the relay peer pair, which is two devices in one call — the same record as
+        an access log, one hop further out. `simple-log` is load-bearing: without
+        it coturn appends a date to the file name and writes a real file beside
+        the sink."""
+        directives = dict(self.directives(self.relay()))
+
+        self.assertEqual(directives.get("log-file"), "/dev/null")
+        self.assertIn("no-stdout-log", directives)
+        self.assertIn("simple-log", directives)
+        self.assertNotIn("syslog", directives)
+        self.assertNotIn("verbose", directives)
+
+    def test_the_quotas_bound_the_band_and_the_ports_bound_the_quotas(self):
+        """The band is fewer than 50 accounts, at most 500 devices and at most ten
+        participants in one room, and every number here comes off it: nine relay
+        allocations for one device in a full mesh, five such rooms at once for the
+        host. One allocation takes one relay port, so a port range narrower than
+        `total-quota` would make the range the limit and the quota a decoration —
+        which is the state a later widening of the quota alone would restore."""
+        directives = dict(self.directives(self.relay()))
+        user, total = int(directives["user-quota"]), int(directives["total-quota"])
+        ports = int(directives["max-port"]) - int(directives["min-port"]) + 1
+
+        self.assertGreaterEqual(user, 9)
+        self.assertGreaterEqual(total, 10 * user)
+        self.assertGreater(ports, total)
+
+    def test_the_relay_listens_on_one_port_of_its_own_address(self):
+        """UDP and TCP 3478, and the firewall list of `ops/RUNBOOK.md` §1 is the
+        same three numbers. A wildcard listener on a host shared with two other
+        projects would answer on every address the box holds."""
+        directives = dict(self.directives(self.relay()))
+
+        self.assertEqual(directives["listening-port"], "3478")
+        self.assertNotIn("no-tcp-relay", directives)
+        for key in ("listening-ip", "relay-ip"):
+            self.assertNotIn("0.0.0.0", directives[key])
+
+    def test_the_credentials_are_the_shared_secret_form_and_no_value_is_committed(self):
+        """`use-auth-secret` is the TURN REST API form: the username is an expiry
+        timestamp and the password is an HMAC over it, so no per-user account
+        state is stored on the relay. The realm and the secret are filled inline at
+        deploy time, and a value committed here would be a credential in git."""
+        directives = dict(self.directives(self.relay()))
+
+        self.assertIn("use-auth-secret", directives)
+        for absent in ("realm", "static-auth-secret", "user", "userdb"):
+            self.assertNotIn(absent, directives)
+
+
 class ProdPostureTests(SimpleTestCase):
     """`config.settings.prod` is what `check --deploy` runs against."""
 
