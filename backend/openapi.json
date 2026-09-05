@@ -3477,7 +3477,7 @@
     },
     "/api/v1/me/relay": {
       "post": {
-        "description": "Mint an ephemeral coturn credential for the calling device.\n\nSafe to repeat: every call mints a fresh username, and a credential already\nissued stays good until its own expiry, so a client that retries a timed-out\nrequest holds two working credentials rather than none.\n\nAn unconfigured deployment answers `503 voice_unconfigured` rather than a\ncredential no relay would accept, which is the same answer as a relay that\nis down: a client that cannot place a call is told so, and told to try later.",
+        "description": "Mint an ephemeral coturn credential for the calling device.\n\nSafe to repeat: every call mints a fresh username, and a credential already\nissued stays good until its own expiry, so a client that retries a timed-out\nrequest holds two working credentials rather than none.\n\nAn unconfigured deployment answers `503 voice_unconfigured` rather than a\ncredential no relay would accept. It is not a backoff: `TURN_URLS` is empty,\nso this server does not do voice, and a retry will not make a relay appear.\nThe route reads the setting and never reaches coturn, so a relay that is\nconfigured but down is a `200` and a call that fails to connect.",
         "operationId": "mint_relay_credential",
         "responses": {
           "200": {

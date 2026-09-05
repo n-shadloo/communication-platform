@@ -36,8 +36,10 @@ async def mint_relay_credential():
     request holds two working credentials rather than none.
 
     An unconfigured deployment answers `503 voice_unconfigured` rather than a
-    credential no relay would accept, which is the same answer as a relay that
-    is down: a client that cannot place a call is told so, and told to try later.
+    credential no relay would accept. It is not a backoff: `TURN_URLS` is empty,
+    so this server does not do voice, and a retry will not make a relay appear.
+    The route reads the setting and never reaches coturn, so a relay that is
+    configured but down is a `200` and a call that fails to connect.
     """
     if not settings.TURN_URLS:
         raise ApiError(503, "voice_unconfigured", UNCONFIGURED)
