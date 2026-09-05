@@ -1,11 +1,10 @@
 """What a fan-out of many payloads costs in round trips.
 
-Two paths publish to more than one topic at a time: a batch send, which is one
-envelope per recipient copy and capped at 256, and a presence announcement, which
-is one frame per subscribed device and capped at 500. Awaited one at a time those
-are that many sequential round trips on the event loop, and the loop is the whole
+One path publishes to more than one topic at a time: a batch send, which is one
+envelope per recipient copy and capped at 256. Awaited one at a time those are
+that many sequential round trips on the event loop, and the loop is the whole
 process on one vCPU. Measured on loopback: 256 sequential publishes cost 37.1 ms
-against 1.5 ms for one pipeline, and 500 cost 55.9 ms against 2.5 ms.
+against 1.5 ms for one pipeline.
 """
 
 import asyncio
@@ -52,7 +51,7 @@ def round_trips(monkeypatch):
 
 def frames(count, prefix="device"):
     return [
-        (bus.device_topic(f"{prefix}-{index}"), {"type": "presence", "n": index})
+        (bus.device_topic(f"{prefix}-{index}"), {"type": "probe", "n": index})
         for index in range(count)
     ]
 
@@ -64,8 +63,7 @@ async def test_a_fan_out_of_many_payloads_costs_one_round_trip(round_trips):
 
 
 async def test_a_fan_out_of_nothing_touches_redis_at_all(round_trips):
-    """A send that reached only stale devices, and a socket that authorized no
-    presence target, both arrive here with an empty list."""
+    """A send that reached only stale devices arrives here with an empty list."""
     await bus.publish_many([])
 
     assert round_trips == {"publishes": 0, "executes": 0}
@@ -92,8 +90,8 @@ async def test_every_payload_of_the_batch_reaches_its_own_topic():
 
 async def test_a_dead_bus_swallows_the_whole_batch(monkeypatch, round_trips):
     """Best-effort, exactly like a single publish: the durable mailbox is the
-    source of truth, and presence is volatile by design. It still costs the one
-    attempted round trip, and nothing falls back to publishing one at a time."""
+    source of truth. It still costs the one attempted round trip, and nothing
+    falls back to publishing one at a time."""
     monkeypatch.setattr(bus, "get_client", lambda: Redis.from_url(DEAD_REDIS_URL))
 
     await bus.publish_many(frames(TOPICS))

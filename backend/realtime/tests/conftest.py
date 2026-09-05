@@ -15,7 +15,7 @@ from api.auth import issue_full
 from api.orm import run_unit
 from api.redis import close_client
 from config.asgi import application
-from core.buckets import ENVELOPE_BUCKETS
+from core.buckets import ENVELOPE_BUCKETS, SIGNAL_BUCKETS
 from core.tests import artefact
 from devices.models import Device
 from realtime.bus import stop_subscriber
@@ -61,6 +61,16 @@ async def mint_access(user, device):
 
 def envelope_blob(fill=b"e"):
     return base64.b64encode(fill * min(ENVELOPE_BUCKETS)).decode()
+
+
+def signal_blob(fill=b"s", bucket=None):
+    """A blob the gateway relays: standard base64 of exactly one signal bucket,
+    the smallest unless one is named."""
+    return base64.b64encode(fill * (bucket or min(SIGNAL_BUCKETS))).decode()
+
+
+# The self-signal every suite uses as a barrier, bucketed like any other blob.
+PROBE_BLOB = signal_blob(b"p")
 
 
 def ws(headers=None, outbound_max=0):
@@ -138,10 +148,10 @@ async def probe(comm, own_device_id):
     awaits its own publish, so when the probe comes back over the bus, every
     frame sent before it has been fully handled: a deterministic barrier."""
     await comm.send_json_to(
-        {"type": "signal", "to_device": str(own_device_id), "blob": "probe"}
+        {"type": "signal", "to_device": str(own_device_id), "blob": PROBE_BLOB}
     )
     frame = await comm.receive_json_from(timeout=2)
-    assert frame == {"type": "signal", "blob": "probe"}
+    assert frame == {"type": "signal", "blob": PROBE_BLOB}
 
 
 def _table_counts():

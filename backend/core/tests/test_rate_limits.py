@@ -43,6 +43,7 @@ def test_every_declared_scope_has_a_rate():
         "claim",
         "envelopes",
         "attachments",
+        "relay",
     }
 
 

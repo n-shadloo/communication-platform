@@ -10,9 +10,9 @@ The adversary is a **state actor with full root access to the running VPS** — 
 forensic disk image but a live system: all storage, all memory, all logs, all traffic in
 and out, and the ability to run modified server code.
 
-**In scope — protected even under that adversary:** message content (text, files,
-and the voice audio of the design phase 7 lands), past and future; group membership and group contents as *content*; any per-user
-action or state that could identify a user as the author of specific content.
+**In scope — protected even under that adversary:** message content (text, files, and
+voice audio), past and future; group membership and group contents as *content*; any
+per-user action or state that could identify a user as the author of specific content.
 
 **Out of scope:** hiding user IP addresses (connection-level visibility to the ISP is
 accepted); hiding that the service exists or that a given IP connects to it; client
@@ -68,9 +68,11 @@ holds *infrastructure* secrets:
 | Double-Ratchet / session keys | content | client memory/storage | never | past msgs safe (FS); heals (PCS) |
 | Pairwise group session keys (one Double Ratchet session per member device, started from the same PQXDH bundles as a DM) | content | client | never | that pairwise session's group msgs; heals (PCS) |
 | Attachment content keys | content | inside E2E messages | never | that attachment only |
+| DTLS-SRTP session keys (one per voice connection) | content | the two client endpoints of that connection | never (neither this server nor coturn holds one, and no application-level media key exists) | that connection's audio until it closes |
 | Recovery secret | content | user-held only | never | can unwrap the key backup → cross-signing private keys |
 | TLS private key | infrastructure | server (nginx) | yes (by definition) | impersonate transport (mitigated by client SPKI pinning); no message content |
 | JWT signing key | infrastructure | server env, at least 32 generated characters (`check --deploy` refuses less) | yes | mint tokens → account access; cannot decrypt any message |
+| coturn shared secret (`TURN_STATIC_AUTH_SECRET`) | infrastructure | server env, and `static-auth-secret` in the coturn configuration — one value in two places, at least 32 characters once `TURN_URLS` names a relay (`check --deploy` refuses less) | yes | mint relay credentials → relay bandwidth for each credential's lifetime (AR-17); cannot decrypt any audio, which is keyed by DTLS between the two client devices |
 | Django `SECRET_KEY`, Argon2 params | infrastructure | server env | yes | session/signing integrity; no message content |
 | Password hashes (Argon2id) | auth (not a key) | DB | yes (hash only) | offline guessing per account; no message content |
 
@@ -144,36 +146,52 @@ private, or unlinkable.
 In short: content is well protected; the social graph and communication timing are not,
 and cannot be, on a single box under live root.
 
-Also visible, below the live-root bar: **socket and presence metadata** — which devices
-hold sockets and when; presence is relayed only to devices the client authorized.
+Also visible, below the live-root bar: **socket and signalling metadata** — which
+devices hold a socket and when, and which device signals which device. The server holds
+no presence of any kind: a client learns that a peer is reachable from its own
+signalling and its own timeout, never from anything this server keeps.
 
-## Voice — not served by this revision
+## Voice
 
-This revision serves no voice. There is no voice route, no room record, no join token,
-no live membership and no media key on this server, and no process on the host carries
-media. What is deployed is coturn, inert: nothing in the backend reads
-`TURN_STATIC_AUTH_SECRET`, so no credential is issued and no allocation can be made.
+Voice is served by this revision, and the audio content of a call is protected on the
+same terms as every other kind of content. Each connection is SRTP keyed by DTLS between
+its two client endpoints, so the keys exist on those two devices and nowhere else:
+coturn relays packets it cannot open, this server relays signal ciphertext it cannot
+open, neither holds a DTLS key or a media key, and there is no application-level media
+key for either of them to hold. Rotation is inherent — a connection's keys die with the
+connection, and a member who has left has no connection and gets no offer.
 
-The design phase 7 lands is
+The design is
 [ADR-0021](../docs/architecture/decisions/0021-relayed-webrtc-mesh-and-no-server-room.md):
-audio only, as a full mesh of WebRTC connections between client devices. Each connection
-is SRTP keyed by DTLS between its two endpoints, so the keys exist on those two devices
-and nowhere else — this server and coturn hold no DTLS key and no media key, and there
-is no application-level media key for either of them to hold. Rotation is inherent: a
-connection's keys die with the connection, and a member who has left has no connection
-and gets no offer. The offers, answers and candidates travel inside pairwise-session
-ciphertext over `/ws` `signal` frames, so this server relays them and cannot read or
-replace a DTLS fingerprint. A room is client state carried over ordinary envelopes,
-exactly as a group is.
+audio only, as a full mesh of WebRTC connections between client devices under a
+relay-only ICE policy. The offers, the answers and the candidates travel inside
+pairwise-session ciphertext over `/ws` `signal` frames, so this server relays them and
+cannot read or replace a DTLS fingerprint. A room is client state carried over ordinary
+envelopes, exactly as a group is, and the gateway holds no room, no membership and no
+presence
+([ADR-0022](../docs/architecture/decisions/0022-the-gateway-holds-no-presence.md)).
 
-**The honest limits of that design, stated before it ships.** A mesh costs each
-participant one uplink for each peer, so the design point is at most ten participants in
-one room at this scale band. Every media path crosses coturn under a relay-only ICE
-policy — which is what keeps one peer from learning another's address — and coturn
-therefore sees the relay peer pairs, the packet sizes and the timing of a call. The
-gateway sees which device signals which device. Room membership is inferable from that
-fan-out, exactly as group membership is inferable from envelope fan-out. Neither is
-protected by this architecture, and neither can be on a single box under live root.
+The whole HTTP surface of voice is `POST /api/v1/me/relay` (`realtime/API.md`), which
+mints an ephemeral coturn credential under the secret the two processes share. It reads
+no row and writes none: a credential is computed rather than stored, and no table stands
+behind it. The username it mints is a Unix expiry timestamp, a colon and sixteen random
+bytes — no account identifier, no device identifier, and nothing derived from either —
+so the credential itself tells coturn nothing about who holds it: two credentials of one
+device look exactly like credentials of two devices, and nothing in one joins to anything
+this server holds. What coturn does learn about a caller it learns from the traffic and
+not from the credential — the source address of each allocation, and the pairs, sizes
+and timing below — and the threat model above places addresses out of scope.
+
+**The honest limits of that design.** A mesh costs each participant one uplink for each
+peer, so the design point is at most ten participants in one room at this scale band,
+and nothing above that is claimed. Every media path crosses coturn under the relay-only
+ICE policy — which is what keeps one peer from learning another's address — so coturn
+sees the relay allocation pairs, and with them which device talks to which device,
+together with the packet sizes and the timing of each stream; participant count is
+inferable from the relay load. The gateway sees which device signals which device. Room
+membership is inferable from that fan-out, exactly as group membership is inferable from
+envelope fan-out. Neither is protected by this architecture, and neither can be on a
+single box under live root.
 
 coturn also carries no TLS listener, so its control channel is readable on the wire: an
 on-path observer sees the STUN allocation and permission requests, and therefore the
@@ -263,9 +281,11 @@ The properties above are enforced by the test suite, not by this document:
 `core/tests/test_seizure_guard.py` (no plaintext/key/graph column can ever appear),
 `core/tests/test_log_silence.py` + per-app log-silence suites (no identifier, blob, or
 token reaches any log line), `core/tests/test_settings_posture.py` + `manage.py check
---deploy` (deploy posture, including a hard error on an empty WebSocket origin
-allowlist, and `access_log off` in every nginx server block — the reverse proxy sees
-every request path one hop before uvicorn does, and would otherwise inherit a log of
-them from the packaged configuration), per-app at-rest, no-graph, and no-history suites, the adversarial
+--deploy` (deploy posture, including a hard error on a `REDIS_URL` that carries no
+password, and on a weak `JWT_SIGNING_KEY` or — once `TURN_URLS` names a relay — a weak
+`TURN_STATIC_AUTH_SECRET`, both under `core.E005`; and `access_log off` in every nginx
+server block — the reverse proxy sees every request path one hop before uvicorn does,
+and would otherwise inherit a log of them from the packaged configuration), per-app
+at-rest, no-graph, and no-history suites, the adversarial
 cross-signing/PQ/device-log suites in `devices/tests/`, and
 `ops/audit/offline_rehearsal.sh` (the repo rebuilds and passes with no network).

@@ -1,17 +1,28 @@
-# realtime API — the `/ws` gateway
+# realtime API — the `/ws` gateway and the relay credential
 
-One WebSocket endpoint carries everything live: instant envelope delivery, volatile
-device-to-device signals, and presence. Frames are JSON text objects in both
-directions — binary frames are a protocol violation. Nothing relayed here is
-persisted or logged; the durable message queue (see `messaging/API.md`) is the
-source of truth, and this socket only makes it fast.
+One WebSocket endpoint carries everything live: instant envelope delivery and volatile
+device-to-device signals. Frames are JSON text objects in both directions — binary
+frames are a protocol violation. Nothing relayed here is persisted or logged; the
+durable message queue (see `messaging/API.md`) is the source of truth, and this socket
+only makes it fast.
 
 Delivery between sockets is Redis publish and subscribe, which holds a message only
 for the instant it takes to hand it to whoever is connected. A frame published for a
 device that is mid-reconnect is dropped, and the client's next REST drain is what
 recovers it — which is why the queue, not this socket, is the contract for delivery.
 
+**The gateway holds no presence.** There is no subscription frame, no `presence` frame
+and no announcement on connect or on disconnect. A presence subscription is a contact
+list the client declares to the server, and the server needs none of it
+([ADR-0022](../../docs/architecture/decisions/0022-the-gateway-holds-no-presence.md)):
+who is in a conversation is the client's knowledge, and presence between its members is
+client protocol carried over `signal` frames like every other announcement.
+
 **URL:** `wss://<host>/ws`
+
+This app also serves one HTTP route, [at the end of this file](#mint-a-relay-credential):
+the coturn credential a client needs before it can place a call. It is the whole of the
+voice surface — everything else about a call is `signal` frames and client state.
 
 ## Connection and authentication
 
@@ -41,15 +52,18 @@ unknown type.
 | Frame encoding | JSON text object | close 4008 |
 | Frame size | `WS_MAX_FRAME` (default 524288 bytes) | close 4008 |
 | Message rate | 100 frames per rolling second | close 4008 |
-| `signal` blob | `SIGNAL_MAX` (default 16384 chars) | frame dropped |
+| `signal` blob | standard base64 of exactly 1024, 4096 or 16384 bytes (`SIGNAL_BUCKETS`) | frame dropped |
 | `ack` ids | ≤ 200 | frame dropped |
-| `subscribe_presence` targets | ≤ 500 | frame dropped |
 | Undelivered server frames queued for one socket | 256 | close 4008 |
 
 Undecodable JSON, non-object JSON, and binary frames close 4008. Frames with an
 unknown `type` are ignored (but still count against the rate limit). Malformed but
-well-typed frames — a bad UUID, an oversized blob, a wrong-typed field — are silently
+well-typed frames — a bad UUID, an off-bucket blob, a wrong-typed field — are silently
 dropped without closing the socket, matching the volatile, fire-and-forget semantics.
+
+The two size bounds are independent and a client never has to choose between them: the
+longest legal `signal` blob is the base64 of the largest bucket, 21848 characters,
+which rides inside a frame far below `WS_MAX_FRAME`.
 
 The last row is backpressure rather than a frame the client sent. Server frames for a
 socket that is not reading them are held in a bounded queue; past the bound the socket
@@ -76,19 +90,25 @@ nothing. No reply frame; the deletion is idempotent.
 
 Volatile relay of an opaque string to one device. Delivered as a `signal` frame to
 every live socket of the target device; dropped silently if the target is offline.
-`blob` ≤ `SIGNAL_MAX` characters. The relayed frame does not name the sender — the
-sender identifies itself inside the ciphertext if the protocol needs it.
 
-### `subscribe_presence`
+`blob` must be standard base64 that decodes to **exactly 1024, 4096 or 16384 bytes** —
+one of `SIGNAL_BUCKETS`, the padding rule every stored ciphertext obeys, applied here
+to the one ciphertext the server relays without storing. Pad the plaintext to a bucket
+before you encrypt and encode; there is no shorter frame to fall back to, and an
+announcement that would fit in a hundred bytes goes out as 1024.
 
-```json
-{ "type": "subscribe_presence", "device_ids": ["2a77d4b9-e611-4c0f-9f1c-6a2e3b7d4e0f"] }
-```
+A blob outside the rule drops the frame in silence, exactly like every other malformed
+but well-typed frame: no close code, and no error frame to read. A blob longer than
+the base64 of the largest bucket is refused on its length alone, before anything
+decodes it.
 
-Replaces this socket's presence-target set (≤ 500 device UUIDs; invalid entries are
-skipped) and immediately announces `online` to every target. The same targets are
-told `offline` when this socket disconnects. Presence flows only toward devices the
-client explicitly listed; an empty list means nobody is told anything.
+The rule is a malformed-input guard and **never a security control**. A modified server
+would relay anything a client sent it, so what it buys is length uniformity on the one
+ciphertext that crosses this socket without being stored — nothing more, and no claim
+above that.
+
+The relayed frame does not name the sender — the sender identifies itself inside the
+ciphertext if the protocol needs it.
 
 ## Server → client messages
 
@@ -108,16 +128,11 @@ and again on its next REST drain; deduplicate by `id`.
 { "type": "signal", "blob": "kzXhc…" }
 ```
 
-A volatile signal relayed from some device. Carries no sender field.
-
-### `presence`
-
-```json
-{ "type": "presence", "device_id": "9f1c6a2e-3b7d-4e0f-8c15-2a77d4b9e611", "state": "online" }
-```
-
-A device this socket was named in a `subscribe_presence` list came online
-(`"online"`) or its socket closed (`"offline"`).
+A volatile signal relayed from some device, carrying the sender's blob unchanged. The
+type and the blob are the whole frame: there is no sender field, and the blob is base64
+of one `SIGNAL_BUCKETS` length, because a blob that was not could not have been
+relayed. Who sent it is whatever the ciphertext says, decrypted under the pairwise
+session it belongs to.
 
 ## Close codes
 
@@ -132,3 +147,100 @@ so a server has no socket to send a close frame on and answers the upgrade reque
 with `403 Forbidden` instead. A failed handshake therefore means "refused": refresh
 the access token and retry. Once a socket has been accepted, every code above arrives
 as a close frame.
+
+## Mint a relay credential
+
+**Method:** `POST`
+**Path:** `/api/v1/me/relay`
+
+The one HTTP route voice has, and the whole of what a call costs this server. A client
+needs an ICE server to place a call, and the only one this deployment has is the
+self-hosted coturn of
+[ADR-0021](../../docs/architecture/decisions/0021-relayed-webrtc-mesh-and-no-server-room.md).
+Under coturn's `use-auth-secret` a credential is computed from a shared secret rather
+than stored, so this route reads no row and writes none: there is no table behind it,
+nothing to revoke, and a credential dies of its own expiry.
+
+**The request takes no body.** A body, if sent, is ignored. The caller is identified by
+the access token it presents, and the answer names nothing the caller asked for.
+
+What the client does with the credential — the relay-only ICE policy, the mesh, the
+signalling over `signal` frames, and when to refresh — is
+[`CLIENT_CONTRACT.md`](../CLIENT_CONTRACT.md) §N, which is binding.
+
+**Headers**
+
+| Header | Required | Value |
+|---|---|---|
+| `Authorization` | yes | `Bearer <access token>`, full scope |
+
+**Path parameters**
+
+| Name | Type | Required | Description |
+|---|---|---|---|
+| — | | | none |
+
+**Query parameters**
+
+| Name | Type | Required | Default | Description |
+|---|---|---|---|---|
+| — | | | | none |
+
+**Request body**
+
+None.
+
+**Retry semantics.** Safe to repeat, and the route stores nothing for a retry to
+conflict with. Every call mints a fresh username, and a credential already issued stays
+good until its own expiry — so a client that retries a timed-out request holds two
+working credentials rather than none, and either one works.
+
+**Responses**
+
+### Minted — `200 OK`
+
+```json
+{
+  "urls": ["turn:chat.nimashadloo.dev:3478?transport=udp"],
+  "username": "1757352000:qkT2wR1mVbA4cJ7fKpN0Zg==",
+  "credential": "b0Zk9Qd4rXm2sT1uV7wY8aB3cD0=",
+  "expires_in": 21600
+}
+```
+
+| Field | What it is |
+|---|---|
+| `urls` | The configured `turn:` URLs, in the order the operator wrote them. This is the entire ICE server list: configure these and nothing else — no STUN server, and no relay this answer did not name |
+| `username` | The Unix timestamp the credential expires at, a colon, and sixteen random bytes as URL-safe base64. It is the TURN REST API user name; pass it through unchanged |
+| `credential` | Standard base64 of HMAC-SHA1 over `username` under the secret the backend and coturn share. It is the TURN REST API password. SHA-1 is not a choice this project makes — it is the digest coturn computes and compares, and what stands on it is an HMAC over a name that expires |
+| `expires_in` | The seconds the pair stays good for, counted from the moment it was minted: `RELAY_CREDENTIAL_TTL_SECONDS`, default 21600 (six hours) |
+
+**The username carries no account identifier and no device identifier**, and nothing
+derived from either. It travels in the clear on a control channel that carries no TLS,
+and it is the whole of what the credential tells the relay about a caller: two
+credentials of one device look exactly like credentials of two devices, and nothing in
+one joins to anything the backend holds. The relay still sees the source address of
+each allocation, as every server sees its caller's address; `SECURITY.md` § "Voice"
+states that visibility beside the rest.
+
+### No relay configured — `503 Service Unavailable`
+
+```json
+{ "code": "voice_unconfigured", "detail": "This deployment serves no voice relay." }
+```
+
+`TURN_URLS` is empty, so there is no relay to mint a credential for. This is not a
+fault and not a backoff: a client reads it as "this server does not do voice" and
+offers no call button. It reports nothing about a relay that is configured but down —
+the route reads the setting and never reaches coturn, so a credential minted against a
+dead relay is a `200` and the call simply fails to connect.
+
+### Rate limited — `429 Too Many Requests`
+
+```json
+{ "code": "throttled", "detail": "Request was throttled." }
+```
+
+Scope `relay`, default 60/min per account. `Retry-After` carries the seconds to wait.
+The route makes no database query of its own, so the scope is there to bound how fast
+one account can mint relay allocations rather than to protect the handler.

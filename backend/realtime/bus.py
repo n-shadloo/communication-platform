@@ -17,8 +17,8 @@ unsubscribe round trip on each bind, which is connection-lifecycle rate rather
 than frame rate.
 
 **Every publish is best-effort and silent.** The durable mailbox is the source of
-truth for an envelope, and presence and signals are volatile by design, so a
-publish that fails must never fail the request that caused it. It is never logged
+truth for an envelope, and a signal is volatile by design, so a publish that
+fails must never fail the request that caused it. It is never logged
 either: the message would carry a topic, and a topic names a device.
 """
 
@@ -45,9 +45,9 @@ RECONNECT_DELAY_SECONDS = 1.0
 # Measured on the largest batch the body cap admits — 200 envelopes at the 262 144
 # bucket, 70 MB of base64 — one pipeline peaked at 178.3 MB of resident set against
 # 37.8 MB for the same publishes issued one at a time, which is 140 MB of a 1 GB
-# host bought with 35 ms of event loop. A mebibyte carries every presence fan-out
-# and every batch of small envelopes in one round trip, and splits the rare batch
-# of large ones into far fewer round trips than it has frames.
+# host bought with 35 ms of event loop. A mebibyte carries every batch of small
+# envelopes in one round trip, and splits the rare batch of large ones into far
+# fewer round trips than it has frames.
 PIPELINE_BYTES = 1024 * 1024
 
 _subscribers = {}
@@ -91,12 +91,11 @@ async def publish(topic, payload):
 async def publish_many(frames):
     """Best-effort fan-out of several payloads, a bounded pipeline at a time.
 
-    Two paths reach here with more than one topic: a batch send, which is one
-    envelope per recipient copy and capped at 256, and a presence announcement,
-    which is one frame per subscribed device and capped at 500. Awaited one at a
-    time those are that many sequential round trips on the event loop, which on
-    one vCPU is the whole process: 256 sequential publishes cost 37.1 ms on
-    loopback against 1.5 ms for the pipeline, and 500 cost 55.9 ms against 2.5 ms.
+    One path reaches here with more than one topic: a batch send, which is one
+    envelope per recipient copy and capped at 256. Awaited one at a time those are
+    that many sequential round trips on the event loop, which on one vCPU is the
+    whole process: 256 sequential publishes cost 37.1 ms on loopback against
+    1.5 ms for the pipeline.
 
     `transaction=False`, because MULTI/EXEC buys nothing here — a publish takes
     effect the moment Redis reads it, and there is no state for the batch to be
@@ -150,17 +149,6 @@ async def push_envelopes(envelopes):
 
 async def relay_signal(device_id, blob):
     await publish(device_topic(device_id), {"type": "signal", "blob": blob})
-
-
-async def announce_presence(device_ids, subject_id, state):
-    """Tell each subscribed device that `subject_id` came online or went offline."""
-    await publish_many(
-        (
-            device_topic(device_id),
-            {"type": "presence", "device_id": subject_id, "state": state},
-        )
-        for device_id in device_ids
-    )
 
 
 def close_device_sockets(device_id):

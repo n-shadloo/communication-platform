@@ -23,6 +23,7 @@ from .conftest import (
     expect_refused,
     mint_access,
     probe,
+    signal_blob,
 )
 
 # A string no client should ever send: a NUL, two more control characters, and
@@ -60,7 +61,7 @@ async def test_every_socket_scenario_emits_no_identifier_or_payload(
 ):
     access_a = await mint_access(active_user, device)
     access_b = await mint_access(peer, peer_device)
-    signal_blob = "volatile-ciphertext-blob"
+    volatile_blob = signal_blob(b"v")
     push_blob = envelope_blob(b"l")
     offline_target = str(uuid.uuid4())
 
@@ -77,28 +78,25 @@ async def test_every_socket_scenario_emits_no_identifier_or_payload(
         await comm_a.send_json_to({"type": "ack", "ids": [frame["id"]]})
         await comm_a.send_json_to({"type": "ack", "ids": [str(device.id) + "-corrupt"]})
 
-        # Volatile signals: delivered, braced spelling, offline target, malformed.
+        # Volatile signals: delivered, offline target, malformed target, off-bucket
+        # blob, then the disconnect and the cleanup it runs.
         await comm_a.send_json_to(
-            {"type": "signal", "to_device": str(peer_device.id), "blob": signal_blob}
+            {"type": "signal", "to_device": str(peer_device.id), "blob": volatile_blob}
         )
         assert await comm_b.receive_json_from(timeout=2) == {
             "type": "signal",
-            "blob": signal_blob,
+            "blob": volatile_blob,
         }
         await comm_a.send_json_to(
-            {"type": "signal", "to_device": offline_target, "blob": signal_blob}
+            {"type": "signal", "to_device": offline_target, "blob": volatile_blob}
         )
         await comm_a.send_json_to(
-            {"type": "signal", "to_device": "not-a-uuid", "blob": signal_blob}
+            {"type": "signal", "to_device": "not-a-uuid", "blob": volatile_blob}
         )
-
-        # Presence subscribe + the offline emit on disconnect.
         await comm_a.send_json_to(
-            {"type": "subscribe_presence", "device_ids": [str(peer_device.id)]}
+            {"type": "signal", "to_device": str(peer_device.id), "blob": "off-bucket"}
         )
-        await comm_b.receive_json_from(timeout=2)  # A online
         await comm_a.disconnect()
-        await comm_b.receive_json_from(timeout=2)  # A offline
         await comm_b.disconnect()
 
         # A refused handshake — with a bad token, and with none at all — and a
@@ -115,7 +113,7 @@ async def test_every_socket_scenario_emits_no_identifier_or_payload(
         "sender device id": str(device.id),
         "target device id": str(peer_device.id),
         "offline to_device": offline_target,
-        "signal blob": signal_blob,
+        "signal blob": volatile_blob,
         "envelope blob": push_blob,
         "access token A": access_a,
         "access token B": access_b,
@@ -150,9 +148,8 @@ async def test_the_whole_malformed_frame_class_emits_no_identifier_or_payload(
             {"type": "ack", "ids": [str(uuid.uuid4()) for _ in range(201)]},
             {"type": "ack", "ids": [CONTROL_BLOB]},
             {"type": "signal", "to_device": str(peer_device.id), "blob": 7},
-            {"type": "signal", "to_device": CONTROL_BLOB, "blob": "x"},
-            {"type": "subscribe_presence", "device_ids": [CONTROL_BLOB]},
-            {"type": "subscribe_presence", "device_ids": "not-a-list"},
+            {"type": "signal", "to_device": str(peer_device.id), "blob": CONTROL_BLOB},
+            {"type": "signal", "to_device": CONTROL_BLOB, "blob": signal_blob()},
             {"type": CONTROL_BLOB},
         ):
             await comm.send_json_to(frame)

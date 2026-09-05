@@ -84,16 +84,20 @@ server no longer serves.
 
 ## Voice
 
-The server surface for voice is gone and the replacement lands in phase 7
-([ADR-0021](docs/architecture/decisions/0021-relayed-webrtc-mesh-and-no-server-room.md)).
-Nothing under `frontend/` implements voice today, so none of this is a removal: it is
-what the client will need, recorded now because the decision that binds it has been
-made and the evidence behind it was gathered on 2026-09-05.
+The server half of the voice design is served
+([ADR-0021](docs/architecture/decisions/0021-relayed-webrtc-mesh-and-no-server-room.md)):
+phase 6 removed the SFU and the room object, and phase 7 added the one route that
+mints a coturn credential. Nothing under `frontend/` implements voice today, so none
+of this is a removal: it is what the client now owes, and the evidence behind the
+package facts below was gathered on 2026-09-05.
 
-**The client contract for voice is not written yet.** The wire shape of the offer, the
-answer and the candidates, and the route that mints a coturn credential, land in phase
-7 and will be `backend/CLIENT_CONTRACT.md` §N and the per-app `API.md` beside it. Build
-nothing against a shape guessed from this file.
+**The client contract for voice is written.**
+[`backend/CLIENT_CONTRACT.md`](backend/CLIENT_CONTRACT.md) §N is the binding text, the
+route is in [`backend/realtime/API.md`](backend/realtime/API.md) with
+[`backend/openapi.json`](backend/openapi.json) beside it, and
+[`API_CHANGES.md`](API_CHANGES.md) records what moved. Where this file and §N could
+differ, §N is authoritative: what follows is the work each of its rules lands under
+`frontend/`, not a second statement of the rule.
 
 ### The media package
 
@@ -107,6 +111,7 @@ package for Flutter, and it is what the design assumes.
 | Native dependencies | `io.github.webrtc-sdk:android:150.7871.01`; `com.github.davidliu:audioswitch` at commit `039a35aefab7747c557242fa216c9ea11743b604`, **from JitPack**; `androidx.annotation:annotation:1.1.0` |
 | What it does **not** bring | No `androidx.core` dependency of its own, so the frozen `androidx.core` 1.16.0 and `connectivity_plus` 6.0.5 pins of `frontend/docs/decisions.md` ADR-054 both hold |
 | The relay policy | Its Android plugin parses `iceTransportPolicy`, and `relay` is the value the design needs: every path crosses coturn, and no peer learns another peer's address |
+| The calls §N leans on | `RTCPeerConnection.setConfiguration` and `restartIce` are in the published API, so the ICE restart of rule 9 under a fresh credential is a library call and not a fork (pub.dev API reference, 1.6.1, read 2026-09-05) |
 
 **The offline Gradle mirror has to carry the JitPack artefact.** `audioswitch` is
 resolved from JitPack by commit hash, not from Maven Central, so a mirror built only
@@ -135,18 +140,40 @@ what to keep and what to remove deliberately rather than by omission.
 | `audioswitch` | `MODIFY_AUDIO_SETTINGS` | Keep. Audio routing during a call needs it |
 
 `RECORD_AUDIO` is the client's own to declare, and it is the one a user is prompted
-for. Nothing in the dependency set declares it for you.
+for. Nothing in the dependency set declares it for you. The microphone
+foreground-service permission is the client's own as well: a call holds the
+microphone while the application is in the background, and the service that keeps it
+is a microphone-typed one.
 
-### What the design assumes of the client
+### What the client now owes
 
-- Audio only. One `RTCPeerConnection` for each peer, so a room of ten participants is
-  nine connections on each device.
-- `iceTransportPolicy: relay`, with the coturn credential phase 7 issues as the only
-  ICE server. No STUN, and no other TURN.
-- The SDP offer, the SDP answer and the ICE candidates travel inside pairwise-session
-  ciphertext over the `/ws` `signal` frames the client already has. The server relays
-  that ciphertext and cannot read or replace a DTLS fingerprint.
-- A room is client state: client-signed control events over ordinary envelopes,
-  exactly as a group is. Ephemeral room text and join and leave announcements are
-  `signal` frames the client fans out to each member device.
-- No media key to distribute, rotate or store. A connection's keys die with it.
+§N binds eleven rules, and this file does not restate them. Rules 1 to 10 are the
+protocol — the mesh, the relay-only ICE configuration, glare, join and leave, presence
+and room text, bucketed signalling, the retry of a volatile frame, removal, the
+credential lifetime and the participant ceiling — and each is Dart against
+`flutter_webrtc` 1.6.1 as published: no fork, no patched native library, no second
+package and no protocol of this project's own, because DTLS-SRTP is what every WebRTC
+endpoint already implements. The ceiling of rule 10 is the server's accepted risk
+([`ACCEPTED_RISKS.md`](ACCEPTED_RISKS.md) AR-16). Rule 11 is the platform half, and the
+package and manifest work it implies is the two subsections above.
+
+No media key is distributed, rotated or stored anywhere in §N: each connection is keyed
+by DTLS between its two endpoints and its keys die with it.
+
+### The gateway frames that left, and the one that changed shape
+
+The gateway now handles `ack` and `signal` and emits `envelope` and `signal`, and
+nothing else ([ADR-0022](docs/architecture/decisions/0022-the-gateway-holds-no-presence.md)).
+The client never sent `subscribe_presence`, so nothing it does today breaks — but the
+code and the documents that describe the old surface now describe a server that does
+not exist, and `API_CHANGES.md` § "Voice comes back, as a relay credential" is the
+full statement of what moved.
+
+| Path | What is there |
+|---|---|
+| `frontend/lib/features/networking/infrastructure/realtime/dio_websocket_gateway.dart` | The `'subscribe_presence'` arm of the outbound frame validator, and the `'presence'` arm of `_decodeEvent` with the `RealtimePresence` event behind it. Neither frame exists on the server. The `'signal'` arm's bound is the other half: it validates a blob against `maximumSignalCharacters`, and the rule is now a bucket rather than a ceiling — base64 of exactly 1024, 4096 or 16384 bytes, and anything else is dropped in silence |
+| `frontend/lib/features/networking/infrastructure/api/api_request.dart` | `maximumSignalCharacters = 16384` and `maximumPresenceTargets = 500`. The first is not the bound any more — the longest legal blob is 21848 characters, the base64 of the largest bucket — and the second bounds a frame that is gone |
+| `frontend/lib/app/dependencies/messaging_providers.dart` | `presenceProjectionProvider`, and the comment saying nothing should read it "until `subscribe_presence` is sent". It will not be sent: presence between conversation members is client protocol over `signal` frames now, per `backend/CLIENT_CONTRACT.md` §N rule 5 |
+| `frontend/lib/features/messaging/presentation/chat_conversation_view.dart` | The comment describing why presence is absent, which now has a different reason behind it |
+| `frontend/docs/design-handoff/voice-room-states.md` | The "Too large" row reads `Blob over SIGNAL_MAX, 16384 chars`. `SIGNAL_MAX` is gone as a setting and as an environment variable, and a blob is dropped for being off-bucket rather than for being over a maximum — a 1500-character blob is dropped too |
+| `frontend/docs/sync-engine.md`, `frontend/docs/decisions.md` | Both describe `subscribe_presence` as a frame the client has not implemented yet. It is not unimplemented now; it is not a frame |

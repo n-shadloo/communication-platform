@@ -1,16 +1,17 @@
 # Communication Platform
 
 A private, self-hosted messaging platform with end-to-end encrypted direct messages and
-group chats, built to survive a national internet shutdown. Audio-only voice is designed
-and not yet served.
+group chats, built to survive a national internet shutdown. Audio-only voice is designed,
+and the server half of it is served.
 
 > **Status: work in progress.** The backend is substantially built, and the Android
 > client implements registration, enrollment, cross-signing, direct messaging, history
-> transfer, background delivery and notifications against it. Voice is served by
-> neither side: the server surface for it was removed in phase 6 and the replacement
-> lands in phase 7. Attachments, shared media and profile publishing are not built on
-> the client. Nothing here has had an external security audit. This is not recommended
-> for anyone whose safety depends on it.
+> transfer, background delivery and notifications against it. Voice is served on the
+> server side only: phase 6 removed the SFU and the room object, phase 7 landed the
+> route that mints a relay credential, and no client places a call against it yet.
+> Attachments, shared media and profile publishing are not built on the client. Nothing
+> here has had an external security audit. This is not recommended for anyone whose
+> safety depends on it.
 
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 
@@ -29,10 +30,11 @@ it is not a public service and is not open for signup.
 - Direct messages between two users.
 - Group chats of up to roughly 50 members.
 
-Audio-only voice is decided and not served: a full mesh of WebRTC connections between
+Audio-only voice is decided and served: a full mesh of WebRTC connections between
 devices, relayed by the self-hosted coturn and keyed end to end by DTLS-SRTP
 ([ADR-0021](docs/architecture/decisions/0021-relayed-webrtc-mesh-and-no-server-room.md)).
-It lands in phase 7.
+The server's whole part in it is one route that mints an ephemeral relay credential;
+the client half is not built.
 
 ## Security model
 
@@ -71,8 +73,8 @@ flowchart LR
   D --> A
   A --> P
   A --> R
-  C -.->|"SRTP, phase 7"| T
-  T -.->|"SRTP, phase 7"| C
+  C -.->|"SRTP · relay only"| T
+  T -.->|"SRTP · relay only"| C
 ```
 
 | Layer | Technology |
@@ -81,7 +83,7 @@ flowchart LR
 | Server | Python 3.12, Django 6.0, FastAPI on uvicorn |
 | Database | PostgreSQL 16, loopback only |
 | Cache, fan-out bus and live state | Redis 7, loopback only |
-| Voice (phase 7) | WebRTC mesh between devices, keyed by DTLS-SRTP, relayed by self-hosted coturn |
+| Voice | WebRTC mesh between devices, keyed by DTLS-SRTP, relayed by self-hosted coturn |
 | Edge | nginx, TLS 1.3 under a pre-distributed private CA |
 
 ## Repository layout
@@ -123,8 +125,9 @@ with `--no-index` and `--require-hashes`.
 registration, device-scoped JWT authentication, cross-signing and classical + ML-KEM
 prekey distribution, the durable envelope queue, bucketed attachments, and the `/ws`
 gateway — together with the `ops/` artefacts for deploying them to one VPS. Voice is
-not among them: phase 6 removed the SFU and the room object, and phase 7 lands the
-relay credential the mesh design needs.
+one route among them: phase 6 removed the SFU and the room object, and phase 7 added
+`POST /api/v1/me/relay`, which mints the ephemeral coturn credential the mesh design
+needs and stores nothing behind it.
 
 The API surface is frozen at `v1`: [backend/openapi.json](backend/openapi.json) is the
 generated contract and CI fails a change that does not regenerate it, and

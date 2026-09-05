@@ -184,8 +184,16 @@ Five values are generated that way and shared with nothing else:
 `DJANGO_SECRET_KEY`, `JWT_SIGNING_KEY`, `POSTGRES_PASSWORD`, the password inside
 `REDIS_URL`, and `TURN_STATIC_AUTH_SECRET`. Each is an infrastructure secret;
 none of them can decrypt a message, because no content key ever reaches this
-server. `TURN_STATIC_AUTH_SECRET` is read by coturn alone in this release: the
-backend route that mints a relay credential from it lands in phase 7.
+server. `TURN_STATIC_AUTH_SECRET` is read by the backend as well from this
+release: the backend signs a relay credential under it, and coturn verifies that
+credential under `static-auth-secret` in step 7. The two copies are one value and
+must be the same string — a mismatch is a relay that refuses every allocation,
+and check 9 of step 8 is what catches it.
+
+`TURN_URLS` beside it is what serves voice at all. Left empty,
+`POST /api/v1/me/relay` answers `503 voice_unconfigured` and no client can place
+a call; filled, it is what makes `check --deploy` weigh the secret above and
+refuse one under 32 characters (`core.E005`).
 
 Then:
 
@@ -282,10 +290,12 @@ devices and cannot open a packet: the keys of a voice connection are established
 by DTLS between its two endpoints and exist nowhere else
 ([ADR-0021](../../docs/architecture/decisions/0021-relayed-webrtc-mesh-and-no-server-room.md)).
 
-Install it now even though voice is not served by this revision. The relay is
-inert until a client is issued a credential, and the route that mints one lands
-in phase 7; installing it here means the phase-7 deploy is a code deploy and not
-a new service.
+Voice is served by this revision, and this relay is the whole of its media path.
+`POST /api/v1/me/relay` mints the credential a client presents here, signing it
+under the same secret this file carries as `static-auth-secret`. A deployment
+that leaves `TURN_URLS` empty serves no voice and can skip this step; one that
+fills it needs coturn running before the first call, because the route mints a
+credential whether or not a relay is listening for it.
 
 ```sh
 install -d -m 0755 /etc/chat
@@ -311,7 +321,8 @@ systemctl show coturn.service -p ExecStart | grep -c /etc/chat/turnserver.conf  
   `static-auth-secret=` are filled inline in `/etc/chat/turnserver.conf`, from
   the `TURN_REALM` and `TURN_STATIC_AUTH_SECRET` values of the environment file,
   and the file is given the same trust boundary as `.env.production`. Set
-  `listening-ip` and `relay-ip` to the VPS address; never a wildcard.
+  `listening-ip`, `relay-ip` and the `denied-peer-ip=YOUR_VPS_IP` entry to the VPS
+  address; never a wildcard.
 - **coturn has no TLS listener and no certificate.** The hop it carries is
   already SRTP that the relay cannot open, so a TLS or DTLS listener would buy
   nothing and would put a certificate and a renewal on a box whose posture is to
@@ -322,6 +333,19 @@ systemctl show coturn.service -p ExecStart | grep -c /etc/chat/turnserver.conf  
   record at every layer. The file sets `no-stdout-log`, `simple-log` and
   `log-file=/dev/null`. That is deliberate: a relay problem is diagnosed by
   raising the level temporarily and lowering it again, never by leaving it raised.
+- **The peer deny list is what keeps the relay from being a pivot, and one
+  entry that is *not* in it is why voice connects at all.** The file denies the
+  loopback, private and link-local ranges, and denies the host's own address
+  beside them: without that last line an allocation may name this box as its
+  peer, which makes the relay an on-host proxy into nginx (AR-6). What must never
+  be added is `denied-peer-ip=::`. coturn stores a single address as a range
+  whose min and max are that address, and its `ioa_addr_in_range` matches every
+  address when the max is the all-zero "any" address — so that one line denies
+  every peer of every family, IPv4 included, and no call ever connects. Measured
+  against coturn 4.17.2 on 2026-09-05: with the line present a relay bind to an
+  IPv4 peer was refused `403` and the relay logged `A peer IP 192.168.0.102
+  denied in the range: ::`; with it removed the same bind succeeded. The 4.6.1
+  that Debian bookworm and Ubuntu noble install carries the identical matcher.
 - **The quotas are the ceiling on this band, not a tuning knob.** `user-quota=20`
   is one device in a ten-participant mesh with headroom for an ICE restart;
   `total-quota=500` is five such rooms at once; the relay port range 50000–51000
@@ -374,7 +398,37 @@ curl -sS -o /dev/null -w '%{http_code}\n' https://chat.nimashadloo.dev/static/un
 
 # 8. Redis answers, with the password the check above insisted on.
 as_deploy sh -c 'redis-cli -u "$REDIS_URL" ping'     # PONG
+
+# 9. coturn accepts a credential this backend minted. Skip only if TURN_URLS is
+#    empty. `turnutils_uclient` ships with coturn. The secret itself is never
+#    passed to it — the tool's own -W flag would put it in world-readable
+#    /proc/*/cmdline, which is the reason step 7 keeps it out of coturn's own
+#    command line — so the check mints one ephemeral credential through the same
+#    code path the route uses and passes that. What lands in the argument list is
+#    good for RELAY_CREDENTIAL_TTL_SECONDS and can decrypt nothing (AR-17).
+read -r turn_user turn_pass <<EOF
+$(as_deploy .venv/bin/python -c 'import django; django.setup(); from realtime import relay; c = relay.mint(); print(c["username"], c["credential"])')
+EOF
+turnutils_uclient -y -c -X -n 10 -l 100 -p 3478 -u "$turn_user" -w "$turn_pass" \
+    "$(sed -n 's/^listening-ip=//p' /etc/chat/turnserver.conf)"
+# `channel bind: error 403 ()` is the PASS, and it is the only pass this host can
+# produce. A client reaches a channel bind only after an allocation, so that line
+# says coturn authenticated the minted credential under its own copy of the
+# secret; the bind behind it is then refused by this deployment's own
+# denied-peer-ip entry for the host's own address, because -y makes the peer
+# another relay address on this box. Two real devices never meet that entry.
+# `ERROR Cannot complete Allocation` is the FAIL: coturn refused the credential,
+# so the value in .env.production and the static-auth-secret in
+# /etc/chat/turnserver.conf are not the same string.
+# Neither line before the command gives up: nothing is answering on 3478. Check
+# the unit, the drop-in of step 7, and the firewall rule of step 1.
 ```
+
+Check 9 is the one check with no second source. The relay writes no log at all
+(AR-15), so `journalctl -u coturn.service` will not confirm or contradict it: the
+client's own output is the whole of the evidence, which is why the pass and the
+fail above are distinguished by the line and never by the exit status — both of
+them exit non-zero.
 
 There is no readiness endpoint and no metric, by design
 ([ADR-0019](../../docs/architecture/decisions/0019-the-system-emits-no-request-scoped-telemetry.md)):
@@ -382,7 +436,7 @@ one host with an in-place deploy has no rotation to gate, and a request-scoped
 log on this host would be the social graph the schema exists to exclude. AR-9 in
 [`../../ACCEPTED_RISKS.md`](../../ACCEPTED_RISKS.md) carries what that costs and
 the trigger that ends it. The checks above are what stands in its place, so
-running all eight is not optional.
+running all nine is not optional.
 
 `journalctl -u chat.service` carries the process's own output. It holds no
 request line, no path and no identifier — that is the invariant, not an
@@ -395,7 +449,7 @@ accident — so a fault shows as a traceback that names code and never data.
 **The rollback is a git checkout and a restart, and it has never been
 executed** (AR-13). Read that entry before you need this section.
 
-The trigger, decided here rather than during the incident: any of the eight
+The trigger, decided here rather than during the incident: any of the nine
 checks in step 8 fails and is not fixed by the next command you would have run
 anyway. Do not diagnose first. Restore the previous release, then diagnose.
 

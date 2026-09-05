@@ -94,7 +94,7 @@ REDIS_URL = env("REDIS_URL", default="redis://127.0.0.1:6379/0")
 # answering — a blocked instance, or a half-open socket after the network moved
 # under it — holds its caller for ever. On the HTTP surface the request deadline
 # would eventually answer `503`; the WebSocket gateway has no deadline at all, so
-# a presence announcement would wait until the client gave up.
+# a signal relay would wait until the client gave up.
 # Loopback commands on this host are sub-millisecond, so two seconds is a hang and
 # never a slow answer, and the throttled routes fail closed on it exactly as they
 # already do when Redis refuses the connection (ADR-0010).
@@ -148,6 +148,7 @@ THROTTLE_RATES = {
     "claim": env("THROTTLE_CLAIM", default="120/min"),
     "envelopes": env("THROTTLE_ENVELOPES", default="600/min"),
     "attachments": env("THROTTLE_ATTACHMENTS", default="60/min"),
+    "relay": env("THROTTLE_RELAY", default="60/min"),
 }
 
 # --- Request limits (ADR-0014) --------------------------------------------------
@@ -187,9 +188,24 @@ MAX_DEVICES_PER_USER = env_int("MAX_DEVICES_PER_USER", default=10)
 # table at the batch cap times the rate limit for as long as it likes.
 MAX_DEVICELOG_RECORDS = env_int("MAX_DEVICELOG_RECORDS", default=10000)
 
-# Realtime gateway bounds.
+# Realtime gateway bounds. A `signal` blob is bounded by `SIGNAL_BUCKETS` in
+# `core/buckets.py` rather than by a setting: it is base64 of exactly one bucket.
 WS_MAX_FRAME = env_int("WS_MAX_FRAME", default=512 * 1024)
-SIGNAL_MAX = env_int("SIGNAL_MAX", default=16 * 1024)
+
+# --- The voice relay (ADR-0021) -------------------------------------------------
+# coturn is the only media service of this deployment, and `POST /me/relay` is the
+# only route voice has. The secret is shared with `ops/coturn/turnserver.conf` and
+# is read here as well from this release: it is the HMAC key a credential is signed
+# under, never a value that travels. An empty `TURN_URLS` is a deployment that
+# serves no voice, and the route answers `503 voice_unconfigured` — so voice is
+# configured on, rather than off, by an operator who fills these two in.
+TURN_URLS = env_list("TURN_URLS", default=[])
+TURN_STATIC_AUTH_SECRET = env("TURN_STATIC_AUTH_SECRET", default="")
+# Six hours. Long enough that a call outlives its credential only rarely, and
+# short enough that a leaked one buys an attacker relay bandwidth for an evening
+# rather than for the life of the deployment (AR-17). The client refreshes with
+# under an hour left, and performs an ICE restart if one expires mid-call.
+RELAY_CREDENTIAL_TTL_SECONDS = env_int("RELAY_CREDENTIAL_TTL_SECONDS", default=21600)
 
 # Security headers (prod tightens further).
 SECURE_CONTENT_TYPE_NOSNIFF = True

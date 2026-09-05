@@ -34,6 +34,7 @@ from devices.routes import authenticated as devices_authenticated
 from devices.routes import registration as devices_registration
 from messaging.routes import router as messaging_router
 from realtime import bus, gateway
+from realtime.routes import router as realtime_router
 from vault.routes import router as vault_router
 
 API_PREFIX = "/api/v1"
@@ -90,6 +91,7 @@ def route_limits():
         f"{API_PREFIX}/me/envelopes/ack": batch_class,
         f"{API_PREFIX}/attachments": attachment_class,
         f"{API_PREFIX}/attachments/{{attachment_id}}": json_class,
+        f"{API_PREFIX}/me/relay": json_class,
     }
 
     return per_route, json_class
@@ -180,6 +182,7 @@ def create_app(django_app):
     app.include_router(devices_authenticated, prefix=API_PREFIX)
     app.include_router(messaging_router, prefix=API_PREFIX)
     app.include_router(attachments_router, prefix=API_PREFIX)
+    app.include_router(realtime_router, prefix=API_PREFIX)
     # The gateway is at the root, not under the version prefix: `/ws` is the path
     # `realtime/API.md` publishes and the client already opens. Added to the
     # application rather than included as a router, because a websocket route

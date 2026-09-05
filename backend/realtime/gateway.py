@@ -1,16 +1,21 @@
 """The `/ws` gateway: one Starlette WebSocket route on the FastAPI application.
 
-One socket carries envelope delivery, volatile device-to-device signals and
-presence. The wire contract is `realtime/API.md` and this module is the whole of
-its server half; `realtime/bus.py` carries a frame between two sockets, wherever
-in the process set they are.
+One socket carries envelope delivery and volatile device-to-device signals. The
+wire contract is `realtime/API.md` and this module is the whole of its server
+half; `realtime/bus.py` carries a frame between two sockets, wherever in the
+process set they are.
 
 A connection authenticates before it is accepted, so every accepted socket is
 already bound to a device. It is then a receive loop and a send loop in one task
 group, plus the watch that turns an out-of-band stop — a revocation, a slow
 consumer — into a close code. Every task of the group dies with the first one that
-raises, and the cleanup that follows runs on every exit path alike: presence
-offline to the devices the socket named, and the unsubscription of its topic.
+raises, and the cleanup that follows runs on every exit path alike: the
+unsubscription of its topic.
+
+The gateway holds no presence (ADR-0022). A presence subscription is a contact
+list the client declares to the server, and the server needs none of it: who is
+in a conversation is the client's knowledge, and presence between its members is
+client protocol carried over `signal` frames like every other announcement.
 
 Nothing here is persisted and nothing here is logged. The database is reached only
 through `api/orm.py`, on the thread the ORM owns, and Redis only through the async
@@ -18,6 +23,7 @@ client of `api/redis.py`, so no frame ever blocks the event loop.
 """
 
 import asyncio
+import base64
 import json
 import time
 import uuid
@@ -25,12 +31,20 @@ import uuid
 from django.conf import settings
 from fastapi import WebSocket
 
+from core.buckets import SIGNAL_BUCKETS
+from core.fields import BadBucket, decode_blob_or_400
 from realtime import auth, bus
 
 RATE_WINDOW_SECONDS = 1.0
 RATE_MAX_IN_WINDOW = 100
-PRESENCE_TARGETS_MAX = 500
 ACK_IDS_MAX = 200
+
+# The most characters a `signal` blob may carry: the base64 of the largest signal
+# bucket. A longer blob cannot decode to a bucket length, so it is refused on its
+# length alone rather than decoded first — a frame may be as long as
+# `WS_MAX_FRAME`, and decoding half a mebibyte to learn it was never a bucket is
+# event-loop time spent on a frame the contract already refuses.
+SIGNAL_BLOB_MAX = len(base64.b64encode(bytes(max(SIGNAL_BUCKETS))))
 
 # The bound on the one per-connection buffer that an outside writer fills. A
 # socket that cannot drain it is a slow consumer and closes with 4008 rather than
@@ -87,7 +101,6 @@ class Connection:
         self.user = None
         self.device = None
         self.device_topic = None
-        self.presence_targets = set()
         self._msg_times = []
         self._outbox = asyncio.Queue(maxsize=SEND_QUEUE_MAX)
         self._stop = asyncio.Event()
@@ -140,7 +153,6 @@ class Connection:
         raise _Stop
 
     async def _cleanup(self):
-        await self._emit_presence("offline")
         await bus.get_subscriber().unsubscribe(self.device_topic, self.deliver)
 
     async def _close(self):
@@ -211,8 +223,6 @@ class Connection:
             await self._handle_ack(content)
         elif message_type == "signal":
             await self._handle_signal(content)
-        elif message_type == "subscribe_presence":
-            await self._handle_subscribe_presence(content)
         # Unknown types are ignored (but counted by the rate limiter above).
 
     async def _handle_ack(self, content):
@@ -233,7 +243,7 @@ class Connection:
         blob = content.get("blob")
         # Volatile relay: forward opaque ciphertext, drop it if the target is
         # offline, and never persist or log to_device or blob.
-        if not to_device or not isinstance(blob, str) or len(blob) > settings.SIGNAL_MAX:
+        if not to_device or not signal_blob_ok(blob):
             return
         try:
             # Normalized, not raw: uuid.UUID accepts braced/urn/uppercase
@@ -243,20 +253,6 @@ class Connection:
         except (ValueError, TypeError):
             return
         await bus.relay_signal(to_device, blob)
-
-    async def _handle_subscribe_presence(self, content):
-        ids = content.get("device_ids") or []
-        if not isinstance(ids, list) or len(ids) > PRESENCE_TARGETS_MAX:
-            return
-        valid = set()
-        for device_id in ids:
-            try:
-                # Normalized like _handle_signal.
-                valid.add(str(uuid.UUID(str(device_id))))
-            except (ValueError, TypeError):
-                continue
-        self.presence_targets = valid
-        await self._emit_presence("online")
 
     # ---- helpers ---------------------------------------------------------
     async def _bind(self, token_str):
@@ -269,19 +265,31 @@ class Connection:
         await auth.touch_active(self.device.id)
         return True
 
-    async def _emit_presence(self, state):
-        # Presence is metadata the server inherently knows (socket up or down);
-        # only the devices the client authorized through subscribe_presence are
-        # told. No content is involved. One round trip for the whole set, because
-        # the set holds up to PRESENCE_TARGETS_MAX and this runs on the receive
-        # loop and again on every disconnect.
-        await bus.announce_presence(self.presence_targets, str(self.device.id), state)
-
     def _rate_ok(self):
         now = time.monotonic()
         self._msg_times = [t for t in self._msg_times if now - t < RATE_WINDOW_SECONDS]
         self._msg_times.append(now)
         return len(self._msg_times) <= RATE_MAX_IN_WINDOW
+
+
+def signal_blob_ok(blob):
+    """True when `blob` is standard base64 of exactly one signal bucket.
+
+    The padding rule of every stored ciphertext, applied to the one ciphertext
+    the server relays without storing: length is the one thing a relay can see,
+    so a blob outside the bucket set is a malformed frame and is dropped in
+    silence like every other malformed but well-typed frame. It is a guard and
+    never a security control — a modified server would relay anything. The
+    decoder is the one every route uses; its refusal is a drop here where a
+    route answers `400 bad_bucket`.
+    """
+    if not isinstance(blob, str) or len(blob) > SIGNAL_BLOB_MAX:
+        return False
+    try:
+        decode_blob_or_400(blob, SIGNAL_BUCKETS)
+    except BadBucket:
+        return False
+    return True
 
 
 def _header_token(websocket):

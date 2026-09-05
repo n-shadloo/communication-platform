@@ -18,6 +18,11 @@ SOCKET_CEILING = 500
 # an empty match.
 SITE = "chat.nimashadloo.dev.conf"
 
+# The two modules the relay's shared-secret posture is read out of, named here so a
+# failure quotes the path rather than the file.
+BASE = "config/settings/base.py"
+MINTING = "realtime/relay.py"
+
 
 def deploy_check_ids():
     """The ids `manage.py check --deploy` would report under the current settings,
@@ -42,8 +47,10 @@ DOCUMENTED = re.compile(r"^\| `([A-Z][A-Z0-9_]*)` \|", re.M)
 READ_OUTSIDE_PYTHON = {
     "DJANGO_SETTINGS_MODULE": "django, to find the settings module at all",
     "WEB_CONCURRENCY": "the systemd unit, as uvicorn's --workers argument",
+    # `TURN_STATIC_AUTH_SECRET` is not here: from this release Python reads it too,
+    # to sign a relay credential, so it is one value in two places rather than a
+    # value the example carries for another process alone.
     "TURN_REALM": "ops/coturn/turnserver.conf",
-    "TURN_STATIC_AUTH_SECRET": "ops/coturn/turnserver.conf",
 }
 
 
@@ -551,6 +558,29 @@ class BasePostureTests(SimpleTestCase):
         with override_settings(JWT_SIGNING_KEY=strong, SECRET_KEY="k" * 50):
             self.assertNotIn("core.E005", deploy_check_ids())
 
+    def test_the_deploy_checks_refuse_a_weak_relay_secret_once_voice_is_served(self):
+        """`TURN_STATIC_AUTH_SECRET` is the HMAC key every relay credential is
+        signed under, and from this release Python reads it as well as coturn. A
+        holder of it mints credentials for this deployment's relay until the value
+        is rotated in both of the two places that carry it.
+
+        It is weighed only when `TURN_URLS` names a relay: a deployment that
+        serves no voice answers `503 voice_unconfigured` and never reads the
+        secret, so refusing it a value would refuse a deployment that is correct.
+        Driven through the registry, so a check written and never registered for
+        deployment fails here rather than passing in silence.
+        """
+        # 198.51.100.0/24 is the documentation range: the check reads only whether
+        # `TURN_URLS` is empty, and nothing resolves this.
+        relay = ["turn:198.51.100.10:3478"]
+
+        with override_settings(TURN_URLS=[], TURN_STATIC_AUTH_SECRET=""):
+            self.assertNotIn("core.E005", deploy_check_ids())
+        with override_settings(TURN_URLS=relay, TURN_STATIC_AUTH_SECRET="t" * 31):
+            self.assertIn("core.E005", deploy_check_ids())
+        with override_settings(TURN_URLS=relay, TURN_STATIC_AUTH_SECRET="t" * 32):
+            self.assertNotIn("core.E005", deploy_check_ids())
+
 
 class CoturnPostureTests(SimpleTestCase):
     """The only media service of this deployment, read from the file that runs it.
@@ -692,6 +722,80 @@ class CoturnPostureTests(SimpleTestCase):
         self.assertIn("use-auth-secret", directives)
         for absent in ("realm", "static-auth-secret", "user", "userdb"):
             self.assertNotIn(absent, directives)
+
+    def test_no_denied_peer_range_ends_at_the_all_zero_any_address(self):
+        """The one directive in this file whose plain reading is the opposite of
+        what it does.
+
+        coturn stores a single address as a range whose min and max are that
+        address, and `ioa_addr_in_range` returns a match whenever the range's max
+        is the all-zero "any" address — so `denied-peer-ip=::` denies every peer of
+        every family, IPv4 included, and no call ever connects. Measured against a
+        real coturn 4.17.2 on 2026-09-05: with the line present, a relay bind to an
+        IPv4 peer was refused `403` and the relay logged
+        `A peer IP 192.168.0.102 denied in the range: ::`; with the line removed the
+        same bind succeeded; and with the host's own address denied instead, only
+        that address was refused. The 4.6.1 that Debian bookworm and Ubuntu noble
+        install carries the identical matcher in `ns_turn_ioaddr.c`.
+
+        None of that is in the coturn documentation, and the relay writes no log
+        (AR-15) — so a deployment that grew the line back would fail silently, with
+        voice simply never connecting. The upper bound of every range is what is
+        asserted: `0.0.0.0-0.255.255.255` is a real range ending at
+        `0.255.255.255` and stays, while `::`, `0.0.0.0` and any range written to
+        end at one of them is the whole-internet deny this test refuses.
+        """
+        any_address = {"0.0.0.0", "::", "0:0:0:0:0:0:0:0"}
+        denied = [
+            value
+            for key, value in self.directives(self.relay())
+            if key == "denied-peer-ip"
+        ]
+
+        self.assertTrue(denied)
+        for entry in denied:
+            self.assertNotIn(entry.split("-")[-1].strip(), any_address, entry)
+
+    def test_the_relay_and_the_backend_sign_under_one_shared_secret(self):
+        """`TURN_STATIC_AUTH_SECRET` is one value in two places from this release:
+        coturn checks a credential with it, and `realtime/relay.py` signs one with
+        it. Two copies that drift are a relay that refuses every credential the
+        backend mints, and the failure is invisible — coturn writes no log, so
+        what an operator sees is calls that never connect.
+
+        What the repository can assert is the shape on both sides and that no value
+        is committed to either: the coturn file asks for the TURN REST API form,
+        commits no `static-auth-secret`, and names the variable that fills it; the
+        settings module reads that same variable and defaults it to empty; and the
+        minting code signs with SHA-1, which is not a choice this project makes but
+        the digest coturn compares — a credential under any other digest is one the
+        relay refuses. The two copies being *equal* is the operator's job — they
+        fill both from the environment file of `ops/RUNBOOK.md` §5 — and no
+        assertion in this repository can reach it.
+        """
+        conf = self.relay()
+        directives = dict(self.directives(conf))
+        base = (settings.BASE_DIR / BASE).read_text()
+        minting = (settings.BASE_DIR / MINTING).read_text()
+
+        self.assertIn("use-auth-secret", directives)
+        self.assertNotIn("static-auth-secret", directives)
+        self.assertIn("TURN_STATIC_AUTH_SECRET", conf)  # named in the comments only
+        # The three below read a whole module, and `assertIn` would quote the whole
+        # of it on a failure. A failure report is a terminal, so each says what is
+        # missing and names the file rather than printing it.
+        self.assertTrue(
+            'env("TURN_STATIC_AUTH_SECRET", default="")' in base,
+            f"{BASE} reads no TURN_STATIC_AUTH_SECRET with an empty default",
+        )
+        self.assertTrue(
+            "settings.TURN_STATIC_AUTH_SECRET.encode()" in minting,
+            f"{MINTING} signs under some other key",
+        )
+        self.assertTrue(
+            "hashlib.sha1" in minting,
+            f"{MINTING} signs under a digest coturn does not compare",
+        )
 
 
 class ProdPostureTests(SimpleTestCase):
