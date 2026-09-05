@@ -109,7 +109,23 @@ class Connection:
 
     # ---- lifecycle -------------------------------------------------------
     async def serve(self, token):
-        if token is None or not await self._bind(token):
+        if token is None:
+            await self.websocket.close()
+            return
+        try:
+            bound = await self._bind(token)
+        except BaseException:
+            # The bind subscribes the topic before it touches the device row, and
+            # the subscriber records a sink before it sends SUBSCRIBE, so a raise
+            # after either point has registered a sink for a socket that will
+            # never exist. Left there it lives as long as the worker: the topic
+            # is never unsubscribed for the device, because a later socket of it
+            # joins the holders and its own cleanup leaves this one behind, and
+            # every frame published to the device fills a dead outbox to its
+            # bound. Release it, and let the handshake fail as it did.
+            await self._cleanup()
+            raise
+        if not bound:
             # Decided before the accept, so this is a refused handshake rather
             # than a close frame: a server answers the upgrade request with an
             # HTTP failure and there is no socket to carry a code on.
@@ -153,6 +169,8 @@ class Connection:
         raise _Stop
 
     async def _cleanup(self):
+        if self.device_topic is None:
+            return  # the bind failed before it registered anything
         await bus.get_subscriber().unsubscribe(self.device_topic, self.deliver)
 
     async def _close(self):

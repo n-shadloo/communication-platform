@@ -16,12 +16,15 @@ import redis.asyncio
 
 from realtime import auth, bus, gateway
 
-from .conftest import bearer, connect_ok, mint_access, probe
+from .conftest import bearer, connect_ok, mint_access, probe, ws
 from .test_log_silence import raw_root_capture
 
 pytestmark = pytest.mark.django_db(transaction=True)
 
 DELIVERY_TIMEOUT = 10
+# A port nothing answers on, the one `test_bus_batching.py` already relies on: a
+# connection to it is refused at once, on every run.
+DEAD_REDIS_URL = "redis://127.0.0.1:6390"
 
 
 async def wait_for(predicate, timeout=DELIVERY_TIMEOUT):
@@ -88,6 +91,71 @@ async def test_a_socket_that_crashes_still_gives_its_topic_back(
     await comm.send_json_to({"type": "ack", "ids": [str(uuid.uuid4())]})
 
     await wait_for(lambda: topic not in bus.get_subscriber()._sinks)
+    assert gateway.LIVE == set()
+
+
+async def test_a_bind_that_fails_after_its_subscribe_gives_its_topic_back(
+    active_user, device, monkeypatch
+):
+    """`_bind` subscribes the device topic and then touches the device row. A
+    database that goes away between the two — or a pool with nothing free for the
+    second query — raises out of the bind before the accept. Until this was pinned
+    the sink the bind had registered stayed in the subscriber for the life of the
+    worker: never unsubscribed, because a later socket of the same device joins the
+    holders and its own cleanup leaves the leaked one behind, and filling a dead
+    outbox with every frame published to the device."""
+
+    async def explode(*_args, **_kwargs):
+        raise RuntimeError("the database went away between the token check and the touch")
+
+    monkeypatch.setattr(auth, "touch_active", explode)
+    topic = bus.device_topic(str(device.id))
+    comm = ws(bearer(await mint_access(active_user, device)))
+
+    with pytest.raises(RuntimeError):
+        await comm.connect(timeout=2)
+
+    assert topic not in bus.get_subscriber()._sinks
+    assert gateway.LIVE == set()
+
+
+async def test_a_bind_whose_subscribe_fails_leaves_no_sink_behind(
+    active_user, device, monkeypatch
+):
+    """The other place a bind can fail after it has registered: `Subscriber.subscribe`
+    records the sink before it sends SUBSCRIBE, so a Redis that refuses the
+    connection raises with the sink already in place."""
+    monkeypatch.setattr(
+        bus, "get_client", lambda: redis.asyncio.Redis.from_url(DEAD_REDIS_URL)
+    )
+    topic = bus.device_topic(str(device.id))
+    comm = ws(bearer(await mint_access(active_user, device)))
+
+    with pytest.raises(redis.exceptions.ConnectionError):
+        await comm.connect(timeout=2)
+
+    assert topic not in bus.get_subscriber()._sinks
+    assert gateway.LIVE == set()
+
+
+async def test_a_bind_that_fails_before_it_registers_still_fails_the_handshake(
+    active_user, device, monkeypatch
+):
+    """The token check is the first thing a bind does, and a database that is gone
+    then has registered nothing: the release on the way out has nothing to give
+    back and must neither invent an error of its own nor turn the failure into a
+    refusal — the handshake fails exactly as an unguarded one did."""
+
+    async def explode(*_args, **_kwargs):
+        raise RuntimeError("the database was gone at the token check")
+
+    monkeypatch.setattr(auth, "authenticate_access", explode)
+    comm = ws(bearer(await mint_access(active_user, device)))
+
+    with pytest.raises(RuntimeError):
+        await comm.connect(timeout=2)
+
+    assert bus.device_topic(str(device.id)) not in bus.get_subscriber()._sinks
     assert gateway.LIVE == set()
 
 
