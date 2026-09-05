@@ -111,6 +111,7 @@ package for Flutter, and it is what the design assumes.
 | Native dependencies | `io.github.webrtc-sdk:android:150.7871.01`; `com.github.davidliu:audioswitch` at commit `039a35aefab7747c557242fa216c9ea11743b604`, **from JitPack**; `androidx.annotation:annotation:1.1.0` |
 | What it does **not** bring | No `androidx.core` dependency of its own, so the frozen `androidx.core` 1.16.0 and `connectivity_plus` 6.0.5 pins of `frontend/docs/decisions.md` ADR-054 both hold |
 | The relay policy | Its Android plugin parses `iceTransportPolicy`, and `relay` is the value the design needs: every path crosses coturn, and no peer learns another peer's address |
+| The calls §N leans on | `RTCPeerConnection.setConfiguration` and `restartIce` are in the published API, so the ICE restart of rule 9 under a fresh credential is a library call and not a fork (pub.dev API reference, 1.6.1, read 2026-09-05) |
 
 **The offline Gradle mirror has to carry the JitPack artefact.** `audioswitch` is
 resolved from JitPack by commit hash, not from Maven Central, so a mirror built only
@@ -146,55 +147,18 @@ is a microphone-typed one.
 
 ### What the client now owes
 
-Eleven obligations, in the order §N states them. Each line says what has to be built
-under `frontend/`; the rule that binds it is the contract's.
+§N binds eleven rules, and this file does not restate them. Rules 1 to 10 are the
+protocol — the mesh, the relay-only ICE configuration, glare, join and leave, presence
+and room text, bucketed signalling, the retry of a volatile frame, removal, the
+credential lifetime and the participant ceiling — and each is Dart against
+`flutter_webrtc` 1.6.1 as published: no fork, no patched native library, no second
+package and no protocol of this project's own, because DTLS-SRTP is what every WebRTC
+endpoint already implements. The ceiling of rule 10 is the server's accepted risk
+([`ACCEPTED_RISKS.md`](ACCEPTED_RISKS.md) AR-16). Rule 11 is the platform half, and the
+package and manifest work it implies is the two subsections above.
 
-- **One connection for each device pair.** One `RTCPeerConnection` between one of your
-  own devices and one member device, carrying one audio track — no video track and no
-  data channel in this version. A room of ten participants is nine connections on each
-  device.
-- **A relay-only ICE configuration.** `iceTransportPolicy: relay`, with the `urls`,
-  `username` and `credential` of `POST /api/v1/me/relay` as the only ICE server. No
-  STUN, and no server this deployment does not run.
-- **The glare rule.** Of two devices, the one whose device id string sorts lower is the
-  polite peer of the perfect-negotiation pattern. Both ends decide it alone and never
-  agree it over the wire, so both must apply the same comparison to the same string.
-- **Join and leave over `signal` frames.** A joining device fans a join announcement
-  out to every live member device; a participant that receives one sends an offer and
-  the joiner answers. Drop a device on its leave announcement, and on a connection to
-  it closing.
-- **Presence, implemented by the client.** A device that needs the current participants
-  fans out a query announcement and participants answer; ephemeral room text goes the
-  same way. The gateway holds no presence
-  ([ADR-0022](docs/architecture/decisions/0022-the-gateway-holds-no-presence.md)), so
-  nothing about a room reaches the server outside `signal` frames and ordinary
-  envelopes.
-- **Bucketed ciphertext, and no description from anywhere else.** Every offer, answer,
-  candidate set and announcement is pairwise-session ciphertext padded to 1024, 4096
-  or 16384 bytes and sent as a `signal` blob; the gateway drops a blob of any other
-  length. Accept a remote description from that channel only — the DTLS fingerprint
-  inside the SDP is authenticated by the pairwise session and never by the server.
-- **A retry policy for a volatile frame.** A `signal` frame is delivered to a live
-  socket or discarded, so re-send an unanswered offer or announcement after a bounded
-  timeout, a bounded number of times, and then report the device as unreachable.
-- **Removal, applied at once.** When a signed control event removes a member, close
-  every connection to that member's devices immediately and refuse their offers and
-  announcements from then on. A removed device closes its own connections.
-- **Fetch the credential before joining, and refresh it.** Call the route before a
-  join, and again once less than an hour of `expires_in` remains; on an expiry during
-  a call, perform an ICE restart with the new credential. The call is safe to repeat —
-  each one mints a fresh username and the earlier credential stays good to its own
-  expiry — so a timed-out request is retried rather than reconciled.
-- **The ten-participant ceiling, enforced in the client.** Refuse to admit an eleventh
-  participant at band 0 and state the reason. A full mesh costs each participant one
-  uplink for each peer, ten is the design point, and nothing on the server enforces it
-  ([`ACCEPTED_RISKS.md`](ACCEPTED_RISKS.md) AR-16).
-- **The platform obligations.** Request the microphone at join and at no other moment,
-  and run a microphone-type foreground service for the duration of a call. The package
-  and manifest work that goes with it is the two subsections above.
-
-No media key is distributed, rotated or stored anywhere in that list: each connection
-is keyed by DTLS between its two endpoints and its keys die with it.
+No media key is distributed, rotated or stored anywhere in §N: each connection is keyed
+by DTLS between its two endpoints and its keys die with it.
 
 ### The gateway frames that left, and the one that changed shape
 
