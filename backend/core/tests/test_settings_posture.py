@@ -13,6 +13,11 @@ from core.checks import no_foreign_or_telemetry, ws_origin_allowlist_set
 # because nothing in this process enforces it.
 SOCKET_CEILING = 500
 
+# The one site file `ops/nginx/` carries; the per-location assertions below read
+# it by name rather than by glob, so a rename fails here instead of passing over
+# an empty match.
+SITE = "chat.nimashadloo.dev.conf"
+
 
 def deploy_check_ids():
     """The ids `manage.py check --deploy` would report under the current settings,
@@ -40,6 +45,52 @@ READ_OUTSIDE_PYTHON = {
     "TURN_REALM": "ops/coturn/turnserver.conf",
     "TURN_STATIC_AUTH_SECRET": "ops/coturn/turnserver.conf",
 }
+
+
+def nginx_locations(conf):
+    """Every `location` block of the TLS server block, as {spec: body}.
+
+    Written here rather than pulled from a parser package: the properties below
+    are per-location, and `str.count` over the whole file cannot tell a cap in
+    one location from a cap in another.
+    """
+    tls = next(
+        body
+        for match in re.finditer(r"^server\s*\{", conf, re.M)
+        for body in [_block(conf, match.start())]
+        if "listen 443" in body
+    )
+    blocks = {}
+    for match in re.finditer(r"^\s*location\s+(?P<spec>[^{#]+?)\s*\{", tls, re.M):
+        blocks[match.group("spec")] = _block(tls, match.start())
+    return blocks
+
+
+def _block(text, at):
+    """The body of the brace-delimited block whose opening brace follows `at`."""
+    start = text.index("{", at)
+    depth = 0
+    for index in range(start, len(text)):
+        if text[index] == "{":
+            depth += 1
+        elif text[index] == "}":
+            depth -= 1
+            if depth == 0:
+                return text[start + 1 : index]
+    raise AssertionError("unbalanced braces")
+
+
+def nginx_size(value):
+    """An nginx size — a number with an optional `k` or `m` suffix — as bytes."""
+    scale = {"k": 1024, "m": 1024**2}
+    if value[-1].lower() in scale:
+        return int(value[:-1]) * scale[value[-1].lower()]
+    return int(value)
+
+
+def nginx_seconds(value):
+    """An nginx time — a number with an optional `s` suffix — as seconds."""
+    return int(value.removesuffix("s"))
 
 
 class BasePostureTests(SimpleTestCase):
@@ -229,6 +280,123 @@ class BasePostureTests(SimpleTestCase):
             self.assertEqual(
                 len(re.findall(r"error_log\s+\S+\s+crit;", body)), blocks, conf.name
             )
+
+    def test_every_location_of_the_edge_caps_the_body_it_admits(self):
+        """A cap on the server block alone is the cap of whichever location admits
+        the most, applied to every location that admits less. The upload route
+        needs 70 MiB, so one server-level number would let a 70 MiB body reach the
+        admin path — which the application then refuses with `413` after nginx has
+        already carried it to loopback. Each location states its own instead, and
+        the server-level value is the deny-by-default for a path that matches
+        none."""
+        conf = (settings.BASE_DIR / "ops" / "nginx" / SITE).read_text()
+        locations = nginx_locations(conf)
+
+        self.assertTrue(locations)
+        for spec, body in locations.items():
+            self.assertIn("client_max_body_size", body, spec)
+
+    def test_the_edge_admits_exactly_what_each_upstream_admits(self):
+        """The two caps are one setting in two places. nginx above the application
+        would 413 a body the routes accept; nginx below it would carry a body the
+        routes refuse. `/api/` takes the largest route class, and the admin claims
+        no route at all, so `api.app.route_limits` gives it the fallback class."""
+        locations = nginx_locations(
+            (settings.BASE_DIR / "ops" / "nginx" / SITE).read_text()
+        )
+        caps = {
+            spec: nginx_size(re.search(r"client_max_body_size\s+(\S+);", body).group(1))
+            for spec, body in locations.items()
+        }
+
+        self.assertEqual(caps["/api/"], settings.BODY_CAP_BATCH_BYTES)
+        self.assertEqual(caps["/admin/"], settings.BODY_CAP_JSON_BYTES)
+
+    def test_the_edge_waits_longer_than_the_deadline_below_it(self):
+        """Timeouts nest innermost first. The application answers its own
+        `503 unavailable` at its deadline; nginx must still be waiting then, or a
+        slow request becomes a `504` with no answer from the application and the
+        deadline's envelope never reaches the client. nginx's own default is 60 s,
+        which is below the 120 s the upload and batch routes take."""
+        locations = nginx_locations(
+            (settings.BASE_DIR / "ops" / "nginx" / SITE).read_text()
+        )
+        waits = {
+            spec: nginx_seconds(re.search(r"proxy_read_timeout\s+(\S+);", body).group(1))
+            for spec, body in locations.items()
+            if "proxy_pass" in body
+        }
+
+        self.assertGreater(waits["/api/"], settings.UPLOAD_DEADLINE_SECONDS)
+        self.assertGreater(waits["/admin/"], settings.REQUEST_DEADLINE_SECONDS)
+
+    def test_one_layer_owns_the_transport_security_header(self):
+        """`add_header` appends; it never replaces. Django's SecurityMiddleware
+        emits HSTS on the admin path it serves, and SECURE_HSTS_SECONDS has to stay
+        set there because `check --deploy` requires it — so without the hide the
+        admin response carries the header twice. nginx is the layer that keeps it,
+        because it is the only one that sees every response on this host: the
+        proxied ones, the files it serves from disk, and its own 404 and 413.
+
+        The mirror of that rule is the second assertion: a location that adds a
+        header of its own drops every inherited one, so it repeats HSTS or it
+        serves without it.
+        """
+        conf = (settings.BASE_DIR / "ops" / "nginx" / SITE).read_text()
+        snippet = (
+            settings.BASE_DIR / "ops" / "nginx" / "snippets" / "proxy-headers.conf"
+        ).read_text()
+
+        self.assertIn("proxy_hide_header Strict-Transport-Security;", snippet)
+        self.assertTrue(prod.SECURE_HSTS_SECONDS)
+        for spec, body in nginx_locations(conf).items():
+            if "proxy_pass" in body:
+                self.assertIn("snippets/proxy-headers.conf", body, spec)
+            elif "add_header" in body:
+                self.assertIn("Strict-Transport-Security", body, spec)
+
+    def test_the_edge_includes_only_snippets_this_repository_ships(self):
+        """An `include` that names a file nobody wrote is a site that does not
+        load, and the snippet behind this one carries X-Forwarded-Proto — the
+        header SECURE_PROXY_SSL_HEADER trusts. An operator inventing it is an
+        operator choosing that trust boundary by hand."""
+        conf = (settings.BASE_DIR / "ops" / "nginx" / SITE).read_text()
+
+        for included in re.findall(r"include\s+(\S+);", conf):
+            self.assertTrue(
+                (settings.BASE_DIR / "ops" / "nginx" / included).is_file(), included
+            )
+
+    def test_the_three_windows_of_a_stop_nest(self):
+        """A deploy is a stop, and three windows have to nest around it: the
+        longest request the surface admits, the drain uvicorn takes, and the time
+        systemd waits before SIGKILL. Measured on this application with the drain
+        below the request: the request was cut and the client read
+        `HTTP/1.1 500 Internal Server Error`, so a deploy that caught a slow upload
+        reported itself as a fault of the API. With the drain above it the same
+        probe completed and read its real status.
+
+        systemd's own `DefaultTimeoutStopSec` is 90 s, so the outermost window is
+        stated rather than inherited: an unset value would be below the drain and
+        would kill the process in the middle of it.
+        """
+        unit = (settings.BASE_DIR / "ops" / "systemd" / "chat.service").read_text()
+        drain = int(re.search(r"--timeout-graceful-shutdown (\d+)", unit).group(1))
+        stop = int(re.search(r"TimeoutStopSec=(\d+)", unit).group(1))
+
+        self.assertGreater(drain, settings.UPLOAD_DEADLINE_SECONDS)
+        self.assertGreater(stop, drain)
+
+    def test_the_maintenance_run_is_bounded_rather_than_left_to_a_default(self):
+        """systemd will not start a second instance of the unit while one is
+        active, so a sweep that never returns holds the timer's every later fire
+        behind it. The distribution default would instead kill a large sweep at
+        90 s and mark the unit failed. The bound is stated so it is neither."""
+        unit = (
+            settings.BASE_DIR / "ops" / "systemd" / "chat-maintenance.service"
+        ).read_text()
+
+        self.assertIsNotNone(re.search(r"^TimeoutStartSec=\S+$", unit, re.M))
 
     def test_the_concurrency_limit_leaves_room_for_http_beside_the_sockets(self):
         """uvicorn's `--limit-concurrency` counts *connections*, and a live

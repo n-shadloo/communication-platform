@@ -108,6 +108,9 @@ with `--no-index` and `--require-hashes`.
 | [docs/architecture/DESIGN-RECORD.md](docs/architecture/DESIGN-RECORD.md) | The system of record for the architecture: the positions table, the assumption ledger, the deferral list, and the decision log |
 | [docs/architecture/GROUND-TRUTH.md](docs/architecture/GROUND-TRUTH.md) | The measured facts of the deployment: topology, configuration deviations, scale facts, and the domain rules the code must hold |
 | [docs/architecture/decisions/](docs/architecture/decisions/) | One ADR for each architecture decision |
+| [ACCEPTED_RISKS.md](ACCEPTED_RISKS.md) | Every risk the project has looked at and decided to carry, each with what it exposes, what reduces it, and the event that ends the acceptance |
+| [docs/admin/PANEL-RECORD.md](docs/admin/PANEL-RECORD.md) | The system of record for the operator back office: the pinned release, the override ledger, the role model, and the deferrals |
+| [backend/ops/RUNBOOK.md](backend/ops/RUNBOOK.md) | The operator runbook: host setup, the offline install, the database, the units, nginx and TLS, LiveKit and coturn, the checks after a deploy, the rollback, and the maintenance timer |
 | [frontend/docs/README.md](frontend/docs/README.md) | Index of the client engineering contract: threat model, cryptographic protocol, UI specification, sync engine, and platform notes |
 
 ## Current status
@@ -132,6 +135,27 @@ client must do for the security properties to hold.
 
 Apache License 2.0 — see [LICENSE](LICENSE). Copyright 2026 Nima Shadloo.
 
-Third-party components keep their own terms: the Python packages pinned in
-`backend/requirements/` stay under their respective licenses, and
-`frontend/assets/fonts/vazirmatn/` bundles the Vazirmatn font under SIL OFL 1.1.
+Third-party components keep their own terms. The Python packages pinned in
+`backend/requirements/` stay under their respective licenses;
+`backend/ops/gen_sbom.sh` writes a CycloneDX document of that set, with every name,
+version and digest, from `backend/requirements/prod.txt`.
+
+Two of those packages ship files this deployment serves to a browser, so their own
+bundled third-party assets are served with them. `django-unfold` (MIT) renders the
+admin panel, and `python manage.py collectstatic` publishes the following from
+inside it:
+
+| Bundled asset | Licence |
+|---|---|
+| Alpine.js, with its anchor, focus, persist, resize and sort plugins | MIT |
+| Chart.js | MIT |
+| htmx | 0BSD |
+| Inter (four `woff2` weights) | SIL OFL 1.1 |
+| Material Symbols Outlined (`woff2`) | Apache-2.0 |
+
+Each carries its own `LICENSE` file inside the package, and each is served from
+this host rather than from a CDN — the same no-foreign-dependency rule that governs
+everything else here.
+
+On the client side, `frontend/assets/fonts/vazirmatn/` bundles the Vazirmatn font
+under SIL OFL 1.1.

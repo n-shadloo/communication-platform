@@ -253,11 +253,19 @@ changing the panel.
 
 ## Deployment
 
-Deployment artefacts live under `ops/`: systemd units for uvicorn and the maintenance
-timer, the nginx site, coturn and LiveKit configuration, PostgreSQL setup notes, and
-the offline-install scripts (`ops/vendor.sh`, `ops/offline_install.sh`). The operator
-runbook in those directories is the authoritative sequence; this README does not
-duplicate it. One step is worth naming because nothing fails loudly without it:
+[`ops/RUNBOOK.md`](ops/RUNBOOK.md) is the authoritative sequence: host setup, the
+wheel vendoring and the offline install, the database and the recreation rule of this
+version, `migrate` and `collectstatic`, the environment file and its permissions, the
+units, nginx and TLS under the private CA, LiveKit and coturn, the checks that verify
+a deploy, the rollback, and the maintenance timer. This README does not duplicate it.
+
+The rest of `ops/` is what the runbook routes to: the systemd units for uvicorn and
+the maintenance timer, the nginx site and the proxy snippet it includes, coturn and
+LiveKit configuration, PostgreSQL setup notes, the TLS scripts, and the offline
+tooling (`ops/vendor.sh`, `ops/offline_install.sh`, `ops/gen_sbom.sh`,
+`ops/audit/offline_rehearsal.sh`).
+
+One step is worth naming here because nothing fails loudly without it:
 `python manage.py collectstatic --noinput` must run on every deploy that changes a
 dependency, or nginx serves an empty `STATIC_ROOT` and the panel loads with no styling
 at all.

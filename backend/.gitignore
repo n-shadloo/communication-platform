@@ -29,3 +29,8 @@ htmlcov/
 # the network is available, and ops/offline_install.sh installs from it. It is a
 # large binary artifact rebuilt from requirements/, so it never enters git.
 vendor/
+
+# The CycloneDX document ops/gen_sbom.sh writes. It is derived from
+# requirements/, so a committed copy goes stale the moment a pin moves;
+# regenerate it with the release it describes and keep it beside the artefact.
+ops/sbom.*.json

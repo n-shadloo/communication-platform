@@ -1,0 +1,485 @@
+# Operator runbook
+
+The sequence that puts this backend onto the VPS, and the sequence that takes a
+release off it again. One host, one operator, in-place deploys, and a
+maintenance window whenever the operator wants one — there is no second host to
+roll through and nothing to drain to.
+
+**This file routes; it does not repeat.** Every step names the note that owns its
+detail, and the note is authoritative wherever the two could differ. The notes:
+
+| Subject | Owner |
+|---|---|
+| PostgreSQL role, database, `pg_hba.conf`, and the recreation rule | [`postgres/README.md`](postgres/README.md) |
+| The private CA, the server pair, and the client SPKI pins | [`tls/README.md`](tls/README.md) |
+| Redis posture | [`redis/redis-chatapp.conf`](redis/redis-chatapp.conf) |
+| The units, their hardening, and every uvicorn flag | [`systemd/`](systemd/) |
+| The nginx site, its per-location caps and its header ownership | [`nginx/`](nginx/) |
+| LiveKit and coturn | [`livekit/livekit.yaml`](livekit/livekit.yaml), [`coturn/turnserver.conf`](coturn/turnserver.conf) |
+| Every environment variable and what it does | [`../README.md`](../README.md) §Configuration, [`../.env.example`](../.env.example) |
+| The threat model these steps serve | [`../SECURITY.md`](../SECURITY.md) |
+
+**No secret value appears in this file, and none may be added to it.** Every
+secret is generated on the host and written only into the environment file of
+step 5. Where a step needs one, it names the variable and never a value.
+
+**What has and has not been exercised.** Steps 1 to 7 have never run against a
+real VPS: this repository has no serving host yet, and every claim about the
+host is what the committed configuration sets rather than what a machine
+reported. The rollback of step 9 has never been executed, which
+[`../../ACCEPTED_RISKS.md`](../../ACCEPTED_RISKS.md) records as AR-13 with the
+trigger that ends it. Read this file as the plan it is, and record what actually
+happens in [`../../docs/architecture/GROUND-TRUTH.md`](../../docs/architecture/GROUND-TRUTH.md)
+the first time it runs.
+
+Run every command from `/srv/chat/backend` unless a step says otherwise. Where a
+step runs a management command, it uses this form, which is the same
+`set -a; . …; set +a` convention [`../README.md`](../README.md) documents for
+development:
+
+```sh
+as_deploy() {
+    sudo -u deploy sh -c \
+        'cd /srv/chat/backend && set -a && . ./.env.production && set +a && exec "$@"' _ "$@"
+}
+```
+
+`sudo -u deploy` gives the command the deploy account's full group set, which is
+what lets it read the environment file of step 5.
+
+---
+
+## 1. One-time host setup
+
+The host is one VPS with 1 vCPU and 1 GB of RAM, shared with two other projects
+of the same operator. Everything below listens on loopback except nginx, coturn,
+and LiveKit's media ports.
+
+1. **Packages.** `python3.12` with `python3.12-venv`, `postgresql-16`, `redis`
+   (7.x), `nginx`, `coturn`, and the `livekit-server` binary at
+   `/usr/local/bin/livekit-server`, version 1.4 or later — the audio-only token
+   grant relies on `canPublishSources`, which an older binary ignores in silence
+   ([`livekit/livekit.yaml`](livekit/livekit.yaml)).
+2. **The service account.** A `deploy` user with a group of its own, additionally
+   a member of `www-data`, with no login shell. Every unit runs as that user with
+   `Group=www-data`, so files the process creates are group-readable by nginx.
+3. **The tree.**
+
+   ```sh
+   install -d -o deploy -g www-data -m 0750 /srv/chat
+   sudo -u deploy git clone https://github.com/n-shadloo/communication-platform /srv/chat
+   install -d -o deploy -g www-data -m 0750 /srv/chat/backend/media_root
+   install -d -o deploy -g www-data -m 0750 /srv/chat/backend/static_root
+   ```
+
+   `media_root` is the only path the serving unit may write, and `static_root`
+   is deliberately not among them: `collectstatic` is the operator's command and
+   nginx serves the result, so a compromised process cannot replace the panel's
+   own JavaScript ([`systemd/chat.service`](systemd/chat.service)).
+4. **The firewall.** Inbound: 80 and 443 (nginx), 3478 and 5349 (coturn),
+   50300–50400/udp (coturn relay), 7881/tcp and 50100–50200/udp (LiveKit media).
+   Nothing else. PostgreSQL, Redis, and uvicorn are loopback-only and must not be
+   reachable from outside the host.
+5. **Redis.** Copy [`redis/redis-chatapp.conf`](redis/redis-chatapp.conf) into
+   the host's Redis configuration and uncomment `requirepass` with a generated
+   value. The same value goes into `REDIS_URL` in step 5. It is not optional:
+   `manage.py check --deploy` refuses a `REDIS_URL` with no password
+   (`core.E004`), so a deployment cannot forget it.
+6. **PostgreSQL.** Follow [`postgres/README.md`](postgres/README.md) — the role,
+   the database, `listen_addresses`, and `pg_hba.conf`. Come back here for step 3.
+
+---
+
+## 2. Vendor the wheels while the network is up, then install offline
+
+The system must install and reinstall with no internet
+([ADR-0012](../../docs/architecture/decisions/0012-pinned-hashed-and-untracked-wheel-cache.md)).
+The wheel cache is per-platform and per-interpreter, so it is built **on the
+VPS** — a set downloaded on a developer machine will not install on it.
+
+```sh
+python3.12 -m venv .venv
+.venv/bin/python -m pip install --upgrade pip
+bash ops/vendor.sh            # needs the network; writes vendor/wheels/
+bash ops/offline_install.sh   # needs no network; rebuilds .venv from that cache
+```
+
+`vendor.sh` downloads with `--require-hashes --only-binary=:all:`, which refuses
+a source distribution: the VPS has no compiler and, when it matters, no network
+to fetch a build backend with. `offline_install.sh` installs with `--no-index
+--require-hashes`, so pip reaches no index at all and a wheel that is missing or
+tampered with fails the install loudly.
+
+Re-run `vendor.sh` after **any** change to `requirements/`, while the network is
+still available. `vendor/wheels/` is not tracked in git.
+
+For a release record, `bash ops/gen_sbom.sh` writes a CycloneDX 1.6 document of
+the pinned production set to `ops/sbom.prod.json`. It is derived from
+`requirements/prod.txt`, so it is not committed — regenerate it with the release
+it describes and keep it beside the artefact.
+
+---
+
+## 3. The database, and the recreation rule of this version
+
+Create the role and the database as [`postgres/README.md`](postgres/README.md)
+describes.
+
+**Then, once, before the first `migrate` of this version: drop and recreate the
+database.** The migration history was regenerated — each app holds one
+`0001_initial` and every earlier file is gone
+([ADR-0009](../../docs/architecture/decisions/0009-regenerate-the-initial-migrations.md))
+— and Django matches an applied migration by `(app, name)`, so a database that
+recorded the old names cannot be migrated onto the new history. The recreation
+command is in [`postgres/README.md`](postgres/README.md) under "Recreate the
+database before the first migrate of this version".
+
+Three things about that step:
+
+- **It is destructive DDL, and it is available exactly once.** The precondition
+  is zero production accounts, recorded in
+  [`GROUND-TRUTH.md`](../../docs/architecture/GROUND-TRUTH.md). Read that
+  precondition before running it, not after. Once one real account exists the
+  step is gone, and any future history change is expand and contract instead.
+- **From the next release the history is append-only.** This is the last time
+  the history is rewritten.
+- **It is a stop, not a step.** A drop of a database that might hold data is
+  never run on a verdict alone. Confirm the precondition, then run it
+  deliberately, with the application stopped.
+
+---
+
+## 4. `migrate` and `collectstatic`
+
+Both run as `deploy`, with the environment file of step 5 already in place.
+
+```sh
+as_deploy .venv/bin/python manage.py migrate
+as_deploy .venv/bin/python manage.py collectstatic --noinput
+```
+
+`migrate` runs once per release, from here, and never from a unit or a boot
+hook: one process applies the schema, and the code that reads it starts
+afterwards.
+
+`collectstatic` is the step that fails quietly. Nothing raises without it — the
+panel simply renders with no styling at all, because nginx serves `static_root`
+in production and Django serves nothing. Run it on **every** deploy that changes
+a dependency, since django-unfold ships the panel's whole asset set (its
+stylesheet, Alpine, Chart.js, htmx, and the Inter and Material Symbols fonts) and
+a version bump replaces those files.
+
+---
+
+## 5. The environment file and its permissions
+
+Copy [`../.env.example`](../.env.example) to `/srv/chat/backend/.env.production`
+and fill it. `DJANGO_SETTINGS_MODULE=config.settings.prod`. Generate every secret
+on the host, one at a time:
+
+```sh
+.venv/bin/python -c "import secrets; print(secrets.token_urlsafe(64))"
+```
+
+Six values are generated that way and shared with nothing else:
+`DJANGO_SECRET_KEY`, `JWT_SIGNING_KEY`, `POSTGRES_PASSWORD`, the password inside
+`REDIS_URL`, `LIVEKIT_API_SECRET`, and `TURN_STATIC_AUTH_SECRET`. Each is an
+infrastructure secret; none of them can decrypt a message, because no content key
+ever reaches this server.
+
+Then:
+
+```sh
+chown root:deploy /srv/chat/backend/.env.production
+chmod 0640 /srv/chat/backend/.env.production
+```
+
+`root:deploy` and `0640`, and both halves matter. The units never read this file
+themselves: systemd reads `EnvironmentFile=` as root, in PID 1, and hands the
+values to the process after it drops privileges — which is why root ownership
+costs the service nothing and keeps the file writable only by the operator. The
+`deploy` group is for the `as_deploy` commands above, which do read it. No other
+account on this shared host can.
+
+The values still reach the process as environment variables, which systemd's own
+documentation calls unsuitable for secrets. `LoadCredential=` is the alternative
+and it would need the settings layer to read files instead of `os.environ`. That
+is not a change this run makes; AR-14 in
+[`../../ACCEPTED_RISKS.md`](../../ACCEPTED_RISKS.md) carries it with its
+trigger.
+
+`.env.production` is never committed. `.gitignore` excludes `.env.*`, and the
+only file of that family in the repository is the example.
+
+Two settings are one setting in two places, and changing either alone breaks the
+panel: `ADMIN_PATH` here and the matching `location` in
+[`nginx/chat.nimashadloo.dev.conf`](nginx/chat.nimashadloo.dev.conf). Pick a
+non-obvious path and change both.
+
+---
+
+## 6. The units, nginx, and TLS
+
+**TLS first**, because nginx will not start without the pair.
+[`tls/README.md`](tls/README.md) owns the private CA: generate it off the host,
+keep `ca.key` offline, and install **only** `server.crt` and `server.key` at
+`/etc/chat/tls/`, root-owned and unreadable by anyone else. The clients pin the
+SPKI of that key and of a backup key, so a rotation without a shipped backup pin
+locks every device out permanently — read that file before generating anything.
+
+**The units.**
+
+```sh
+install -m 0644 ops/systemd/chat.service /etc/systemd/system/
+install -m 0644 ops/systemd/chat-maintenance.service /etc/systemd/system/
+install -m 0644 ops/systemd/chat-maintenance.timer /etc/systemd/system/
+install -m 0644 ops/systemd/livekit.service /etc/systemd/system/
+systemctl daemon-reload
+systemctl enable --now chat.service chat-maintenance.timer
+systemctl enable livekit.service
+```
+
+`livekit.service` is enabled but not started here: it reads
+`/etc/chat/livekit.yaml`, which step 7 installs, and starting it first is a unit
+that fails on a file that does not exist yet.
+
+`chat-maintenance.service` is never enabled at all: the timer starts it. See
+step 10.
+
+**nginx.** The site and the snippet it includes both ship here, and the snippet
+is not optional — it carries `X-Forwarded-Proto`, which is the header
+`SECURE_PROXY_SSL_HEADER` trusts, and `proxy_hide_header
+Strict-Transport-Security`, which is what leaves exactly one owner for that
+header.
+
+```sh
+install -d -m 0755 /etc/nginx/snippets
+install -m 0644 ops/nginx/chat.nimashadloo.dev.conf /etc/nginx/sites-available/
+install -m 0644 ops/nginx/snippets/proxy-headers.conf /etc/nginx/snippets/
+ln -sf /etc/nginx/sites-available/chat.nimashadloo.dev.conf /etc/nginx/sites-enabled/
+nginx -t && systemctl reload nginx
+```
+
+`nginx -t` is the gate; never reload without it.
+
+Two properties of that site are worth knowing before changing it, because both
+fail silently:
+
+- **Every location states its own `client_max_body_size`**, equal to the largest
+  body that location admits, and the server block's value is the deny-by-default
+  for a path that matches none. The `/api/` cap and `BODY_CAP_BATCH_BYTES` are
+  one number in two places; so are the `/admin/` cap and `BODY_CAP_JSON_BYTES`.
+  Raise one without the other and nginx either refuses a body the routes accept
+  or carries one they refuse.
+- **`add_header` inside a location replaces every inherited one.** nginx owns
+  `Strict-Transport-Security` for the whole host, because it is the only layer
+  that sees every response — the proxied ones, the files it serves from disk, and
+  its own 404 and 413. The application owns `X-Content-Type-Options`,
+  `Cache-Control` and `Referrer-Policy` on everything it answers. `/static/`
+  reaches no application, so nginx supplies its `nosniff` and repeats HSTS
+  beside it.
+
+---
+
+## 7. LiveKit and coturn
+
+Both carry media only, and neither ever holds a media key: each sender's key is
+generated on the client and distributed over the pairwise sessions
+([ADR-0016](../../docs/architecture/decisions/0016-client-held-voice-media-keys.md)).
+
+```sh
+install -d -m 0755 /etc/chat
+install -m 0644 ops/livekit/livekit.yaml /etc/chat/livekit.yaml
+systemctl start livekit.service
+
+install -o root -g turnserver -m 0640 ops/coturn/turnserver.conf /etc/chat/turnserver.conf
+# The packaged coturn unit reads /etc/turnserver.conf. Point it at the file
+# above rather than editing the packaged unit, which a package upgrade replaces.
+mkdir -p /etc/systemd/system/coturn.service.d
+printf '[Service]\nExecStart=\nExecStart=/usr/bin/turnserver -c /etc/chat/turnserver.conf\n' \
+    > /etc/systemd/system/coturn.service.d/config-path.conf
+systemctl daemon-reload && systemctl enable --now coturn.service
+```
+
+Check that the drop-in took before trusting it — a coturn reading the packaged
+default answers with the wrong realm and no shared secret, and it fails at the
+first client rather than at start:
+
+```sh
+systemctl show coturn.service -p ExecStart | grep -c /etc/chat/turnserver.conf   # 1
+```
+
+- **LiveKit** reads no secret from its file. `livekit.service` composes
+  `LIVEKIT_KEYS` from `LIVEKIT_API_KEY` and `LIVEKIT_API_SECRET` in the
+  environment file, so the pair lives in exactly one place on the host.
+- **coturn cannot read environment variables, and a command-line flag would put
+  the secret in world-readable `/proc/*/cmdline`.** So `realm=` and
+  `static-auth-secret=` are filled inline in `/etc/chat/turnserver.conf`, from
+  the `TURN_REALM` and `TURN_STATIC_AUTH_SECRET` values of the environment file,
+  and the file is given the same trust boundary as `.env.production`. Set
+  `listening-ip` and `relay-ip` to the VPS address; never a wildcard.
+- **coturn still points at `/etc/letsencrypt/live/` for its own TLS**, while
+  nginx has moved to the private CA. That is a known and recorded gap: the
+  deferral list of
+  [`DESIGN-RECORD.md`](../../docs/architecture/DESIGN-RECORD.md) §4 owns it, and
+  the trigger is the first end-to-end voice rehearsal on the VPS.
+
+`LIVEKIT_URL` is `wss://chat.nimashadloo.dev` — the client SDK appends `/rtc`,
+which nginx proxies to loopback:7880. Leaving `LIVEKIT_URL` empty disables voice,
+and the token route answers `503`.
+
+---
+
+## 8. Verify a deploy
+
+Run all of these, in order, after every deploy. Each one asserts on what came
+back; none of them is satisfied by an absence of errors.
+
+```sh
+# 1. The process is up and stayed up.
+systemctl is-active chat.service livekit.service    # active, active
+systemctl show chat.service -p NRestarts
+# Unchanged since before the deploy. A number that climbs while you watch is a
+# process that boots and dies; `journalctl -u chat.service -n 50` says why.
+
+# 2. Posture, under the settings the process actually runs.
+as_deploy .venv/bin/python manage.py check --deploy
+# exit 0 and no core.E / core.W. A finding here is a release defect.
+
+# 3. The schema matches the code that is serving. It opens the database, so a
+#    pass is also the proof that PostgreSQL answers with these credentials.
+as_deploy .venv/bin/python manage.py migrate --check
+
+# 4. Liveness, through the edge, end to end.
+curl -sS -o /dev/null -w '%{http_code}\n' https://chat.nimashadloo.dev/api/v1/health
+# 200
+
+# 5. The edge is answering, and the error envelope is this API's.
+curl -sS https://chat.nimashadloo.dev/api/v1/nope
+# {"code": "not_found", ...} — Django's HTML 404 here means the mount is wrong.
+
+# 6. Exactly one Strict-Transport-Security header, on a proxied path and on a
+#    path nginx serves itself.
+curl -sSI https://chat.nimashadloo.dev/api/v1/health | grep -ci strict-transport
+curl -sSI https://chat.nimashadloo.dev/static/admin/css/base.css | grep -ci strict-transport
+# 1 and 1. A 2 is a second owner; a 0 on the static path is the add_header
+# inheritance rule biting.
+
+# 7. The panel renders styled — collectstatic ran and nginx serves the result.
+#    ADMIN_PATH is in .env.production, so read it from there rather than typing it.
+as_deploy sh -c 'curl -sSI "https://chat.nimashadloo.dev/${ADMIN_PATH}" | head -1'
+curl -sS -o /dev/null -w '%{http_code}\n' https://chat.nimashadloo.dev/static/unfold/css/styles.css
+# 200 for the stylesheet. A 404 is an empty static_root.
+
+# 8. Redis answers, with the password the check above insisted on.
+as_deploy sh -c 'redis-cli -u "$REDIS_URL" ping'     # PONG
+```
+
+There is no readiness endpoint and no metric, by design
+([ADR-0019](../../docs/architecture/decisions/0019-the-system-emits-no-request-scoped-telemetry.md)):
+one host with an in-place deploy has no rotation to gate, and a request-scoped
+log on this host would be the social graph the schema exists to exclude. AR-9 in
+[`../../ACCEPTED_RISKS.md`](../../ACCEPTED_RISKS.md) carries what that costs and
+the trigger that ends it. The checks above are what stands in its place, so
+running all eight is not optional.
+
+`journalctl -u chat.service` carries the process's own output. It holds no
+request line, no path and no identifier — that is the invariant, not an
+accident — so a fault shows as a traceback that names code and never data.
+
+---
+
+## 9. Roll back
+
+**The rollback is a git checkout and a restart, and it has never been
+executed** (AR-13). Read that entry before you need this section.
+
+The trigger, decided here rather than during the incident: any of the eight
+checks in step 8 fails and is not fixed by the next command you would have run
+anyway. Do not diagnose first. Restore the previous release, then diagnose.
+
+```sh
+# 0. Know where you are going back to, before you stop anything.
+git -C /srv/chat log --oneline -5
+
+# 1. Stop accepting. The drain window is 130 s and it is a ceiling, not a wait:
+#    with nothing in flight the process exits at once.
+systemctl stop chat.service
+
+# 2. Restore the code.
+git -C /srv/chat checkout <previous-release-sha>
+
+# 3. Restore the dependency set only if it moved between the two releases.
+bash ops/offline_install.sh
+
+# 4. Restore the collected assets, for the same reason as step 4 above.
+as_deploy .venv/bin/python manage.py collectstatic --noinput
+
+# 5. Start, and run every check of step 8 again.
+systemctl start chat.service
+```
+
+Three things this procedure does not do, stated so nobody discovers them under
+pressure:
+
+- **It does not roll the schema back.** A backwards `migrate` restores structure
+  and never data. Every release from here on is expand and contract
+  ([ADR-0009](../../docs/architecture/decisions/0009-regenerate-the-initial-migrations.md)
+  ends the rewritable era), which means the previous release serves against the
+  new schema and no schema step is needed to go back. A release for which that is
+  not true must not ship: fix it forward, or decompose it until each half is
+  reversible.
+- **It is not atomic.** There is a window between the stop and the start in which
+  the host answers nothing. On one VPS with one operator that is the accepted
+  shape of a deploy, not a defect to engineer around.
+- **It does not undo the recreation of step 3.** That step exists once, before
+  the first account. After it, a restore of data is a restore from backup, and
+  this repository has never drilled one — the ground truth records the absence
+  rather than claiming a number.
+
+Environment changes roll back the same way: `.env.production` is the only place a
+value lives, so keep the previous copy before you edit it.
+
+---
+
+## 10. The maintenance timer
+
+`chat-maintenance.timer` runs `manage.py prune` hourly, with a five-minute
+randomised delay so the sweep does not land on a predictable wall-clock edge.
+`Persistent=true` means one missed run fires after a reboot, and only one — the
+sweep is idempotent, so replaying every missed hour would buy nothing.
+
+```sh
+systemctl list-timers chat-maintenance.timer
+systemctl status chat-maintenance.service
+journalctl -u chat-maintenance.service --since '1 day ago'
+```
+
+What the journal says, and what it means:
+
+- `envelopes pruned: N`, `attachments pruned: N (files removed: N)`,
+  `audit rows pruned: N` — a completed sweep. Counts only; an id or a blob on
+  that line would be exactly what the schema refuses to store.
+- `skipped: another prune already holds the sweep lock` — **normal, not a
+  fault.** The command takes a PostgreSQL advisory lock for its whole run and
+  declines when another run holds it, exiting 0 so the unit does not enter a
+  failed state for declining to do the one thing that would be wrong. It is what
+  you see when an operator runs `manage.py prune` by hand beside the timer.
+- `the <name> sweep failed: <ExceptionClass>` with exit 1 — a real failure. The
+  exception itself never reaches the output, because a database error carries the
+  statement that raised it and those statements carry envelope ids. The step name
+  and the exception class are what you get; reproduce it against a scratch copy
+  rather than by widening the log on the host.
+
+The sweep is bounded at `TimeoutStartSec=15min`. The largest run ever measured
+was 5.95 s for 99 962 expired envelopes, so a run that reaches that bound is
+blocked rather than busy — look at `pg_stat_activity` for a lock wait. Being
+killed costs nothing: each batch commits on its own, the advisory lock dies with
+the backend, and the next fire resumes from what is left.
+
+To run a sweep by hand:
+
+```sh
+systemctl start chat-maintenance.service   # or:
+as_deploy .venv/bin/python manage.py prune
+```
