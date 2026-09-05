@@ -15,6 +15,10 @@ PROFILE_BUCKETS = [1024, 4096]
 LABEL_BUCKETS = [256, 1024]
 DEVICELOG_BUCKETS = [256, 1024]
 BACKUP_BUCKETS = [4096, 16384, 65536, 262144, 1048576]
+# The sizes a volatile `signal` blob may decode to. Nothing on that path is stored,
+# so the set stops at the largest thing a signal carries — an SDP offer with its
+# candidate set — and a join, leave or presence announcement pads to the smallest.
+SIGNAL_BUCKETS = [1024, 4096, 16384]
 ATTACHMENT_BUCKETS = [65536, 262144, 1048576, 4194304, 16777216, 67108864]
 
 

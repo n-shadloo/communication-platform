@@ -1,0 +1,44 @@
+"""The relay route: the whole HTTP surface of voice.
+
+One route, and it is the only one of this API with no unit of work behind it: it
+reads no row and writes none, because a coturn credential is computed from a
+shared secret rather than stored (`realtime/relay.py`). The socket half of this
+app is `realtime/gateway.py`, which declares no dependency here because it
+authenticates the handshake itself.
+"""
+
+from django.conf import settings
+from fastapi import APIRouter, Depends
+
+from api.auth import require_full_device
+from api.errors import ApiError
+from api.ratelimit import rate_limit
+from api.schema import FULL_DEVICE, errors
+from realtime import relay
+from realtime.schemas import RelayCredentialOut
+
+router = APIRouter(tags=["realtime"], dependencies=[Depends(require_full_device)])
+
+UNCONFIGURED = "This deployment serves no voice relay."
+
+
+@router.post(
+    "/me/relay",
+    response_model=RelayCredentialOut,
+    responses=errors(*FULL_DEVICE, "voice_unconfigured", "throttled"),
+    dependencies=[Depends(rate_limit("relay"))],
+)
+async def mint_relay_credential():
+    """Mint an ephemeral coturn credential for the calling device.
+
+    Safe to repeat: every call mints a fresh username, and a credential already
+    issued stays good until its own expiry, so a client that retries a timed-out
+    request holds two working credentials rather than none.
+
+    An unconfigured deployment answers `503 voice_unconfigured` rather than a
+    credential no relay would accept, which is the same answer as a relay that
+    is down: a client that cannot place a call is told so, and told to try later.
+    """
+    if not settings.TURN_URLS:
+        raise ApiError(503, "voice_unconfigured", UNCONFIGURED)
+    return relay.mint()

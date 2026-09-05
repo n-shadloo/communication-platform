@@ -3,8 +3,8 @@ that crashes.
 
 None of the three reports itself. A subscriber whose connection went away and
 never re-subscribed leaves every socket of the worker silent but open, and a
-socket torn down without its cleanup leaves a device announced online to peers
-that will never hear otherwise and a topic subscribed with no reader behind it.
+socket torn down without its cleanup leaves a topic subscribed with no reader
+behind it and a connection the next drain waits on.
 """
 
 import asyncio
@@ -55,30 +55,11 @@ async def test_the_subscriber_keeps_delivering_after_its_connection_drops(
     assert received[0] == {"type": "probe"}
 
 
-async def test_a_cancelled_socket_still_announces_itself_offline(
-    active_user, device, peer, peer_device
-):
-    """uvicorn cancels what it cannot drain, and a cleanup that a cancellation cuts
-    short leaves this device online for every peer that subscribed to it."""
-    watcher = []
-    peer_topic = bus.device_topic(str(peer_device.id))
-    await bus.get_subscriber().subscribe(peer_topic, watcher.append)
-
-    comm = await connect_ok(bearer(await mint_access(active_user, device)))
-    await comm.send_json_to(
-        {"type": "subscribe_presence", "device_ids": [str(peer_device.id)]}
-    )
-    await wait_for(lambda: any(f.get("state") == "online" for f in watcher))
-
-    comm.task.cancel()  # what a server does to a handler it cannot drain
-
-    await wait_for(lambda: any(f.get("state") == "offline" for f in watcher))
-    assert gateway.LIVE == set()
-
-
 async def test_a_cancelled_socket_gives_its_topic_back(active_user, device):
-    """A sink left registered for a topic nobody reads keeps the worker subscribed
-    to a device that is gone."""
+    """uvicorn cancels what it cannot drain, and a cleanup that a cancellation cuts
+    short leaves a sink registered for a topic nobody reads — the worker stays
+    subscribed to a device that is gone — and a connection in `LIVE` that the
+    next drain waits on."""
     comm = await connect_ok(bearer(await mint_access(active_user, device)))
     topic = bus.device_topic(str(device.id))
     await wait_for(lambda: topic in bus.get_subscriber()._sinks)
@@ -86,24 +67,19 @@ async def test_a_cancelled_socket_gives_its_topic_back(active_user, device):
     comm.task.cancel()  # what a server does to a handler it cannot drain
 
     await wait_for(lambda: topic not in bus.get_subscriber()._sinks)
+    assert gateway.LIVE == set()
 
 
-async def test_a_socket_that_crashes_still_announces_itself_offline(
-    active_user, device, peer, peer_device, monkeypatch
+async def test_a_socket_that_crashes_still_gives_its_topic_back(
+    active_user, device, monkeypatch
 ):
     """A defect inside a frame handler leaves the task group with an exception the
     `except* _Stop` clause does not catch, so it propagates rather than closing
     cleanly. The cleanup is in a `finally` for exactly that case: without it a
-    crashed socket leaves its device online for every peer watching it."""
-    watcher = []
-    await bus.get_subscriber().subscribe(
-        bus.device_topic(str(peer_device.id)), watcher.append
-    )
+    crashed socket keeps its topic and its place in `LIVE`."""
     comm = await connect_ok(bearer(await mint_access(active_user, device)))
-    await comm.send_json_to(
-        {"type": "subscribe_presence", "device_ids": [str(peer_device.id)]}
-    )
-    await wait_for(lambda: any(f.get("state") == "online" for f in watcher))
+    topic = bus.device_topic(str(device.id))
+    await wait_for(lambda: topic in bus.get_subscriber()._sinks)
 
     async def explode(*_args, **_kwargs):
         raise RuntimeError("a defect in a frame handler")
@@ -111,7 +87,7 @@ async def test_a_socket_that_crashes_still_announces_itself_offline(
     monkeypatch.setattr(auth, "delete_envelopes", explode)
     await comm.send_json_to({"type": "ack", "ids": [str(uuid.uuid4())]})
 
-    await wait_for(lambda: any(f.get("state") == "offline" for f in watcher))
+    await wait_for(lambda: topic not in bus.get_subscriber()._sinks)
     assert gateway.LIVE == set()
 
 

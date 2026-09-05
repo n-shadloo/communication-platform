@@ -22,7 +22,7 @@ from hypothesis import strategies as st
 from api.redis import close_client
 from realtime import bus, gateway
 
-from .conftest import bearer, connect_ok, mint_access, probe
+from .conftest import PROBE_BLOB, bearer, connect_ok, mint_access, probe
 
 pytestmark = pytest.mark.django_db(transaction=True)
 
@@ -214,12 +214,6 @@ CLIENT_FRAMES = st.one_of(
     st.fixed_dictionaries(
         {"type": st.just("signal"), "to_device": IDENTIFIERS, "blob": BLOBS}
     ),
-    st.fixed_dictionaries(
-        {
-            "type": st.just("subscribe_presence"),
-            "device_ids": st.one_of(st.lists(IDENTIFIERS, max_size=4), IDENTIFIERS),
-        }
-    ),
     st.fixed_dictionaries({"type": st.text(max_size=8)}),
     st.dictionaries(st.text(max_size=6), st.integers(), max_size=3),
 )
@@ -260,13 +254,13 @@ async def send_and_settle(user, device, batch):
         for frame in batch:
             await comm.send_json_to(frame)
         await comm.send_json_to(
-            {"type": "signal", "to_device": str(device.id), "blob": "probe"}
+            {"type": "signal", "to_device": str(device.id), "blob": PROBE_BLOB}
         )
         while True:
             message = await comm.receive_output(timeout=5)
             if message["type"] == "websocket.close":
                 return message.get("code")
-            if json.loads(message["text"]) == {"type": "signal", "blob": "probe"}:
+            if json.loads(message["text"]) == {"type": "signal", "blob": PROBE_BLOB}:
                 return None
     finally:
         await comm.disconnect()

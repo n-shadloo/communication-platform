@@ -53,9 +53,12 @@ one revokes is dead on the other.
 application, with one handshake path: an `Authorization: Bearer` header on the upgrade
 request. A bad token or no header refuses the handshake before the accept, which the
 client sees as `403 Forbidden` rather than as a close code, so every accepted socket
-is already bound to a device. The gateway handles `ack`, `signal` and
-`subscribe_presence` frames from the client, and emits `envelope`, `signal` and
-`presence` frames to it. Frames are JSON text only, size- and rate-limited;
+is already bound to a device. The gateway handles `ack` and `signal` frames from the
+client and emits `envelope` and `signal` frames to it; it holds no presence, which is
+client protocol over `signal` frames
+([ADR-0022](../docs/architecture/decisions/0022-the-gateway-holds-no-presence.md)).
+A `signal` blob is base64 of exactly one signal bucket, like every stored
+ciphertext. Frames are JSON text only, size- and rate-limited;
 protocol violations and a slow consumer close the socket with code 4008, revocation
 with 4003, and a shutdown with 1012.
 
@@ -65,17 +68,18 @@ subscription connection for each worker process, with one topic per device
 (`ws:dev:<device id>`). The gateway subscribes to that topic on bind and
 unsubscribes on the way out, so Redis drops a publish nobody holds rather than
 carrying it to a worker that would discard it. Every
-publisher — the send push, the revocation and deactivation closes, presence, and both
-relays — publishes after its transaction has committed, and a publish that fails never
+publisher — the send push, the revocation and deactivation closes, and the signal
+relay — publishes after its transaction has committed, and a publish that fails never
 fails the request that caused it.
 
 **Durable queue versus volatile relay.** A sent message is fanned out into one padded
 ciphertext row per recipient device, held until that device drains and acks it (or the
 TTL prunes it). A group message is the same fan-out over every member device, each copy
 under its own pairwise session; the server holds no group object, roster, or group key.
-Everything else — presence and typing-style signals — is relayed between live
-sockets over the fan-out bus and never touches the database or disk. If no socket is
-listening, a volatile signal is dropped.
+Everything else — the signalling of a call, and every announcement between the
+members of a conversation — is relayed between live sockets over the fan-out bus and
+never touches the database or disk. If no socket is listening, a volatile signal is
+dropped.
 
 **Voice.** Not served by this revision. The design is a full mesh of WebRTC audio
 between client devices, keyed by DTLS-SRTP between the two endpoints of each
@@ -208,6 +212,7 @@ Every environment variable the code reads, with its default:
 | `THROTTLE_CLAIM` | `120/min` | Rate limit: prekey-bundle claims |
 | `THROTTLE_ENVELOPES` | `600/min` | Rate limit: send/drain/ack |
 | `THROTTLE_ATTACHMENTS` | `60/min` | Rate limit: attachment upload/download |
+| `THROTTLE_RELAY` | `60/min` | Rate limit: relay-credential minting, per account |
 | `ATTACHMENTS_ROOT` | `<repo>/media_root` | Directory for attachment bytes |
 | `ATTACH_USER_QUOTA_BYTES` | `2147483648` | Per-user attachment quota (2 GiB) |
 | `ATTACH_TTL_DAYS` | `30` | Attachment retention, days |
@@ -217,12 +222,14 @@ Every environment variable the code reads, with its default:
 | `MAX_DEVICELOG_RECORDS` | `10000` | Ceiling on one account's device-list log; an append past it is `409 devicelog_limit` |
 | `WEB_CONCURRENCY` | `1` | uvicorn worker processes; each opens its own Redis subscription for the gateway bus |
 | `WS_MAX_FRAME` | `524288` | Maximum WebSocket frame, bytes |
-| `SIGNAL_MAX` | `16384` | Maximum volatile-signal blob, characters |
+| `TURN_URLS` | empty | Comma-separated `turn:` URLs the relay route hands a client. Empty serves no voice: `POST /api/v1/me/relay` answers `503 voice_unconfigured` |
+| `TURN_STATIC_AUTH_SECRET` | empty | The HMAC key a relay credential is signed under; one value shared with `static-auth-secret` in `ops/coturn/turnserver.conf`. `check --deploy` refuses under 32 characters once `TURN_URLS` is set (`core.E005`) |
+| `RELAY_CREDENTIAL_TTL_SECONDS` | `21600` | Lifetime of a minted relay credential, seconds |
 
-`.env.example` lists all of these plus `DJANGO_SETTINGS_MODULE` and the two coturn
-values (`TURN_REALM`, `TURN_STATIC_AUTH_SECRET`) consumed by `ops/coturn/turnserver.conf`.
-No Python module reads those two yet: the relay is deployed and the route that mints
-a credential from the secret lands in phase 7 (ADR-0021).
+`.env.example` lists all of these plus `DJANGO_SETTINGS_MODULE` and `TURN_REALM`,
+which `ops/coturn/turnserver.conf` consumes and no Python module reads.
+`TURN_STATIC_AUTH_SECRET` is read by both: it is one value in two places, and the
+runbook's coturn step is where the second copy is filled in.
 
 ## The admin panel
 

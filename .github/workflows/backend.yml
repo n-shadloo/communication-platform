@@ -164,6 +164,11 @@ jobs:
           export JWT_SIGNING_KEY="$(generate)"
           export POSTGRES_PASSWORD="$(generate)"
           export REDIS_URL="redis://:$(generate)@127.0.0.1:6379/0"
+          # The relay stub is the configured shape, not the off one: with
+          # TURN_URLS empty `core.E005` would never weigh the relay secret, so
+          # the gate would pass over the branch a serving deployment runs.
+          export TURN_URLS="turn:ci.invalid:3478?transport=udp"
+          export TURN_STATIC_AUTH_SECRET="$(generate)"
           python manage.py check --deploy --fail-level WARNING
 
   offline-install:

@@ -56,6 +56,10 @@ EXPECTED = {
     ("POST", "/api/v1/me/envelopes/ack"): (FULL_DEVICE, "envelopes"),
     ("POST", "/api/v1/attachments"): (FULL_DEVICE, "attachments"),
     ("GET", "/api/v1/attachments/{attachment_id}"): (FULL_DEVICE, "attachments"),
+    # The one HTTP route voice has. It reads no row and writes none: the
+    # credential is computed from a shared secret, so the scope is what bounds
+    # an account rather than anything the route stores.
+    ("POST", "/api/v1/me/relay"): (FULL_DEVICE, "relay"),
 }
 
 # The routes whose path names a device the token itself must be. Recorded here

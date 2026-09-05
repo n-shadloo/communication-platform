@@ -6,7 +6,11 @@ tests, and `run_unit`'s `close_old_connections` bracket would sever this test's
 own transaction under CONN_MAX_AGE=0 — Django closes a connection whose
 autocommit flag disagrees with its settings, which inside pytest-django's atomic
 block is every connection, and the reopen then fails with "Cannot open a new
-connection in an atomic block"."""
+connection in an atomic block".
+
+The relay route is the exception, and it is measured through the composed
+application, because it has no unit of work to measure: its own database cost is
+zero and the claim is about the whole call."""
 
 import uuid
 
@@ -22,6 +26,13 @@ from realtime.auth import _authenticate_access, _delete_envelopes, _touch_active
 pytestmark = pytest.mark.django_db
 
 TXN_BOOKKEEPING = ("BEGIN", "COMMIT", "SAVEPOINT", "RELEASE SAVEPOINT")
+
+RELAY_URL = "/api/v1/me/relay"
+# The device row joined to its owner, which every authenticated route pays.
+AUTH_QUERY = 1
+# An obvious test value. No process outside this suite reads it, and nothing this
+# test asserts depends on what it is.
+TEST_TURN_SECRET = "turn-secret-for-tests-only-not-a-deployment-value"
 
 
 def _count(unit, *args):
@@ -109,3 +120,35 @@ def test_an_ack_naming_rows_that_are_not_there_is_still_one_statement(device):
     assert all(
         q.startswith(TXN_BOOKKEEPING) for q in queries if not q.startswith("DELETE")
     )
+
+
+@pytest.mark.django_db(transaction=True)
+def test_the_relay_route_costs_the_authentication_query_and_nothing_more(
+    http, active_user, device, bearer, settings
+):
+    """A relay credential is computed from a shared secret, never stored, so the
+    route reads no row and writes none. A query appearing here would mean somebody
+    gave the relay a table — an issued-credential row, a per-device counter — and
+    with it a record of who placed a call and when, which is the one thing the voice
+    design exists to avoid holding.
+
+    This is the one measurement in the file taken end to end rather than against a
+    synchronous unit, because the route has no unit to take: its whole database cost
+    belongs to the authentication dependency, and only the composed application
+    shows that the handler adds nothing to it. `transaction=True` for the same
+    reason `devices/tests/test_query_counts.py` needs it — `api/orm.py` closes the
+    connection around every unit of work, which under a wrapping test transaction
+    would sever the connection the test itself holds — and the transaction
+    statements are excluded so the number is the database work itself.
+    """
+    settings.TURN_URLS = ["turn:relay.invalid:3478?transport=udp"]
+    settings.TURN_STATIC_AUTH_SECRET = TEST_TURN_SECRET
+
+    with CaptureQueriesContext(connection) as ctx:
+        response = http.post(RELAY_URL, headers=bearer(active_user, device))
+
+    sqls = [
+        q["sql"] for q in ctx.captured_queries if not q["sql"].startswith(TXN_BOOKKEEPING)
+    ]
+    assert response.status_code == 200
+    assert len(sqls) == AUTH_QUERY, "\n".join(sqls)

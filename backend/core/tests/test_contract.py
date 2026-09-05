@@ -1,6 +1,6 @@
 """Every answer `backend/openapi.json` declares, produced by the running surface.
 
-`core/tests/artefact.py` reads the committed document and lists the 244
+`core/tests/artefact.py` reads the committed document and lists the 217
 `(method, template, status)` triples it declares. A document may declare a status
 no code path can reach, and nothing in the drift gate would notice: the gate
 proves the document matches the *routes*, not that the surface can actually
@@ -480,6 +480,25 @@ def _drain(stage):
 @sample("POST", f"{PREFIX}/me/envelopes/ack", "200")
 def _ack(stage):
     return Call("POST", f"{PREFIX}/me/envelopes/ack", stage.auth, {"json": {"ids": []}})
+
+
+@sample("POST", f"{PREFIX}/me/relay", "200")
+def _relay_credential(stage):
+    """The one sample that configures the deployment before it calls it.
+
+    Every other operation answers its success on the settings the suite already
+    runs under; this one answers `503 voice_unconfigured` unless `TURN_URLS` names
+    a relay, because voice is configured on rather than off. The sample is what
+    every seam starts from — the `429`, the `500` and the `503` all re-send it —
+    so the configuration belongs here rather than in one driver.
+
+    198.51.100.0/24 is the documentation range and nothing resolves it: the route
+    reads the list to echo it back and never connects to it. The secret is a fixed
+    test value that no process outside this suite reads.
+    """
+    stage.settings.TURN_URLS = ["turn:198.51.100.10:3478"]
+    stage.settings.TURN_STATIC_AUTH_SECRET = "contract-suite-relay-secret-32ch"
+    return Call("POST", f"{PREFIX}/me/relay", stage.auth)
 
 
 @sample("POST", f"{PREFIX}/attachments", "201")

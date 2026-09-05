@@ -311,10 +311,31 @@ async def _scripted_logout(client, s):
     assert r.status_code == 204, f"logout: {r.status_code}"
 
 
+async def _scripted_relay_traffic(client, s):
+    """The voice half's HTTP surface: mint one coturn credential.
+
+    The route reads no row and writes none — the credential is computed from a
+    shared secret — so what it contributes here is the two values it returns.
+    Both are exactly what invariant 4 forbids in a log line: the username is the
+    identifier coturn will see, and the credential is the password that opens a
+    relay allocation on this deployment until its own expiry. A deployment with no
+    `TURN_URLS` answers `503 voice_unconfigured`, so the suites that drive this
+    audit configure one.
+    """
+    auth = {"Authorization": f"Bearer {s['access token']}"}
+
+    r = await client.post("/api/v1/me/relay", headers=auth)
+    assert r.status_code == 200, f"relay credential: {r.status_code}"
+    s["relay username"] = r.json()["username"]
+    s["relay credential"] = r.json()["credential"]
+    return s
+
+
 async def _scripted_socket_traffic(s):
     """The realtime half: authenticated connect, a volatile signal round-trip to our own
     device, disconnect. Adds the signal blob to the secret set."""
     from config.asgi import application
+    from core.buckets import SIGNAL_BUCKETS
     from realtime.tests.socket import WebSocketCommunicator
 
     comm = WebSocketCommunicator(
@@ -324,7 +345,11 @@ async def _scripted_socket_traffic(s):
     )
     connected, _ = await comm.connect(timeout=2)
     assert connected, "socket handshake refused"
-    s["signal blob"] = f"volatile-{random_secrets.token_hex(12)}"
+    # Bucketed like every stored ciphertext: the gateway relays a blob only when
+    # it is standard base64 of exactly one signal bucket.
+    s["signal blob"] = base64.b64encode(
+        random_secrets.token_bytes(min(SIGNAL_BUCKETS))
+    ).decode()
     await comm.send_json_to(
         {"type": "signal", "to_device": s["device id"], "blob": s["signal blob"]}
     )
@@ -381,6 +406,7 @@ async def run_audit(probe=None):
                 await _scripted_device_traffic(client, secrets)
                 await _scripted_blob_traffic(client, secrets)
                 await _scripted_account_state_traffic(client, secrets)
+                await _scripted_relay_traffic(client, secrets)
                 await _scripted_socket_traffic(secrets)
                 await _scripted_logout(client, secrets)
         if probe is not None:

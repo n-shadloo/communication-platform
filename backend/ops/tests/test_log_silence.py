@@ -131,6 +131,13 @@ class TestTheAuditRefusesToPassOnANonWindow:
     @pytest.fixture(autouse=True)
     async def _isolated_runtime(self, settings, tmp_path):
         settings.ATTACHMENTS_ROOT = tmp_path
+        # Voice is configured on rather than off: with no `TURN_URLS` the relay route
+        # answers `503 voice_unconfigured` and the pass would never mint the credential
+        # it exists here to prove silent. 198.51.100.0/24 is the documentation range
+        # and nothing resolves it; the secret is a fixed test value that no process
+        # outside this suite reads.
+        settings.TURN_URLS = ["turn:198.51.100.10:3478"]
+        settings.TURN_STATIC_AUTH_SECRET = "log-silence-audit-relay-secret-32"
         yield
         await stop_subscriber()
         await close_client()

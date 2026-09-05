@@ -29,6 +29,13 @@ async def _isolated_runtime(settings, tmp_path):
     """Uploads stay out of the repo, and the bus the socket half opens is released
     with the loop it was opened on."""
     settings.ATTACHMENTS_ROOT = tmp_path
+    # Voice is configured on rather than off: with no `TURN_URLS` the relay route
+    # answers `503 voice_unconfigured` and the pass would never mint the credential
+    # it exists here to prove silent. 198.51.100.0/24 is the documentation range
+    # and nothing resolves it; the secret is a fixed test value that no process
+    # outside this suite reads.
+    settings.TURN_URLS = ["turn:198.51.100.10:3478"]
+    settings.TURN_STATIC_AUTH_SECRET = "log-silence-audit-relay-secret-32"
     yield
     await stop_subscriber()
     await close_client()
@@ -74,6 +81,8 @@ async def test_scripted_traffic_across_every_surface_leaks_nothing():
         "envelope blob",
         "queued envelope id",
         "attachment id",
+        "relay username",
+        "relay credential",
         "signal blob",
         "profile blob",
         "key backup blob",
@@ -122,17 +131,18 @@ async def test_the_pass_drives_every_route_of_the_table():
         "refresh token",
         "attachment id",
         "queued envelope id",
+        "relay credential",
     ],
 )
 async def test_the_audit_catches_a_leak_of_every_kind_of_secret_it_collected(label):
     """The scan has to recognise each shape, not just an identifier.
 
     The existing probe leaks a device id, which is a UUID; a ciphertext blob, a
-    bearer token and a base64 capability id are matched by different patterns and
-    would each be a different way for the pass to clear a leak it never looked
-    for. Every label here is one the audit records, so a step that stops
-    generating its secret fails the anti-vacuity test above rather than quietly
-    narrowing this one.
+    bearer token, a base64 capability id and the base64 HMAC of a relay
+    credential are matched by different patterns and would each be a different way
+    for the pass to clear a leak it never looked for. Every label here is one the
+    audit records, so a step that stops generating its secret fails the
+    anti-vacuity test above rather than quietly narrowing this one.
     """
 
     def leak(secrets):

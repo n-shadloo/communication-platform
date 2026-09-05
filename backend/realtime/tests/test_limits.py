@@ -12,9 +12,18 @@ import json
 
 import pytest
 
+from core.buckets import SIGNAL_BUCKETS
 from realtime import gateway
 
-from .conftest import bearer, connect_ok, expect_close, mint_access, probe
+from .conftest import (
+    PROBE_BLOB,
+    bearer,
+    connect_ok,
+    expect_close,
+    mint_access,
+    probe,
+    signal_blob,
+)
 
 pytestmark = pytest.mark.django_db(transaction=True)
 
@@ -89,8 +98,21 @@ async def test_a_frame_at_the_size_cap_is_read_and_the_byte_past_it_closes_4008(
 ):
     """The cap is what the frame may be, not what it must be under. A client whose
     largest legal envelope ack lands exactly on the bound has to be able to send
-    it."""
-    settings.WS_MAX_FRAME = 200
+    it.
+
+    The cap is the length of the barrier frame this suite probes with, and that is
+    what settles the number: the barrier is a `signal` carrying a blob of the
+    smallest bucket, so it is the shortest legal signal frame that exists, and a cap
+    below it admits no signal at all. Under such a cap the barrier that proves the
+    socket survived the frame at the cap would itself be a violation, and the test
+    would close on the wrong frame. Setting the cap to exactly that length makes the
+    barrier the largest legal frame, so both halves are measured against real
+    traffic.
+    """
+    barrier = json.dumps(
+        {"type": "signal", "to_device": str(device.id), "blob": PROBE_BLOB}
+    )
+    settings.WS_MAX_FRAME = len(barrier)
     comm = await connect_ok(bearer(await mint_access(active_user, device)))
     padding = settings.WS_MAX_FRAME - len(json.dumps({"type": "noop", "pad": ""}))
     at_the_cap = json.dumps({"type": "noop", "pad": "x" * padding})
@@ -102,6 +124,31 @@ async def test_a_frame_at_the_size_cap_is_read_and_the_byte_past_it_closes_4008(
     one_past_the_cap = json.dumps({"type": "noop", "pad": "x" * (padding + 1)})
     await comm.send_to(text_data=one_past_the_cap)
     await expect_close(comm, 4008)
+
+
+async def test_the_frame_cap_and_the_signal_blob_cap_are_independent_bounds(
+    active_user, device, peer, peer_device, settings
+):
+    """Two bounds on one frame, and a client must never have to choose between
+    them. `SIGNAL_BLOB_MAX` is the base64 length of the largest signal bucket, and
+    the largest signal a client can legally send — an offer with its candidate set,
+    padded to that bucket — rides inside a frame far under the configured
+    `WS_MAX_FRAME`. If the two ever crossed, a client obeying the bucket rule would
+    be closed with 4008 for obeying it, and the only way out would be to send a
+    shorter blob than the padding allows, which is not a blob the rule admits.
+    """
+    blob = signal_blob(b"L", bucket=max(SIGNAL_BUCKETS))
+    frame = json.dumps({"type": "signal", "to_device": str(peer_device.id), "blob": blob})
+    assert len(blob) == gateway.SIGNAL_BLOB_MAX
+    assert len(frame) < settings.WS_MAX_FRAME, "the largest legal signal is unsendable"
+    comm_a = await connect_ok(bearer(await mint_access(active_user, device)))
+    comm_b = await connect_ok(bearer(await mint_access(peer, peer_device)))
+
+    await comm_a.send_to(text_data=frame)
+
+    assert await comm_b.receive_json_from(timeout=2) == {"type": "signal", "blob": blob}
+    await comm_a.disconnect()
+    await comm_b.disconnect()
 
 
 async def test_the_frame_at_the_rate_cap_is_the_last_one_admitted(

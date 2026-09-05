@@ -33,6 +33,10 @@ CHECKS = (
 )
 BANNED = ("sentry_sdk", "ddtrace", "newrelic", "elasticapm")
 STRONG = "g" * 32
+# A relay the check can see without one existing. Only the emptiness of
+# `TURN_URLS` is read, never what it names, and 198.51.100.0/24 is the
+# documentation range so nothing resolves it.
+RELAY = ["turn:198.51.100.10:3478"]
 
 
 def ids(errors):
@@ -51,7 +55,14 @@ class TestRegistration:
 
     def test_each_check_reports_an_error_id_of_its_own(self):
         """Four ids, four distinct failures. A duplicated id is two problems an
-        operator reads as one."""
+        operator reads as one.
+
+        One id covers more than one failure by design: `core.E005` is raised once
+        per weak infrastructure secret, so a run with both of them weak reports
+        two errors under it. That is the deliberate exception, and
+        `TestInfrastructureSecrets` is where it is pinned; what this asserts is
+        that no two *checks* share an id.
+        """
         raised = set()
         with mock.patch.object(settings, "INSTALLED_APPS", list(BANNED)):
             with override_settings(
@@ -176,3 +187,58 @@ class TestInfrastructureSecrets:
             errors = infrastructure_secrets_are_strong(None)
 
         assert "s3cr3t-but-far-too-short" not in " ".join(error.msg for error in errors)
+
+    def test_a_relay_secret_is_not_weighed_when_no_relay_is_configured(self):
+        """A deployment that serves no voice reads the secret nowhere, so refusing
+        it a value would refuse a deployment that is correct. `TURN_URLS` is what
+        says whether voice is served, and it is empty by default."""
+        for secret in ("", "far-too-short"):
+            with override_settings(TURN_URLS=[], TURN_STATIC_AUTH_SECRET=secret):
+                assert infrastructure_secrets_are_strong(None) == []
+
+    def test_a_relay_secret_below_the_key_size_is_weak_once_a_relay_is_named(self):
+        """The secret is the HMAC key every relay credential is signed under, and
+        a holder of it mints credentials for this deployment's coturn until the
+        value is rotated in both of the two places that carry it."""
+        with override_settings(TURN_URLS=RELAY, TURN_STATIC_AUTH_SECRET="t" * 31):
+            assert ids(infrastructure_secrets_are_strong(None)) == ["core.E005"]
+
+    def test_a_relay_secret_at_the_key_size_passes(self):
+        """The boundary: thirty-two characters is the first acceptable length, the
+        same floor the signing key is held to."""
+        with override_settings(TURN_URLS=RELAY, TURN_STATIC_AUTH_SECRET="t" * 32):
+            assert infrastructure_secrets_are_strong(None) == []
+
+    def test_both_secrets_weak_at_once_are_reported_as_two_errors(self):
+        """One check, two secrets. A deploy that fixed the signing key and stopped
+        reading would leave the relay secret weak, so each one gets a line of its
+        own rather than the first one found."""
+        with override_settings(
+            JWT_SIGNING_KEY="s" * 31, TURN_URLS=RELAY, TURN_STATIC_AUTH_SECRET="t" * 31
+        ):
+            errors = infrastructure_secrets_are_strong(None)
+
+        assert ids(errors) == ["core.E005", "core.E005"]
+        reported = " ".join(error.msg for error in errors)
+        assert "JWT_SIGNING_KEY" in reported
+        assert "TURN_STATIC_AUTH_SECRET" in reported
+
+    def test_the_relay_error_names_the_setting_the_operator_has_to_rotate(self):
+        """Two variables can fail this check and they are rotated differently: the
+        relay secret is one value in two places, so a message that named neither
+        would leave an operator to guess which."""
+        with override_settings(TURN_URLS=RELAY, TURN_STATIC_AUTH_SECRET="t" * 31):
+            (error,) = infrastructure_secrets_are_strong(None)
+
+        assert "TURN_STATIC_AUTH_SECRET" in error.msg
+        assert "JWT_SIGNING_KEY" not in error.msg
+
+    def test_no_relay_error_message_carries_a_secret_value(self):
+        """The same rule as the signing key, at the one other secret this check
+        reads: the message lands in a deploy log."""
+        with override_settings(
+            TURN_URLS=RELAY, TURN_STATIC_AUTH_SECRET="t00-short-for-a-relay"
+        ):
+            errors = infrastructure_secrets_are_strong(None)
+
+        assert "t00-short-for-a-relay" not in " ".join(error.msg for error in errors)

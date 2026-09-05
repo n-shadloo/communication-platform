@@ -4,10 +4,16 @@ from django.test import SimpleTestCase
 from hypothesis import given
 from hypothesis import strategies as st
 
-from core.buckets import DEVICELOG_BUCKETS, ENVELOPE_BUCKETS, LABEL_BUCKETS, in_bucket
+from core.buckets import (
+    DEVICELOG_BUCKETS,
+    ENVELOPE_BUCKETS,
+    LABEL_BUCKETS,
+    SIGNAL_BUCKETS,
+    in_bucket,
+)
 from core.fields import BadBucket, decode_blob_or_400
 
-BUCKET_SETS = (ENVELOPE_BUCKETS, LABEL_BUCKETS, DEVICELOG_BUCKETS)
+BUCKET_SETS = (ENVELOPE_BUCKETS, LABEL_BUCKETS, DEVICELOG_BUCKETS, SIGNAL_BUCKETS)
 
 
 def b64(nbytes):
@@ -85,7 +91,7 @@ class BucketSetShapeTests(SimpleTestCase):
                 self.assertTrue(all(size > 0 for size in sizes), sizes)
 
     def test_the_guard_actually_found_the_published_sets(self):
-        self.assertEqual(len(self.sets()), 6)
+        self.assertEqual(len(self.sets()), 7)
 
     def test_this_deployment_serves_the_default_envelope_set(self):
         """`ENVELOPE_BUCKETS_OVERRIDE` exists for a deployment that measured its

@@ -1235,6 +1235,38 @@
         "title": "RegisterScopeOut",
         "type": "object"
       },
+      "RelayCredentialOut": {
+        "description": "One ephemeral coturn credential.\n\n`urls` is the configured `turn:` list, in the order the operator wrote it.\n`username` is the Unix expiry timestamp, a colon and sixteen random bytes as\nURL-safe base64. `credential` is standard base64 of HMAC-SHA1 over that\nusername. `expires_in` is the seconds the pair stays good for, counted from\nthe moment it was minted.",
+        "properties": {
+          "credential": {
+            "title": "Credential",
+            "type": "string"
+          },
+          "expires_in": {
+            "title": "Expires In",
+            "type": "integer"
+          },
+          "urls": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Urls",
+            "type": "array"
+          },
+          "username": {
+            "title": "Username",
+            "type": "string"
+          }
+        },
+        "required": [
+          "urls",
+          "username",
+          "credential",
+          "expires_in"
+        ],
+        "title": "RelayCredentialOut",
+        "type": "object"
+      },
       "SendIn": {
         "additionalProperties": false,
         "properties": {
@@ -3440,6 +3472,78 @@
         "summary": "Write My Profile",
         "tags": [
           "accounts"
+        ]
+      }
+    },
+    "/api/v1/me/relay": {
+      "post": {
+        "description": "Mint an ephemeral coturn credential for the calling device.\n\nSafe to repeat: every call mints a fresh username, and a credential already\nissued stays good until its own expiry, so a client that retries a timed-out\nrequest holds two working credentials rather than none.\n\nAn unconfigured deployment answers `503 voice_unconfigured` rather than a\ncredential no relay would accept, which is the same answer as a relay that\nis down: a client that cannot place a call is told so, and told to try later.",
+        "operationId": "mint_relay_credential",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RelayCredentialOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`unauthenticated`, `invalid_token`, `token_revoked`"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`scope_forbidden`"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`throttled`"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`server_error`"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "`voice_unconfigured`, `unavailable`"
+          }
+        },
+        "summary": "Mint Relay Credential",
+        "tags": [
+          "realtime"
         ]
       }
     },
