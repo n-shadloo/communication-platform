@@ -26,7 +26,7 @@ A pure-ASGI middleware sets a deadline on every HTTP request. Every route has an
 explicit body cap equal to the largest payload its contract admits. The trusted
 host list is `ALLOWED_HOSTS`.
 
-No CORS policy exists; the web client is served from the API origin.
+No CORS policy exists. There is no browser client to need one.
 
 ## Position fields
 
@@ -36,7 +36,10 @@ No CORS policy exists; the web client is served from the API origin.
 - **Scale band.** Band 0, holding through band 2.
 - **Flip trigger.** A browser client is served from an origin other than the API
   origin. A CORS policy then becomes necessary, and its absence stops being a
-  simplification.
+  simplification. Moot while
+  [0020](0020-one-android-client-and-no-browser-surface.md) holds: the product is
+  one Android application, so the trigger cannot fire without reversing that
+  decision first.
 - **Cost.** A deadline can cut a legitimate slow request, and a body cap is one
   more contract detail that must stay true as payload sizes change. Both fail
   closed, which is the intent.
@@ -58,10 +61,12 @@ No CORS policy exists; the web client is served from the API origin.
   websocket scope straight through, which is load-bearing rather than incidental: a
   request deadline on a long-lived socket would cancel it, and the body cap's counting
   `receive` would turn a websocket frame into `http.disconnect`. What bounds the
-  socket instead lives in `realtime/gateway.py` — the frame cap, the rate cap, the
-  send-queue bound and the authentication deadline. The consequence to hold in mind is
-  that `ALLOWED_HOSTS` is not checked on a handshake; `ALLOWED_WS_ORIGINS` is the only
-  origin control the socket has.
+  socket instead lives in `realtime/gateway.py` — the frame cap, the rate cap and
+  the send-queue bound. The consequence to hold in mind is that `ALLOWED_HOSTS` is
+  not checked on a handshake, and since
+  [0020](0020-one-android-client-and-no-browser-surface.md) removed
+  `ALLOWED_WS_ORIGINS` the socket has no origin control at all — what refuses a
+  handshake is the bearer token and nothing else.
 - The body cap is per route, not global. nginx's `client_max_body_size 70m`
   covers the largest attachment bucket; a route that accepts a 1 KB JSON body
   must not inherit that ceiling.

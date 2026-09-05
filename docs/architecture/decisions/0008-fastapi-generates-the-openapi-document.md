@@ -30,6 +30,12 @@ FastAPI generates the OpenAPI document. `python manage.py openapi` writes
 
 The interactive documentation routes are closed outside `DEBUG`.
 
+**Superseded in part by [0020](0020-one-android-client-and-no-browser-surface.md).**
+The schema route and the two interactive views are now unregistered in every mode,
+`DEBUG` included: they render for a browser the product does not have. Generation,
+the drift gate and the `API.md` files below are unchanged, and `backend/openapi.json`
+is now the only published form of the contract.
+
 The per-app `API.md` files stay the human reference and match the code.
 
 ## Position fields
@@ -50,9 +56,10 @@ The per-app `API.md` files stay the human reference and match the code.
 
 - `backend/openapi.json` is committed, so a contract change is visible as a diff
   in review rather than only as a code change.
-- The `/docs` and `/redoc` routes exist in development only. They describe every
-  route and every payload shape, which is reconnaissance on a server whose
-  posture is to reveal nothing.
+- The `/docs` and `/redoc` routes existed in development only, and after
+  [0020](0020-one-android-client-and-no-browser-surface.md) exist nowhere. They
+  describe every route and every payload shape, which is reconnaissance on a server
+  whose posture is to reveal nothing.
 - The `API.md` files stay authoritative for the parts a generated schema cannot
   carry: the retry semantics of [0007](0007-contract-conventions.md), the bucket
   rules, and the close codes.
