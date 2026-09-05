@@ -4,10 +4,12 @@ A private, self-hosted messaging platform with end-to-end encrypted direct messa
 group chats, and persistent audio-only voice rooms, built to survive a national internet
 shutdown.
 
-> **Status: work in progress.** The backend is substantially built; the frontend is an
-> application shell only, with no feature screens and no service integrations. Nothing
-> here has had an external security audit. This is not recommended for anyone whose
-> safety depends on it.
+> **Status: work in progress.** The backend is substantially built, and the Android
+> client implements registration, enrollment, cross-signing, direct messaging, history
+> transfer, background delivery and notifications against it. Voice rooms, attachments,
+> shared media and profile publishing are not built on the client. Nothing here has had
+> an external security audit. This is not recommended for anyone whose safety depends on
+> it.
 
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 
@@ -52,7 +54,7 @@ Full threat model, key inventory, and residual risk:
 
 ```mermaid
 flowchart LR
-  C["Flutter client<br/>Android · Web"]
+  C["Flutter client<br/>Android"]
   N["nginx<br/>TLS 1.3"]
   D["uvicorn<br/>ASGI"]
   A["FastAPI + Django"]
@@ -74,7 +76,7 @@ flowchart LR
 
 | Layer | Technology |
 |---|---|
-| Client | Flutter 3.44.7, Dart 3.12.2 — Android and Web targets only |
+| Client | Flutter 3.44.7, Dart 3.12.2 — Android only |
 | Server | Python 3.12, Django 6.0, FastAPI on uvicorn |
 | Database | PostgreSQL 16, loopback only |
 | Cache, fan-out bus and live state | Redis 7, loopback only |
@@ -86,7 +88,7 @@ flowchart LR
 | Path | Owner | Contents |
 |---|---|---|
 | [`backend/`](backend/) | [Nima Shadloo](https://github.com/n-shadloo) | The server: the `accounts`, `devices`, `vault`, `messaging`, `attachments`, `voicerooms`, `realtime` and `core` apps, the `api` package that composes the FastAPI runtime over them, the `config` project, and `ops/` deployment artefacts for a single VPS |
-| [`frontend/`](frontend/) | [realSeyed](https://github.com/realSeyed) | Flutter client for Android and Web, including all client-side cryptography |
+| [`frontend/`](frontend/) | [realSeyed](https://github.com/realSeyed) | Flutter client for Android, including all client-side cryptography |
 
 `backend/vendor/wheels` is the offline wheel cache, and it is not tracked in git. The
 no-foreign-dependency constraint means the server must install and rebuild with no
@@ -109,25 +111,39 @@ with `--no-index` and `--require-hashes`.
 | [docs/architecture/GROUND-TRUTH.md](docs/architecture/GROUND-TRUTH.md) | The measured facts of the deployment: topology, configuration deviations, scale facts, and the domain rules the code must hold |
 | [docs/architecture/decisions/](docs/architecture/decisions/) | One ADR for each architecture decision |
 | [ACCEPTED_RISKS.md](ACCEPTED_RISKS.md) | Every risk the project has looked at and decided to carry, each with what it exposes, what reduces it, and the event that ends the acceptance |
+| [CLIENT_WORK.md](CLIENT_WORK.md) | What the client developer owes, when a server change lands work under `frontend/` that the server cannot make itself |
 | [docs/admin/PANEL-RECORD.md](docs/admin/PANEL-RECORD.md) | The system of record for the operator back office: the pinned release, the override ledger, the role model, and the deferrals |
 | [backend/ops/RUNBOOK.md](backend/ops/RUNBOOK.md) | The operator runbook: host setup, the offline install, the database, the units, nginx and TLS, LiveKit and coturn, the checks after a deploy, the rollback, and the maintenance timer |
 | [frontend/docs/README.md](frontend/docs/README.md) | Index of the client engineering contract: threat model, cryptographic protocol, UI specification, sync engine, and platform notes |
 
 ## Current status
 
-Built, with tests: the eight backend apps above — account and device registration,
-device-scoped JWT authentication, cross-signing and classical + ML-KEM prekey
-distribution, the durable envelope queue, bucketed attachments, voice-room token minting,
-and the `/ws` gateway — together with the `ops/` artefacts for deploying them to one VPS.
+**Server.** Built, with tests: the eight backend apps above — account and device
+registration, device-scoped JWT authentication, cross-signing and classical + ML-KEM
+prekey distribution, the durable envelope queue, bucketed attachments, voice-room token
+minting, and the `/ws` gateway — together with the `ops/` artefacts for deploying them to
+one VPS.
 
 The API surface is frozen at `v1`: [backend/openapi.json](backend/openapi.json) is the
 generated contract and CI fails a change that does not regenerate it, and
 [API_CHANGES.md](API_CHANGES.md) records every observable change from here on.
 
-Not built: the frontend beyond its foundation. It currently has a design system, an
-adaptive application shell, environment provisioning with a fail-closed bootstrap, and a
-local storage layer; it has no chat, group, voice, or cryptography features. There has
-been no external security audit, and
+**Client.** Android is the only target. `frontend/README.md` and
+`frontend/docs/implementation-checklist.md` are the live status; as they stand,
+registration, login, device enrollment and cross-signing, contacts, direct messaging,
+Saved Messages, local search, linked devices, history transfer, notifications, background
+delivery, the settings surfaces and a user-initiated diagnostics export are implemented.
+Group chats exist only in the closed-beta build, behind a gate that opens per CPU
+architecture on measured on-device evidence, and resolve unavailable in production. Voice
+rooms, file attachments, shared media and profile publishing are not built, and every
+routed surface without an implementation behind it says so.
+
+The client tree still carries the web platform files, the conditional-import stubs and
+the web build step that the removed web target left behind; the server side of that
+removal has landed, and [CLIENT_WORK.md](CLIENT_WORK.md) is the list the client developer
+works from.
+
+There has been no external security audit, and
 [backend/CLIENT_CONTRACT.md](backend/CLIENT_CONTRACT.md) is authoritative for what a
 client must do for the security properties to hold.
 
